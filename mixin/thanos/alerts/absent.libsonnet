@@ -3,11 +3,11 @@
 
   // We build alerts for the presence of all these jobs.
   jobs:: {
-    ThanosQuerier: thanos.querier.selector,
+    ThanosQuery: thanos.query.selector,
     ThanosStore: thanos.store.selector,
-    ThanosReceiver: thanos.receiver.selector,
-    ThanosRuler: thanos.ruler.selector,
-    ThanosCompactor: thanos.compactor.selector,
+    ThanosReceive: thanos.receive.selector,
+    ThanosRule: thanos.rule.selector,
+    ThanosCompact: thanos.compact.selector,
     ThanosSidecar: thanos.sidecar.selector,
   },
 

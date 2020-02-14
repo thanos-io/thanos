@@ -1,40 +1,40 @@
 {
   local thanos = self,
-  compactor+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Compactor alerts',
-    selector: error 'must provide selector for Thanos Compactor alerts',
+  compact+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Compact alerts',
+    selector: error 'must provide selector for Thanos Compact alerts',
   },
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-compactor.rules',
+        name: 'thanos-compact.rules',
         rules: [
           {
-            alert: 'ThanosCompactorMultipleCompactorsAreRunning',
+            alert: 'ThanosCompactMultipleRunning',
             annotations: {
-              message: 'You should never run more than one Thanos Compactor at once. You have {{ $value }}',
+              message: 'No more than one Thanos Compact instance should be running at once. There are {{ $value }}',
             },
-            expr: 'sum(up{%(selector)s}) > 1' % thanos.compactor,
+            expr: 'sum(up{%(selector)s}) > 1' % thanos.compact,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosCompactorHalted',
+            alert: 'ThanosCompactHalted',
             annotations: {
-              message: 'Thanos Compactor {{$labels.job}} has failed to run and now is halted.',
+              message: 'Thanos Compact {{$labels.job}} has failed to run and now is halted.',
             },
-            expr: 'thanos_compactor_halted{%(selector)s} == 1' % thanos.compactor,
+            expr: 'thanos_compactor_halted{%(selector)s} == 1' % thanos.compact,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosCompactorHighCompactionFailures',
+            alert: 'ThanosCompactHighCompactionFailures',
             annotations: {
-              message: 'Thanos Compactor {{$labels.job}} is failing to execute {{ $value | humanize }}% of compactions.',
+              message: 'Thanos Compact {{$labels.job}} is failing to execute {{ $value | humanize }}% of compactions.',
             },
             expr: |||
               (
@@ -43,16 +43,16 @@
                 sum by (job) (rate(thanos_compact_group_compactions_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.compactor,
+            ||| % thanos.compact,
             'for': '15m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosCompactorBucketHighOperationFailures',
+            alert: 'ThanosCompactBucketHighOperationFailures',
             annotations: {
-              message: 'Thanos Compactor {{$labels.job}} Bucket is failing to execute {{ $value | humanize }}% of operations.',
+              message: 'Thanos Compact {{$labels.job}} Bucket is failing to execute {{ $value | humanize }}% of operations.',
             },
             expr: |||
               (
@@ -61,18 +61,18 @@
                 sum by (job) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.compactor,
+            ||| % thanos.compact,
             'for': '15m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosCompactorHasNotRun',
+            alert: 'ThanosCompactHasNotRun',
             annotations: {
-              message: 'Thanos Compactor {{$labels.job}} has not uploaded anything for 24 hours.',
+              message: 'Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.',
             },
-            expr: '(time() - max(thanos_objstore_bucket_last_successful_upload_time{%(selector)s})) / 60 / 60 > 24' % thanos.compactor,
+            expr: '(time() - max(thanos_objstore_bucket_last_successful_upload_time{%(selector)s})) / 60 / 60 > 24' % thanos.compact,
             labels: {
               severity: 'warning',
             },

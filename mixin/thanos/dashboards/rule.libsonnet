@@ -2,14 +2,14 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 
 {
   local thanos = self,
-  ruler+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Ruler dashboard',
-    selector: error 'must provide selector for Thanos Ruler dashboard',
-    title: error 'must provide title for Thanos Ruler dashboard',
+  rule+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Rule dashboard',
+    selector: error 'must provide selector for Thanos Rule dashboard',
+    title: error 'must provide title for Thanos Rule dashboard',
   },
   grafanaDashboards+:: {
-    'ruler.json':
-      g.dashboard(thanos.ruler.title)
+    'rule.json':
+      g.dashboard(thanos.rule.title)
       .addRow(
         g.row('Alert Sent')
         .addPanel(
@@ -122,38 +122,38 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.ruler, true, '%(jobPrefix)s.*' % thanos.ruler) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.ruler, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.rule, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Rule')
       .addPanel(
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
-          'sum(rate(thanos_alert_sender_alerts_sent_total{namespace="$namespace",%(selector)s}[$interval])) by (job, alertmanager)' % thanos.ruler,
+          'sum(rate(thanos_alert_sender_alerts_sent_total{namespace="$namespace",%(selector)s}[$interval])) by (job, alertmanager)' % thanos.rule,
           '{{job}} {{alertmanager}}'
         ) +
-        g.addDashboardLink(thanos.ruler.title) +
+        g.addDashboardLink(thanos.rule.title) +
         g.stack
       )
       .addPanel(
         g.panel('Alert Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
         g.qpsErrTotalPanel(
-          'thanos_alert_sender_errors_total{namespace="$namespace",%(selector)s}' % thanos.ruler,
-          'thanos_alert_sender_alerts_sent_total{namespace="$namespace",%(selector)s}' % thanos.ruler,
+          'thanos_alert_sender_errors_total{namespace="$namespace",%(selector)s}' % thanos.rule,
+          'thanos_alert_sender_alerts_sent_total{namespace="$namespace",%(selector)s}' % thanos.rule,
         ) +
-        g.addDashboardLink(thanos.ruler.title)
+        g.addDashboardLink(thanos.rule.title)
       )
       .addPanel(
         g.sloLatency(
           'Alert Sent Duration',
           'Shows how long has it taken to send alerts to alert manager.',
-          'thanos_alert_sender_latency_seconds_bucket{namespace="$namespace",%(selector)s}' % thanos.ruler,
+          'thanos_alert_sender_latency_seconds_bucket{namespace="$namespace",%(selector)s}' % thanos.rule,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink(thanos.ruler.title)
+        g.addDashboardLink(thanos.rule.title)
       ) +
       g.collapse,
     ],

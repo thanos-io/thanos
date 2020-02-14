@@ -2,14 +2,14 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 
 {
   local thanos = self,
-  querier+:: {
+  query+:: {
     jobPrefix: error 'must provide job prefix for Thanos Query dashboard',
     selector: error 'must provide selector for Thanos Query dashboard',
     title: error 'must provide title for Thanos Query dashboard',
   },
   grafanaDashboards+:: {
-    'querier.json':
-      g.dashboard(thanos.querier.title)
+    'query.json':
+      g.dashboard(thanos.query.title)
       .addRow(
         g.row('Instant Query API')
         .addPanel(
@@ -139,54 +139,54 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.querier, true, '%(jobPrefix)s.*' % thanos.querier) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.querier, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.query, true, '%(jobPrefix)s.*' % thanos.query) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.query, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Instant Query')
       .addPanel(
         g.panel('Requests Rate', 'Shows rate of requests against /query for the given time.') +
-        g.httpQpsPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query"' % thanos.querier) +
-        g.addDashboardLink(thanos.querier.title)
+        g.httpQpsPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query"' % thanos.query) +
+        g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
         g.panel('Requests Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query.') +
-        g.httpErrPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query"' % thanos.querier) +
-        g.addDashboardLink(thanos.querier.title)
+        g.httpErrPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query"' % thanos.query) +
+        g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
         g.sloLatency(
           'Latency 99th Percentile',
           'Shows how long has it taken to handle requests.',
-          'http_request_duration_seconds_bucket{namespace="$namespace",%(selector)s,handler="query"}' % thanos.querier,
+          'http_request_duration_seconds_bucket{namespace="$namespace",%(selector)s,handler="query"}' % thanos.query,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink(thanos.querier.title)
+        g.addDashboardLink(thanos.query.title)
       ),
 
       g.row('Range Query')
       .addPanel(
         g.panel('Requests Rate', 'Shows rate of requests against /query_range for the given time range.') +
-        g.httpQpsPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query_range"' % thanos.querier) +
-        g.addDashboardLink(thanos.querier.title)
+        g.httpQpsPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query_range"' % thanos.query) +
+        g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
         g.panel('Requests Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query_range.') +
-        g.httpErrPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query_range"' % thanos.querier) +
-        g.addDashboardLink(thanos.querier.title)
+        g.httpErrPanel('http_requests_total', 'namespace="$namespace",%(selector)s,handler="query_range"' % thanos.query) +
+        g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
         g.sloLatency(
           'Latency 99th Percentile',
           'Shows how long has it taken to handle requests.',
-          'http_request_duration_seconds_bucket{namespace="$namespace",%(selector)s,handler="query_range"}' % thanos.querier,
+          'http_request_duration_seconds_bucket{namespace="$namespace",%(selector)s,handler="query_range"}' % thanos.query,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink(thanos.querier.title)
+        g.addDashboardLink(thanos.query.title)
       ),
     ],
   },
