@@ -81,7 +81,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	enableIndexHeader := cmd.Flag("experimental.enable-index-header", "If true, Store Gateway will recreate index-header instead of index-cache.json for each block. This will replace index-cache.json permanently once it will be out of experimental stage.").
 		Hidden().Default("false").Bool()
 
-	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
+	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				minTime, maxTime)

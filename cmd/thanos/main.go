@@ -32,7 +32,7 @@ const (
 	logFormatJson   = "json"
 )
 
-type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, bool) error
+type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, <-chan struct{}, bool) error
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -178,7 +178,10 @@ func main() {
 		})
 	}
 
-	if err := cmds[cmd](&g, logger, metrics, tracer, *logLevel == "debug"); err != nil {
+	// Create a signal channel to dispatch reload events to sub-commands.
+	reloadCh := make(chan struct{}, 1)
+
+	if err := cmds[cmd](&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
 		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
@@ -188,6 +191,16 @@ func main() {
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			return interrupt(logger, cancel)
+		}, func(error) {
+			close(cancel)
+		})
+	}
+
+	// Listen for reload signals.
+	{
+		cancel := make(chan struct{})
+		g.Add(func() error {
+			return reload(logger, cancel, reloadCh)
 		}, func(error) {
 			close(cancel)
 		})
@@ -209,5 +222,23 @@ func interrupt(logger log.Logger, cancel <-chan struct{}) error {
 		return nil
 	case <-cancel:
 		return errors.New("canceled")
+	}
+}
+
+func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP)
+	for {
+		select {
+		case s := <-c:
+			level.Info(logger).Log("msg", "caught signal. Reloading.", "signal", s)
+			select {
+			case r <- struct{}{}:
+				level.Info(logger).Log("msg", "relaod dispatched.")
+			default:
+			}
+		case <-cancel:
+			return errors.New("canceled")
+		}
 	}
 }
