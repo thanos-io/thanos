@@ -321,6 +321,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			filter,
 			originBucket,
 			targetBucket,
+			nil,
 		)
 
 		err = r.execute(ctx)

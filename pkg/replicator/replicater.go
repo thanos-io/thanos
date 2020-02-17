@@ -159,7 +159,7 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", ulid.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt, reg).execute(ctx); err != nil {
 			return fmt.Errorf("replication execute: %w", err)
 		}
 

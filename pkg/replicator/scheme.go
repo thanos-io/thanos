@@ -6,7 +6,6 @@ package replicator
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -100,6 +99,7 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 
 type blockFilterFunc func(b *metadata.Meta) bool
 
+// TODO: Add filters field.
 type replicationScheme struct {
 	fromBkt objstore.BucketReader
 	toBkt   objstore.Bucket
@@ -108,6 +108,8 @@ type replicationScheme struct {
 
 	logger  log.Logger
 	metrics *replicationMetrics
+
+	reg prometheus.Registerer
 }
 
 type replicationMetrics struct {
@@ -160,7 +162,7 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, from objstore.BucketReader, to objstore.Bucket) *replicationScheme {
+func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, from objstore.BucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -171,6 +173,7 @@ func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockF
 		fromBkt:     from,
 		toBkt:       to,
 		metrics:     metrics,
+		reg:         reg,
 	}
 }
 
@@ -179,7 +182,6 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	level.Debug(rs.logger).Log("msg", "scanning blocks available blocks for replication")
 
-	// TODO: Use block.MetaFetcher with filters instead.
 	if err := rs.fromBkt.Iter(ctx, "", func(name string) error {
 		rs.metrics.originIterations.Inc()
 
@@ -189,7 +191,8 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		}
 
 		rs.metrics.originMetaLoads.Inc()
-		meta, metaNonExistentOrPartial, err := loadMeta(ctx, rs.fromBkt, id)
+
+		meta, metaNonExistentOrPartial, err := loadMeta(ctx, rs, id)
 		if metaNonExistentOrPartial {
 			// meta.json is the last file uploaded by a Thanos shipper,
 			// therefore a block may be partially present, but no meta.json
@@ -259,6 +262,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	defer runutil.CloseWithLogOnErr(rs.logger, originMetaFile, "close original meta file")
 
 	targetMetaFile, err := rs.toBkt.Get(ctx, metaFile)
+
 	if targetMetaFile != nil {
 		defer runutil.CloseWithLogOnErr(rs.logger, targetMetaFile, "close target meta file")
 	}
@@ -355,33 +359,31 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 // not being present or partial. The distinction is important, as if missing or
 // partial, this is just a temporary failure, as the block is still being
 // uploaded to the origin bucket.
-func loadMeta(ctx context.Context, bucket objstore.BucketReader, id ulid.ULID) (*metadata.Meta, bool, error) {
-	src := path.Join(id.String(), thanosblock.MetaFilename)
-
-	r, err := bucket.Get(ctx, src)
-	if bucket.IsObjNotFoundErr(err) {
-		return nil, true, fmt.Errorf("get meta file: %w", err)
+func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metadata.Meta, bool, error) {
+	fetcher, err := thanosblock.NewMetaFetcher(rs.logger, 32, rs.fromBkt, "", rs.reg)
+	if err != nil {
+		return nil, false, fmt.Errorf("create meta fetcher with buecket %v: %w", rs.fromBkt, err)
 	}
+
+	metas, _, err := fetcher.Fetch(ctx)
 
 	if err != nil {
-		return nil, false, fmt.Errorf("get meta file: %w", err)
+		switch errors.Cause(err) {
+		default:
+			return nil, false, fmt.Errorf("fetch meta: %w", err)
+		case thanosblock.ErrorSyncMetaNotFound:
+			return nil, true, fmt.Errorf("fetch meta: %w", err)
+		}
 	}
 
-	defer r.Close()
-
-	metaContent, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, false, fmt.Errorf("read meta file: %w", err)
+	m, ok := metas[id]
+	if !ok {
+		return nil, true, fmt.Errorf("fetch meta: %w", err)
 	}
 
-	var m metadata.Meta
-	if err := json.Unmarshal(metaContent, &m); err != nil {
-		return nil, true, fmt.Errorf("unmarshal meta: %w", err)
+	if metas[id].Version != metadata.MetaVersion1 {
+		return nil, false, fmt.Errorf("unexpected meta file version %d", m.Version)
 	}
 
-	if m.Version != metadata.MetaVersion1 {
-		return nil, false, errors.Errorf("unexpected meta file version %d", m.Version)
-	}
-
-	return &m, false, nil
+	return metas[id], false, nil
 }

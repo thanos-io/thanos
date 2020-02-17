@@ -381,11 +381,19 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	}
 }
 
+// Provide a list of resolution, can not use Enum directly, since string does not implement int64 function.
+func listResLevel() []string {
+	return []string{
+		strconv.FormatInt(downsample.ResLevel0, 10),
+		strconv.FormatInt(downsample.ResLevel1, 10),
+		strconv.FormatInt(downsample.ResLevel2, 10)}
+}
+
 func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("replicate", "Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (meta.json has to have Thanos metadata).")
+	cmd := root.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
 	httpMetricsBindAddr, _ := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
-	resolution := cmd.Flag("resolution", "Only blocks with this resolution will be replicated.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).Int64()
+	resolution := cmd.Flag("resolution", "Only blocks with this resolution will be replicated.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64()
 	compaction := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Int()
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
