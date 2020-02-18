@@ -411,18 +411,12 @@ func startStreamSeriesSet(
 			frameTimeoutCtx, cancel := frameCtx(s.responseTimeout)
 			defer cancel()
 			var rr *recvResponse
-
-			var err error
 			select {
 			case <-ctx.Done():
-				close(done)
-				err = errors.Wrap(ctx.Err(), fmt.Sprintf("failed to receive any data from %s", s.name))
-				s.handleErr(err)
+				s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
 				return
 			case <-frameTimeoutCtx.Done():
-				close(done)
-				err = errors.Wrap(frameTimeoutCtx.Err(), fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name))
-				s.handleErr(err)
+				s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data in %s from %s", s.responseTimeout.String(), s.name), done)
 				return
 			case rr = <-rCh:
 			}
@@ -434,8 +428,7 @@ func startStreamSeriesSet(
 
 			if rr.err != nil {
 				wrapErr := errors.Wrapf(rr.err, "receive series from %s", s.name)
-				s.handleErr(wrapErr)
-				close(done)
+				s.handleErr(wrapErr, done)
 				return
 			}
 			numResponses++
@@ -450,8 +443,10 @@ func startStreamSeriesSet(
 	return s
 }
 
-func (s *streamSeriesSet) handleErr(err error) {
+func (s *streamSeriesSet) handleErr(err error, done chan struct{}) {
+	defer close(done)
 	s.closeSeries()
+
 	if s.partialResponse {
 		level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
 		s.warnCh.send(storepb.NewWarnSeriesResponse(err))
