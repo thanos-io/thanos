@@ -398,7 +398,7 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
 
-	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicator.ParseFlagMatchers(*matcherStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse block label matchers")
