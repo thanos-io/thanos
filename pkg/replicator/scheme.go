@@ -376,14 +376,5 @@ func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metada
 		}
 	}
 
-	m, ok := metas[id]
-	if !ok {
-		return nil, true, fmt.Errorf("fetch meta: %w", err)
-	}
-
-	if metas[id].Version != metadata.MetaVersion1 {
-		return nil, false, fmt.Errorf("unexpected meta file version %d", m.Version)
-	}
-
 	return metas[id], false, nil
 }
