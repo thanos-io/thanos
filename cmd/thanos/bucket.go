@@ -35,7 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/replicator"
+	"github.com/thanos-io/thanos/pkg/replicate"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -399,12 +399,12 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
 
 	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		matchers, err := replicator.ParseFlagMatchers(*matcherStrs)
+		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse block label matchers")
 		}
 
-		return replicator.RunReplicate(
+		return replicate.RunReplicate(
 			g,
 			logger,
 			reg,
