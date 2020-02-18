@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,7 +32,9 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -865,7 +868,6 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 }
 
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
-	t.Skip("")
 	tb := testutil.NewTB(t)
 
 	tmpDir, err := ioutil.TempDir("", "test-expanded-postings")
@@ -878,18 +880,10 @@ func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 
 	id := uploadTestBlock(tb, tmpDir, bkt)
 
-	tb.Run("binary_header", func(tb testutil.TB) {
-		r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-		testutil.Ok(tb, err)
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+	testutil.Ok(tb, err)
 
-		benchmarkExpandedPostings(tb, bkt, id, r)
-	})
-	tb.Run("index_json", func(tb testutil.TB) {
-		r, err := indexheader.NewJSONReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-		testutil.Ok(tb, err)
-
-		benchmarkExpandedPostings(tb, bkt, id, r)
-	})
+	benchmarkExpandedPostings(tb, bkt, id, r)
 }
 
 func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
@@ -904,18 +898,10 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
 	id := uploadTestBlock(tb, tmpDir, bkt)
-	tb.Run("binary_header", func(tb testutil.TB) {
-		r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-		testutil.Ok(tb, err)
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+	testutil.Ok(tb, err)
 
-		benchmarkExpandedPostings(tb, bkt, id, r)
-	})
-	tb.Run("index_json", func(tb testutil.TB) {
-		r, err := indexheader.NewJSONReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-		testutil.Ok(tb, err)
-
-		benchmarkExpandedPostings(tb, bkt, id, r)
-	})
+	benchmarkExpandedPostings(tb, bkt, id, r)
 }
 
 // Make entries ~50B in size, to emulate real-world high cardinality.
@@ -1072,14 +1058,77 @@ func newSeries(t testing.TB, lset labels.Labels, smplChunks [][]sample) storepb.
 	return s
 }
 
-func TestSeries_200kSeriesWithOneSample(t *testing.T) {
-	benchSeries_SeriesWithOneSample(testutil.NewTB(t), 200000)
-}
-func BenchmarkSeries(b *testing.B) {
-	benchSeries_SeriesWithOneSample(testutil.NewTB(b), 10000000)
+// https://github.com/thanos-io/thanos/issues/2147
+func TestSeries(t *testing.T) {
+	tb := testutil.NewTB(t)
+	tb.Run("1kSeriesWithOneSample", func(tb testutil.TB) {
+		benchSeries(tb, 1000, seriesDimension)
+	})
+	tb.Run("OneSeriesWith1kSamples", func(tb testutil.TB) {
+		benchSeries(tb, 1000, samplesDimension)
+	})
 }
 
-func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
+func BenchmarkSeries(b *testing.B) {
+	tb := testutil.NewTB(b)
+	tb.Run("1MlnSeriesWithOneSample", func(tb testutil.TB) {
+		benchSeries(tb, 10000000, seriesDimension)
+	})
+	tb.Run("OneSeriesWith1BlnSamples", func(tb testutil.TB) {
+		benchSeries(tb, 10e6, samplesDimension) // ~10d
+	})
+}
+
+func createBlockWithOneSample(t testutil.TB, dir string, blockIndex int, totalSeries int) (ulid.ULID, []storepb.Series) {
+	fmt.Println("Building block with numSeries:", totalSeries)
+
+	var series []storepb.Series
+	h, err := tsdb.NewHead(nil, nil, nil, 1)
+	testutil.Ok(t, err)
+	defer testutil.Ok(t, h.Close())
+
+	app := h.Appender()
+
+	for i := 0; i < totalSeries; i++ {
+		ts := int64(blockIndex*totalSeries + i)
+		lbls := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, postingsBenchSuffix))
+		series = append(series, newSeries(t, append(labels.Labels{{Name: "ext1", Value: "1"}}, lbls...), [][]sample{{sample{t: ts, v: 0}}}))
+
+		_, err := app.Add(lbls, ts, 0)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	return createBlockFromHead(t, dir, h), series
+}
+
+func createBlockWithOneSeries(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand) ulid.ULID {
+	fmt.Println("Building block with one series with numSamples:", totalSamples)
+
+	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples))
+	testutil.Ok(t, err)
+	defer testutil.Ok(t, h.Close())
+
+	app := h.Appender()
+
+	ref, err := app.Add(lbls, int64(blockIndex*totalSamples), random.Float64())
+	for i := 0; i < totalSamples; i++ {
+		ts := int64(blockIndex*totalSamples + i)
+		testutil.Ok(t, app.AddFast(ref, ts, random.Float64()))
+	}
+	testutil.Ok(t, app.Commit())
+
+	return createBlockFromHead(t, dir, h)
+}
+
+type Dimension string
+
+const (
+	seriesDimension  = Dimension("series")
+	samplesDimension = Dimension("samples")
+)
+
+func benchSeries(t testutil.TB, number int, dimension Dimension) {
 	tmpDir, err := ioutil.TempDir("", "testorbench-series")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
@@ -1088,11 +1137,23 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
-	logger := log.NewNopLogger()
-	var blocks []*bucketBlock
+	var (
+		logger = log.NewNopLogger()
+		blocks []*bucketBlock
+		series []storepb.Series
+		random = rand.New(rand.NewSource(120))
+	)
 
-	numSeriesPerBlock := totalSeries / 4
-	series := make([]storepb.Series, 0, 4*numSeriesPerBlock)
+	numberPerBlock := number / 4
+	lbls := labels.FromStrings("foo", "bar", "i", postingsBenchSuffix)
+	switch dimension {
+	case seriesDimension:
+		series = make([]storepb.Series, 0, 4*numberPerBlock)
+	case samplesDimension:
+		series = []storepb.Series{newSeries(t, append(labels.Labels{{Name: "ext1", Value: "1"}}, lbls...), nil)}
+	default:
+		t.Fatal("unknown dimension", dimension)
+	}
 
 	thanosMeta := metadata.Thanos{
 		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
@@ -1105,34 +1166,107 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 	testutil.Ok(t, err)
 
 	if !t.IsBenchmark() {
-		bucketedPool, err := pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, 100e7)
-		testutil.Ok(t, err)
-
-		chunkPool = &mockedPool{parent: bucketedPool}
+		chunkPool = &mockedPool{parent: chunkPool}
 	}
 
-	// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
-	// Timestamp will be counted for each new series, so each series will have unique timestamp.
-	// This allows to pick time range that will correspond to number of series picked 1:1.
-	for bi := 0; bi < 4; bi++ {
-		h, err := tsdb.NewHead(nil, nil, nil, 1)
-		testutil.Ok(t, err)
-		defer testutil.Ok(t, h.Close())
+	blockDir := filepath.Join(tmpDir, "tmp")
 
-		app := h.Appender()
-
-		for i := 0; i < numSeriesPerBlock; i++ {
-			ts := int64(bi*numSeriesPerBlock + i)
-			lbls := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, postingsBenchSuffix))
-			series = append(series, newSeries(t, append(labels.Labels{{Name: "ext1", Value: "1"}}, lbls...), [][]sample{{sample{t: ts, v: 0}}}))
-
-			_, err := app.Add(lbls, ts, 0)
-			testutil.Ok(t, err)
+	var preBuildBlockIDs []ulid.ULID
+	if t.IsBenchmark() {
+		switch dimension {
+		case seriesDimension:
+			// Local optimization. We cannot really commit this to Git (2GB).
+			p := filepath.Join(".", "test-data", "10000000seriesOneSample")
+			if _, err := os.Stat(p); err == nil {
+				blockDir = p
+			}
+		case samplesDimension:
+			// Local optimization. We cannot really commit this to Git (2GB).
+			p := filepath.Join(".", "test-data", "1series100e6Samples")
+			if _, err := os.Stat(p); err == nil {
+				blockDir = p
+			}
 		}
-		testutil.Ok(t, app.Commit())
 
-		blockDir := filepath.Join(tmpDir, "tmp")
-		id := createBlockFromHead(t, blockDir, h)
+		info, err := ioutil.ReadDir(blockDir)
+		if err == nil {
+			for _, d := range info {
+				if !d.IsDir() {
+					continue
+				}
+
+				id, err := ulid.Parse(d.Name())
+				if err != nil {
+					continue
+				}
+
+				preBuildBlockIDs = append(preBuildBlockIDs, id)
+			}
+		}
+	}
+
+	for bi := 0; bi < 4; bi++ {
+		var bSeries []storepb.Series
+
+		var id ulid.ULID
+		switch dimension {
+		case seriesDimension:
+			if len(preBuildBlockIDs) > 0 {
+				id = preBuildBlockIDs[bi]
+				fmt.Println("Using pre-build block:", id)
+				break
+			}
+			// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
+			// Timestamp will be counted for each new series, so each series will have unique timestamp.
+			// This allows to pick time range that will correspond to number of series picked 1:1.
+			id, bSeries = createBlockWithOneSample(t, blockDir, bi, numberPerBlock)
+			series = append(series, bSeries...)
+		case samplesDimension:
+			if len(preBuildBlockIDs) > 0 {
+				id = preBuildBlockIDs[bi]
+				fmt.Println("Using pre-build block:", id)
+			} else {
+				// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
+				// Timestamp will be counted for each new series, so each series will have unique timestamp.
+				// This allows to pick time range that will correspond to number of series picked 1:1.
+				id = createBlockWithOneSeries(t, blockDir, lbls, bi, numberPerBlock, random)
+			}
+
+			if !t.IsBenchmark() {
+				// Reread chunks for ref.
+				indexr, err := index.NewFileReader(filepath.Join(blockDir, id.String(), "index"))
+				testutil.Ok(t, err)
+				b, err := chunks.NewDirReader(filepath.Join(blockDir, id.String(), "chunks"), nil)
+				testutil.Ok(t, err)
+
+				k, v := index.AllPostingsKey()
+				all, err := indexr.Postings(k, v)
+				testutil.Ok(t, err)
+
+				p, err := index.ExpandPostings(all)
+				testutil.Ok(t, err)
+
+				// One series expected.
+				testutil.Equals(t, 1, len(p))
+				l := labels.Labels{}
+				chs := []chunks.Meta{}
+				testutil.Ok(t, indexr.Series(p[0], &l, &chs))
+
+				for _, c := range chs {
+					raw, err := b.Chunk(c.Ref)
+					testutil.Ok(t, err)
+
+					series[0].Chunks = append(series[0].Chunks, storepb.AggrChunk{
+						MaxTime: c.MaxTime,
+						MinTime: c.MinTime,
+						Raw: &storepb.Chunk{
+							Data: raw.Bytes(),
+							Type: storepb.Chunk_XOR,
+						},
+					})
+				}
+			}
+		}
 
 		meta, err := metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, id.String()), thanosMeta, nil)
 		testutil.Ok(t, err)
@@ -1149,7 +1283,6 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 		}
 		blocks = append(blocks, b)
 	}
-
 	store := &BucketStore{
 		bkt:        bkt,
 		logger:     logger,
@@ -1164,9 +1297,20 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 
 	var cases []*benchSeriesCase
 	if t.IsBenchmark() {
-		for s := 1; s <= 4*numSeriesPerBlock; s *= 10 {
+		for s := 1; s <= 4*numberPerBlock; s *= 10 {
+			var expected []storepb.Series
+
+			switch dimension {
+			case seriesDimension:
+				expected = series[:s]
+			case samplesDimension:
+				expected = []storepb.Series{{
+					Labels: series[0].Labels,
+				}}
+			}
+
 			cases = append(cases, &benchSeriesCase{
-				name: fmt.Sprintf("%dof%d", s, 4*numSeriesPerBlock),
+				name: fmt.Sprintf("%dof%d", s, 4*numberPerBlock),
 				req: &storepb.SeriesRequest{
 					MinTime: 0,
 					MaxTime: int64(s) - 1,
@@ -1174,15 +1318,24 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 						{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 					},
 				},
-				expected: series[:s],
+				expected: expected,
 			})
 		}
 	} else {
 		// For test just go straight away to the largest one, we care here only about correctness.
-		s := totalSeries
+		s := number
+
+		var expected []storepb.Series
+
+		switch dimension {
+		case seriesDimension:
+			expected = series[:s]
+		case samplesDimension:
+			expected = series
+		}
 
 		cases = append(cases, &benchSeriesCase{
-			name: fmt.Sprintf("%dof%d", s, 4*numSeriesPerBlock),
+			name: fmt.Sprintf("%dof%d", s, 4*numberPerBlock),
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: int64(s) - 1,
@@ -1190,39 +1343,35 @@ func benchSeries_SeriesWithOneSample(t testutil.TB, totalSeries int) {
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
-			expected: series[:s],
+			expected: expected,
 		})
 	}
 
-	t.Run("binary_header", func(t testutil.TB) {
-		for _, block := range blocks {
-			block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
-			testutil.Ok(t, err)
-		}
+	for _, block := range blocks {
+		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
+		testutil.Ok(t, err)
+	}
 
-		benchmarkSeries(t, store, cases)
-		if !t.IsBenchmark() {
-			// Make sure pool is correctly used.
-			testutil.Equals(t, 4, int(chunkPool.(*mockedPool).gets))
-			testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance))
-			chunkPool.(*mockedPool).gets = 0
-		}
-	})
-
-	t.Run("index_json", func(t testutil.TB) {
-		for _, block := range blocks {
-			block.indexHeaderReader, err = indexheader.NewJSONReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
-			testutil.Ok(t, err)
-		}
-
-		benchmarkSeries(t, store, cases)
-		if !t.IsBenchmark() {
-			// Make sure pool is correctly used.
-			testutil.Equals(t, 4, int(chunkPool.(*mockedPool).gets))
-			testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance))
-		}
-	})
+	fmt.Println("Starting")
+	benchmarkSeries(t, store, cases)
+	if !t.IsBenchmark() {
+		// Make sure the pool is correctly used.
+		testutil.Equals(t, 4, int(chunkPool.(*mockedPool).gets))
+		testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance))
+		chunkPool.(*mockedPool).gets = 0
+	}
 }
+
+var _ = fakePool{}
+
+type fakePool struct{}
+
+func (m fakePool) Get(sz int) (*[]byte, error) {
+	b := make([]byte, 0, sz)
+	return &b, nil
+}
+
+func (m fakePool) Put(_ *[]byte) {}
 
 type mockedPool struct {
 	parent  pool.BytesPool
@@ -1271,6 +1420,12 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 				testutil.Equals(t, len(c.expected), len(srv.SeriesSet))
 
 				if !t.IsBenchmark() {
+					if len(c.expected) == 1 {
+						// Chunks are not sorted within response. TODO: Investigate: Is this fine?
+						sort.Slice(srv.SeriesSet[0].Chunks, func(i, j int) bool {
+							return srv.SeriesSet[0].Chunks[i].MinTime < srv.SeriesSet[0].Chunks[j].MinTime
+						})
+					}
 					// This will give unreadable output for millions of series error.
 					testutil.Equals(t, c.expected, srv.SeriesSet)
 				}

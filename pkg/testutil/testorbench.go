@@ -27,6 +27,8 @@ type TB interface {
 	testing.TB
 	IsBenchmark() bool
 	Run(name string, f func(t TB)) bool
+
+	SetBytes(n int64)
 	N() int
 	ResetTimer()
 }
@@ -59,6 +61,14 @@ func (t *tb) N() int {
 		return b.N
 	}
 	return 1
+}
+
+// SetBytes records the number of bytes processed in a single operation for benchmark, noop otherwise.
+// If this is called, the benchmark will report ns/op and MB/s.
+func (t *tb) SetBytes(n int64) {
+	if b, ok := t.TB.(*testing.B); ok {
+		b.SetBytes(n)
+	}
 }
 
 // ResetTimer resets a timer, if it's a benchmark, noop otherwise.
