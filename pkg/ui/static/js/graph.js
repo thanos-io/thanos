@@ -342,7 +342,7 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
         }
 
         self.fuzzyResult = {
-          query: null,
+          query: "",
           result: null,
           map: {}
         }
@@ -355,34 +355,179 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
   });
 };
 
+const QUERY_MIN_LENGTH = 3;
+const AMOUNT_OF_ITEMS_IN_SUGGEST = (
+  window.screen.availHeight > 900 // MacBook Pro 13-inch
+    ? 30
+    : 20
+);
+
+function createMatcher(opts) {
+  opts = opts || {};
+  const pre = opts.pre || '';
+  const post = opts.post || '';
+
+  return function fuzzyMatch(pattern, str, fromIndex) {
+    let patternIdx = 0
+    , len = str.length
+    , totalScore = 0
+    , currScore = 0;
+
+    // If there's an exact match, add pre/post, max out score and skip the lookup
+    if (str === pattern) {
+      return {
+        rendered: pre + str + post,
+        score: 1000
+      };
+    }
+
+    let idx = fromIndex;
+    let result;
+
+    // For each character in the string, either add it to the result
+    // or wrap in template if it's the next string in the pattern
+    for(; idx < len && patternIdx < pattern.length; idx++) {
+      if(str.charCodeAt(idx) === pattern.charCodeAt(patternIdx)) {
+        if (result === undefined) {
+          result = str.split('')
+        }
+
+        result[idx] = pre + str[idx] + post;
+        patternIdx += 1;
+
+        // consecutive characters should increase the score more than linearly
+        currScore += 1 + currScore;
+      } else {
+        currScore = 0;
+      }
+      totalScore += currScore;
+    }
+
+    // return rendered string if we have a match for every char
+    if(patternIdx === pattern.length) {
+      let candidate;
+      const next = idx + 1;
+      if (next + pattern.length > str.length) {
+        return {
+          rendered: result ? result : str,
+          score: totalScore
+        }
+      }
+
+      const nextPossible = str.indexOf(pattern[0], next);
+
+      // If possible, try to find a better match at the rest of the string
+      if (nextPossible > -1 && (nextPossible + pattern.length) <= str.length) {
+        candidate = fuzzyMatch(pattern, str, nextPossible);
+      }
+
+      return (
+        candidate && candidate.score > totalScore
+          ? candidate
+          : {
+            rendered: result ? result : str,
+            score: totalScore
+          }
+      );
+    }
+
+    return null;
+  }
+}
+
+function fuzzyFilter(pattern, arr, opts) {
+  if(!arr || arr.length === 0) {
+    return [];
+  }
+  if (typeof pattern !== 'string' || pattern === '') {
+    return arr;
+  }
+
+  const buckets = new Map();
+  const fuzzyMatcher = createMatcher(opts);
+
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    const str = opts.extract(item);
+    const rendered = fuzzyMatcher(pattern, str, 0);
+
+    if (rendered === null) continue;
+
+    const entry = {
+      string: rendered.rendered,
+      score: rendered.score,
+      index: i,
+      original: str
+    };
+
+    let bucket = buckets.get(entry.score);
+
+    if (bucket === undefined) {
+      bucket = [entry];
+      buckets.set(entry.score, bucket);
+    } else {
+      bucket[bucket.length] = entry;
+    }
+  }
+
+  const keys = Array.from(buckets.keys()).sort(function (a, b) {return b - a});
+
+  const result = [];
+
+  for (let i = 0; i < keys.length; i++) {
+    const bucket = buckets.get(keys[i]);
+
+    for (let j = 0; j < bucket.length; j++) {
+      if (Array.isArray(bucket[j].string)) {
+        bucket[j].string = bucket[j].string.join('');
+      }
+
+      result[result.length] = bucket[j];
+    }
+  }
+
+  return result;
+}
+
 Prometheus.Graph.prototype.initTypeahead = function(self) {
   const source = queryHistory.isEnabled() ? pageConfig.queryHistMetrics.concat(pageConfig.allMetrics) : pageConfig.allMetrics;
+
   self.expr.typeahead({
     autoSelect: false,
     source: source,
-    items: 1000,
+    items: AMOUNT_OF_ITEMS_IN_SUGGEST,
+    delay: 90,
+    minLength: QUERY_MIN_LENGTH,
     matcher: function (item) {
-      // If we have result for current query, skip
-      if (self.fuzzyResult.query !== this.query) {
-        self.fuzzyResult.query = this.query;
-        self.fuzzyResult.map = {};
-        self.fuzzyResult.result = fuzzy.filter(this.query.replace(/ /g, ""), this.source, {
+      if (self.fuzzyResult.query === this.query) return item in self.fuzzyResult.map;
+
+      self.fuzzyResult.map = {};
+
+      const isPrefix = self.fuzzyResult.query.length > QUERY_MIN_LENGTH && this.query.indexOf(self.fuzzyResult.query) === 0;
+      self.fuzzyResult.query = this.query;
+
+      self.fuzzyResult.result = fuzzyFilter(
+        this.query.replace(/ /g, ""),
+        isPrefix ? self.fuzzyResult.result : this.source, {
           pre: "<strong>",
-          post: "</strong>"
-        });
-        self.fuzzyResult.result.forEach(function(r) {
-          self.fuzzyResult.map[r.original] = r;
-        });
+          post: "</strong>",
+          extract: (
+            isPrefix
+              ? function(s) {return s.original}
+              : function (s) {return s}
+          )
+      });
+
+      const len = Math.min(AMOUNT_OF_ITEMS_IN_SUGGEST, self.fuzzyResult.result.length);
+
+      for (let i = 0; i < len; i++) {
+        const r = self.fuzzyResult.result[i];
+        self.fuzzyResult.map[r.original] = r;
       }
 
       return item in self.fuzzyResult.map;
     },
-
     sorter: function (items) {
-      items.sort(function(a,b) {
-        var i = self.fuzzyResult.map[b].score - self.fuzzyResult.map[a].score;
-        return i === 0 ? a.localeCompare(b) : i;
-      });
       return items;
     }
   });
