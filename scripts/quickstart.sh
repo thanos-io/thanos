@@ -166,7 +166,6 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
   ${THANOS_EXECUTABLE} receive \
     --debug.name receive \
     --log.level debug \
-    --log.level debug \
     --tsdb.path "./data/remote-write-receive-data" \
     --grpc-address 0.0.0.0:10907 \
     --grpc-grace-period 1s \
