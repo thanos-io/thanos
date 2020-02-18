@@ -5,6 +5,7 @@ package e2eutil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -24,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -275,6 +278,131 @@ func (p *Prometheus) Appender() tsdb.Appender {
 		panic("Appender must not be called after start")
 	}
 	return p.db.Appender()
+}
+
+// CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
+// (Prometheus pre v2.7.0).
+func CreateEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	uid := ulid.MustNew(ulid.Now(), entropy)
+
+	if err := os.Mkdir(path.Join(dir, uid.String()), os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	if err := os.Mkdir(path.Join(dir, uid.String(), "chunks"), os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	w, err := index.NewWriter(context.Background(), path.Join(dir, uid.String(), "index"))
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "new index")
+	}
+
+	if err := w.Close(); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	m := tsdb.BlockMeta{
+		Version: 1,
+		ULID:    uid,
+		MinTime: mint,
+		MaxTime: maxt,
+		Compaction: tsdb.BlockMetaCompaction{
+			Level:   1,
+			Sources: []ulid.ULID{uid},
+		},
+	}
+	b, err := json.Marshal(&m)
+	if err != nil {
+		return ulid.ULID{}, err
+	}
+
+	if err := ioutil.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "saving meta.json")
+	}
+
+	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, uid.String()), metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: resolution},
+		Source:     metadata.TestSource,
+	}, nil); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "finalize block")
+	}
+
+	return uid, nil
+}
+
+// CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
+// Samples will be in the time range [mint, maxt)
+// Block ID will be created with a delay of time duration blockDelay.
+func CreateBlockWithBlockDelay(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	blockDelay time.Duration,
+	extLset labels.Labels,
+	resolution int64,
+) (id ulid.ULID, err error) {
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	if err != nil {
+		return id, errors.Wrap(err, "block creation")
+	}
+
+	id, err = ulid.New(uint64(time.Unix(int64(blockID.Time()), 0).Add(-blockDelay*1000).Unix()), nil)
+	if err != nil {
+		return id, errors.Wrap(err, "create block id")
+	}
+
+	if blockID.Compare(id) == 0 {
+		return
+	}
+
+	metaFile := path.Join(dir, blockID.String(), "meta.json")
+	r, err := os.Open(metaFile)
+	if err != nil {
+		return id, errors.Wrap(err, "open meta file")
+	}
+
+	metaContent, err := ioutil.ReadAll(r)
+	if err != nil {
+		return id, errors.Wrap(err, "read meta file")
+	}
+
+	m := &metadata.Meta{}
+	if err := json.Unmarshal(metaContent, m); err != nil {
+		return id, errors.Wrap(err, "meta.json corrupted")
+	}
+	m.ULID = id
+	m.Compaction.Sources = []ulid.ULID{id}
+
+	if err := os.MkdirAll(path.Join(dir, id.String()), 0777); err != nil {
+		return id, errors.Wrap(err, "create directory")
+	}
+
+	err = copyRecursive(path.Join(dir, blockID.String()), path.Join(dir, id.String()))
+	if err != nil {
+		return id, errors.Wrap(err, "copy directory")
+	}
+
+	err = os.RemoveAll(path.Join(dir, blockID.String()))
+	if err != nil {
+		return id, errors.Wrap(err, "delete directory")
+	}
+
+	jsonMeta, err := json.MarshalIndent(m, "", "\t")
+	if err != nil {
+		return id, errors.Wrap(err, "meta marshal")
+	}
+
+	err = ioutil.WriteFile(path.Join(dir, id.String(), "meta.json"), jsonMeta, 0644)
+	if err != nil {
+		return id, errors.Wrap(err, "write meta.json file")
+	}
+
+	return
 }
 
 // CreateBlock writes a block with the given series and numSamples samples each.

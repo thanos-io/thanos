@@ -49,6 +49,7 @@ type Syncer struct {
 	metrics                  *syncerMetrics
 	acceptMalformedIndex     bool
 	enableVerticalCompaction bool
+	duplicateBlocksFilter    *block.DeduplicateFilter
 }
 
 type syncerMetrics struct {
@@ -123,19 +124,20 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
-		logger:               logger,
-		reg:                  reg,
-		bkt:                  bkt,
-		fetcher:              fetcher,
-		blocks:               map[ulid.ULID]*metadata.Meta{},
-		metrics:              newSyncerMetrics(reg),
-		blockSyncConcurrency: blockSyncConcurrency,
-		acceptMalformedIndex: acceptMalformedIndex,
+		logger:                logger,
+		reg:                   reg,
+		bkt:                   bkt,
+		fetcher:               fetcher,
+		blocks:                map[ulid.ULID]*metadata.Meta{},
+		metrics:               newSyncerMetrics(reg),
+		duplicateBlocksFilter: duplicateBlocksFilter,
+		blockSyncConcurrency:  blockSyncConcurrency,
+		acceptMalformedIndex:  acceptMalformedIndex,
 		// The syncer offers an option to enable vertical compaction, even if it's
 		// not currently used by Thanos, because the compactor is also used by Cortex
 		// which needs vertical compaction.
@@ -225,95 +227,14 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 
 // GarbageCollect deletes blocks from the bucket if their data is available as part of a
 // block with a higher compaction level.
+// Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
 func (s *Syncer) GarbageCollect(ctx context.Context) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	begin := time.Now()
 
-	// Run a separate round of garbage collections for each valid resolution.
-	for _, res := range []int64{
-		downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2,
-	} {
-		err := s.garbageCollect(ctx, res)
-		if err != nil {
-			s.metrics.garbageCollectionFailures.Inc()
-		}
-		s.metrics.garbageCollections.Inc()
-		s.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
-
-		if err != nil {
-			return errors.Wrapf(err, "garbage collect resolution %d", res)
-		}
-	}
-	return nil
-}
-
-func (s *Syncer) GarbageBlocks(resolution int64) (ids []ulid.ULID, err error) {
-	// Map each block to its highest priority parent. Initial blocks have themselves
-	// in their source section, i.e. are their own parent.
-	parents := map[ulid.ULID]ulid.ULID{}
-
-	for id, meta := range s.blocks {
-		// Skip any block that has a different resolution.
-		if meta.Thanos.Downsample.Resolution != resolution {
-			continue
-		}
-
-		// For each source block we contain, check whether we are the highest priority parent block.
-		for _, sid := range meta.Compaction.Sources {
-			pid, ok := parents[sid]
-			// No parents for the source block so far.
-			if !ok {
-				parents[sid] = id
-				continue
-			}
-			pmeta, ok := s.blocks[pid]
-			if !ok {
-				return nil, errors.Errorf("previous parent block %s not found", pid)
-			}
-			// The current block is the higher priority parent for the source if its
-			// compaction level is higher than that of the previously set parent.
-			// If compaction levels are equal, the more recent ULID wins.
-			//
-			// The ULID recency alone is not sufficient since races, e.g. induced
-			// by downtime of garbage collection, may re-compact blocks that are
-			// were already compacted into higher-level blocks multiple times.
-			level, plevel := meta.Compaction.Level, pmeta.Compaction.Level
-
-			if level > plevel || (level == plevel && id.Compare(pid) > 0) {
-				parents[sid] = id
-			}
-		}
-	}
-
-	// A block can safely be deleted if they are not the highest priority parent for
-	// any source block.
-	topParents := map[ulid.ULID]struct{}{}
-	for _, pid := range parents {
-		topParents[pid] = struct{}{}
-	}
-
-	for id, meta := range s.blocks {
-		// Skip any block that has a different resolution.
-		if meta.Thanos.Downsample.Resolution != resolution {
-			continue
-		}
-		if _, ok := topParents[id]; ok {
-			continue
-		}
-
-		ids = append(ids, id)
-	}
-	return ids, nil
-}
-
-func (s *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
-	garbageIds, err := s.GarbageBlocks(resolution)
-	if err != nil {
-		return err
-	}
-
+	garbageIds := s.duplicateBlocksFilter.DuplicateIDs()
 	for _, id := range garbageIds {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -327,6 +248,7 @@ func (s *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		err := block.Delete(delCtx, s.logger, s.bkt, id)
 		cancel()
 		if err != nil {
+			s.metrics.garbageCollectionFailures.Inc()
 			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
 		}
 
@@ -335,6 +257,8 @@ func (s *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		delete(s.blocks, id)
 		s.metrics.garbageCollectedBlocks.Inc()
 	}
+	s.metrics.garbageCollections.Inc()
+	s.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
 	return nil
 }
 

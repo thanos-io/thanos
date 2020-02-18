@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,12 +18,10 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -91,10 +88,13 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil,
+			duplicateBlocksFilter.Filter,
+		)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 1, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, 1, false, false)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -164,10 +164,13 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 
-		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil,
+			duplicateBlocksFilter.Filter,
+		)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 5, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, 5, false, false)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -382,7 +385,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		var id ulid.ULID
 		var err error
 		if b.numSamples == 0 {
-			id, err = createEmptyBlock(prepareDir, b.mint, b.maxt, b.extLset, b.res)
+			id, err = e2eutil.CreateEmptyBlock(prepareDir, b.mint, b.maxt, b.extLset, b.res)
 		} else {
 			id, err = e2eutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res)
 		}
@@ -395,57 +398,4 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, id.String())))
 	}
 	return metas
-}
-
-// createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
-// (Prometheus pre v2.7.0).
-func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
-	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
-	uid := ulid.MustNew(ulid.Now(), entropy)
-
-	if err := os.Mkdir(path.Join(dir, uid.String()), os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
-	}
-
-	if err := os.Mkdir(path.Join(dir, uid.String(), "chunks"), os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
-	}
-
-	w, err := index.NewWriter(context.Background(), path.Join(dir, uid.String(), "index"))
-	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "new index")
-	}
-
-	if err := w.Close(); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
-	}
-
-	m := tsdb.BlockMeta{
-		Version: 1,
-		ULID:    uid,
-		MinTime: mint,
-		MaxTime: maxt,
-		Compaction: tsdb.BlockMetaCompaction{
-			Level:   1,
-			Sources: []ulid.ULID{uid},
-		},
-	}
-	b, err := json.Marshal(&m)
-	if err != nil {
-		return ulid.ULID{}, err
-	}
-
-	if err := ioutil.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "saving meta.json")
-	}
-
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, uid.String()), metadata.Thanos{
-		Labels:     extLset.Map(),
-		Downsample: metadata.ThanosDownsample{Resolution: resolution},
-		Source:     metadata.TestSource,
-	}, nil); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "finalize block")
-	}
-
-	return uid, nil
 }

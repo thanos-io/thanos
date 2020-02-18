@@ -16,7 +16,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -184,17 +183,11 @@ func runCompact(
 		Name: "thanos_compactor_iterations_total",
 		Help: "Total number of iterations that were executed successfully.",
 	})
-	consistencyDelayMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_consistency_delay_seconds",
-		Help: "Configured consistency delay in seconds.",
-	}, func() float64 {
-		return consistencyDelay.Seconds()
-	})
 	partialUploadDeleteAttempts := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
 	})
-	reg.MustRegister(halted, retried, iterations, consistencyDelayMetric, partialUploadDeleteAttempts)
+	reg.MustRegister(halted, retried, iterations, partialUploadDeleteAttempts)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
@@ -247,15 +240,18 @@ func runCompact(
 		}
 	}()
 
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg),
+	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
-		(&consistencyDelayMetaFilter{logger: logger, consistencyDelay: consistencyDelay}).Filter,
+		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
+		duplicateBlocksFilter.Filter,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, blockSyncConcurrency, acceptMalformedIndex, false)
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, blockSyncConcurrency, acceptMalformedIndex, false)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -390,25 +386,6 @@ func runCompact(
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
 	return nil
-}
-
-type consistencyDelayMetaFilter struct {
-	logger           log.Logger
-	consistencyDelay time.Duration
-}
-
-func (f *consistencyDelayMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced block.GaugeLabeled, _ bool) {
-	for id, meta := range metas {
-		if ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond) &&
-			meta.Thanos.Source != metadata.BucketRepairSource &&
-			meta.Thanos.Source != metadata.CompactorSource &&
-			meta.Thanos.Source != metadata.CompactorRepairSource {
-
-			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
-			synced.WithLabelValues(block.TooFreshMeta).Inc()
-			delete(metas, id)
-		}
-	}
 }
 
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.

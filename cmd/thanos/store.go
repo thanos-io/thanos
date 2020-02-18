@@ -81,6 +81,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	enableIndexHeader := cmd.Flag("experimental.enable-index-header", "If true, Store Gateway will recreate index-header instead of index-cache.json for each block. This will replace index-cache.json permanently once it will be out of experimental stage.").
 		Hidden().Default("false").Bool()
 
+	consistencyDelay := modelDuration(cmd.Flag("consistency-delay", "Minimum age of all blocks before they are being read.").
+		Default("30m"))
+
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
@@ -116,6 +119,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
 			*enableIndexHeader,
+			time.Duration(*consistencyDelay),
 		)
 	}
 }
@@ -148,6 +152,7 @@ func runStore(
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
 	enableIndexHeader bool,
+	consistencyDelay time.Duration,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -220,9 +225,11 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
+	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, prometheusRegisterer,
 		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
 		block.NewDeduplicateFilter().Filter,
 	)
 	if err != nil {
