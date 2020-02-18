@@ -366,7 +366,6 @@ func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metada
 	}
 
 	metas, _, err := fetcher.Fetch(ctx)
-
 	if err != nil {
 		switch errors.Cause(err) {
 		default:
@@ -376,5 +375,10 @@ func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metada
 		}
 	}
 
-	return metas[id], false, nil
+	m, ok := metas[id]
+	if !ok {
+		return nil, true, fmt.Errorf("fetch meta: %w", err)
+	}
+
+	return m, false, nil
 }
