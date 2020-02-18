@@ -64,7 +64,8 @@ func RunReplicate(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	_ opentracing.Tracer,
-	httpMetricsBindAddr string,
+	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	labelSelector labels.Selector,
 	resolution compact.ResolutionLevel,
 	compaction int,
@@ -74,16 +75,29 @@ func RunReplicate(
 ) error {
 	logger = log.With(logger, "component", "replicate")
 
-	level.Debug(logger).Log("msg", "setting up metric http listen-group")
+	level.Debug(logger).Log("msg", "setting up http listen-group")
 
-	// register a metrics http service.
 	httpProbe := prober.NewHTTP()
-	s := http.New(logger, reg, component.Replicate, httpProbe)
+	statusProber := prober.Combine(
+		httpProbe,
+		prober.NewInstrumentation(component.Replicate, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+	)
+
+	s := http.New(logger, reg, component.Replicate, httpProbe,
+		http.WithListen(httpBindAddr),
+		http.WithGracePeriod(httpGracePeriod),
+	)
 
 	g.Add(func() error {
-		level.Info(logger).Log("msg", "Listening for metrics", "address", httpMetricsBindAddr)
-		return errors.Wrap(s.ListenAndServe(), "serve metrics")
+		level.Info(logger).Log("msg", "Listening for http service", "address", httpBindAddr)
+
+		statusProber.Healthy()
+
+		return s.ListenAndServe()
 	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+
 		s.Shutdown(err)
 	})
 
