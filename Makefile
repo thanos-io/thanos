@@ -317,7 +317,7 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 		-w "/go/src/github.com/thanos-io/thanos" \
 		-e USER=deadbeef \
 		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci:release-0.35
+		quay.io/coreos/jsonnet-ci:release-0.36
 
 .PHONY: examples-in-container
 examples-in-container:
