@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## [v0.11.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0-rc.0) - 2020.02.19
+
 ### Fixed
 
 - [#2033](https://github.com/thanos-io/thanos/pull/2033) minio-go: Fixed Issue #1494 support Web Identity providers for IAM credentials for AWS EKS
