@@ -1,6 +1,6 @@
 {
   local thanos = self,
-  replicator+:: {
+  replicate+:: {
     jobPrefix: error 'must provide job prefix for Thanos Replicate dashboard',
     selector: error 'must provide selector for Thanos Replicate dashboard',
   },
@@ -13,7 +13,7 @@
             alert: 'ThanosReplicateIsDown',
             expr: |||
               absent(up{%(selector)s})
-            ||| % thanos.replicator,
+            ||| % thanos.replicate,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -33,7 +33,7 @@
               / on (namespace) group_left
                 sum(rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= 10
-            ||| % thanos.replicator,
+            ||| % thanos.replicate,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -50,7 +50,7 @@
               and
                 sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
-            ||| % thanos.replicator,
+            ||| % thanos.replicate,
             'for': '5m',
             labels: {
               severity: 'critical',

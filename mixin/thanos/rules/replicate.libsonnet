@@ -1,6 +1,6 @@
 {
   local thanos = self,
-  replicator+:: {
+  replicate+:: {
     selector: error 'must provide selector for Thanos Replicate dashboard',
   },
   prometheusRules+:: {
