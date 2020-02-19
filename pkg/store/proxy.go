@@ -416,7 +416,7 @@ func startStreamSeriesSet(
 				s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
 				return
 			case <-frameTimeoutCtx.Done():
-				s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data in %s from %s", s.responseTimeout.String(), s.name), done)
+				s.handleErr(errors.Wrapf(frameTimeoutCtx.Err(), "failed to receive any data in %s from %s", s.responseTimeout.String(), s.name), done)
 				return
 			case rr = <-rCh:
 			}
@@ -427,8 +427,7 @@ func startStreamSeriesSet(
 			}
 
 			if rr.err != nil {
-				wrapErr := errors.Wrapf(rr.err, "receive series from %s", s.name)
-				s.handleErr(wrapErr, done)
+				s.handleErr(errors.Wrapf(rr.err, "receive series from %s", s.name), done)
 				return
 			}
 			numResponses++
