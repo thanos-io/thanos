@@ -5,12 +5,12 @@ package receive
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/cespare/xxhash"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/prompb"
 )
 

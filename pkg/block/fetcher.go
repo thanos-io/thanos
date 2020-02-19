@@ -6,7 +6,6 @@ package block
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"io/ioutil"
 	"os"
 	"path"
@@ -185,7 +184,7 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 			return m, nil
 		}
 
-		if !stderrors.Is(err, os.ErrNotExist) {
+		if !errors.Is(err, os.ErrNotExist) {
 			level.Warn(s.logger).Log("msg", "best effort read of the local meta.json failed; removing cached block dir", "dir", cachedBlockDir, "err", err)
 			if err := os.RemoveAll(cachedBlockDir); err != nil {
 				level.Warn(s.logger).Log("msg", "best effort remove of cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
