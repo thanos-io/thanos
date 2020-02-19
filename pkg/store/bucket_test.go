@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/pool"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -1277,4 +1278,180 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 			}
 		})
 	}
+}
+
+// Regression test against: https://github.com/thanos-io/thanos/issues/2147.
+func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "segfault-series")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	logger := log.NewNopLogger()
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	chunkPool, err := pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, 100e7)
+	testutil.Ok(t, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
+		MaxItemSize: 3000,
+		// This is the exact size of cache needed for our *single request*.
+		// This is limited in order to make sure we test evictions.
+		MaxSize: 8889,
+	})
+	testutil.Ok(t, err)
+
+	var b1 *bucketBlock
+
+	const numSeries = 100
+
+	// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
+	// Timestamp will be counted for each new series, so each series will have unique timestamp.
+	// This allows to pick time range that will correspond to number of series picked 1:1.
+	{
+		// Block 1.
+		h, err := tsdb.NewHead(nil, nil, nil, 1)
+		testutil.Ok(t, err)
+		defer testutil.Ok(t, h.Close())
+
+		app := h.Appender()
+
+		for i := 0; i < numSeries; i++ {
+			ts := int64(i)
+			lbls := labels.FromStrings("foo", "bar", "b", "1", "i", fmt.Sprintf("%07d%s", ts, postingsBenchSuffix))
+
+			_, err := app.Add(lbls, ts, 0)
+			testutil.Ok(t, err)
+		}
+		testutil.Ok(t, app.Commit())
+
+		blockDir := filepath.Join(tmpDir, "tmp")
+		id := createBlockFromHead(t, blockDir, h)
+
+		meta, err := metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, id.String()), thanosMeta, nil)
+		testutil.Ok(t, err)
+		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String())))
+
+		b1 = &bucketBlock{
+			indexCache:  indexCache,
+			logger:      logger,
+			bkt:         bkt,
+			meta:        meta,
+			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:   chunkPool,
+		}
+		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID)
+		testutil.Ok(t, err)
+	}
+
+	var b2 *bucketBlock
+	{
+		// Block 2, do not load this block yet.
+		h, err := tsdb.NewHead(nil, nil, nil, 1)
+		testutil.Ok(t, err)
+		defer testutil.Ok(t, h.Close())
+
+		app := h.Appender()
+
+		for i := 0; i < numSeries; i++ {
+			ts := int64(i)
+			lbls := labels.FromStrings("foo", "bar", "b", "2", "i", fmt.Sprintf("%07d%s", ts, postingsBenchSuffix))
+
+			_, err := app.Add(lbls, ts, 0)
+			testutil.Ok(t, err)
+		}
+		testutil.Ok(t, app.Commit())
+
+		blockDir := filepath.Join(tmpDir, "tmp2")
+		id := createBlockFromHead(t, blockDir, h)
+
+		meta, err := metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, id.String()), thanosMeta, nil)
+		testutil.Ok(t, err)
+		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String())))
+
+		b2 = &bucketBlock{
+			indexCache:  indexCache,
+			logger:      logger,
+			bkt:         bkt,
+			meta:        meta,
+			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:   chunkPool,
+		}
+		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID)
+		testutil.Ok(t, err)
+	}
+
+	store := &BucketStore{
+		bkt:        bkt,
+		logger:     logger,
+		indexCache: indexCache,
+		metrics:    newBucketStoreMetrics(nil),
+		blockSets: map[uint64]*bucketBlockSet{
+			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
+		},
+		blocks: map[ulid.ULID]*bucketBlock{
+			b1.meta.ULID: b1,
+			b2.meta.ULID: b2,
+		},
+		queryGate:      noopGater{},
+		samplesLimiter: noopLimiter{},
+	}
+
+	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
+		srv := newStoreSeriesServer(context.Background())
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
+			MinTime: 0,
+			MaxTime: int64(numSeries) - 1,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+				// This bug shows only when we use lot's of symbols for matching.
+				{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
+			},
+		}, srv))
+		testutil.Equals(t, 0, len(srv.Warnings))
+		testutil.Equals(t, numSeries, len(srv.SeriesSet))
+	})
+	t.Run("invoke series for second block. This should revoke previous cache.", func(t *testing.T) {
+		srv := newStoreSeriesServer(context.Background())
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
+			MinTime: 0,
+			MaxTime: int64(numSeries) - 1,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
+				// This bug shows only when we use lot's of symbols for matching.
+				{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
+			},
+		}, srv))
+		testutil.Equals(t, 0, len(srv.Warnings))
+		testutil.Equals(t, numSeries, len(srv.SeriesSet))
+	})
+	t.Run("remove second block. Cache stays. Ask for first again.", func(t *testing.T) {
+		testutil.Ok(t, store.removeBlock(b2.meta.ULID))
+
+		srv := newStoreSeriesServer(context.Background())
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
+			MinTime: 0,
+			MaxTime: int64(numSeries) - 1,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+				// This bug shows only when we use lot's of symbols for matching.
+				{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
+			},
+		}, srv))
+		testutil.Equals(t, 0, len(srv.Warnings))
+		testutil.Equals(t, numSeries, len(srv.SeriesSet))
+	})
 }
