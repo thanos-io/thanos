@@ -321,9 +321,7 @@ func runReceive(
 		if cw != nil {
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				// TODO: If config is empty we never start receiver. We might want to fail in this case.
-				receive.HashringFromConfig(ctx, updates, cw)
-				return nil
+				return receive.HashringFromConfig(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})

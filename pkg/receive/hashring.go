@@ -165,7 +165,12 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
-func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) {
+func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
+	_, _, err := cw.LoadConfig()
+	if err != nil {
+		return errors.Wrap(err, "failed to load hashring configuration file")
+	}
+
 	go cw.Run(ctx)
 	defer close(updates)
 
@@ -173,11 +178,11 @@ func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *Config
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
-				return
+				return errors.New("hashring config watcher stopped")
 			}
 			updates <- newMultiHashring(cfg)
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		}
 	}
 }
