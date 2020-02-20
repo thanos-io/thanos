@@ -51,7 +51,7 @@ const (
 	// Filter's label values.
 	labelExcludedMeta = "label-excluded"
 	timeExcludedMeta  = "time-excluded"
-	TooFreshMeta      = "too-fresh"
+	tooFreshMeta      = "too-fresh"
 	duplicateMeta     = "duplicate"
 )
 
@@ -83,7 +83,7 @@ func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
 		[]string{corruptedMeta},
 		[]string{noMeta},
 		[]string{loadedMeta},
-		[]string{TooFreshMeta},
+		[]string{tooFreshMeta},
 		[]string{failedMeta},
 		[]string{labelExcludedMeta},
 		[]string{timeExcludedMeta},
@@ -535,6 +535,9 @@ type ConsistencyDelayMetaFilter struct {
 
 // NewConsistencyDelayMetaFilter creates ConsistencyDelayMetaFilter.
 func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Duration, reg prometheus.Registerer) *ConsistencyDelayMetaFilter {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	consistencyDelayMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "consistency_delay_seconds",
 		Help: "Configured consistency delay in seconds.",
@@ -561,7 +564,7 @@ func (f *ConsistencyDelayMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, 
 			meta.Thanos.Source != metadata.CompactorRepairSource {
 
 			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
-			synced.WithLabelValues(TooFreshMeta).Inc()
+			synced.WithLabelValues(tooFreshMeta).Inc()
 			delete(metas, id)
 		}
 	}

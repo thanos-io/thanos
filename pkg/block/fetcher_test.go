@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
@@ -268,7 +270,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(labelExcludedMeta)))
 				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(timeExcludedMeta)))
 				testutil.Equals(t, float64(expectedFailures), promtest.ToFloat64(f.metrics.synced.WithLabelValues(failedMeta)))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(TooFreshMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(tooFreshMeta)))
 			}); !ok {
 				return
 			}
@@ -769,4 +771,109 @@ func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []
 		fmt.Printf("\033[31m%s:%d:\n\n\texp keys: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, mapKeys, s)
 		tb.FailNow()
 	}
+}
+
+type ulidBuilder struct {
+	entropy *rand.Rand
+
+	created []ulid.ULID
+}
+
+func (u *ulidBuilder) ULID(t time.Time) ulid.ULID {
+	if u.entropy == nil {
+		source := rand.NewSource(1234)
+		u.entropy = rand.New(source)
+	}
+
+	id := ulid.MustNew(ulid.Timestamp(t), u.entropy)
+	u.created = append(u.created, id)
+	return id
+}
+
+func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
+	u := &ulidBuilder{}
+	now := time.Now()
+
+	input := map[ulid.ULID]*metadata.Meta{
+		// Fresh blocks.
+		u.ULID(now):                       {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.RulerSource}},
+
+		// For now non-delay delete sources, should be ignored by consistency delay.
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
+		u.ULID(now.Add(-1 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
+
+		// 29m.
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.RulerSource}},
+
+		// For now non-delay delete sources, should be ignored by consistency delay.
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
+		u.ULID(now.Add(-29 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
+
+		// 30m.
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.RulerSource}},
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
+		u.ULID(now.Add(-30 * time.Minute)): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
+
+		// 30m+.
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.RulerSource}},
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
+		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
+	}
+
+	t.Run("consistency 0 (turned off)", func(t *testing.T) {
+		synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		expected := map[ulid.ULID]*metadata.Meta{}
+		// Copy all.
+		for _, id := range u.created {
+			expected[id] = input[id]
+		}
+
+		reg := prometheus.NewRegistry()
+		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+
+		f.Filter(input, synced, false)
+
+		testutil.Equals(t, 0.0, promtest.ToFloat64(synced.WithLabelValues(tooFreshMeta)))
+		testutil.Equals(t, expected, input)
+	})
+
+	t.Run("consistency 30m.", func(t *testing.T) {
+		synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		expected := map[ulid.ULID]*metadata.Meta{}
+		// Only certain sources and those with 30m or more age go through.
+		for i, id := range u.created {
+			// Younger than 30m.
+			if i < 13 {
+				if input[id].Thanos.Source != metadata.BucketRepairSource &&
+					input[id].Thanos.Source != metadata.CompactorSource &&
+					input[id].Thanos.Source != metadata.CompactorRepairSource {
+					continue
+				}
+			}
+			expected[id] = input[id]
+		}
+
+		reg := prometheus.NewRegistry()
+		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+
+		f.Filter(input, synced, false)
+
+		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(synced.WithLabelValues(tooFreshMeta)))
+		testutil.Equals(t, expected, input)
+	})
 }
