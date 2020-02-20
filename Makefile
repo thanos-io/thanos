@@ -425,9 +425,7 @@ $(MINIO_SERVER):
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
 
 $(FAILLINT):
-	@go get github.com/fatih/faillint@$(FAILLINT_VERSION)
-	@mv $(GOBIN)/faillint $(FAILLINT)
-	@go mod tidy
+	$(call fetch_go_bin_version,github.com/fatih/faillint,$(FAILLINT_VERSION))
 
 $(PROMS):
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
