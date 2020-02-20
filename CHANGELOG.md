@@ -15,25 +15,25 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
-- [#2033](https://github.com/thanos-io/thanos/pull/2033) Minio-go: Fixed Issue #1494 support Web Identity providers for IAM credentials for AWS EKS
+- [#2033](https://github.com/thanos-io/thanos/pull/2033) Minio-go: Fixed Issue #1494 support Web Identity providers for IAM credentials for AWS EKS.
 - [#1985](https://github.com/thanos-io/thanos/pull/1985) Store Gateway: Fixed case where series entry is larger than 64KB in index.
 - [#2051](https://github.com/thanos-io/thanos/pull/2051) Ruler: Fixed issue where ruler does not expose shipper metrics.
 - [#2101](https://github.com/thanos-io/thanos/pull/2101) Ruler: Fixed bug where thanos_alert_sender_errors_total was not registered.
-- [#1789](https://github.com/thanos-io/thanos/pull/1789) Store Gateway: Improve timeouts
-- [#2009](https://github.com/thanos-io/thanos/pull/2009) Store Gateway: Add consistency delay to fetch blocks
-- [#2139](https://github.com/thanos-io/thanos/pull/2139) Properly handle SIGHUP for reloading
-- [#2040](https://github.com/thanos-io/thanos/pull/2040) UI: Fix ruler alerts click
-- [#2033](https://github.com/thanos-io/thanos/pull/1978) Fix tracing for alerts
+- [#1789](https://github.com/thanos-io/thanos/pull/1789) Store Gateway: Improve timeouts.
+- [#2139](https://github.com/thanos-io/thanos/pull/2139) Properly handle SIGHUP for reloading.
+- [#2040](https://github.com/thanos-io/thanos/pull/2040) UI: Fix URL of alerts in Ruler
+- [#2033](https://github.com/thanos-io/thanos/pull/1978) Ruler: Fix tracing in Thanos Ruler
 
 ### Added
 
-- [#2003](https://github.com/thanos-io/thanos/pull/2003) Query: Support downsampling for /series
-- [#1952](https://github.com/thanos-io/thanos/pull/1952) Store Gateway: Implement binary index header
-- [#1963](https://github.com/thanos-io/thanos/pull/1963) Mixin: Add Thanos Ruler alerts
-- [#1984](https://github.com/thanos-io/thanos/pull/1984) Query: Add cache-control header to not cache on error
-- [#1870](https://github.com/thanos-io/thanos/pull/1870) UI: Persist settings in query
-- [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags
-- [#1967](https://github.com/thanos-io/thanos/issues/1967) Receive: Allow local TSDB compaction
+- [#2003](https://github.com/thanos-io/thanos/pull/2003) Query: Support downsampling for /series.
+- [#1952](https://github.com/thanos-io/thanos/pull/1952) Store Gateway: Implemented [binary index header](https://thanos.io/proposals/201912_thanos_binary_index_header.md/). This significantly reduces resource consumption (memory, CPU, net bandwidth) for startup and data loading processes as well as baseline memory. This means that adding more blocks into object storage, without querying them will use almost no resources. This, however, **still means that querying large amounts of data** will result in high spikes of memory and CPU use as before, due to simply fetching large amounts of metrics data. Since we fixed baseline, we are now focusing on query performance optimizations in separate initiatives. To enable experimental `index-header` mode run store with hidden `experimental.enable-index-header` flag.
+- [#2009](https://github.com/thanos-io/thanos/pull/2009) Store Gateway: Minimum age of all blocks before they are being read. Set it to a safe value (e.g 30m) if your object storage is eventually consistent. GCS and S3 are (roughly) strongly consistent.
+- [#1963](https://github.com/thanos-io/thanos/pull/1963) Mixin: Add Thanos Ruler alerts.
+- [#1984](https://github.com/thanos-io/thanos/pull/1984) Query: Add cache-control header to not cache on error.
+- [#1870](https://github.com/thanos-io/thanos/pull/1870) UI: Persist settings in query.
+- [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags.
+- [#1967](https://github.com/thanos-io/thanos/issues/1967) Receive: Allow local TSDB compaction.
 - [#1939](https://github.com/thanos-io/thanos/pull/1939) Ruler: Add TLS and authentication support for query endpoints with the `--query.config` and `--query.config-file` CLI flags. See [documentation](docs/components/rule.md/#configuration) for further information.
 - [#1982](https://github.com/thanos-io/thanos/pull/1982) Ruler: Add support for Alertmanager v2 API endpoints.
 - [#2030](https://github.com/thanos-io/thanos/pull/2030) Query: Add `thanos_proxy_store_empty_stream_responses_total` metric for number of empty responses from stores.
