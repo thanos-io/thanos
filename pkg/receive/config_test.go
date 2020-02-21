@@ -12,7 +12,7 @@ import (
 )
 
 func TestValidateConfig(t *testing.T) {
-	var emptyHashringErr EmptyHashringError
+	var emptyCfgErr EmptyConfigurationError
 
 	for _, tc := range []struct {
 		name string
@@ -22,12 +22,12 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "<nil> config",
 			cfg:  nil,
-			err:  emptyHashringErr,
+			err:  emptyCfgErr,
 		},
 		{
 			name: "empty config",
 			cfg:  []HashringConfig{},
-			err:  emptyHashringErr,
+			err:  emptyCfgErr,
 		},
 		{
 			name: "unparsable config",

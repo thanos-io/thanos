@@ -320,7 +320,7 @@ func runReceive(
 		updates := make(chan receive.Hashring, 1)
 
 		if cw != nil {
-			// Before scheduling a job, check if hashring config is valid.
+			// Check the hashring configuration on before running the watcher.
 			if err := cw.ValidateConfig(); err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")

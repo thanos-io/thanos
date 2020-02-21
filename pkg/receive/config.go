@@ -20,9 +20,11 @@ import (
 	"gopkg.in/fsnotify.v1"
 )
 
-type EmptyHashringError string
+// An EmptyConfigurationError is returned by the ConfigWatcher when attempting to load an empty configuration file.
+// Note: This error is defined as a type to conviently test the behavior against errors.
+type EmptyConfigurationError string
 
-func (e EmptyHashringError) Error() string { return "hashring is empty" }
+func (e EmptyConfigurationError) Error() string { return "configuration file is empty: " + string(e) }
 
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
@@ -184,7 +186,7 @@ func (cw *ConfigWatcher) C() <-chan []HashringConfig {
 	return cw.ch
 }
 
-// ValidateConfig returns an error if configuration that's being watched is not valid.
+// ValidateConfig returns an error if the configuration that's being watched is not valid.
 func (cw *ConfigWatcher) ValidateConfig() error {
 	_, _, err := cw.loadConfig()
 	return err
@@ -204,8 +206,7 @@ func (cw *ConfigWatcher) loadConfig() ([]HashringConfig, float64, error) {
 
 	// If hashring is empty, return an error.
 	if len(config) == 0 {
-		var err EmptyHashringError
-		return nil, 0, err
+		return nil, 0, EmptyConfigurationError(cw.path)
 	}
 
 	return config, hashAsMetricValue(cfgContent), nil
@@ -276,7 +277,7 @@ func (cw *ConfigWatcher) stop() {
 	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
 }
 
-// readFile reads the configured file and returns content of configuration file.
+// readFile reads the configuration file and returns content of configuration file.
 func (cw *ConfigWatcher) readFile() ([]byte, error) {
 	fd, err := os.Open(cw.path)
 	if err != nil {
