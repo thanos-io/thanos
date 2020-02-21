@@ -166,12 +166,8 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
 func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
-	if err := cw.ValidateConfig(); err != nil {
-		return errors.Wrap(err, "failed to validate hashring configuration file")
-	}
-
-	go cw.Run(ctx)
 	defer close(updates)
+	go cw.Run(ctx)
 
 	for {
 		select {
