@@ -747,6 +747,7 @@ type errInvalidPattern struct {
 func (e *errInvalidPattern) Error() string {
 	return errors.Wrapf(e.err, "retrieving rule files failed. Ignoring file. pattern %s", e.pat).Error()
 }
+
 func reloadRules(logger log.Logger,
 	ruleFiles []string,
 	ruleMgr *thanosrule.Manager,
