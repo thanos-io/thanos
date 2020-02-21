@@ -66,6 +66,7 @@ require (
 replace (
 	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
+	// TODO(bwplotka): Update once https://github.com/cortexproject/cortex/pull/2146 is merged.
 	github.com/cortexproject/cortex => github.com/bwplotka/cortex v0.0.0-20200218165228-c04fa1c09090
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f

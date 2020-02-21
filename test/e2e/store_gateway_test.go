@@ -29,7 +29,7 @@ import (
 )
 
 // TODO(bwplotka): Extend this test to have multiple stores and memcached.
-// TODO(bwplotka): Extent this test for downsampling.
+// TODO(bwplotka): Extend this test for downsampling.
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
 

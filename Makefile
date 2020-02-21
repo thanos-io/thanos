@@ -244,7 +244,7 @@ test-local:
 	$(MAKE) test
 
 .PHONY: test-e2e
-test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e.
+test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
 test-e2e: docker
 	@echo ">> running /test/e2e tests."
 	@go test -v ./test/e2e/...
@@ -293,7 +293,7 @@ web: web-pre-process $(HUGO)
 # to debug big allocations during linting.
 lint: ## Runs various static analysis against our code.
 lint: check-git deps $(GOLANGCILINT) $(MISSPELL) $(FAILLINT)
-	$(call require_clean_work_tree,"detected not clean muster before running lint")
+	$(call require_clean_work_tree,"detected not clean master before running lint")
 	@echo ">> verifying modules being imported"
 	@$(FAILLINT) -paths $(MODULES_TO_AVOID) ./...
 	@echo ">> examining all of the Go files"

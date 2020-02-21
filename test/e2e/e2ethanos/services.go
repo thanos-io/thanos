@@ -13,6 +13,8 @@ import (
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -58,7 +60,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		promImage,
 		e2e.NewCommandWithoutEntrypoint("prometheus", e2e.BuildArgs(map[string]string{
 			"--config.file":                     filepath.Join(container, "prometheus.yml"),
-			"--storage.tsdb.path":               filepath.Join(container),
+			"--storage.tsdb.path":               container,
 			"--storage.tsdb.max-block-duration": "2h",
 			"--log.level":                       logLevel,
 			"--web.listen-address":              ":9090",
@@ -86,7 +88,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 			"--grpc-grace-period": "0s",
 			"--http-address":      ":80",
 			"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
-			"--tsdb.path":         filepath.Join(dataDir),
+			"--tsdb.path":         dataDir,
 			"--log.level":         logLevel,
 		})...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
@@ -94,18 +96,6 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 		9091,
 	)
 	return prom, sidecar, nil
-}
-
-func generateFileSD(addresses []string) string {
-	conf := "[ { \"targets\": ["
-	for index, addr := range addresses {
-		conf += fmt.Sprintf("\"%s\"", addr)
-		if index+1 < len(addresses) {
-			conf += ","
-		}
-	}
-	conf += "] } ]"
-	return conf
 }
 
 func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDStoreAddresses []string) (*Service, error) {
@@ -132,11 +122,21 @@ func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDSt
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(generateFileSD(fileSDStoreAddresses)), 0666); err != nil {
+		fileSD := []*targetgroup.Group{{}}
+		for _, a := range fileSDStoreAddresses {
+			fileSD[0].Targets = append(fileSD[0].Targets, model.LabelSet{model.AddressLabel: model.LabelValue(a)})
+		}
+
+		b, err := yaml.Marshal(fileSD)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.yaml", b, 0666); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
-		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.json"))
+		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
 	}
 
 	return NewService(

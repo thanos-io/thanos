@@ -365,10 +365,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			continue
 		}
 		if err := s.removeBlock(id); err != nil {
-			level.Warn(s.logger).Log("msg", "drop outdated block failed", "block", id, "err", err)
+			level.Warn(s.logger).Log("msg", "drop of outdated block failed", "block", id, "err", err)
 			s.metrics.blockDropFailures.Inc()
 		}
-		level.Info(s.logger).Log("msg", "unloaded outdated block", "block", id)
+		level.Info(s.logger).Log("msg", "dropped outdated block", "block", id)
 		s.metrics.blockDrops.Inc()
 	}
 
