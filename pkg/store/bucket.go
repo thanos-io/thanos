@@ -1088,7 +1088,11 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 	bs := append(s.blocks[i], b)
 	s.blocks[i] = bs
 
+	// Always sort blocks by min time, then max time.
 	sort.Slice(bs, func(j, k int) bool {
+		if bs[j].meta.MinTime == bs[k].meta.MinTime {
+			return bs[j].meta.MaxTime < bs[k].meta.MaxTime
+		}
 		return bs[j].meta.MinTime < bs[k].meta.MinTime
 	})
 	return nil
@@ -1120,6 +1124,9 @@ func int64index(s []int64, x int64) int {
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
 // Blocks with the biggest resolution possible but not bigger than the given max resolution are returned.
+// It supports overlapping blocks.
+//
+// NOTE: s.blocks are expected to be sorted in minTime order.
 func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
 	if mint > maxt {
 		return nil

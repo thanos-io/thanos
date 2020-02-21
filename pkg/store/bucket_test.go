@@ -192,12 +192,16 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 		mint, maxt int64
 		window     int64
 	}
+	// Input is expected to be sorted. It is sorted in addBlock.
 	input := []resBlock{
 		// Blocks from 0 to 100 with raw resolution.
 		{window: downsample.ResLevel0, mint: 0, maxt: 100},
 		{window: downsample.ResLevel0, mint: 100, maxt: 200},
+		{window: downsample.ResLevel0, mint: 100, maxt: 200}, // Same overlap.
+		{window: downsample.ResLevel0, mint: 200, maxt: 299}, // Short overlap.
 		{window: downsample.ResLevel0, mint: 200, maxt: 300},
 		{window: downsample.ResLevel0, mint: 300, maxt: 400},
+		{window: downsample.ResLevel0, mint: 300, maxt: 600}, // Long overlap.
 		{window: downsample.ResLevel0, mint: 400, maxt: 500},
 		// Lower resolution data not covering last block.
 		{window: downsample.ResLevel1, mint: 0, maxt: 100},
@@ -230,8 +234,11 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 0, maxt: 100},
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
+				{window: downsample.ResLevel0, mint: 100, maxt: 200},
+				{window: downsample.ResLevel0, mint: 200, maxt: 299},
 				{window: downsample.ResLevel0, mint: 200, maxt: 300},
 				{window: downsample.ResLevel0, mint: 300, maxt: 400},
+				{window: downsample.ResLevel0, mint: 300, maxt: 600},
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
 		}, {
@@ -240,8 +247,11 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 			maxResolution: downsample.ResLevel1 - 1,
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
+				{window: downsample.ResLevel0, mint: 100, maxt: 200},
+				{window: downsample.ResLevel0, mint: 200, maxt: 299},
 				{window: downsample.ResLevel0, mint: 200, maxt: 300},
 				{window: downsample.ResLevel0, mint: 300, maxt: 400},
+				{window: downsample.ResLevel0, mint: 300, maxt: 600},
 				// Block intervals are half-open: [b.MinTime, b.MaxTime), so 400-500 contains single sample.
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
@@ -253,6 +263,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				{window: downsample.ResLevel1, mint: 100, maxt: 200},
 				{window: downsample.ResLevel1, mint: 200, maxt: 300},
 				{window: downsample.ResLevel1, mint: 300, maxt: 400},
+				{window: downsample.ResLevel0, mint: 300, maxt: 600},
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
 		}, {
@@ -264,6 +275,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				{window: downsample.ResLevel2, mint: 100, maxt: 200},
 				{window: downsample.ResLevel2, mint: 200, maxt: 300},
 				{window: downsample.ResLevel1, mint: 300, maxt: 400},
+				{window: downsample.ResLevel0, mint: 300, maxt: 600},
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
 		},
@@ -1059,24 +1071,24 @@ func newSeries(t testing.TB, lset labels.Labels, smplChunks [][]sample) storepb.
 	return s
 }
 
-// https://github.com/thanos-io/thanos/issues/2147
 func TestSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
-	tb.Run("1kSeriesWithOneSample", func(tb testutil.TB) {
-		benchSeries(tb, 10000000, seriesDimension)
+	tb.Run("200e3SeriesWithOneSample", func(tb testutil.TB) {
+		benchSeries(tb, 200e3, seriesDimension, 200e3)
 	})
-	tb.Run("OneSeriesWith1kSamples", func(tb testutil.TB) {
-		benchSeries(tb, 10e6, samplesDimension)
+	tb.Run("OneSeriesWith200e3Samples", func(tb testutil.TB) {
+		benchSeries(tb, 200e3, samplesDimension, 200e3)
 	})
 }
 
 func BenchmarkSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
-	tb.Run("1MlnSeriesWithOneSample", func(tb testutil.TB) {
-		benchSeries(tb, 10000000, seriesDimension)
+	tb.Run("10e6SeriesWithOneSample", func(tb testutil.TB) {
+		benchSeries(tb, 10e6, seriesDimension, 1e6) // 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6)
 	})
-	tb.Run("OneSeriesWith1BlnSamples", func(tb testutil.TB) {
-		benchSeries(tb, 10e6, samplesDimension) // ~10d
+	tb.Run("OneSeriesWith100e6Samples", func(tb testutil.TB) {
+		// 100e6 samples = ~17361 days with 15s scrape.
+		benchSeries(tb, 100e6, samplesDimension, 10e6) // 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6, 100e6)
 	})
 }
 
@@ -1113,7 +1125,8 @@ func createBlockWithOneSeries(t testutil.TB, dir string, lbls labels.Labels, blo
 	app := h.Appender()
 
 	ref, err := app.Add(lbls, int64(blockIndex*totalSamples), random.Float64())
-	for i := 0; i < totalSamples; i++ {
+	testutil.Ok(t, err)
+	for i := 1; i <= totalSamples; i++ {
 		ts := int64(blockIndex*totalSamples + i)
 		testutil.Ok(t, app.AddFast(ref, ts, random.Float64()))
 	}
@@ -1129,7 +1142,7 @@ const (
 	samplesDimension = Dimension("samples")
 )
 
-func benchSeries(t testutil.TB, number int, dimension Dimension) {
+func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 	tmpDir, err := ioutil.TempDir("", "testorbench-series")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
@@ -1173,16 +1186,17 @@ func benchSeries(t testutil.TB, number int, dimension Dimension) {
 	blockDir := filepath.Join(tmpDir, "tmp")
 
 	var preBuildBlockIDs []ulid.ULID
-	if !t.IsBenchmark() {
+	// Local dev optimization to fetch those big blocks, instead of recreating.
+	// We cannot really commit this to Git (2GB).
+	// TODO(bwplotka): Provide them in objstore instead?.
+	if t.IsBenchmark() {
 		switch dimension {
 		case seriesDimension:
-			// Local optimization. We cannot really commit this to Git (2GB).
-			p := filepath.Join(".", "test-data", "10000000seriesOneSample")
+			p := filepath.Join(".", "test-data", "10e6seriesOneSample")
 			if _, err := os.Stat(p); err == nil {
 				blockDir = p
 			}
 		case samplesDimension:
-			// Local optimization. We cannot really commit this to Git (2GB).
 			p := filepath.Join(".", "test-data", "1series100e6Samples")
 			if _, err := os.Stat(p); err == nil {
 				blockDir = p
@@ -1285,6 +1299,7 @@ func benchSeries(t testutil.TB, number int, dimension Dimension) {
 		}
 		blocks = append(blocks, b)
 	}
+
 	store := &BucketStore{
 		bkt:        bkt,
 		logger:     logger,
@@ -1297,50 +1312,27 @@ func benchSeries(t testutil.TB, number int, dimension Dimension) {
 		samplesLimiter: noopLimiter{},
 	}
 
-	var cases []*benchSeriesCase
-	if t.IsBenchmark() {
-		for s := 1; s <= 4*numberPerBlock; s *= 10 {
-			var expected []storepb.Series
+	for _, block := range blocks {
+		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
+		testutil.Ok(t, err)
+	}
 
-			switch dimension {
-			case seriesDimension:
-				expected = series[:s]
-			case samplesDimension:
-				expected = []storepb.Series{{
-					Labels: series[0].Labels,
-				}}
-			}
-
-			cases = append(cases, &benchSeriesCase{
-				name: fmt.Sprintf("%dof%d", s, 4*numberPerBlock),
-				req: &storepb.SeriesRequest{
-					MinTime: 0,
-					MaxTime: int64(s) - 1,
-					Matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
-					},
-				},
-				expected: expected,
-			})
-		}
-	} else {
-		// For test just go straight away to the largest one, we care here only about correctness.
-		s := number
-
+	var bCases []*benchSeriesCase
+	for _, c := range cases {
 		var expected []storepb.Series
 
 		switch dimension {
 		case seriesDimension:
-			expected = series[:s]
+			expected = series[:c]
 		case samplesDimension:
 			expected = series
 		}
 
-		cases = append(cases, &benchSeriesCase{
-			name: fmt.Sprintf("%dof%d", s, 4*numberPerBlock),
+		bCases = append(bCases, &benchSeriesCase{
+			name: fmt.Sprintf("%dof%d", c, 4*numberPerBlock),
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
-				MaxTime: int64(s) - 1,
+				MaxTime: int64(c) - 1,
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
@@ -1349,26 +1341,18 @@ func benchSeries(t testutil.TB, number int, dimension Dimension) {
 		})
 	}
 
-	for _, block := range blocks {
-		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
-		testutil.Ok(t, err)
-	}
-
 	fmt.Println("Starting")
-	benchmarkSeries(t, store, cases)
+	benchmarkSeries(t, store, bCases)
 	if !t.IsBenchmark() {
-		// Make sure the pool is correctly used.
-		testutil.Equals(t, 1, int(chunkPool.(*mockedPool).gets))
+		// Make sure the pool is correctly used. This is expected for 200k numbers.
+		testutil.Equals(t, 4, int(chunkPool.(*mockedPool).gets))
+		// TODO(bwplotka): This is super negative for large number of samples (1mln). Investigate.
 		testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance))
 		chunkPool.(*mockedPool).gets = 0
 
 		for _, b := range blocks {
-			switch dimension {
-			case seriesDimension:
-				testutil.Equals(t, 0, promtest.ToFloat64(b.seriesRefetches))
-			case samplesDimension:
-				testutil.Equals(t, 1, promtest.ToFloat64(b.seriesRefetches))
-			}
+			// NOTE(bwplotka): It is 4 x 1.0 for 100mln samples. Kind of make sense: long series.
+			testutil.Equals(t, 0.0, promtest.ToFloat64(b.seriesRefetches))
 		}
 	}
 }
@@ -1430,14 +1414,6 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 				testutil.Equals(t, 0, len(srv.Warnings))
 				testutil.Equals(t, len(c.expected), len(srv.SeriesSet))
 
-				sum := 0
-				count := len(srv.SeriesSet)
-				for _, s := range srv.SeriesSet {
-					fmt.Println("size", s.Size())
-					sum += s.Size()
-				}
-				fmt.Println("Sum:", sum, "Avg:", sum/count, "Count", count)
-
 				if !t.IsBenchmark() {
 					if len(c.expected) == 1 {
 						// Chunks are not sorted within response. TODO: Investigate: Is this fine?
@@ -1446,7 +1422,7 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 						})
 					}
 					// This will give unreadable output for millions of series error.
-					testutil.Equals(t, len(c.expected), (srv.SeriesSet))
+					testutil.Equals(t, len(c.expected), len(srv.SeriesSet))
 					//testutil.Equals(t, c.expected, srv.SeriesSet)
 				}
 
