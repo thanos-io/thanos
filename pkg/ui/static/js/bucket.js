@@ -24,6 +24,7 @@ function draw() {
 
         dataTable.addColumn({type: 'string', id: 'Replica'});
         dataTable.addColumn({type: 'string', id: 'Label'});
+        dataTable.addColumn({type: 'string', role: 'tooltip'});
         dataTable.addColumn({type: 'date', id: 'Start'});
         dataTable.addColumn({type: 'date', id: 'End'});
 
@@ -52,8 +53,8 @@ function draw() {
                     }
                 }();
 
-                label = `l: ${d.compaction.level}, res: ${d.thanos.downsample.resolution}`;
-                return [title, label, new Date(d.minTime), new Date(d.maxTime)];
+                label = `level: ${d.compaction.level}, resolution: ${d.thanos.downsample.resolution}`;
+                return [title, label, generateTooltip(d), new Date(d.minTime), new Date(d.maxTime)];
             }));
 
         chart.draw(dataTable);
@@ -75,4 +76,62 @@ function stringify(map) {
         t += `${key}: ${value} `;
     }
     return t;
+}
+
+function generateTooltip(block) {
+    var tooltip = document.createElement("div");
+    tooltip.className = "card";
+
+
+    var title = document.createElement("h6");
+    title.className = "card-header text-nowrap";
+    title.innerHTML = block.ulid;
+
+    var info = document.createElement("ul");
+    info.className = "list-group list-group-flush";
+
+    var metaInfo = document.createElement("li");
+    metaInfo.className = "list-group-item";
+    metaInfo.innerHTML = "<p><b>Labels</b></p>";
+    var labelTable = document.createElement("table");
+    labelTable.className = "table table-sm mb-0";
+    for (let [key, value] of Object.entries(block.thanos.labels)) {
+        labelTable.innerHTML += `<tr><td>${key}</td><td>${value}</td></tr>`;
+    }
+    metaInfo.appendChild(labelTable);
+
+    var dateInfo = document.createElement("li");
+    var minTime = new Date(block.minTime);
+    var maxTime = new Date(block.maxTime);
+
+    dateInfo.className = "list-group-item";
+    dateInfo.innerHTML = generateLine("Start Date: ", minTime.toLocaleDateString() + " " + minTime.toLocaleTimeString());
+    dateInfo.innerHTML += generateLine("End Date: ", maxTime.toLocaleDateString() + " " + maxTime.toLocaleTimeString());
+    dateInfo.innerHTML += generateLine("Duration: ", moment.duration(maxTime-minTime).humanize());
+
+    var statsInfo = document.createElement("li");
+    statsInfo.className = "list-group-item";
+    statsInfo.innerHTML = generateLine("Series: ", block.stats.numSeries.toLocaleString());
+    statsInfo.innerHTML += generateLine("Samples: ", block.stats.numSamples.toLocaleString());
+    statsInfo.innerHTML += generateLine("Chunks: ", block.stats.numChunks.toLocaleString());  
+
+    var compactInfo = document.createElement("li");
+    compactInfo.className = "list-group-item";
+    compactInfo.innerHTML = generateLine("Resolution: ", block.thanos.downsample.resolution);
+    compactInfo.innerHTML += generateLine("Level: ", block.compaction.level);
+    compactInfo.innerHTML += generateLine("Source: ", block.thanos.source);
+
+    info.appendChild(metaInfo);
+    info.appendChild(dateInfo);
+    info.appendChild(statsInfo);
+    info.appendChild(compactInfo);
+
+    tooltip.appendChild(title);
+    tooltip.appendChild(info);
+
+    return tooltip.outerHTML;
+}
+
+function generateLine(key, value) {
+    return "<b>" + key + "</b>" + value + "</br>"
 }
