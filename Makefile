@@ -78,6 +78,10 @@ ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
 MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 
+FAILLINT_VERSION        ?= v1.0.1
+FAILLINT                ?=$(GOBIN)/faillint-$(FAILLINT_VERSION)
+MODULES_TO_AVOID        ?=errors,github.com/prometheus/tsdb,github.com/prometheus/prometheus/pkg/testutils
+
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
@@ -290,7 +294,9 @@ web: web-pre-process $(HUGO)
 #      --mem-profile-path string   Path to memory profile output file
 #
 # to debug big allocations during linting.
-lint: check-git $(GOLANGCILINT) $(MISSPELL)
+lint: check-git $(GOLANGCILINT) $(MISSPELL) $(FAILLINT)
+	@echo ">> verifying modules being imported"
+	@$(FAILLINT) -paths $(MODULES_TO_AVOID) ./...
 	@echo ">> examining all of the Go files"
 	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
@@ -417,6 +423,9 @@ $(ALERTMANAGER):
 
 $(MINIO_SERVER):
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
+
+$(FAILLINT):
+	$(call fetch_go_bin_version,github.com/fatih/faillint,$(FAILLINT_VERSION))
 
 $(PROMS):
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))

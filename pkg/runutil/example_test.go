@@ -5,11 +5,11 @@ package runutil_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
