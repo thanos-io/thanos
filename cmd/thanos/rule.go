@@ -200,6 +200,55 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	}
 }
 
+// RuleMetrics defines thanos rule metrics.
+type RuleMetrics struct {
+	configSuccess     prometheus.Gauge
+	configSuccessTime prometheus.Gauge
+	duplicatedQuery   prometheus.Counter
+	rulesLoaded       *prometheus.GaugeVec
+	ruleEvalWarnings  *prometheus.CounterVec
+}
+
+func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
+	m := new(RuleMetrics)
+
+	m.configSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_rule_config_last_reload_successful",
+		Help: "Whether the last configuration reload attempt was successful.",
+	})
+	m.configSuccessTime = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_rule_config_last_reload_success_timestamp_seconds",
+		Help: "Timestamp of the last successful configuration reload.",
+	})
+	m.duplicatedQuery = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_duplicated_query_addresses_total",
+		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
+	})
+	m.rulesLoaded = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "thanos_rule_loaded_rules",
+			Help: "Loaded rules partitioned by file and group",
+		},
+		[]string{"strategy", "file", "group"},
+	)
+	m.ruleEvalWarnings = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "thanos_rule_evaluation_with_warnings_total",
+			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
+		}, []string{"strategy"},
+	)
+	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
+	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
+
+	reg.MustRegister(m.configSuccess)
+	reg.MustRegister(m.configSuccessTime)
+	reg.MustRegister(m.duplicatedQuery)
+	reg.MustRegister(m.rulesLoaded)
+	reg.MustRegister(m.ruleEvalWarnings)
+
+	return m
+}
+
 // runRule runs a rule evaluation component that continuously evaluates alerting and recording
 // rules. It sends alert notifications and writes TSDB data for results like a regular Prometheus server.
 func runRule(
@@ -239,39 +288,7 @@ func runRule(
 	dnsSDResolver string,
 	comp component.Component,
 ) error {
-	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_rule_config_last_reload_successful",
-		Help: "Whether the last configuration reload attempt was successful.",
-	})
-	configSuccessTime := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_rule_config_last_reload_success_timestamp_seconds",
-		Help: "Timestamp of the last successful configuration reload.",
-	})
-	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_rule_duplicated_query_addresses_total",
-		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
-	})
-	rulesLoaded := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "thanos_rule_loaded_rules",
-			Help: "Loaded rules partitioned by file and group",
-		},
-		[]string{"strategy", "file", "group"},
-	)
-	ruleEvalWarnings := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "thanos_rule_evaluation_with_warnings_total",
-			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
-		}, []string{"strategy"},
-	)
-	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
-	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
-
-	reg.MustRegister(configSuccess)
-	reg.MustRegister(configSuccessTime)
-	reg.MustRegister(duplicatedQuery)
-	reg.MustRegister(rulesLoaded)
-	reg.MustRegister(ruleEvalWarnings)
+	metrics := newRuleMetrics(reg)
 
 	var queryCfg []query.Config
 	if len(queryConfigYAML) > 0 {
@@ -435,7 +452,7 @@ func runRule(
 			opts := opts
 			opts.Registerer = extprom.WrapRegistererWith(prometheus.Labels{"strategy": strings.ToLower(s.String())}, reg)
 			opts.Context = ctx
-			opts.QueryFunc = queryFunc(logger, queryClients, duplicatedQuery, ruleEvalWarnings, s)
+			opts.QueryFunc = queryFunc(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, s)
 
 			mgr := rules.NewManager(&opts)
 			ruleMgr.SetRuleManager(s, mgr)
@@ -476,7 +493,7 @@ func runRule(
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			// Initialize rules.
-			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
 				// Return when initialize with invalid pattern error.
 				if _, ok := err.(*errInvalidPattern); ok {
@@ -486,7 +503,7 @@ func runRule(
 			for {
 				select {
 				case <-reloadSignal:
-					if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+					if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}
 				case <-cancel:
@@ -541,7 +558,7 @@ func runRule(
 		}
 
 		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
-			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 				level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -752,9 +769,7 @@ func reloadRules(logger log.Logger,
 	ruleFiles []string,
 	ruleMgr *thanosrule.Manager,
 	evalInterval time.Duration,
-	configSuccess prometheus.Gauge,
-	configSuccessTime prometheus.Gauge,
-	rulesLoaded *prometheus.GaugeVec) error {
+	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 	var files []string
 	for _, pat := range ruleFiles {
@@ -770,16 +785,16 @@ func reloadRules(logger log.Logger,
 	level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 
 	if err := ruleMgr.Update(evalInterval, files); err != nil {
-		configSuccess.Set(0)
+		metrics.configSuccess.Set(0)
 		return errors.Wrap(err, "reloading rules failed")
 	}
 
-	configSuccess.Set(1)
-	configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
+	metrics.configSuccess.Set(1)
+	metrics.configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 
-	rulesLoaded.Reset()
+	metrics.rulesLoaded.Reset()
 	for _, group := range ruleMgr.RuleGroups() {
-		rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
+		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 	}
 	return nil
 }
