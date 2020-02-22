@@ -891,12 +891,12 @@ func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
-	id := uploadTestBlock(tb, tmpDir, bkt)
+	id := uploadTestBlock(tb, tmpDir, bkt, 500)
 
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
 	testutil.Ok(tb, err)
 
-	benchmarkExpandedPostings(tb, bkt, id, r)
+	benchmarkExpandedPostings(tb, bkt, id, r, 500)
 }
 
 func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
@@ -910,11 +910,11 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
-	id := uploadTestBlock(tb, tmpDir, bkt)
+	id := uploadTestBlock(tb, tmpDir, bkt, 50e5)
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
 	testutil.Ok(tb, err)
 
-	benchmarkExpandedPostings(tb, bkt, id, r)
+	benchmarkExpandedPostings(tb, bkt, id, r, 50e5)
 }
 
 // Make entries ~50B in size, to emulate real-world high cardinality.
@@ -922,7 +922,7 @@ const (
 	postingsBenchSuffix = "aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
 )
 
-func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket) ulid.ULID {
+func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series int) ulid.ULID {
 	h, err := tsdb.NewHead(nil, nil, nil, 1000)
 	testutil.Ok(t, err)
 	defer func() {
@@ -937,8 +937,9 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket) ulid.ULID
 		testutil.Ok(t, err)
 	}
 
+	series = series / 5
 	for n := 0; n < 10; n++ {
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < series/10; i++ {
 			addSeries(labels.FromStrings("i", strconv.Itoa(i)+postingsBenchSuffix, "n", strconv.Itoa(n)+postingsBenchSuffix, "j", "foo"))
 			// Have some series that won't be matched, to properly test inverted matches.
 			addSeries(labels.FromStrings("i", strconv.Itoa(i)+postingsBenchSuffix, "n", strconv.Itoa(n)+postingsBenchSuffix, "j", "bar"))
@@ -983,6 +984,7 @@ func benchmarkExpandedPostings(
 	bkt objstore.BucketReader,
 	id ulid.ULID,
 	r indexheader.Reader,
+	series int,
 ) {
 	n1 := labels.MustNewMatcher(labels.MatchEqual, "n", "1"+postingsBenchSuffix)
 
@@ -997,28 +999,29 @@ func benchmarkExpandedPostings(
 	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+postingsBenchSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 
+	series = series / 5
 	cases := []struct {
 		name     string
 		matchers []*labels.Matcher
 
 		expectedLen int
 	}{
-		{`n="1"`, []*labels.Matcher{n1}, 200000},
-		{`n="1",j="foo"`, []*labels.Matcher{n1, jFoo}, 100000},
-		{`j="foo",n="1"`, []*labels.Matcher{jFoo, n1}, 100000},
-		{`n="1",j!="foo"`, []*labels.Matcher{n1, jNotFoo}, 100000},
-		{`i=~".*"`, []*labels.Matcher{iStar}, 5000000},
-		{`i=~".+"`, []*labels.Matcher{iPlus}, 5000000},
+		{`n="1"`, []*labels.Matcher{n1}, int(float64(series) * 0.2)},
+		{`n="1",j="foo"`, []*labels.Matcher{n1, jFoo}, int(float64(series) * 0.1)},
+		{`j="foo",n="1"`, []*labels.Matcher{jFoo, n1}, int(float64(series) * 0.1)},
+		{`n="1",j!="foo"`, []*labels.Matcher{n1, jNotFoo}, int(float64(series) * 0.1)},
+		{`i=~".*"`, []*labels.Matcher{iStar}, 5 * series},
+		{`i=~".+"`, []*labels.Matcher{iPlus}, 5 * series},
 		{`i=~""`, []*labels.Matcher{iEmptyRe}, 0},
-		{`i!=""`, []*labels.Matcher{iNotEmpty}, 5000000},
-		{`n="1",i=~".*",j="foo"`, []*labels.Matcher{n1, iStar, jFoo}, 100000},
-		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, 100000},
-		{`n="1",i!=""`, []*labels.Matcher{n1, iNotEmpty}, 200000},
-		{`n="1",i!="",j="foo"`, []*labels.Matcher{n1, iNotEmpty, jFoo}, 100000},
-		{`n="1",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, jFoo}, 100000},
-		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, 11111},
-		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, 100000},
-		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, 88889},
+		{`i!=""`, []*labels.Matcher{iNotEmpty}, 5 * series},
+		{`n="1",i=~".*",j="foo"`, []*labels.Matcher{n1, iStar, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".*",i!="2",j="foo"`, []*labels.Matcher{n1, iStar, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i!=""`, []*labels.Matcher{n1, iNotEmpty}, int(float64(series) * 0.2)},
+		{`n="1",i!="",j="foo"`, []*labels.Matcher{n1, iNotEmpty, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".+",j="foo"`, []*labels.Matcher{n1, iPlus, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, int(float64(series) * 0.011111)},
+		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
+		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
 	}
 
 	for _, c := range cases {
@@ -1084,11 +1087,11 @@ func TestSeries(t *testing.T) {
 func BenchmarkSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	tb.Run("10e6SeriesWithOneSample", func(tb testutil.TB) {
-		benchSeries(tb, 10e6, seriesDimension, 1e6) // 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6)
+		benchSeries(tb, 10e6, seriesDimension, 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5) // This is too big for my machine: 10e6.
 	})
 	tb.Run("OneSeriesWith100e6Samples", func(tb testutil.TB) {
 		// 100e6 samples = ~17361 days with 15s scrape.
-		benchSeries(tb, 100e6, samplesDimension, 10e6) // 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6, 100e6)
+		benchSeries(tb, 100e6, samplesDimension, 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6) // This is too big for my machine: 100e6.
 	})
 }
 
@@ -1126,7 +1129,7 @@ func createBlockWithOneSeries(t testutil.TB, dir string, lbls labels.Labels, blo
 
 	ref, err := app.Add(lbls, int64(blockIndex*totalSamples), random.Float64())
 	testutil.Ok(t, err)
-	for i := 1; i <= totalSamples; i++ {
+	for i := 1; i < totalSamples; i++ {
 		ts := int64(blockIndex*totalSamples + i)
 		testutil.Ok(t, app.AddFast(ref, ts, random.Float64()))
 	}
@@ -1421,9 +1424,8 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 							return srv.SeriesSet[0].Chunks[i].MinTime < srv.SeriesSet[0].Chunks[j].MinTime
 						})
 					}
-					// This will give unreadable output for millions of series error.
-					testutil.Equals(t, len(c.expected), len(srv.SeriesSet))
-					//testutil.Equals(t, c.expected, srv.SeriesSet)
+					// This might give unreadable output for millions of series if error.
+					testutil.Equals(t, c.expected, srv.SeriesSet)
 				}
 
 			}
