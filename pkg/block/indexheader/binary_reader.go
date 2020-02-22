@@ -23,6 +23,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -60,6 +61,15 @@ func init() {
 // polynomial may be easily changed in one location at a later time, if necessary.
 func newCRC32() hash.Hash32 {
 	return crc32.New(castagnoliTable)
+}
+
+// SafeByteSlice is an index byte slice that can return error after each operation.
+// It should be safe to use errored safeByteSlice: it should do noop and return default values.
+// This allows to check error at the end of operation.
+type SafeByteSlice interface {
+	index.ByteSlice
+	// NOTE: It's easy to miss.
+	Err() error
 }
 
 // BinaryTOC is a table of content for index-header file.
@@ -410,7 +420,7 @@ type postingOffset struct {
 }
 
 type BinaryReader struct {
-	b   index.ByteSlice
+	b   SafeByteSlice
 	toc *BinaryTOC
 
 	// Close that releases the underlying resources of the byte slice.
@@ -433,12 +443,12 @@ type BinaryReader struct {
 	indexLastPostingEnd int64
 }
 
-// NewBinaryReader loads or builds new index-header if not present on disk.
-func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (*BinaryReader, error) {
+// NewMemMapBinaryReader loads or builds new index-header if not present on disk.
+func NewMemMapBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (_ *BinaryReader, err error) {
 	binfn := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 	br, err := newFileBinaryReader(binfn)
 	if err == nil {
-		return br, nil
+		return br, br.init()
 	}
 
 	level.Debug(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
@@ -450,11 +460,118 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 
 	level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
 
-	return newFileBinaryReader(binfn)
+	// Which one is better? newFileMemMapBinaryReader?
+	r, err := newFileBinaryReader(binfn)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, r, "index header close")
+		}
+	}()
+
+	return r, r.init()
+}
+
+func newFileMemMapBinaryReader(path string) (bw *BinaryReader, err error) {
+	f, err := fileutil.OpenMmapFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &BinaryReader{
+		b:        realByteSlice(f.Bytes()),
+		c:        f,
+		postings: map[string]*postingValueOffsets{},
+	}, nil
+}
+
+type fileByteSlice struct {
+	// Not responsible to close it.
+	f *os.File
+
+	size int
+
+	err error
+}
+
+func newFileByteSlice(f *os.File) (*fileByteSlice, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileByteSlice{f: f, size: int(info.Size())}, nil
+}
+
+func (f *fileByteSlice) Len() int {
+	if f.Err() != nil {
+		return 0
+	}
+	return f.size
+}
+
+func (f *fileByteSlice) Range(start, end int) []byte {
+	if f.Err() != nil {
+		return nil
+	}
+	// Just alloc? Any reuse possible?
+	b := make([]byte, end-start)
+	_, f.err = f.f.ReadAt(b, int64(start))
+	return b
+}
+
+func (f *fileByteSlice) Err() error {
+	return f.err
+}
+
+func captureSafeByteSliceErr(slice SafeByteSlice, err *error) {
+	if serr := slice.Err(); serr != nil {
+		if *err != nil {
+			*err = serr
+		}
+		merr := tsdberrors.MultiError{}
+		merr.Add(*err)
+		merr.Add(serr)
+		*err = merr.Err()
+	}
+}
+
+// NewBinaryReader loads or builds new index-header if not present on disk.
+func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (_ *BinaryReader, err error) {
+	binfn := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
+	br, err := newFileBinaryReader(binfn)
+	if err == nil {
+		return br, br.init()
+	}
+
+	level.Debug(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
+
+	start := time.Now()
+	if err := WriteBinary(ctx, bkt, id, binfn); err != nil {
+		return nil, errors.Wrap(err, "write index header")
+	}
+
+	level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
+
+	// Which one is better? newFileMemMapBinaryReader?
+	r, err := newFileBinaryReader(binfn)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, r, "index header close")
+		}
+	}()
+
+	return r, r.init()
 }
 
 func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
-	f, err := fileutil.OpenMmapFile(path)
+	f, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
@@ -464,18 +581,27 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 		}
 	}()
 
-	r := &BinaryReader{
-		b:        realByteSlice(f.Bytes()),
+	fbs, err := newFileByteSlice(f)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BinaryReader{
+		b:        fbs,
 		c:        f,
 		postings: map[string]*postingValueOffsets{},
-	}
+	}, nil
+}
+
+func (r *BinaryReader) init() (err error) {
+	defer captureSafeByteSliceErr(r.b, &err)
 
 	// Verify header.
 	if r.b.Len() < headerLen {
-		return nil, errors.Wrap(encoding.ErrInvalidSize, "index header's header")
+		return errors.Wrap(encoding.ErrInvalidSize, "index header's header")
 	}
 	if m := binary.BigEndian.Uint32(r.b.Range(0, 4)); m != MagicIndex {
-		return nil, errors.Errorf("invalid magic number %x", m)
+		return errors.Errorf("invalid magic number %x", m)
 	}
 	r.version = int(r.b.Range(4, 5)[0])
 	r.indexVersion = int(r.b.Range(5, 6)[0])
@@ -483,17 +609,17 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 	r.indexLastPostingEnd = int64(binary.BigEndian.Uint64(r.b.Range(6, headerLen)))
 
 	if r.version != BinaryFormatV1 {
-		return nil, errors.Errorf("unknown index header file version %d", r.version)
+		return errors.Errorf("unknown index header file version %d", r.version)
 	}
 
 	r.toc, err = newBinaryTOCFromByteSlice(r.b)
 	if err != nil {
-		return nil, errors.Wrap(err, "read index header TOC")
+		return errors.Wrap(err, "read index header TOC")
 	}
 
 	r.symbols, err = index.NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
 	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return errors.Wrap(err, "read symbols")
 	}
 
 	var lastKey []string
@@ -522,7 +648,7 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			prevRng = index.Range{Start: int64(off + postingLengthFieldSize)}
 			return nil
 		}); err != nil {
-			return nil, errors.Wrap(err, "read postings table")
+			return errors.Wrap(err, "read postings table")
 		}
 		if lastKey != nil {
 			prevRng.End = r.indexLastPostingEnd - crc32.Size
@@ -563,7 +689,7 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			valueCount++
 			return nil
 		}); err != nil {
-			return nil, errors.Wrap(err, "read postings table")
+			return errors.Wrap(err, "read postings table")
 		}
 		if lastKey != nil {
 			if valueCount%symbolFactor != 0 {
@@ -586,14 +712,14 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 		}
 		off, err := r.symbols.ReverseLookup(k)
 		if err != nil {
-			return nil, errors.Wrap(err, "reverse symbol lookup")
+			return errors.Wrap(err, "reverse symbol lookup")
 		}
 		r.nameSymbols[off] = k
 	}
 
 	r.dec = &index.Decoder{LookupSymbol: r.LookupSymbol}
 
-	return r, nil
+	return nil
 }
 
 // newBinaryTOCFromByteSlice return parsed TOC from given index header byte slice.
@@ -625,7 +751,9 @@ func (r BinaryReader) IndexVersion() int {
 }
 
 // TODO(bwplotka): Get advantage of multi value offset fetch.
-func (r BinaryReader) PostingsOffset(name string, value string) (index.Range, error) {
+func (r BinaryReader) PostingsOffset(name string, value string) (_ index.Range, err error) {
+	defer captureSafeByteSliceErr(r.b, &err)
+
 	rngs, err := r.postingsOffset(name, value)
 	if err != nil {
 		return index.Range{}, err
@@ -741,7 +869,9 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 	return rngs, nil
 }
 
-func (r BinaryReader) LookupSymbol(o uint32) (string, error) {
+func (r BinaryReader) LookupSymbol(o uint32) (_ string, err error) {
+	defer captureSafeByteSliceErr(r.b, &err)
+
 	if s, ok := r.nameSymbols[o]; ok {
 		return s, nil
 	}
@@ -755,7 +885,9 @@ func (r BinaryReader) LookupSymbol(o uint32) (string, error) {
 	return r.symbols.Lookup(o)
 }
 
-func (r BinaryReader) LabelValues(name string) ([]string, error) {
+func (r BinaryReader) LabelValues(name string) (_ []string, err error) {
+	defer captureSafeByteSliceErr(r.b, &err)
+
 	if r.indexVersion == index.FormatV1 {
 		e, ok := r.postingsV1[name]
 		if !ok {

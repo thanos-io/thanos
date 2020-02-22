@@ -111,6 +111,29 @@ func TestReaders(t *testing.T) {
 				compareIndexToHeader(t, b, br)
 			})
 
+			t.Run("binary-mmap", func(t *testing.T) {
+				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
+				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
+
+				br, err := NewMemMapBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id)
+				testutil.Ok(t, err)
+
+				defer func() { testutil.Ok(t, br.Close()) }()
+
+				if id == id1 {
+					testutil.Equals(t, 1, br.version)
+					testutil.Equals(t, 2, br.indexVersion)
+					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 50}, br.toc)
+					testutil.Equals(t, int64(330), br.indexLastPostingEnd)
+					testutil.Equals(t, 8, br.symbols.Size())
+					testutil.Equals(t, 3, len(br.postings))
+					testutil.Equals(t, 0, len(br.postingsV1))
+					testutil.Equals(t, 2, len(br.nameSymbols))
+				}
+
+				compareIndexToHeader(t, b, br)
+			})
+
 			t.Run("json", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexCacheFilename)
 				testutil.Ok(t, WriteJSON(log.NewNopLogger(), filepath.Join(tmpDir, id.String(), "index"), fn))
@@ -374,6 +397,27 @@ func BenchmarkBinaryWrite(t *testing.B) {
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
 		testutil.Ok(t, WriteBinary(ctx, bkt, m.ULID, fn))
+	}
+}
+
+func BenchmarkMmapBinaryReader(t *testing.B) {
+	ctx := context.Background()
+	tmpDir, err := ioutil.TempDir("", "bench-indexheader")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+
+	m := prepareIndexV2Block(t, tmpDir, bkt)
+	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
+	testutil.Ok(t, WriteBinary(ctx, bkt, m.ULID, fn))
+
+	t.ResetTimer()
+	for i := 0; i < t.N; i++ {
+		br, err := newFileMemMapBinaryReader(fn)
+		testutil.Ok(t, err)
+		testutil.Ok(t, br.Close())
 	}
 }
 

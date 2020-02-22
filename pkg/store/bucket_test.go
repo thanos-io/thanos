@@ -893,10 +893,19 @@ func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 
 	id := uploadTestBlock(tb, tmpDir, bkt, 500)
 
-	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-	testutil.Ok(tb, err)
+	tb.Run("file", func(tb testutil.TB) {
+		r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+		testutil.Ok(tb, err)
 
-	benchmarkExpandedPostings(tb, bkt, id, r, 500)
+		benchmarkExpandedPostings(tb, bkt, id, r, 500)
+	})
+
+	tb.Run("mmap", func(tb testutil.TB) {
+		r, err := indexheader.NewMemMapBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+		testutil.Ok(tb, err)
+
+		benchmarkExpandedPostings(tb, bkt, id, r, 500)
+	})
 }
 
 func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
@@ -911,10 +920,20 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
 	id := uploadTestBlock(tb, tmpDir, bkt, 50e5)
-	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
-	testutil.Ok(tb, err)
 
-	benchmarkExpandedPostings(tb, bkt, id, r, 50e5)
+	tb.Run("file", func(tb testutil.TB) {
+		r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+		testutil.Ok(tb, err)
+
+		benchmarkExpandedPostings(tb, bkt, id, r, 50e5)
+	})
+
+	tb.Run("mmap", func(tb testutil.TB) {
+		r, err := indexheader.NewMemMapBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+		testutil.Ok(tb, err)
+
+		benchmarkExpandedPostings(tb, bkt, id, r, 50e5)
+	})
 }
 
 // Make entries ~50B in size, to emulate real-world high cardinality.

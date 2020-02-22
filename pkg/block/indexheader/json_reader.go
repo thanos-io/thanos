@@ -56,9 +56,7 @@ func (b realByteSlice) Range(start, end int) []byte {
 	return b[start:end]
 }
 
-func (b realByteSlice) Sub(start, end int) index.ByteSlice {
-	return b[start:end]
-}
+func (b realByteSlice) Err() error { return nil }
 
 // readSymbols reads the symbol table fully into memory and allocates proper strings for them.
 // Strings backed by the mmap'd memory would cause memory faults if applications keep using them
