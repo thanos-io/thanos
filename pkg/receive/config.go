@@ -62,7 +62,7 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 		return nil, errors.Wrap(err, "creating file watcher")
 	}
 	if err := watcher.Add(path); err != nil {
-		return nil, errors.Wrap(err, "adding path to file watcher")
+		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
 	}
 	c := &ConfigWatcher{
 		ch:       make(chan []HashringConfig),

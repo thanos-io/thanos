@@ -33,7 +33,7 @@ jobs:
       - run: make check-docs
       - run: make format
       - run:
-          name: "Run all tests"
+          name: "Run unit tests."
           # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then

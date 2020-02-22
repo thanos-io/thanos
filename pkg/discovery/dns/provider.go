@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
+	"github.com/thanos-io/thanos/pkg/extprom"
 )
 
 // Provider is a stateful cache for asynchronous DNS resolutions. It provides a way to resolve addresses and obtain them.
@@ -23,7 +24,7 @@ type Provider struct {
 	resolved map[string][]string
 	logger   log.Logger
 
-	resolverAddrs         *prometheus.GaugeVec
+	resolverAddrs         *extprom.TxGaugeVec
 	resolverLookupsCount  prometheus.Counter
 	resolverFailuresCount prometheus.Counter
 }
@@ -56,7 +57,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 		resolver: NewResolver(resolverType.ToResolver(logger)),
 		resolved: make(map[string][]string),
 		logger:   logger,
-		resolverAddrs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		resolverAddrs: extprom.NewTxGaugeVec(prometheus.GaugeOpts{
 			Name: "dns_provider_results",
 			Help: "The number of resolved endpoints for each configured address",
 		}, []string{"addr"}),
@@ -98,12 +99,17 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	p.Lock()
 	defer p.Unlock()
 
+	p.resolverAddrs.ResetTx()
+	defer p.resolverAddrs.Submit()
+
+	resolvedAddrs := map[string][]string{}
 	for _, addr := range addrs {
 		var resolved []string
 		qtypeAndName := strings.SplitN(addr, "+", 2)
 		if len(qtypeAndName) != 2 {
 			// No lookup specified. Add to results and continue to the next address.
-			p.resolved[addr] = []string{addr}
+			resolvedAddrs[addr] = []string{addr}
+			p.resolverAddrs.WithLabelValues(addr).Set(1.0)
 			continue
 		}
 		qtype, name := qtypeAndName[0], qtypeAndName[1]
@@ -114,20 +120,13 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 			// The DNS resolution failed. Continue without modifying the old records.
 			p.resolverFailuresCount.Inc()
 			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
-			continue
+			// Use cached values.
+			resolved = p.resolved[addr]
 		}
-		p.resolved[addr] = resolved
+		resolvedAddrs[addr] = resolved
+		p.resolverAddrs.WithLabelValues(addr).Set(float64(len(resolved)))
 	}
-
-	// Remove stored addresses that are no longer requested.
-	for existingAddr := range p.resolved {
-		if !contains(addrs, existingAddr) {
-			delete(p.resolved, existingAddr)
-			p.resolverAddrs.DeleteLabelValues(existingAddr)
-		} else {
-			p.resolverAddrs.WithLabelValues(existingAddr).Set(float64(len(p.resolved[existingAddr])))
-		}
-	}
+	p.resolved = resolvedAddrs
 }
 
 // Addresses returns the latest addresses present in the Provider.
@@ -140,13 +139,4 @@ func (p *Provider) Addresses() []string {
 		result = append(result, addrs...)
 	}
 	return result
-}
-
-func contains(slice []string, str string) bool {
-	for _, s := range slice {
-		if str == s {
-			return true
-		}
-	}
-	return false
 }

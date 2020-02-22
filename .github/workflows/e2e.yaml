@@ -1,9 +1,8 @@
-name: CI
+name: e2e
 on: [pull_request]
 
 jobs:
-  cross-build-check:
-    name: Cross build check
+  e2e:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go.
@@ -11,16 +10,13 @@ jobs:
         with:
           go-version: 1.13.6
 
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+      - name: Check out code into the Go module directory.
+        uses: actions/checkout@v2
 
       - uses: actions/cache@v1
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
-      - name: Get dependencies
-        run: make deps
-
-      - name: Cross build check
-        run: make crossbuild
+      - name: Run e2e docker-based tests.
+        run: make test-e2e

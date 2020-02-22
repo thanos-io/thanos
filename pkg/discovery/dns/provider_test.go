@@ -8,9 +8,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/go-kit/kit/log"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -37,32 +36,59 @@ func TestProvider(t *testing.T) {
 	result := prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, []string(nil), result)
+	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 
 	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips, result)
+	testutil.Equals(t, 3, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+a")))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
 	prv.Resolve(ctx, []string{"any+b", "any+c"})
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips[2:], result)
+	testutil.Equals(t, 2, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
 	prv.Resolve(ctx, []string{"any+x"})
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, []string(nil), result)
+	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 
 	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips, result)
+	testutil.Equals(t, 3, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+a")))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
-	prv.resolver = &mockResolver{err: errors.New("failed to resolve urls")}
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	prv.Resolve(ctx, []string{"any+b", "example.com:90", "any+c"})
 	result = prv.Addresses()
 	sort.Strings(result)
-	testutil.Equals(t, ips, result)
+	testutil.Equals(t, append(ips[2:], "example.com:90"), result)
+	testutil.Equals(t, 3, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("example.com:90")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
+
+	prv.Resolve(ctx, []string{"any+b", "any+c"})
+	result = prv.Addresses()
+	sort.Strings(result)
+	testutil.Equals(t, ips[2:], result)
+	testutil.Equals(t, 2, promtestutil.CollectAndCount(prv.resolverAddrs))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
+
 }
 
 type mockResolver struct {
@@ -70,7 +96,7 @@ type mockResolver struct {
 	err error
 }
 
-func (d *mockResolver) Resolve(ctx context.Context, name string, qtype QType) ([]string, error) {
+func (d *mockResolver) Resolve(_ context.Context, name string, _ QType) ([]string, error) {
 	if d.err != nil {
 		return nil, d.err
 	}

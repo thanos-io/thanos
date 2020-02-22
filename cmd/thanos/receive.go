@@ -284,6 +284,9 @@ func runReceive(
 					if !ok {
 						return nil
 					}
+
+					level.Info(logger).Log("msg", "updating DB")
+
 					if err := db.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
 					}
@@ -298,7 +301,7 @@ func runReceive(
 					localStorage.Set(db.Get(), startTimeMargin)
 					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
 					statusProber.Ready()
-					level.Info(logger).Log("msg", "server is ready to receive web requests.")
+					level.Info(logger).Log("msg", "server is ready to receive web requests")
 					dbReady <- struct{}{}
 				}
 			}
@@ -318,6 +321,7 @@ func runReceive(
 		if cw != nil {
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
+				// TODO: If config is empty we never start receiver. We might want to fail in this case.
 				receive.HashringFromConfig(ctx, updates, cw)
 				return nil
 			}, func(error) {
