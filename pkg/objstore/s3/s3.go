@@ -109,10 +109,6 @@ func parseConfig(conf []byte) (Config, error) {
 		return Config{}, err
 	}
 
-	if config.SSEKMSID != "" && config.SSECustomerKeyPath != "" {
-		return Config{}, ErrSSEConfig
-	}
-
 	if config.SSEEncryptionLegacy {
 		config.SSEEncryption = config.SSEEncryptionLegacy
 	}
@@ -194,7 +190,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	})
 
 	var sse encrypt.ServerSide
-	if config.SSEEncryption {
+	if config.SSEEncryption || config.SSEKMSID != "" || config.SSECustomerKeyPath != "" {
 		var err error
 		switch {
 		case config.SSEKMSID != "":
@@ -251,6 +247,11 @@ func validate(conf Config) error {
 	if conf.AccessKey != "" && conf.SecretKey == "" {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
+
+	if conf.SSEKMSID != "" && conf.SSECustomerKeyPath != "" {
+		return ErrSSEConfig
+	}
+
 	return nil
 }
 

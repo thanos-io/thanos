@@ -104,6 +104,38 @@ http_config:
 	testutil.Equals(t, "bucket-owner-full-control", cfg2.PutUserMetadata["X-Amz-Acl"])
 }
 
+func TestParseConfig_SSE(t *testing.T) {
+	input := []byte(`
+encrypt_sse: true
+sse_s3: false`,
+	)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	testutil.Assert(t, cfg.SSEEncryption == true, "encrypt_sse should map to SSEEncryption when true")
+
+	input = []byte(`
+encrypt_sse: false
+sse_s3: true`,
+	)
+	cfg, err = parseConfig(input)
+	testutil.Ok(t, err)
+	testutil.Assert(t, cfg.SSEEncryption == true, "encrypt_sse should not override sse_s3 when false")
+}
+
+func TestValidate_SSE(t *testing.T) {
+	input := []byte(`
+endpoint: "s3-endpoint"
+access_key: "access_key"
+secret_key: "secret_key"
+sse_kms_id: "some_key"
+sse_c_key: "some/file/path"
+`,
+	)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	testutil.Assert(t, validate(cfg) == ErrSSEConfig, "sse_kms_id and sse_c_key are mutually exclusive")
+}
+
 func TestParseConfig_PartSize(t *testing.T) {
 	input := []byte(`bucket: "bucket-name"
 endpoint: "s3-endpoint"
