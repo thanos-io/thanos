@@ -1,9 +1,13 @@
-name: CI
-on: [pull_request]
+name: cross-build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
 
 jobs:
   cross-build-check:
-    name: Cross build check
     runs-on: ubuntu-latest
     steps:
       - name: Install Go.
