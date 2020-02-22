@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -34,6 +35,8 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+var ErrSSEConfig = fmt.Errorf("sse_kms_id and sse_c_key are both set")
+
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
 	HTTPConfig: HTTPConfig{
@@ -53,13 +56,28 @@ type Config struct {
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
-	SSEEncryption   bool              `yaml:"encrypt_sse"`
 	SecretKey       string            `yaml:"secret_key"`
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	PartSize uint64 `yaml:"part_size"`
+
+	// SSE config items are used for configuring server-side encryption.
+	//	encrypt_sse - An alias for sse_s3.
+	// 	sse_s3 			- When true, enables SSE-S3. ignored if KMS or C are enabled. `encrypt_sse` is kept as a legacy alias for this.
+	//.	sse_c_key		- When set to a filepath, enables SSE-C. Overrides `sse_s3`.
+	//	sse_kms_id	- When set, enables SSE-KMS. Overrides `sse_s3`. A KMS context can be optionally set via `sse_kms_context`.
+	//	sse_kms_context  - If `sse_kms_id` is set, attaches the given context to all KMS requests.
+	//
+	// NOTE: If both sse_c_key and sse_kms_id are set, we throw an error, as it's unclear what the operator wants.
+	// See https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
+	// for more details on the SSE-S3, SSE-KMS, and SSE-C options.
+	SSEEncryptionLegacy bool              `yaml:"encrypt_sse"`
+	SSEEncryption       bool              `yaml:"sse_s3"`
+	SSECustomerKeyPath  string            `yaml:"sse_c_key"`
+	SSEKMSID            string            `yaml:"sse_kms_id"`
+	SSEKMSContext       map[string]string `yaml:"sse_kms_context"`
 }
 
 type TraceConfig struct {
@@ -83,11 +101,20 @@ type Bucket struct {
 	partSize        uint64
 }
 
-// parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+// parseConfig unmarshals a buffer into a Config with default HTTPConfig values
+// and validates the config somewhat.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
+	}
+
+	if config.SSEKMSID != "" && config.SSECustomerKeyPath != "" {
+		return Config{}, ErrSSEConfig
+	}
+
+	if config.SSEEncryptionLegacy {
+		config.SSEEncryption = config.SSEEncryptionLegacy
 	}
 
 	return config, nil
@@ -168,7 +195,26 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 
 	var sse encrypt.ServerSide
 	if config.SSEEncryption {
-		sse = encrypt.NewSSE()
+		var err error
+		switch {
+		case config.SSEKMSID != "":
+			sse, err = encrypt.NewSSEKMS(config.SSEKMSID, config.SSEKMSContext)
+			if err != nil {
+				return nil, err
+			}
+		case config.SSECustomerKeyPath != "":
+			key, err := ioutil.ReadFile(config.SSECustomerKeyPath)
+			if err != nil {
+				return nil, err
+			}
+
+			sse, err = encrypt.NewSSEC(key)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			sse = encrypt.NewSSE()
+		}
 	}
 
 	if config.TraceConfig.Enable {
