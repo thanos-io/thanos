@@ -83,7 +83,6 @@ config:
   access_key: ""
   insecure: false
   signature_version2: false
-  encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
   http_config:
@@ -93,6 +92,11 @@ config:
   trace:
     enable: false
   part_size: 134217728
+  encrypt_sse: false # legacy, supersceded by `sse_e3`
+  sse_s3: false
+  sse_c_key: ""
+  sse_kms_id: ""
+  sse_kms_context: {}
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -100,6 +104,16 @@ At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `ac
 The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region).
 
 Make sure you use a correct signature version. Currently AWS requires signature v4, so it needs `signature-version2: false`. If you don't specify it, you will get an `Access Denied` error. On the other hand, several S3 compatible APIs use `signature-version2: true`.
+
+For server-side encryption:
+ - `encrypt_sse` - An alias for `sse_s3`.
+ - `sse_s3` - When true, enables SSE-S3. Ignored if KMS or C are enabled. `encrypt_sse` is kept as a legacy alias for this.
+ - `sse_c_key` - When set to a filepath, enables SSE-C. Overrides `sse_s3`.
+ - `sse_kms_id` - When set, enables SSE-KMS. Overrides `sse_s3`. A KMS context can be optionally set via `sse_kms_context`.
+ - `sse_kms_context` - If `sse_kms_id` is set, attaches the given context to all KMS requests.
+
+NOTE: If both `sse_c_key` and `sse_kms_id` are set, we throw an error, as it's unclear what the operator wants.
+See https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html for more details on the SSE-S3, SSE-KMS, and SSE-C options.
 
 You can configure the timeout settings for the HTTP client by setting the `http_config.idle_conn_timeout` and `http_config.response_header_timeout` keys. As a rule of thumb, if you are seeing errors like `timeout awaiting response headers` in your logs, you may want to increase the value of `http_config.response_header_timeout`.
 
