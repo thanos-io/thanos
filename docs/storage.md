@@ -92,7 +92,7 @@ config:
   trace:
     enable: false
   part_size: 134217728
-  encrypt_sse: false # legacy, supersceded by `sse_e3`
+  encrypt_sse: false
   sse_s3: false
   sse_c_key: ""
   sse_kms_id: ""
