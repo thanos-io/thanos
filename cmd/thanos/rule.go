@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -495,10 +496,6 @@ func runRule(
 			// Initialize rules.
 			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
-				// Return when initialize with invalid pattern error.
-				if _, ok := err.(*errInvalidPattern); ok {
-					return err
-				}
 			}
 			for {
 				select {
@@ -756,27 +753,22 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 	})
 }
 
-type errInvalidPattern struct {
-	err error
-	pat string
-}
-
-func (e *errInvalidPattern) Error() string {
-	return errors.Wrapf(e.err, "retrieving rule files failed. Ignoring file. pattern %s", e.pat).Error()
-}
-
 func reloadRules(logger log.Logger,
 	ruleFiles []string,
 	ruleMgr *thanosrule.Manager,
 	evalInterval time.Duration,
 	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
-	var files []string
+	var (
+		errs  tsdberrors.MultiError
+		files []string
+	)
 	for _, pat := range ruleFiles {
 		fs, err := filepath.Glob(pat)
 		if err != nil {
-			// Check errInvalidPattern when initialize.
-			return &errInvalidPattern{err, pat}
+			// The only error can be a bad pattern.
+			errs.Add(errors.Wrapf(err, "retrieving rule files failed. Ignoring file. pattern %s", pat))
+			continue
 		}
 
 		files = append(files, fs...)
@@ -786,7 +778,7 @@ func reloadRules(logger log.Logger,
 
 	if err := ruleMgr.Update(evalInterval, files); err != nil {
 		metrics.configSuccess.Set(0)
-		return errors.Wrap(err, "reloading rules failed")
+		errs.Add(errors.Wrap(err, "reloading rules failed"))
 	}
 
 	metrics.configSuccess.Set(1)
@@ -796,5 +788,5 @@ func reloadRules(logger log.Logger,
 	for _, group := range ruleMgr.RuleGroups() {
 		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 	}
-	return nil
+	return errs.Err()
 }
