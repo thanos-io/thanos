@@ -89,10 +89,10 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
-  replicate+:: {
-    jobPrefix: 'thanos-replicate',
+  bucket_replicate+:: {
+    jobPrefix: 'thanos-bucket-replicate',
     selector: 'job=~"%s.*"' % self.jobPrefix,
-    title: '%(prefix)sReplicate' % $.dashboard.prefix,
+    title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },
   overview+:: {
     title: '%(prefix)sOverview' % $.dashboard.prefix,

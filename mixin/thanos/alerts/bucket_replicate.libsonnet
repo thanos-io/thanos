@@ -1,19 +1,19 @@
 {
   local thanos = self,
-  replicate+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Replicate dashboard',
-    selector: error 'must provide selector for Thanos Replicate dashboard',
+  bucket_replicate+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Bucket Replicate dashboard',
+    selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
   },
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-replicate.rules',
+        name: 'thanos-bucket-replicate.rules',
         rules: [
           {
-            alert: 'ThanosReplicateIsDown',
+            alert: 'ThanosBucketReplicateIsDown',
             expr: |||
               absent(up{%(selector)s})
-            ||| % thanos.replicate,
+            ||| % thanos.bucket_replicate,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -23,7 +23,7 @@
             },
           },
           {
-            alert: 'ThanosReplicateErrorRate',
+            alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
               message: 'Thanos Replicate failing to run, {{ $value | humanize }}% of attempts failed.',
             },
@@ -33,14 +33,14 @@
               / on (namespace) group_left
                 sum(rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= 10
-            ||| % thanos.replicate,
+            ||| % thanos.bucket_replicate,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosReplicateRunLatency',
+            alert: 'ThanosBucketReplicateRunLatency',
             annotations: {
               message: 'Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for the replicate operations.',
             },
@@ -50,7 +50,7 @@
               and
                 sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
-            ||| % thanos.replicate,
+            ||| % thanos.bucket_replicate,
             'for': '5m',
             labels: {
               severity: 'critical',

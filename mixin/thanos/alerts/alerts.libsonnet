@@ -5,4 +5,4 @@
 (import 'store.libsonnet') +
 (import 'rule.libsonnet') +
 (import 'absent.libsonnet') +
-(import 'replicate.libsonnet')
+(import 'bucket_replicate.libsonnet')
