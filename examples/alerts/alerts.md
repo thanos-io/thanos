@@ -106,7 +106,7 @@ rules:
     sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-rule.*"}[5m])) > 0
   for: 15m
   labels:
-    severity: warning
+    severity: info
 - alert: ThanosRuleRuleEvaluationLatencyHigh
   annotations:
     message: Thanos Rule {{$labels.job}}/{{$labels.pod}} has higher evaluation latency
@@ -141,7 +141,7 @@ rules:
     != 1
   for: 5m
   labels:
-    severity: warning
+    severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
     message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
