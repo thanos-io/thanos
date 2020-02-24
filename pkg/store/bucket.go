@@ -693,9 +693,10 @@ func blockSeries(
 				Value: lv,
 			})
 		}
-		sort.Slice(s.lset, func(i, j int) bool {
-			return s.lset[i].Name < s.lset[j].Name
-		})
+		// 22.8%
+		//sort.Slice(s.lset, func(i, j int) bool {
+		//	return s.lset[i].Name < s.lset[j].Name
+		//})
 
 		for _, meta := range chks {
 			if meta.MaxTime < req.MinTime {
@@ -1771,6 +1772,7 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 	r.stats.seriesTouched++
 	r.stats.seriesTouchedSizeSum += len(b)
 
+	// Lookup symbol here takes 17.8% of 1.469603449 so 260 MB (Why?)
 	return r.dec.Series(b, lset, chks)
 }
 

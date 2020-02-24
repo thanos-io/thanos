@@ -1087,12 +1087,12 @@ func TestSeries(t *testing.T) {
 func BenchmarkSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	tb.Run("10e6SeriesWithOneSample", func(tb testutil.TB) {
-		benchSeries(tb, 10e6, seriesDimension, 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5) // This is too big for my machine: 10e6.
+		benchSeries(tb, 10e6, seriesDimension, 1) //  10, 10e1, 10e2, 10e3, 10e4, 10e5) // This is too big for my machine: 10e6.
 	})
-	tb.Run("OneSeriesWith100e6Samples", func(tb testutil.TB) {
-		// 100e6 samples = ~17361 days with 15s scrape.
-		benchSeries(tb, 100e6, samplesDimension, 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6) // This is too big for my machine: 100e6.
-	})
+	//tb.Run("OneSeriesWith100e6Samples", func(tb testutil.TB) {
+	//	// 100e6 samples = ~17361 days with 15s scrape.
+	//	benchSeries(tb, 100e6, samplesDimension, 1, 10, 10e1, 10e2, 10e3, 10e4, 10e5, 10e6) // This is too big for my machine: 100e6.
+	//})
 }
 
 func createBlockWithOneSample(t testutil.TB, dir string, blockIndex int, totalSeries int) (ulid.ULID, []storepb.Series) {
@@ -1338,6 +1338,17 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 				MaxTime: int64(c) - 1,
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+			},
+			expected: expected,
+		})
+		bCases = append(bCases, &benchSeriesCase{
+			name: fmt.Sprintf("%dof%d-neg-matcher", c, 4*numberPerBlock),
+			req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: int64(c) - 1,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
 				},
 			},
 			expected: expected,
