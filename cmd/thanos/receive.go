@@ -414,17 +414,15 @@ func runReceive(
 				)
 				startGRPC <- struct{}{}
 			}
-			return nil
-		}, func(err error) {
 			if s != nil {
 				s.Shutdown(err)
 			}
-		})
+			return nil
+		}, func(error) {})
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
 			for range startGRPC {
-				level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 				if err := s.ListenAndServe(); err != nil {
 					return errors.Wrap(err, "serve gRPC")
 				}
