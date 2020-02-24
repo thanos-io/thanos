@@ -318,12 +318,17 @@ func runReceive(
 		// In the single-node case, which has no configuration
 		// watcher, we close the chan ourselves.
 		updates := make(chan receive.Hashring, 1)
+
 		if cw != nil {
+			// Check the hashring configuration on before running the watcher.
+			if err := cw.ValidateConfig(); err != nil {
+				close(updates)
+				return errors.Wrap(err, "failed to validate hashring configuration file")
+			}
+
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				// TODO: If config is empty we never start receiver. We might want to fail in this case.
-				receive.HashringFromConfig(ctx, updates, cw)
-				return nil
+				return receive.HashringFromConfig(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})

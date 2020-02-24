@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"reflect"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -19,6 +18,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"gopkg.in/fsnotify.v1"
+)
+
+var (
+	// An errParseConfigurationFile is returned by the ConfigWatcher when parsing failed.
+	errParseConfigurationFile = errors.New("configuration file is not parsable")
+	// An errEmptyConfigurationFile is returned by the ConfigWatcher when attempting to load an empty configuration file.
+	errEmptyConfigurationFile = errors.New("configuration file is empty")
 )
 
 // HashringConfig represents the configuration for a hashring
@@ -47,8 +53,8 @@ type ConfigWatcher struct {
 	hashringNodesGauge   *prometheus.GaugeVec
 	hashringTenantsGauge *prometheus.GaugeVec
 
-	// last is the last known configuration.
-	last []HashringConfig
+	// lastLoadedConfigHash is the hash of the last successfully loaded configuration.
+	lastLoadedConfigHash float64
 }
 
 // NewConfigWatcher creates a new ConfigWatcher.
@@ -64,6 +70,7 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 	if err := watcher.Add(path); err != nil {
 		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
 	}
+
 	c := &ConfigWatcher{
 		ch:       make(chan []HashringConfig),
 		path:     path,
@@ -180,39 +187,37 @@ func (cw *ConfigWatcher) C() <-chan []HashringConfig {
 	return cw.ch
 }
 
-// readFile reads the configured file and returns content of configuration file.
-func (cw *ConfigWatcher) readFile() ([]byte, error) {
-	fd, err := os.Open(cw.path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := fd.Close(); err != nil {
-			level.Error(cw.logger).Log("msg", "failed to close file", "err", err, "path", cw.path)
-		}
-	}()
-
-	return ioutil.ReadAll(fd)
+// ValidateConfig returns an error if the configuration that's being watched is not valid.
+func (cw *ConfigWatcher) ValidateConfig() error {
+	_, _, err := cw.loadConfig()
+	return err
 }
 
 // loadConfig loads raw configuration content and returns a configuration.
-func (cw *ConfigWatcher) loadConfig(content []byte) ([]HashringConfig, error) {
-	var config []HashringConfig
-	err := json.Unmarshal(content, &config)
-	return config, err
+func (cw *ConfigWatcher) loadConfig() ([]HashringConfig, float64, error) {
+	cfgContent, err := cw.readFile()
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to read configuration file")
+	}
+
+	config, err := cw.parseConfig(cfgContent)
+	if err != nil {
+		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
+	}
+
+	// If hashring is empty, return an error.
+	if len(config) == 0 {
+		return nil, 0, errors.Wrapf(errEmptyConfigurationFile, "failed to load configuration file, path: %s", cw.path)
+	}
+
+	return config, hashAsMetricValue(cfgContent), nil
 }
 
 // refresh reads the configured file and sends the hashring configuration on the channel.
 func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.refreshCounter.Inc()
-	cfgContent, err := cw.readFile()
-	if err != nil {
-		cw.errorCounter.Inc()
-		level.Error(cw.logger).Log("msg", "failed to read configuration file", "err", err, "path", cw.path)
-		return
-	}
 
-	config, err := cw.loadConfig(cfgContent)
+	config, cfgHash, err := cw.loadConfig()
 	if err != nil {
 		cw.errorCounter.Inc()
 		level.Error(cw.logger).Log("msg", "failed to load configuration file", "err", err, "path", cw.path)
@@ -220,15 +225,17 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	}
 
 	// If there was no change to the configuration, return early.
-	if reflect.DeepEqual(cw.last, config) {
+	if cw.lastLoadedConfigHash == cfgHash {
 		return
 	}
+
 	cw.changesCounter.Inc()
+
 	// Save the last known configuration.
-	cw.last = config
+	cw.lastLoadedConfigHash = cfgHash
+	cw.hashGauge.Set(cfgHash)
 	cw.successGauge.Set(1)
 	cw.lastSuccessTimeGauge.SetToCurrentTime()
-	cw.hashGauge.Set(hashAsMetricValue(cfgContent))
 
 	for _, c := range config {
 		cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
@@ -269,6 +276,28 @@ func (cw *ConfigWatcher) stop() {
 
 	close(cw.ch)
 	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
+}
+
+// readFile reads the configuration file and returns content of configuration file.
+func (cw *ConfigWatcher) readFile() ([]byte, error) {
+	fd, err := os.Open(cw.path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := fd.Close(); err != nil {
+			level.Error(cw.logger).Log("msg", "failed to close file", "err", err, "path", cw.path)
+		}
+	}()
+
+	return ioutil.ReadAll(fd)
+}
+
+// parseConfig parses the raw configuration content and returns a HashringConfig.
+func (cw *ConfigWatcher) parseConfig(content []byte) ([]HashringConfig, error) {
+	var config []HashringConfig
+	err := json.Unmarshal(content, &config)
+	return config, err
 }
 
 // hashAsMetricValue generates metric value from hash of data.
