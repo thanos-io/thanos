@@ -336,7 +336,7 @@ rules:
       }} seconds for instant queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) > 0
     )
@@ -346,10 +346,10 @@ rules:
 - alert: ThanosQueryRangeLatencyHigh
   annotations:
     message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
-      }} seconds for instant queries.
+      }} seconds for range queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-query.*", handler="query_range"}[5m])) > 0
     )
