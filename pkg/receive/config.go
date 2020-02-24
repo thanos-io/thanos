@@ -20,11 +20,12 @@ import (
 	"gopkg.in/fsnotify.v1"
 )
 
-// An EmptyConfigurationError is returned by the ConfigWatcher when attempting to load an empty configuration file.
-// Note: This error is defined as a type to conviently test the behavior against errors.
-type EmptyConfigurationError string
-
-func (e EmptyConfigurationError) Error() string { return "configuration file is empty: " + string(e) }
+var (
+	// An errParseConfigurationFile is returned by the ConfigWatcher when parsing failed.
+	errParseConfigurationFile = errors.New("configuration file is not parsable")
+	// An errEmptyConfigurationFile is returned by the ConfigWatcher when attempting to load an empty configuration file.
+	errEmptyConfigurationFile = errors.New("configuration file is empty")
+)
 
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
@@ -201,12 +202,12 @@ func (cw *ConfigWatcher) loadConfig() ([]HashringConfig, float64, error) {
 
 	config, err := cw.parseConfig(cfgContent)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to load configuration file")
+		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
 	}
 
 	// If hashring is empty, return an error.
 	if len(config) == 0 {
-		return nil, 0, EmptyConfigurationError(cw.path)
+		return nil, 0, errors.Wrapf(errEmptyConfigurationFile, "failed to load configuration file, path: %s", cw.path)
 	}
 
 	return config, hashAsMetricValue(cfgContent), nil

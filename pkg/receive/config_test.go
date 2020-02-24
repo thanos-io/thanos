@@ -5,34 +5,33 @@ package receive
 
 import (
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 func TestValidateConfig(t *testing.T) {
-	var emptyCfgErr EmptyConfigurationError
-
 	for _, tc := range []struct {
 		name string
 		cfg  interface{}
-		err  interface{}
+		err  error
 	}{
 		{
 			name: "<nil> config",
 			cfg:  nil,
-			err:  emptyCfgErr,
+			err:  errEmptyConfigurationFile,
 		},
 		{
 			name: "empty config",
 			cfg:  []HashringConfig{},
-			err:  emptyCfgErr,
+			err:  errEmptyConfigurationFile,
 		},
 		{
 			name: "unparsable config",
 			cfg:  struct{}{},
-			err:  json.UnsupportedTypeError{},
+			err:  errParseConfigurationFile,
 		},
 		{
 			name: "valid config",
@@ -69,7 +68,7 @@ func TestValidateConfig(t *testing.T) {
 			t.Fatalf("case %q: unexpectedly failed creating config watcher: %v", tc.name, err)
 		}
 
-		if err := cw.ValidateConfig(); err != nil && !errors.As(err, &tc.err) {
+		if err := cw.ValidateConfig(); err != nil && !errors.Is(err, tc.err) {
 			t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 			continue
 		}
