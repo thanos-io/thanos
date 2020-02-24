@@ -403,7 +403,7 @@ rules:
     )
   for: 5m
   labels:
-    severity: critical
+    severity: warning
 - alert: ThanosReceiveHighHashringFileRefreshFailures
   annotations:
     message: Thanos Receive {{$labels.job}} is failing to refresh hashring file, {{
