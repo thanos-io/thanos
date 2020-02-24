@@ -173,7 +173,7 @@ func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *Config
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
-				return errors.New("hashring config watcher stopped")
+				return errors.New("hashring config watcher stopped unexpectedly")
 			}
 			updates <- newMultiHashring(cfg)
 		case <-ctx.Done():
