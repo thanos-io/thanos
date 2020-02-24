@@ -387,6 +387,8 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
+		ctx, cancel := context.WithCancel(context.Background())
+
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 		g.Add(func() error {
@@ -397,25 +399,30 @@ func runReceive(
 				return errors.Wrap(err, "setup gRPC server")
 			}
 
-			for range dbReady {
-				if s != nil {
-					s.Shutdown(errors.New("reload hashrings"))
-				}
-				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
-				rw := store.ReadWriteTSDBStore{
-					StoreServer:          tsdbStore,
-					WriteableStoreServer: webHandler,
-				}
+			for {
+				select {
+				case <-dbReady:
+					if s != nil {
+						s.Shutdown(errors.New("reload hashrings"))
+					}
+					tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
+					rw := store.ReadWriteTSDBStore{
+						StoreServer:          tsdbStore,
+						WriteableStoreServer: webHandler,
+					}
 
-				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe, rw,
-					grpcserver.WithListen(grpcBindAddr),
-					grpcserver.WithGracePeriod(grpcGracePeriod),
-					grpcserver.WithTLSConfig(tlsCfg),
-				)
-				startGRPC <- struct{}{}
+					s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe, rw,
+						grpcserver.WithListen(grpcBindAddr),
+						grpcserver.WithGracePeriod(grpcGracePeriod),
+						grpcserver.WithTLSConfig(tlsCfg),
+					)
+					startGRPC <- struct{}{}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
-			return nil
 		}, func(err error) {
+			cancel()
 			if s != nil {
 				s.Shutdown(err)
 			}
@@ -430,7 +437,9 @@ func runReceive(
 				}
 			}
 			return nil
-		}, func(error) {})
+		}, func(error) {
+			cancel()
+		})
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
