@@ -278,7 +278,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 	})
 }
 
-func TestLabelShardedMetaFilter_Filter(t *testing.T) {
+func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 	relabelContentYaml := `
     - action: drop
       regex: "A"
@@ -338,6 +338,72 @@ func TestLabelShardedMetaFilter_Filter(t *testing.T) {
 	testutil.Equals(t, 3.0, promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
+}
+
+func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
+	relabelContentYamlFmt := `
+    - action: hashmod
+      source_labels: ["ff%s"]
+      target_label: shard
+      modulus: 3
+    - action: keep
+      source_labels: ["shard"]
+      regex: %d
+`
+	for i := 0; i < 3; i++ {
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			var relabelConfig []*relabel.Config
+			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, blockIDLabel, i)), &relabelConfig))
+
+			f := NewLabelShardedMetaFilter(relabelConfig)
+
+			input := map[ulid.ULID]*metadata.Meta{
+				ULID(1): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B", "message": "keepme"},
+					},
+				},
+				ULID(2): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"something": "A", "message": "keepme"},
+					},
+				},
+				ULID(3): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "A", "message": "keepme"},
+					},
+				},
+				ULID(4): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "A", "something": "B", "message": "keepme"},
+					},
+				},
+				ULID(5): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B"},
+					},
+				},
+				ULID(6): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B", "message": "keepme"},
+					},
+				},
+				ULID(7): {},
+				ULID(8): {}, ULID(8): {},
+				ULID(9): {},
+			}
+			expected := map[ulid.ULID]*metadata.Meta{
+				// ?
+			}
+
+			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			f.Filter(input, synced, false)
+
+			testutil.Equals(t, 3.0, promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
+			testutil.Equals(t, expected, input)
+		})
+
+	}
 }
 
 func TestTimePartitionMetaFilter_Filter(t *testing.T) {

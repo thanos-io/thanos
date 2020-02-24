@@ -401,14 +401,25 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
+const blockIDLabel = "__block_id"
+
 // Filter filters out blocks that filters blocks that have no labels after relabelling.
 func (f *LabelShardedMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	lbls := make(labels.Labels, 1)
 	for id, m := range metas {
-		if processedLabels := relabel.Process(labels.FromMap(m.Thanos.Labels), f.relabelConfig...); processedLabels != nil {
-			continue
+		lbls[0] = labels.Label{Name: blockIDLabel, Value: id.String()}
+		lbls = lbls[:1]
+		if len(lbls) < len(m.Thanos.Labels) {
+			lbls = make([]labels.Label, 0, len(m.Thanos.Labels))
 		}
-		synced.WithLabelValues(labelExcludedMeta).Inc()
-		delete(metas, id)
+		for k, v := range m.Thanos.Labels {
+			lbls = append(lbls, labels.Label{Name: k, Value: v})
+		}
+
+		if processedLabels := relabel.Process(lbls, f.relabelConfig...); processedLabels == nil {
+			synced.WithLabelValues(labelExcludedMeta).Inc()
+			delete(metas, id)
+		}
 	}
 }
 
