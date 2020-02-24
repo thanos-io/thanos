@@ -387,8 +387,6 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 		g.Add(func() error {
@@ -399,47 +397,38 @@ func runReceive(
 				return errors.Wrap(err, "setup gRPC server")
 			}
 
-			for {
-				select {
-				case <-dbReady:
-					if s != nil {
-						s.Shutdown(errors.New("reload hashrings"))
-					}
-					tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
-					rw := store.ReadWriteTSDBStore{
-						StoreServer:          tsdbStore,
-						WriteableStoreServer: webHandler,
-					}
-
-					s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe, rw,
-						grpcserver.WithListen(grpcBindAddr),
-						grpcserver.WithGracePeriod(grpcGracePeriod),
-						grpcserver.WithTLSConfig(tlsCfg),
-					)
-					startGRPC <- struct{}{}
-				case <-ctx.Done():
-					return ctx.Err()
+			for range dbReady {
+				if s != nil {
+					s.Shutdown(errors.New("reload hashrings"))
 				}
+				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
+				rw := store.ReadWriteTSDBStore{
+					StoreServer:          tsdbStore,
+					WriteableStoreServer: webHandler,
+				}
+
+				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe, rw,
+					grpcserver.WithListen(grpcBindAddr),
+					grpcserver.WithGracePeriod(grpcGracePeriod),
+					grpcserver.WithTLSConfig(tlsCfg),
+				)
+				startGRPC <- struct{}{}
 			}
-		}, func(err error) {
-			cancel()
 			if s != nil {
 				s.Shutdown(err)
 			}
-		})
+			return nil
+		}, func(error) {})
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
 			for range startGRPC {
-				level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 				if err := s.ListenAndServe(); err != nil {
 					return errors.Wrap(err, "serve gRPC")
 				}
 			}
 			return nil
-		}, func(error) {
-			cancel()
-		})
+		}, func(error) {})
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
