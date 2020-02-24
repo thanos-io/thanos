@@ -278,7 +278,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 	})
 }
 
-func TestLabelShardedMetaFilter_Filter(t *testing.T) {
+func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 	relabelContentYaml := `
     - action: drop
       regex: "A"
@@ -338,6 +338,104 @@ func TestLabelShardedMetaFilter_Filter(t *testing.T) {
 	testutil.Equals(t, 3.0, promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
+}
+
+func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
+	relabelContentYamlFmt := `
+    - action: hashmod
+      source_labels: ["%s"]
+      target_label: shard
+      modulus: 3
+    - action: keep
+      source_labels: ["shard"]
+      regex: %d
+`
+	for i := 0; i < 3; i++ {
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+			var relabelConfig []*relabel.Config
+			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, blockIDLabel, i)), &relabelConfig))
+
+			f := NewLabelShardedMetaFilter(relabelConfig)
+
+			input := map[ulid.ULID]*metadata.Meta{
+				ULID(1): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B", "message": "keepme"},
+					},
+				},
+				ULID(2): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"something": "A", "message": "keepme"},
+					},
+				},
+				ULID(3): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "A", "message": "keepme"},
+					},
+				},
+				ULID(4): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "A", "something": "B", "message": "keepme"},
+					},
+				},
+				ULID(5): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B"},
+					},
+				},
+				ULID(6): {
+					Thanos: metadata.Thanos{
+						Labels: map[string]string{"cluster": "B", "message": "keepme"},
+					},
+				},
+				ULID(7):  {},
+				ULID(8):  {},
+				ULID(9):  {},
+				ULID(10): {},
+				ULID(11): {},
+				ULID(12): {},
+				ULID(13): {},
+				ULID(14): {},
+				ULID(15): {},
+			}
+			expected := map[ulid.ULID]*metadata.Meta{}
+			switch i {
+			case 0:
+				expected = map[ulid.ULID]*metadata.Meta{
+					ULID(2):  input[ULID(2)],
+					ULID(6):  input[ULID(6)],
+					ULID(11): input[ULID(11)],
+					ULID(13): input[ULID(13)],
+				}
+			case 1:
+				expected = map[ulid.ULID]*metadata.Meta{
+					ULID(5):  input[ULID(5)],
+					ULID(7):  input[ULID(7)],
+					ULID(10): input[ULID(10)],
+					ULID(12): input[ULID(12)],
+					ULID(14): input[ULID(14)],
+					ULID(15): input[ULID(15)],
+				}
+			case 2:
+				expected = map[ulid.ULID]*metadata.Meta{
+					ULID(1): input[ULID(1)],
+					ULID(3): input[ULID(3)],
+					ULID(4): input[ULID(4)],
+					ULID(8): input[ULID(8)],
+					ULID(9): input[ULID(9)],
+				}
+			}
+			deleted := len(input) - len(expected)
+
+			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			f.Filter(input, synced, false)
+
+			testutil.Equals(t, expected, input)
+			testutil.Equals(t, float64(deleted), promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
+
+		})
+
+	}
 }
 
 func TestTimePartitionMetaFilter_Filter(t *testing.T) {

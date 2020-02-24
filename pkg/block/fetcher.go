@@ -391,7 +391,7 @@ func (f *TimePartitionMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, syn
 
 var _ MetaFetcherFilter = (&LabelShardedMetaFilter{}).Filter
 
-// LabelShardedMetaFilter is a MetaFetcher filter that filters out blocks that have no labels after relabelling.
+// LabelShardedMetaFilter represents struct that allows sharding.
 type LabelShardedMetaFilter struct {
 	relabelConfig []*relabel.Config
 }
@@ -401,14 +401,23 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
-// Filter filters out blocks that filters blocks that have no labels after relabelling.
+// Special label that will have an ULID of the meta.json being referenced to.
+const blockIDLabel = "__block_id"
+
+// Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
 func (f *LabelShardedMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	var lbls labels.Labels
 	for id, m := range metas {
-		if processedLabels := relabel.Process(labels.FromMap(m.Thanos.Labels), f.relabelConfig...); processedLabels != nil {
-			continue
+		lbls = lbls[:0]
+		lbls = append(lbls, labels.Label{Name: blockIDLabel, Value: id.String()})
+		for k, v := range m.Thanos.Labels {
+			lbls = append(lbls, labels.Label{Name: k, Value: v})
 		}
-		synced.WithLabelValues(labelExcludedMeta).Inc()
-		delete(metas, id)
+
+		if processedLabels := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
+			synced.WithLabelValues(labelExcludedMeta).Inc()
+			delete(metas, id)
+		}
 	}
 }
 
