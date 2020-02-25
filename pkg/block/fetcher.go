@@ -52,6 +52,7 @@ const (
 	timeExcludedMeta  = "time-excluded"
 	tooFreshMeta      = "too-fresh"
 	duplicateMeta     = "duplicate"
+	replicaExclude    = "replica-exclude"
 )
 
 func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
@@ -531,6 +532,23 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 		}
 	}
 	return true
+}
+
+type ReplicaLabelsFilter struct {
+	ReplicaLabels []string
+}
+
+func (f *ReplicaLabelsFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, view bool) {
+	for u, meta := range metas {
+		labels := meta.Thanos.Labels
+		for _, replicaLabel := range f.ReplicaLabels {
+			if _, exists := labels[replicaLabel]; exists {
+				delete(labels, replicaLabel)
+				synced.WithLabelValues(replicaExclude).Inc()
+			}
+		}
+		metas[u].Thanos.Labels = labels
+	}
 }
 
 // ConsistencyDelayMetaFilter is a MetaFetcher filter that filters out blocks that are created before a specified consistency delay.

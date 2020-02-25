@@ -847,6 +847,29 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 	}
 }
 
+func TestReplicaLabel_Filter(t *testing.T) {
+	rf := ReplicaLabelsFilter{ReplicaLabels: []string{"replica", "rule_replica"}}
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+		ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "message": "something"}}},
+		ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1", "message": "something"}}},
+		ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1"}}},
+	}
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+		ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+		ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+		ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
+	}
+
+	synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+	rf.Filter(input, synced, false)
+
+	testutil.Equals(t, 5.0, promtest.ToFloat64(synced.WithLabelValues(replicaExclude)))
+	testutil.Equals(t, expected, input)
+}
+
 func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
 	_, file, line, _ := runtime.Caller(1)
 	matching := true

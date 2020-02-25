@@ -121,6 +121,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	dedupReplicaLabels := cmd.Flag("offline-deduplication.replica-labels", "Label to treat as a replica indicator of blocks that can be deduplicated. This will merge multiple replica blocks into one. This process is irrevertable. Experminteal").
+		Hidden().String()
+
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -144,6 +147,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			*dedupReplicaLabels,
 			selectorRelabelConf,
 		)
 	}
@@ -168,6 +172,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	dedupReplicaLabels string,
 	selectorRelabelConf *extflag.PathOrContent,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -242,10 +247,13 @@ func runCompact(
 
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
+	replicaLabelFilter := block.ReplicaLabelsFilter{ReplicaLabels: strings.Split(dedupReplicaLabels, ",")}
+
 	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
 		duplicateBlocksFilter.Filter,
+		replicaLabelFilter.Filter,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
