@@ -65,7 +65,7 @@
 
             'for': '15m',
             labels: {
-              severity: 'warning',
+              severity: 'info',
             },
           },
           {
@@ -111,7 +111,7 @@
             expr: 'avg(thanos_rule_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.rule,
             'for': '5m',
             labels: {
-              severity: 'warning',
+              severity: 'info',
             },
           },
           {

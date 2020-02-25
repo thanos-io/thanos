@@ -106,7 +106,7 @@ rules:
     sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-rule.*"}[5m])) > 0
   for: 15m
   labels:
-    severity: warning
+    severity: info
 - alert: ThanosRuleRuleEvaluationLatencyHigh
   annotations:
     message: Thanos Rule {{$labels.job}}/{{$labels.pod}} has higher evaluation latency
@@ -141,7 +141,7 @@ rules:
     != 1
   for: 5m
   labels:
-    severity: warning
+    severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
     message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
@@ -336,7 +336,7 @@ rules:
       }} seconds for instant queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) > 0
     )
@@ -346,10 +346,10 @@ rules:
 - alert: ThanosQueryRangeLatencyHigh
   annotations:
     message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
-      }} seconds for instant queries.
+      }} seconds for range queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-query.*", handler="query_range"}[5m])) > 0
     )
@@ -403,7 +403,7 @@ rules:
     )
   for: 5m
   labels:
-    severity: critical
+    severity: warning
 - alert: ThanosReceiveHighHashringFileRefreshFailures
   annotations:
     message: Thanos Receive {{$labels.job}} is failing to refresh hashring file, {{
