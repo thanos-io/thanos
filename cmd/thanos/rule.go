@@ -240,13 +240,13 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	)
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
-
-	reg.MustRegister(m.configSuccess)
-	reg.MustRegister(m.configSuccessTime)
-	reg.MustRegister(m.duplicatedQuery)
-	reg.MustRegister(m.rulesLoaded)
-	reg.MustRegister(m.ruleEvalWarnings)
-
+	if reg != nil {
+		reg.MustRegister(m.configSuccess)
+		reg.MustRegister(m.configSuccessTime)
+		reg.MustRegister(m.duplicatedQuery)
+		reg.MustRegister(m.rulesLoaded)
+		reg.MustRegister(m.ruleEvalWarnings)
+	}
 	return m
 }
 
