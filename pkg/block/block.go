@@ -156,6 +156,11 @@ func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir 
 		if strings.HasSuffix(name, objstore.DirDelim) {
 			return deleteDir(ctx, logger, bkt, name)
 		}
+		metaFile := path.Join(id.String(), MetaFilename)
+		if name == metaFile {
+			// skip this file if we found it, it was already deleted
+			continue
+		}
 		if err := bkt.Delete(ctx, name); err != nil {
 			return err
 		}
