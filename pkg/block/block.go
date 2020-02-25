@@ -157,9 +157,9 @@ func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir 
 			return deleteDir(ctx, logger, bkt, name)
 		}
 		metaFile := path.Join(id.String(), MetaFilename)
-		if name == metaFile {
-			// skip this file if we found it, it was already deleted
-			continue
+		if name == metaFile { // the metaFile was already deleted in Delete(), but might still appear in the Iter() list
+			level.Debug(logger).Log("msg", "skipping deletion of meta file, as it should already be deleted", "file", name, "bucket", bkt.Name())
+			return nil
 		}
 		if err := bkt.Delete(ctx, name); err != nil {
 			return err
