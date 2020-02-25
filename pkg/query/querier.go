@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/go-kit/kit/log"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -184,6 +186,16 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		}
 	}
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
+
+	matchers := make([]string, len(ms))
+	for i, m := range ms {
+		matchers[i] = m.String()
+	}
+	ctx = grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
+		"minTime":  params.Start,
+		"maxTime":  params.End,
+		"matchers": "{" + strings.Join(matchers, ",") + "}",
+	})
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
