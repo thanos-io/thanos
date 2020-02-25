@@ -133,6 +133,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h"))
 
+	dedupReplicaLabels := cmd.Flag("offline-deduplication.replica-labels", "Label to treat as a replica indicator of blocks that can be deduplicated. This will merge multiple replica blocks into one. This process is irrevertable. Experminteal").
+		Hidden().String()
+
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -157,6 +160,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			*dedupReplicaLabels,
 			selectorRelabelConf,
 			*waitInterval,
 		)
@@ -183,6 +187,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	dedupReplicaLabels string,
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
 ) error {
@@ -278,11 +283,14 @@ func runCompact(
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(deleteDelay.Seconds()/2)*time.Second)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
+	replicaLabelFilter := block.ReplicaLabelsFilter{ReplicaLabels: strings.Split(dedupReplicaLabels, ",")}
+
 	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
 		ignoreDeletionMarkFilter.Filter,
 		duplicateBlocksFilter.Filter,
+		replicaLabelFilter.Filter,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")

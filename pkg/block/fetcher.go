@@ -57,6 +57,7 @@ const (
 	// Blocks that are marked for deletion can be loaded as well. This is done to make sure that we load blocks that are meant to be deleted,
 	// but don't have a replacement block yet.
 	markedForDeletionMeta = "marked-for-deletion"
+	replicaExclude        = "replica-exclude"
 )
 
 func newSyncMetrics(reg prometheus.Registerer) *syncMetrics {
@@ -538,6 +539,23 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 		}
 	}
 	return true
+}
+
+type ReplicaLabelsFilter struct {
+	ReplicaLabels []string
+}
+
+func (f *ReplicaLabelsFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, view bool) {
+	for u, meta := range metas {
+		labels := meta.Thanos.Labels
+		for _, replicaLabel := range f.ReplicaLabels {
+			if _, exists := labels[replicaLabel]; exists {
+				delete(labels, replicaLabel)
+				synced.WithLabelValues(replicaExclude).Inc()
+			}
+		}
+		metas[u].Thanos.Labels = labels
+	}
 }
 
 // ConsistencyDelayMetaFilter is a MetaFetcher filter that filters out blocks that are created before a specified consistency delay.
