@@ -55,6 +55,12 @@ Release is happening on separate `release-<major>.<minor>` branch.
 
 1. Prepare PR to branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
 
+    Push the created branch to origin (Thanos repository) to be able to make your PR with the CHANGELOG.md changes against this branch later.
+
+    ```bash
+    $ git push origin release-<major>.<minor>
+    ```
+
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
 
 1. Update [CHANGELOG file](/CHANGELOG.md)
@@ -82,7 +88,7 @@ Release is happening on separate `release-<major>.<minor>` branch.
 1. After review, merge the PR and immediately after this tag a version:
 
     ```bash
-    $ tag=x.y.z
+    $ tag=$(cat VERSION)
     $ git tag -s "v${tag}" -m "v${tag}"
     $ git push origin "v${tag}"
     ```
