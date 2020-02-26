@@ -111,6 +111,11 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 		return
 	}
 
+	// Not a problem if it has been closed already.
+	if errors.Is(err, os.ErrClosed) {
+		return
+	}
+
 	if logger == nil {
 		logger = log.NewLogfmtLogger(os.Stderr)
 	}
