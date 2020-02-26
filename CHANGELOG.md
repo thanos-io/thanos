@@ -23,6 +23,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Changed
 
+- [#2194](https://github.com/thanos-io/thanos/pull/2194) Updated to golang v1.14.2
 - [#2505](https://github.com/thanos.io/thanos/pull/2505) Store: remove obsolete `thanos_store_node_info` metric.
 - [2513](https://github.com/thanos-io/thanos/pull/2513) Tools: Moved `thanos bucket` commands to `thanos tools bucket`, also
 moved `thanos check rules` to `thanos tools rules-check`. `thanos tools rules-check` also takes rules by `--rules` repeated flag not argument
