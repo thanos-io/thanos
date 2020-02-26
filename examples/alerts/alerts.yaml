@@ -439,3 +439,39 @@ groups:
     for: 5m
     labels:
       severity: critical
+- name: thanos-bucket-replicate.rules
+  rules:
+  - alert: ThanosBucketReplicateIsDown
+    annotations:
+      message: Thanos Replicate has disappeared from Prometheus target discovery.
+    expr: |
+      absent(up{job=~"thanos-bucket-replicate.*"})
+    for: 5m
+    labels:
+      severity: critical
+  - alert: ThanosBucketReplicateErrorRate
+    annotations:
+      message: Thanos Replicate failing to run, {{ $value | humanize }}% of attempts
+        failed.
+    expr: |
+      (
+        sum(rate(thanos_replicate_replication_runs_total{result="error", job=~"thanos-bucket-replicate.*"}[5m]))
+      / on (namespace) group_left
+        sum(rate(thanos_replicate_replication_runs_total{job=~"thanos-bucket-replicate.*"}[5m]))
+      ) * 100 >= 10
+    for: 5m
+    labels:
+      severity: critical
+  - alert: ThanosBucketReplicateRunLatency
+    annotations:
+      message: Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{
+        $value }} seconds for the replicate operations.
+    expr: |
+      (
+        histogram_quantile(0.9, sum by (job, le) (thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"})) > 120
+      and
+        sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m])) > 0
+      )
+    for: 5m
+    labels:
+      severity: critical

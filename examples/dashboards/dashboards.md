@@ -9,6 +9,7 @@ There exists Grafana dashboards for each component (not all of them complete) ta
 - [Thanos Receiver](thanos-receiver.json)
 - [Thanos Sidecar](thanos-sidecar.json)
 - [Thanos Ruler](thanos-ruler.json)
+- [Thanos Replicate](thanos-bucket-replicate.json)
 
 You can import them via `Import -> Paste JSON` in Grafana.
 These dashboards require Grafana 5 or above, importing them in older versions are known not to work.
