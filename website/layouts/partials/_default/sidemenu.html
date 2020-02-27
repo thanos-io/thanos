@@ -17,6 +17,12 @@
             <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
         {{ end }}
     </div>
+    <h5 class="mt-3">Operating</h5>
+    <div class="list-group list-group-flush">
+        {{ range .Site.Menus.operating }}
+            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
+        {{ end }}
+    </div>
     <h5 class="mt-3">Contributing</h5>
     <div class="list-group list-group-flush">
         {{ range .Site.Menus.contributing }}
