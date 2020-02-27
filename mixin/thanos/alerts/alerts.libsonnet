@@ -4,4 +4,5 @@
 (import 'sidecar.libsonnet') +
 (import 'store.libsonnet') +
 (import 'rule.libsonnet') +
-(import 'absent.libsonnet')
+(import 'absent.libsonnet') +
+(import 'bucket_replicate.libsonnet')

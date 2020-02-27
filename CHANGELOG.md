@@ -30,11 +30,13 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2008](https://github.com/thanos-io/thanos/pull/2008) Querier, Receiver, Sidecar, Store: Add gRPC [health check](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) endpoints.
 - [#2145](https://github.com/thanos-io/thanos/pull/2145) Tracing: track query sent to prometheus via remote read api.
 - [#1848](https://github.com/thanos-io/thanos/pull/1848) Ruler: Return error messages when trigger reload with http.
+- [#2113](https://github.com/thanos-io/thanos/pull/2113) Bucket: Added `thanos bucket replicate`.
 
 ### Changed
 
 - [#1933](https://github.com/thanos-io/thanos/pull/1933) Add a flag `--tsdb.wal-compression` to configure whether to enable tsdb wal compression in ruler and receiver.
 - [#2021](https://github.com/thanos-io/thanos/pull/2021) Rename metric `thanos_query_duplicated_store_address` to `thanos_query_duplicated_store_addresses_total` and `thanos_rule_duplicated_query_address` to `thanos_rule_duplicated_query_addresses_total`.
+- [#2166](https://github.com/thanos-io/thanos/pull/2166) Improve tooltip for bucket web UI.
 
 ## [v0.10.1](https://github.com/thanos-io/thanos/releases/tag/v0.10.1) - 2020.01.24
 

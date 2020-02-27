@@ -5,12 +5,12 @@ package receive
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/cespare/xxhash"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/prompb"
 )
 
@@ -165,19 +165,19 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
-func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) {
-	go cw.Run(ctx)
+func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
 	defer close(updates)
+	go cw.Run(ctx)
 
 	for {
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
-				return
+				return errors.New("hashring config watcher stopped unexpectedly")
 			}
 			updates <- newMultiHashring(cfg)
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		}
 	}
 }

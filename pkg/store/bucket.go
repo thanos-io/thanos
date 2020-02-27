@@ -365,10 +365,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			continue
 		}
 		if err := s.removeBlock(id); err != nil {
-			level.Warn(s.logger).Log("msg", "drop outdated block failed", "block", id, "err", err)
+			level.Warn(s.logger).Log("msg", "drop of outdated block failed", "block", id, "err", err)
 			s.metrics.blockDropFailures.Inc()
 		}
-		level.Debug(s.logger).Log("msg", "dropped outdated block", "block", id)
+		level.Info(s.logger).Log("msg", "dropped outdated block", "block", id)
 		s.metrics.blockDrops.Inc()
 	}
 
@@ -439,7 +439,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 			}
 			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
 		} else {
-			level.Debug(s.logger).Log("msg", "loaded block", "elapsed", time.Since(start), "id", meta.ULID)
+			level.Info(s.logger).Log("msg", "loaded new block", "elapsed", time.Since(start), "id", meta.ULID)
 		}
 	}()
 	s.metrics.blockLoads.Inc()
@@ -1088,7 +1088,11 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 	bs := append(s.blocks[i], b)
 	s.blocks[i] = bs
 
+	// Always sort blocks by min time, then max time.
 	sort.Slice(bs, func(j, k int) bool {
+		if bs[j].meta.MinTime == bs[k].meta.MinTime {
+			return bs[j].meta.MaxTime < bs[k].meta.MaxTime
+		}
 		return bs[j].meta.MinTime < bs[k].meta.MinTime
 	})
 	return nil
@@ -1120,6 +1124,9 @@ func int64index(s []int64, x int64) int {
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
 // Blocks with the biggest resolution possible but not bigger than the given max resolution are returned.
+// It supports overlapping blocks.
+//
+// NOTE: s.blocks are expected to be sorted in minTime order.
 func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
 	if mint > maxt {
 		return nil
@@ -1286,7 +1293,6 @@ func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 // Close waits for all pending readers to finish and then closes all underlying resources.
 func (b *bucketBlock) Close() error {
 	b.pendingReaders.Wait()
-
 	return b.indexHeaderReader.Close()
 }
 

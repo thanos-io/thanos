@@ -40,7 +40,7 @@ for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-bucketCommands=("verify" "ls" "inspect" "web")
+bucketCommands=("verify" "ls" "inspect" "web" "replicate")
 for x in "${bucketCommands[@]}"; do
     ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
 done

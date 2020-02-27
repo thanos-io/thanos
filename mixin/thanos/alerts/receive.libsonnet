@@ -58,7 +58,7 @@
             ||| % thanos.receive,
             'for': '5m',
             labels: {
-              severity: 'critical',
+              severity: 'warning',
             },
           },
           {

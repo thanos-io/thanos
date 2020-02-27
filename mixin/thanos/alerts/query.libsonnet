@@ -102,7 +102,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query"})) > 90
               and
                 sum by (job) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
               )
@@ -115,11 +115,11 @@
           {
             alert: 'ThanosQueryRangeLatencyHigh',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
+              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for range queries.',
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query_range"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query_range"})) > 90
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
               )

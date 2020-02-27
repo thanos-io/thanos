@@ -1,3 +1,4 @@
 (import 'query.libsonnet') +
 (import 'receive.libsonnet') +
-(import 'store.libsonnet')
+(import 'store.libsonnet') +
+(import 'bucket_replicate.libsonnet')

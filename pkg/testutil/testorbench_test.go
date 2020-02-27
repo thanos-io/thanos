@@ -30,6 +30,7 @@ func testorbenchComplexTest(tb TB) {
 			}
 		})
 	})
+	tb.SetBytes(120220)
 	tb.Run("b", func(tb TB) {
 		tb.Run("bb", func(tb TB) {
 			tb.ResetTimer()

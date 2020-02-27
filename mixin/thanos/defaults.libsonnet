@@ -29,6 +29,11 @@
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
+  bucket_replicate+:: {
+    jobPrefix: 'thanos-bucket-replicate',
+    selector: 'job=~"%s.*"' % self.jobPrefix,
+    title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
+  },
   overview+:: {
     title: '%(prefix)sOverview' % $.dashboard.prefix,
   },

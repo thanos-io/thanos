@@ -6,7 +6,6 @@ package block
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"io/ioutil"
 	"os"
 	"path"
@@ -185,15 +184,13 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 			return m, nil
 		}
 
-		if !stderrors.Is(err, os.ErrNotExist) {
+		if !errors.Is(err, os.ErrNotExist) {
 			level.Warn(s.logger).Log("msg", "best effort read of the local meta.json failed; removing cached block dir", "dir", cachedBlockDir, "err", err)
 			if err := os.RemoveAll(cachedBlockDir); err != nil {
 				level.Warn(s.logger).Log("msg", "best effort remove of cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 			}
 		}
 	}
-
-	level.Debug(s.logger).Log("msg", "download meta", "name", metaFile)
 
 	r, err := s.bkt.Get(ctx, metaFile)
 	if s.bkt.IsObjNotFoundErr(err) {
@@ -365,7 +362,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 		return metas, partial, errors.Wrap(metaErrs, "incomplete view")
 	}
 
-	level.Info(s.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(s.cached), "returned", len(metas), "partial", len(partial))
+	level.Debug(s.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(s.cached), "returned", len(metas), "partial", len(partial))
 	return metas, partial, nil
 }
 
@@ -394,7 +391,7 @@ func (f *TimePartitionMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, syn
 
 var _ MetaFetcherFilter = (&LabelShardedMetaFilter{}).Filter
 
-// LabelShardedMetaFilter is a MetaFetcher filter that filters out blocks that have no labels after relabelling.
+// LabelShardedMetaFilter represents struct that allows sharding.
 type LabelShardedMetaFilter struct {
 	relabelConfig []*relabel.Config
 }
@@ -404,14 +401,23 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
-// Filter filters out blocks that filters blocks that have no labels after relabelling.
+// Special label that will have an ULID of the meta.json being referenced to.
+const blockIDLabel = "__block_id"
+
+// Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
 func (f *LabelShardedMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	var lbls labels.Labels
 	for id, m := range metas {
-		if processedLabels := relabel.Process(labels.FromMap(m.Thanos.Labels), f.relabelConfig...); processedLabels != nil {
-			continue
+		lbls = lbls[:0]
+		lbls = append(lbls, labels.Label{Name: blockIDLabel, Value: id.String()})
+		for k, v := range m.Thanos.Labels {
+			lbls = append(lbls, labels.Label{Name: k, Value: v})
 		}
-		synced.WithLabelValues(labelExcludedMeta).Inc()
-		delete(metas, id)
+
+		if processedLabels := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
+			synced.WithLabelValues(labelExcludedMeta).Inc()
+			delete(metas, id)
+		}
 	}
 }
 

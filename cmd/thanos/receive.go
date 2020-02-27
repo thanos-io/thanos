@@ -284,6 +284,9 @@ func runReceive(
 					if !ok {
 						return nil
 					}
+
+					level.Info(logger).Log("msg", "updating DB")
+
 					if err := db.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
 					}
@@ -298,7 +301,7 @@ func runReceive(
 					localStorage.Set(db.Get(), startTimeMargin)
 					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
 					statusProber.Ready()
-					level.Info(logger).Log("msg", "server is ready to receive web requests.")
+					level.Info(logger).Log("msg", "server is ready to receive web requests")
 					dbReady <- struct{}{}
 				}
 			}
@@ -315,11 +318,17 @@ func runReceive(
 		// In the single-node case, which has no configuration
 		// watcher, we close the chan ourselves.
 		updates := make(chan receive.Hashring, 1)
+
 		if cw != nil {
+			// Check the hashring configuration on before running the watcher.
+			if err := cw.ValidateConfig(); err != nil {
+				close(updates)
+				return errors.Wrap(err, "failed to validate hashring configuration file")
+			}
+
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				receive.HashringFromConfig(ctx, updates, cw)
-				return nil
+				return receive.HashringFromConfig(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})
@@ -405,17 +414,15 @@ func runReceive(
 				)
 				startGRPC <- struct{}{}
 			}
-			return nil
-		}, func(err error) {
 			if s != nil {
 				s.Shutdown(err)
 			}
-		})
+			return nil
+		}, func(error) {})
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
 			for range startGRPC {
-				level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 				if err := s.ListenAndServe(); err != nil {
 					return errors.Wrap(err, "serve gRPC")
 				}

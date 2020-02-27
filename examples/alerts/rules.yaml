@@ -121,3 +121,5 @@ groups:
     labels:
       quantile: "0.99"
     record: :thanos_objstore_bucket_operation_duration_seconds:histogram_quantile
+- name: thanos-bucket-replicate.rules
+  rules: []

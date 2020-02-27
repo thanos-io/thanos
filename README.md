@@ -1,6 +1,8 @@
 <p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
-[![CircleCI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
+[![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
+[![Cross Build](https://github.com/thanos-io/thanos/workflows/cross-build/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Across-build)
+[![End-to-End Tests](https://github.com/thanos-io/thanos/workflows/e2e/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ae2e)
 [![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
 [![Go Code reference](https://img.shields.io/badge/code%20reference-go.dev-darkblue.svg)](https://pkg.go.dev/github.com/thanos-io/thanos?tab=subdirectories)
 [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)

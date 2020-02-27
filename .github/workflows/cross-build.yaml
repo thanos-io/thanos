@@ -1,0 +1,30 @@
+name: cross-build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  cross-build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go.
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.6
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Get dependencies
+        run: make deps
+
+      - name: Cross build check
+        run: make crossbuild

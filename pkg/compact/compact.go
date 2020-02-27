@@ -690,7 +690,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if overlappingBlocks {
 		cg.verticalCompactions.Inc()
 	}
-	level.Debug(cg.logger).Log("msg", "compacted blocks",
+	level.Info(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
@@ -732,7 +732,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir); err != nil {
 		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
-	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
+	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
 	// Delete the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.

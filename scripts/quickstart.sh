@@ -199,6 +199,15 @@ fi
 
 sleep 0.5
 
+QUERIER_JAEGER_CONFIG=$(cat <<-EOF
+type: JAEGER
+config:
+  service_name: thanos-query
+  sampler_type: ratelimiting
+  sampler_param: 2
+EOF
+)
+
 # Start two query nodes.
 for i in $(seq 0 1); do
   ${THANOS_EXECUTABLE} query \
@@ -209,6 +218,7 @@ for i in $(seq 0 1); do
     --http-address 0.0.0.0:109${i}4 \
     --http-grace-period 1s \
     --query.replica-label prometheus \
+    --tracing.config="${QUERIER_JAEGER_CONFIG}" \
     ${STORES} &
 done
 
