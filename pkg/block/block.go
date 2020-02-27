@@ -156,7 +156,7 @@ func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir 
 		if strings.HasSuffix(name, objstore.DirDelim) {
 			return deleteDir(ctx, logger, bkt, name)
 		}
-		metaFile := path.Join(id.String(), MetaFilename)
+		metaFile := path.Join(dir, MetaFilename)
 		if name == metaFile { // the metaFile was already deleted in Delete(), but might still appear in the Iter() list
 			level.Debug(logger).Log("msg", "skipping deletion of meta file, as it should already be deleted", "file", name, "bucket", bkt.Name())
 			return nil
