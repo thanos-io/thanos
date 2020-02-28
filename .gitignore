@@ -27,3 +27,6 @@ website/docs-pre-processed/
 
 tmp/bin
 examples/tmp/
+
+# Ignore vscode settings.
+/.vscode
