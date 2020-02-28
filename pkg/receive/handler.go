@@ -395,24 +395,22 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				ec <- err
 				return
 			}
-
 			// Create a span to track the request made to another receive node.
-			span, ctx := tracing.StartSpan(ctx, "thanos_receive_forward")
-			defer span.Finish()
-
-			// Actually make the request against the endpoint
-			// we determined should handle these time series.
-			_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
-				Timeseries: wreqs[endpoint].Timeseries,
-				Tenant:     tenant,
-				Replica:    int64(replicas[endpoint].n + 1), // increment replica since on-the-wire format is 1-indexed and 0 indicates unreplicated.
+			tracing.DoInSpan(ctx, "thanos_receive_forward", func(ctx context.Context) {
+				// Actually make the request against the endpoint
+				// we determined should handle these time series.
+				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
+					Timeseries: wreqs[endpoint].Timeseries,
+					Tenant:     tenant,
+					Replica:    int64(replicas[endpoint].n + 1), // increment replica since on-the-wire format is 1-indexed and 0 indicates unreplicated.
+				})
+				if err != nil {
+					level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
+					ec <- err
+					return
+				}
+				ec <- nil
 			})
-			if err != nil {
-				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
-				ec <- err
-				return
-			}
-			ec <- nil
 		}(endpoint)
 	}
 

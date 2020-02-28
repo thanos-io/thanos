@@ -825,14 +825,13 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
-	{
-		span, _ := tracing.StartSpan(srv.Context(), "store_query_gate_ismyturn")
-		err := s.queryGate.IsMyTurn(srv.Context())
-		span.Finish()
-		if err != nil {
-			return errors.Wrapf(err, "failed to wait for turn")
-		}
+	tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
+		err = s.queryGate.IsMyTurn(srv.Context())
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to wait for turn")
 	}
+
 	defer s.queryGate.Done()
 
 	matchers, err := translateMatchers(req.Matchers)
@@ -843,10 +842,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		stats  = &queryStats{}
-		res    []storepb.SeriesSet
-		mtx    sync.Mutex
-		g, ctx = errgroup.WithContext(srv.Context())
+		ctx     = srv.Context()
+		stats   = &queryStats{}
+		res     []storepb.SeriesSet
+		mtx     sync.Mutex
+		g, gctx = errgroup.WithContext(ctx)
 	)
 
 	s.mtx.RLock()
@@ -871,8 +871,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			b := b
 
 			// We must keep the readers open until all their data has been sent.
-			indexr := b.indexReader(ctx)
-			chunkr := b.chunkReader(ctx)
+			indexr := b.indexReader(gctx)
+			chunkr := b.chunkReader(gctx)
 
 			// Defer all closes to the end of Series method.
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
@@ -924,11 +924,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	// Concurrently get data from all blocks.
 	{
-		span, _ := tracing.StartSpan(srv.Context(), "bucket_store_preload_all")
 		begin := time.Now()
-		err := g.Wait()
-		span.Finish()
-
+		tracing.DoInSpan(ctx, "bucket_store_preload_all", func(_ context.Context) {
+			err = g.Wait()
+		})
 		if err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
@@ -937,10 +936,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
 	}
 	// Merge the sub-results from each selected block.
-	{
-		span, _ := tracing.StartSpan(srv.Context(), "bucket_store_merge_all")
-		defer span.Finish()
-
+	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
 
 		// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
@@ -961,17 +957,21 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
 
-			if err := srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
-				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+				return
 			}
 		}
 		if set.Err() != nil {
-			return status.Error(codes.Unknown, errors.Wrap(set.Err(), "expand series set").Error())
+			err = status.Error(codes.Unknown, errors.Wrap(set.Err(), "expand series set").Error())
+			return
 		}
 		stats.mergeDuration = time.Since(begin)
 		s.metrics.seriesMergeDuration.Observe(stats.mergeDuration.Seconds())
-	}
-	return nil
+
+		err = nil
+	})
+	return err
 }
 
 func chunksSize(chks []storepb.AggrChunk) (size int) {

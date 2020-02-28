@@ -249,9 +249,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in matchesExternalLabels method so we explicitly ignore error.
-			spanStoreMathes, gctx := tracing.StartSpan(gctx, "store_matches")
-			ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...)
-			spanStoreMathes.Finish()
+			var ok bool
+			tracing.DoInSpan(gctx, "store_matches", func(ctx context.Context) {
+				// We can skip error, we already translated matchers once.
+				ok, _ = storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...)
+			})
 			if !ok {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out", st))
 				continue
