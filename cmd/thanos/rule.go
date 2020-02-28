@@ -504,7 +504,7 @@ func runRule(
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}
 				case <-ctx.Done():
-					return errors.New("canceled")
+					return ctx.Err()
 				}
 			}
 		}, func(error) {
