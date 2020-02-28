@@ -491,7 +491,7 @@ func runRule(
 
 	// Handle reload and termination interrupts.
 	{
-		cancel := make(chan struct{})
+		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			// Initialize rules.
 			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
@@ -503,12 +503,12 @@ func runRule(
 					if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}
-				case <-cancel:
+				case <-ctx.Done():
 					return errors.New("canceled")
 				}
 			}
 		}, func(error) {
-			close(cancel)
+			cancel()
 		})
 	}
 
