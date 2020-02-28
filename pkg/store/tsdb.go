@@ -51,7 +51,7 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, compo
 }
 
 // Info returns store information about the Prometheus instance.
-func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.externalLabels)),
 		StoreType: s.component.ToProto(),

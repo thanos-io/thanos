@@ -43,7 +43,7 @@ service Store {
   rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
 }
 
-/// WriteableStore reprents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
+/// WriteableStore represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service WriteableStore {
   // WriteRequest allows you to write metrics to this store via remote write
   rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
@@ -58,8 +58,7 @@ message WriteRequest {
   int64 replica = 3;
 }
 
-message InfoRequest {
-}
+message InfoRequest {}
 
 enum StoreType {
   UNKNOWN = 0;
@@ -159,4 +158,66 @@ message LabelValuesRequest {
 message LabelValuesResponse {
   repeated string values = 1;
   repeated string warnings = 2;
+}
+
+/// Rules represents API.
+service Rules {
+  /// Rules has info for all rules.
+  rpc Rules(RulesRequest) returns (stream RulesResponse);
+}
+
+/// RuleGroup has info for rules which are part of a group.
+message RuleGroup {
+  string name = 1;
+  string file = 2;
+  // In order to preserve rule ordering, while exposing type (alerting or recording)
+  // specific properties, both alerting and recording rules are exposed in the
+  // same array.
+  repeated Rule rules = 3;
+  double interval = 4;
+  int64 evaluation_time = 5;
+  int64 last_evaluation_time = 6;
+}
+
+message Rule {
+  oneof result {
+    Rule rule = 1;
+    Alert alert= 2;
+  }
+}
+
+enum AlertState {
+  PENDING     = 0;
+  FIRING      = 1;
+  INACTIVE    = 2;
+}
+
+message Alert {
+  AlertState state = 1;
+  string name = 2;
+  string query = 3;
+  double duration_seconds = 4; // Is it second?
+  repeated Label labels = 5;
+  repeated Label annotations = 6;
+  repeated Alert alerts = 7;
+  string health = 8;
+  string last_error = 9;
+  double evaluation_duration_seconds = 10; // Is it second?
+  int64 last_evaluation_time = 11;
+}
+
+message RecordingRule {
+  string name = 1;
+  string query = 2;
+  repeated Label labels = 3;
+  string health = 4;
+  string last_error = 5;
+  double evaluation_duration_seconds = 6; // Is it second?
+  int64 last_evaluation_time = 7;
+}
+
+message RulesRequest {}
+
+message RulesResponse {
+  repeated RuleGroup groups = 1;
 }

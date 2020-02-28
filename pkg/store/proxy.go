@@ -103,7 +103,7 @@ func NewProxyStore(
 }
 
 // Info returns store information about the external labels this store have.
-func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
 		StoreType: s.component.ToProto(),
