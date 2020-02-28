@@ -223,12 +223,12 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	})
 	m.duplicatedQuery = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_rule_duplicated_query_addresses_total",
-		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
+		Help: "The number of times a duplicated query addresses is detected from the different configs in rule.",
 	})
 	m.rulesLoaded = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
-			Help: "Loaded rules partitioned by file and group",
+			Help: "Loaded rules partitioned by file and group.",
 		},
 		[]string{"strategy", "file", "group"},
 	)
