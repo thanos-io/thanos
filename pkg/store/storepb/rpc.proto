@@ -132,7 +132,7 @@ message SeriesResponse {
     Series series = 1;
 
     /// warning is considered an information piece in place of series for warning purposes.
-    /// It is used to warn query customer about suspicious cases or partial response (if enabled).
+    /// It is used to warn store API user about suspicious cases or partial response (if enabled).
     string warning = 2;
 
     /// hints is an opaque data structure that can be used to carry additional information from
@@ -170,7 +170,7 @@ message LabelValuesResponse {
   repeated string warnings = 2;
 }
 
-/// Rules represents API.
+/// Rules represents API that is responsible for gathering rules and their statuses.
 service Rules {
   /// Rules has info for all rules.
   rpc Rules(RulesRequest) returns (stream RulesResponse);
@@ -228,6 +228,17 @@ message RecordingRule {
 
 message RulesRequest {}
 
-message RulesResponse {
+message RuleGroups {
   repeated RuleGroup groups = 1;
+}
+
+message RulesResponse {
+  oneof result {
+    // It is up to server implementation to decide how many of those to put here.
+    RuleGroup group = 1;
+
+    /// warning is considered an information piece in place of series for warning purposes.
+    /// It is used to warn rule API users about suspicious cases or partial response (if enabled).
+    string warning = 2;
+  }
 }
