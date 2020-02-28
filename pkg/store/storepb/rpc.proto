@@ -196,14 +196,14 @@ message Rule {
   }
 }
 
-enum AlertState {
-  PENDING     = 0;
-  FIRING      = 1;
-  INACTIVE    = 2;
-}
-
 message Alert {
-  AlertState state = 1;
+  enum State {
+    PENDING     = 0;
+    FIRING      = 1;
+    INACTIVE    = 2;
+  }
+
+  State state = 1;
   string name = 2;
   string query = 3;
   double duration_seconds = 4; // Is it second?
@@ -226,7 +226,14 @@ message RecordingRule {
   int64 last_evaluation_time = 7;
 }
 
-message RulesRequest {}
+message RulesRequest {
+  enum Type {
+    ALL     = 0;
+    ALERTING      = 1;
+    RECORDING    = 2;
+  }
+  Type type = 1;
+}
 
 message RuleGroups {
   repeated RuleGroup groups = 1;
