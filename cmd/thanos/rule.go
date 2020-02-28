@@ -458,7 +458,9 @@ func runRule(
 
 		g.Add(func() error {
 			for {
-				sdr.Send(ctx, alertQ.Pop(ctx.Done()))
+				tracing.DoInSpan(ctx, "/send_alerts", func(ctx context.Context) {
+					sdr.Send(ctx, alertQ.Pop(ctx.Done()))
+				})
 
 				select {
 				case <-ctx.Done():
@@ -712,18 +714,18 @@ func queryFunc(
 		promClients = append(promClients, promclient.NewClient(logger, q))
 	}
 
-	return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+	return func(ctx context.Context, q string, t time.Time) (v promql.Vector, err error) {
 		for _, i := range rand.Perm(len(queriers)) {
 			promClient := promClients[i]
 			endpoints := removeDuplicateQueryEndpoints(logger, duplicatedQuery, queriers[i].Endpoints())
 			for _, i := range rand.Perm(len(endpoints)) {
-				span, ctx := tracing.StartSpan(ctx, spanID)
-				v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
-					Deduplicate:             true,
-					PartialResponseStrategy: partialResponseStrategy,
+				var warns []string
+				tracing.DoInSpan(ctx, spanID, func(ctx context.Context) {
+					v, warns, err = promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
+						Deduplicate:             true,
+						PartialResponseStrategy: partialResponseStrategy,
+					})
 				})
-				span.Finish()
-
 				if err != nil {
 					level.Error(logger).Log("err", err, "query", q)
 					continue

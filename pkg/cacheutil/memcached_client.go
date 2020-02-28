@@ -252,18 +252,18 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) (err error) {
 	return c.enqueueAsync(func() {
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		span, _ := tracing.StartSpan(ctx, "memcached_set")
-		err := c.client.Set(&memcache.Item{
-			Key:        key,
-			Value:      value,
-			Expiration: int32(time.Now().Add(ttl).Unix()),
+		tracing.DoInSpan(ctx, "memcached_set", func(ctx context.Context) {
+			err = c.client.Set(&memcache.Item{
+				Key:        key,
+				Value:      value,
+				Expiration: int32(time.Now().Add(ttl).Unix()),
+			})
 		})
-		span.Finish()
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
 			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "err", err)
@@ -358,13 +358,14 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	return items, lastErr
 }
 
-func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (map[string]*memcache.Item, error) {
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
 	// Wait until we get a free slot from the gate, if the max
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
-		span, _ := tracing.StartSpan(ctx, "memcached_getmulti_gate_ismyturn")
-		err := c.getMultiGate.IsMyTurn(ctx)
-		span.Finish()
+		tracing.DoInSpan(ctx, "memcached_getmulti_gate_ismyturn", func(ctx context.Context) {
+			// TODO(bwplotka): Consider putting span directly in gate.
+			err = c.getMultiGate.IsMyTurn(ctx)
+		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to wait for turn")
 		}
@@ -373,10 +374,9 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (ma
 
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-
-	span, _ := tracing.StartSpan(ctx, "memcached_getmulti")
-	items, err := c.client.GetMulti(keys)
-	span.Finish()
+	tracing.DoInSpan(ctx, "memcached_getmulti", func(ctx context.Context) {
+		items, err = c.client.GetMulti(keys)
+	})
 	if err != nil {
 		c.failures.WithLabelValues(opGetMulti).Inc()
 	} else {

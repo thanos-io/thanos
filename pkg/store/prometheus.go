@@ -366,7 +366,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	return nil
 }
 
-func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.Response) (*prompb.ReadResponse, error) {
+func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.Response) (_ *prompb.ReadResponse, err error) {
 	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "prom series request body")
 
 	b := p.getBuffer()
@@ -375,21 +375,24 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	if _, err := io.Copy(buf, resp.Body); err != nil {
 		return nil, errors.Wrap(err, "copy response")
 	}
-	spanSnappyDecode, ctx := tracing.StartSpan(ctx, "decompress_response")
+
 	sb := p.getBuffer()
-	decomp, err := snappy.Decode(*sb, buf.Bytes())
-	spanSnappyDecode.Finish()
+	var decomp []byte
+	tracing.DoInSpan(ctx, "decompress_response", func(ctx context.Context) {
+		decomp, err = snappy.Decode(*sb, buf.Bytes())
+	})
 	defer p.putBuffer(sb)
 	if err != nil {
 		return nil, errors.Wrap(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
-	spanUnmarshal, _ := tracing.StartSpan(ctx, "unmarshal_response")
-	if err := proto.Unmarshal(decomp, &data); err != nil {
+	tracing.DoInSpan(ctx, "unmarshal_response", func(ctx context.Context) {
+		err = proto.Unmarshal(decomp, &data)
+	})
+	if err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}
-	spanUnmarshal.Finish()
 	if len(data.Results) != 1 {
 		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
 	}
@@ -423,7 +426,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 	return chks, nil
 }
 
-func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) (*http.Response, error) {
+func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) (presp *http.Response, err error) {
 	reqb, err := proto.Marshal(&prompb.ReadRequest{
 		Queries:               []*prompb.Query{q},
 		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
@@ -447,10 +450,10 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
 	preq.Header.Set("User-Agent", userAgent)
-	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request", opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
-	preq = preq.WithContext(ctx)
-	presp, err := p.client.Do(preq)
-	spanReqDo.Finish()
+	tracing.DoInSpan(ctx, "query_prometheus_request", func(ctx context.Context) {
+		preq = preq.WithContext(ctx)
+		presp, err = p.client.Do(preq)
+	}, opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
 	}

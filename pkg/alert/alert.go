@@ -330,8 +330,6 @@ func toAPILabels(labels labels.Labels) models.LabelSet {
 // Send an alert batch to all given Alertmanager clients.
 // TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
-	span, ctx := tracing.StartSpan(ctx, "/send_alerts")
-	defer span.Finish()
 	if len(alerts) == 0 {
 		return
 	}
@@ -382,22 +380,23 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
 				start := time.Now()
 				u.Path = path.Join(u.Path, fmt.Sprintf("/api/%s/alerts", string(am.version)))
-				span, ctx := tracing.StartSpan(ctx, "post_alerts HTTP[client]")
-				defer span.Finish()
-				if err := am.postAlerts(ctx, u, bytes.NewReader(payload[am.version])); err != nil {
-					level.Warn(s.logger).Log(
-						"msg", "sending alerts failed",
-						"alertmanager", u.Host,
-						"alerts", string(payload[am.version]),
-						"err", err,
-					)
-					s.errs.WithLabelValues(u.Host).Inc()
-					return
-				}
-				s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
-				s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
 
-				atomic.AddUint64(&numSuccess, 1)
+				tracing.DoInSpan(ctx, "post_alerts HTTP[client]", func(ctx context.Context) {
+					if err := am.postAlerts(ctx, u, bytes.NewReader(payload[am.version])); err != nil {
+						level.Warn(s.logger).Log(
+							"msg", "sending alerts failed",
+							"alertmanager", u.Host,
+							"alerts", string(payload[am.version]),
+							"err", err,
+						)
+						s.errs.WithLabelValues(u.Host).Inc()
+						return
+					}
+					s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
+					s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
+
+					atomic.AddUint64(&numSuccess, 1)
+				})
 			}(am, *u)
 		}
 	}
