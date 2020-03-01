@@ -20,6 +20,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -213,26 +214,27 @@ type RuleMetrics struct {
 func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	m := new(RuleMetrics)
 
-	m.configSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
+	factory := promauto.With(reg)
+	m.configSuccess = factory.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
 		Help: "Whether the last configuration reload attempt was successful.",
 	})
-	m.configSuccessTime = prometheus.NewGauge(prometheus.GaugeOpts{
+	m.configSuccessTime = factory.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_success_timestamp_seconds",
 		Help: "Timestamp of the last successful configuration reload.",
 	})
-	m.duplicatedQuery = prometheus.NewCounter(prometheus.CounterOpts{
+	m.duplicatedQuery = factory.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_rule_duplicated_query_addresses_total",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule.",
 	})
-	m.rulesLoaded = prometheus.NewGaugeVec(
+	m.rulesLoaded = factory.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
 			Help: "Loaded rules partitioned by file and group.",
 		},
 		[]string{"strategy", "file", "group"},
 	)
-	m.ruleEvalWarnings = prometheus.NewCounterVec(
+	m.ruleEvalWarnings = factory.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "thanos_rule_evaluation_with_warnings_total",
 			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
@@ -240,13 +242,7 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	)
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
 	m.ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
-	if reg != nil {
-		reg.MustRegister(m.configSuccess)
-		reg.MustRegister(m.configSuccessTime)
-		reg.MustRegister(m.duplicatedQuery)
-		reg.MustRegister(m.rulesLoaded)
-		reg.MustRegister(m.ruleEvalWarnings)
-	}
+
 	return m
 }
 
