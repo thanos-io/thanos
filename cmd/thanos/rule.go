@@ -775,6 +775,7 @@ func reloadRules(logger log.Logger,
 	if err := ruleMgr.Update(evalInterval, files); err != nil {
 		metrics.configSuccess.Set(0)
 		errs.Add(errors.Wrap(err, "reloading rules failed"))
+		return errs.Err()
 	}
 
 	metrics.configSuccess.Set(1)
