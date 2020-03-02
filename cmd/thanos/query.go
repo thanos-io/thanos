@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -324,11 +325,15 @@ func runQuery(
 	{
 		router := route.New()
 
+		// RoutePrefix must always start with '/'.
+		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+
 		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "" {
+		if webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
 			})
+			router = router.WithPrefix(webRoutePrefix)
 		}
 
 		flagsMap := map[string]string{
@@ -338,7 +343,7 @@ func runQuery(
 		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router, ins)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
 
