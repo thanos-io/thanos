@@ -147,10 +147,7 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 
 	// Delete the bucket, but skip the metaFile, if found. As we just deleted that.
 	return deleteDirRec(ctx, logger, bkt, id.String(), func(name string) bool {
-		if name == metaFile {
-			return true
-		}
-		return false
+		return name == metaFile
 	})
 }
 
