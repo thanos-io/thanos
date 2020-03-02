@@ -145,16 +145,22 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 		level.Debug(logger).Log("msg", "deleted file", "file", metaFile, "bucket", bkt.Name())
 	}
 
-	return deleteDir(ctx, logger, bkt, id.String())
+	// Delete the bucket, but skip the metaFile as we just deleted that. This is required for eventual object storages (list after write).
+	return deleteDirRec(ctx, logger, bkt, id.String(), func(name string) bool {
+		return name == metaFile
+	})
 }
 
-// deleteDir removes all objects prefixed with dir from the bucket.
+// deleteDirRec removes all objects prefixed with dir from the bucket. It skips objects that return true for the passed keep function.
 // NOTE: For objects removal use `block.Delete` strictly.
-func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string) error {
+func deleteDirRec(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string, keep func(name string) bool) error {
 	return bkt.Iter(ctx, dir, func(name string) error {
 		// If we hit a directory, call DeleteDir recursively.
 		if strings.HasSuffix(name, objstore.DirDelim) {
-			return deleteDir(ctx, logger, bkt, name)
+			return deleteDirRec(ctx, logger, bkt, name, keep)
+		}
+		if keep(name) {
+			return nil
 		}
 		if err := bkt.Delete(ctx, name); err != nil {
 			return err
