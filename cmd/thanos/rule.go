@@ -558,11 +558,15 @@ func runRule(
 	{
 		router := route.New()
 
+		// RoutePrefix must always start with '/'.
+		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+
 		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "" {
+		if webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
 			})
+			router = router.WithPrefix(webRoutePrefix)
 		}
 
 		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
@@ -577,7 +581,7 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), flagsMap).Register(router, ins)
 
 		api := v1.NewAPI(logger, reg, ruleMgr)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
