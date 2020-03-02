@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/store"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -235,7 +236,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 		{
 			EndpointsConfig: http_util.EndpointsConfig{
 				StaticAddresses: func() []string {
-					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil)
+					q, err := e2ethanos.NewQuerier("1", []store.Config{})
 					testutil.Ok(t, err)
 					return []string{q.NetworkHTTPEndpointFor(s.NetworkName())}
 				}(),
@@ -246,7 +247,14 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil)
+	storeCfg := []store.Config{
+		{
+			EndpointsConfig: store.EndpointsConfig{
+				StaticAddresses: []string{r.GRPCNetworkEndpoint()},
+			},
+		},
+	}
+	q, err := e2ethanos.NewQuerier("1", storeCfg)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -322,7 +330,14 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil)
+	storeCfg := []store.Config{
+		{
+			EndpointsConfig: store.EndpointsConfig{
+				StaticAddresses: []string{r.GRPCNetworkEndpoint()},
+			},
+		},
+	}
+	q, err := e2ethanos.NewQuerier("1", storeCfg)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

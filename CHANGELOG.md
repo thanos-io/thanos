@@ -30,6 +30,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2008](https://github.com/thanos-io/thanos/pull/2008) Querier, Receiver, Sidecar, Store: Add gRPC [health check](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) endpoints.
 - [#2145](https://github.com/thanos-io/thanos/pull/2145) Tracing: track query sent to prometheus via remote read api.
 - [#2113](https://github.com/thanos-io/thanos/pull/2113) Bucket: Added `thanos bucket replicate`.
+- [#TODO](https://github.com/thanos-io/thanos/pull/TODO) Query: Add ability to mix Store TLS configuration with the `--store.config` amd `--store.config-file` CLI flags. See [documentation](docs/components/query.md/#configuration) for further information.
 
 ### Changed
 
