@@ -246,11 +246,6 @@ func newRuleMetrics(reg *prometheus.Registry) *RuleMetrics {
 	return m
 }
 
-// reloadErr handlers webhandler and returns err message.
-type reloadErr struct {
-	errMsg chan error
-}
-
 // runRule runs a rule evaluation component that continuously evaluates alerting and recording
 // rules. It sends alert notifications and writes TSDB data for results like a regular Prometheus server.
 func runRule(
@@ -491,7 +486,7 @@ func runRule(
 	}
 
 	// Handle reload and termination interrupts.
-	reloadWebhandler := make(chan reloadErr)
+	reloadWebhandler := make(chan chan error)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -510,7 +505,7 @@ func runRule(
 					if err != nil {
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					}
-					reloadMsg.errMsg <- err
+					reloadMsg <- err
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -563,9 +558,9 @@ func runRule(
 		}
 
 		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
-			reloadMsg := reloadErr{make(chan error)}
+			reloadMsg := make(chan error)
 			reloadWebhandler <- reloadMsg
-			if err := <-reloadMsg.errMsg; err != nil {
+			if err := <-reloadMsg; err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
