@@ -40,6 +40,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2049](https://github.com/thanos-io/thanos/pull/2049) Tracing: Support sampling on Elastic APM with new sample_rate setting.
 - [#2008](https://github.com/thanos-io/thanos/pull/2008) Querier, Receiver, Sidecar, Store: Add gRPC [health check](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) endpoints.
 - [#2145](https://github.com/thanos-io/thanos/pull/2145) Tracing: track query sent to prometheus via remote read api.
+- [#1848](https://github.com/thanos-io/thanos/pull/1848) Ruler: Return error messages when trigger reload with http.
 - [#2113](https://github.com/thanos-io/thanos/pull/2113) Bucket: Added `thanos bucket replicate`.
 
 ### Changed
