@@ -32,7 +32,7 @@ func NewInstrumentation(component component.Component, logger log.Logger, reg pr
 		logger:    logger,
 		status: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name:        "status",
-			Help:        "Represents status (0 indicates success, 1 indicates failure) of the component.",
+			Help:        "Represents status (0 indicates failure, 1 indicates success) of the component.",
 			ConstLabels: map[string]string{"component": component.String()},
 		},
 			[]string{"check"},
