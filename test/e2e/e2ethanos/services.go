@@ -313,3 +313,32 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 		9091,
 	), nil
 }
+
+func NewCompact(sharedDir string, name string, bucketConfig client.BucketConfig) (*Service, error) {
+	dir := filepath.Join(sharedDir, "data", "compact", name)
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
+
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return nil, errors.Wrap(err, "create compact dir")
+	}
+
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate compact config file: %v", bucketConfig)
+	}
+
+	fmt.Println(string(bktConfigBytes))
+
+	return NewService(
+		fmt.Sprintf("compact-%s", name),
+		DefaultImage(),
+		e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
+			"--data-dir":        container,
+			"--objstore.config": string(bktConfigBytes),
+			"--http-address":    ":80",
+		}))...),
+		e2e.NewReadinessProbe(80, "/-/ready", 200),
+		80,
+		9091,
+	), nil
+}
