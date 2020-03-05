@@ -33,16 +33,13 @@ function draw() {
                 // Title is the first column of the timeline.
                 //
                 // A unique Prometheus label that identifies each shard is used
-                // as the title if present, otherwise all labels are displayed
+                // as the title if present, otherwise labels are displayed
                 // externally as a legend.
                 title = function() {
-                    if (thanos.label != "") {
-                        var key = d.thanos.labels[thanos.label];
-                        if (key == undefined) {
-                            throw `Label ${thanos.label} not found in ${Object.keys(d.thanos.labels)}`;
-                        } else {
-                            return key;
-                        }
+                    var key = thanos.label != "" && d.thanos.labels[thanos.label];
+
+                    if (key != undefined) {
+                        return key;
                     } else {
                         title = titles[stringify(d.thanos.labels)];
                         if (title == undefined) {
