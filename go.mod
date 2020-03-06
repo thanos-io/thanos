@@ -29,7 +29,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.18.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.22
-	github.com/minio/minio-go/v6 v6.0.45
+	github.com/minio/minio-go/v6 v6.0.49
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.0.0
