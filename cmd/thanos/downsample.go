@@ -16,6 +16,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -57,17 +58,14 @@ type DownsampleMetrics struct {
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	m := new(DownsampleMetrics)
 
-	m.downsamples = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.downsamples = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_total",
 		Help: "Total number of downsampling attempts.",
 	}, []string{"group"})
-	m.downsampleFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.downsampleFailures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_failures_total",
 		Help: "Total number of failed downsampling attempts.",
 	}, []string{"group"})
-
-	reg.MustRegister(m.downsamples)
-	reg.MustRegister(m.downsampleFailures)
 
 	return m
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
@@ -202,28 +203,24 @@ func newMemcachedClient(
 		),
 	}
 
-	c.operations = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operations_total",
 		Help:        "Total number of operations against memcached.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
 
-	c.failures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.failures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operation_failures_total",
 		Help:        "Total number of operations against memcached that failed.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
 
-	c.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:        "thanos_memcached_operation_duration_seconds",
 		Help:        "Duration of operations against memcached.",
 		ConstLabels: prometheus.Labels{"name": name},
 		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1},
 	}, []string{"operation"})
-
-	if reg != nil {
-		reg.MustRegister(c.operations, c.failures, c.duration)
-	}
 
 	// As soon as the client is created it must ensure that memcached server
 	// addresses are resolved, so we're going to trigger an initial addresses

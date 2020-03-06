@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -67,58 +68,44 @@ type syncerMetrics struct {
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	var m syncerMetrics
 
-	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollectedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
 		Help: "Total number of deleted blocks by compactor.",
 	})
-	m.garbageCollections = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollections = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
 		Help: "Total number of garbage collection operations.",
 	})
-	m.garbageCollectionFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollectionFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_failures_total",
 		Help: "Total number of failed garbage collection operations.",
 	})
-	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+	m.garbageCollectionDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_compact_garbage_collection_duration_seconds",
 		Help:    "Time it took to perform garbage collection iteration.",
 		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 	})
 
-	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
 		Help: "Total number of group compaction attempts that resulted in a new block.",
 	}, []string{"group"})
-	m.compactionRunsStarted = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionRunsStarted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_started_total",
 		Help: "Total number of group compaction attempts.",
 	}, []string{"group"})
-	m.compactionRunsCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionRunsCompleted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_completed_total",
 		Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
-	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionFailures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
 	}, []string{"group"})
-	m.verticalCompactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.verticalCompactions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_vertical_compactions_total",
 		Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 	}, []string{"group"})
-
-	if reg != nil {
-		reg.MustRegister(
-			m.garbageCollectedBlocks,
-			m.garbageCollections,
-			m.garbageCollectionFailures,
-			m.garbageCollectionDuration,
-			m.compactions,
-			m.compactionRunsStarted,
-			m.compactionRunsCompleted,
-			m.compactionFailures,
-			m.verticalCompactions,
-		)
-	}
 	return &m
 }
 
@@ -157,7 +144,7 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	case downsample.ResLevel0:
 		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
 	default:
-		panic(fmt.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
+		panic(errors.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
 	}
 }
 

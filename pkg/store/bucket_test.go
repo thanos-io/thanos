@@ -28,6 +28,7 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
@@ -1298,7 +1299,7 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 			partitioner:     gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 			chunkObjs:       []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:       chunkPool,
-			seriesRefetches: prometheus.NewCounter(prometheus.CounterOpts{}),
+			seriesRefetches: promauto.With(nil).NewCounter(prometheus.CounterOpts{}),
 		}
 		blocks = append(blocks, b)
 	}

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type TxGaugeVec struct {
@@ -24,18 +25,23 @@ type TxGaugeVec struct {
 //
 // Additionally it allows to init LabelValues on each transaction.
 // NOTE: This is quite naive implementation creating new prometheus.GaugeVec on each `ResetTx`, use wisely.
-func NewTxGaugeVec(opts prometheus.GaugeOpts, labelNames []string, initLabelValues ...[]string) *TxGaugeVec {
+func NewTxGaugeVec(reg prometheus.Registerer, opts prometheus.GaugeOpts, labelNames []string, initLabelValues ...[]string) *TxGaugeVec {
+	// Nil as we will register it on our own later.
 	f := func() *prometheus.GaugeVec {
-		g := prometheus.NewGaugeVec(opts, labelNames)
+		g := promauto.With(nil).NewGaugeVec(opts, labelNames)
 		for _, vals := range initLabelValues {
 			g.WithLabelValues(vals...)
 		}
 		return g
 	}
-	return &TxGaugeVec{
+	tx := &TxGaugeVec{
 		current:      f(),
 		newMetricVal: f,
 	}
+	if reg != nil {
+		reg.MustRegister(tx)
+	}
+	return tx
 }
 
 // ResetTx starts new transaction. Not goroutine-safe.

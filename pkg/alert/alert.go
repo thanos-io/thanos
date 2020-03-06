@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -133,34 +134,31 @@ func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSi
 		toAddLset:       toAdd,
 		toExcludeLabels: toExclude,
 
-		dropped: prometheus.NewCounter(prometheus.CounterOpts{
+		dropped: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_queue_alerts_dropped_total",
 			Help: "Total number of alerts that were dropped from the queue.",
 		}),
-		pushed: prometheus.NewCounter(prometheus.CounterOpts{
+		pushed: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_queue_alerts_pushed_total",
 			Help: "Total number of alerts pushed to the queue.",
 		}),
-		popped: prometheus.NewCounter(prometheus.CounterOpts{
+		popped: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_queue_alerts_popped_total",
 			Help: "Total number of alerts popped from the queue.",
 		}),
 	}
-	capMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "thanos_alert_queue_capacity",
 		Help: "Capacity of the alert queue.",
 	}, func() float64 {
 		return float64(q.Cap())
 	})
-	lenMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "thanos_alert_queue_length",
 		Help: "Length of the alert queue.",
 	}, func() float64 {
 		return float64(q.Len())
 	})
-	if reg != nil {
-		reg.MustRegister(q.pushed, q.popped, q.dropped, lenMetric, capMetric)
-	}
 	return q
 }
 
@@ -292,28 +290,25 @@ func NewSender(
 		alertmanagers: alertmanagers,
 		versions:      versions,
 
-		sent: prometheus.NewCounterVec(prometheus.CounterOpts{
+		sent: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_sent_total",
 			Help: "Total number of alerts sent by alertmanager.",
 		}, []string{"alertmanager"}),
 
-		errs: prometheus.NewCounterVec(prometheus.CounterOpts{
+		errs: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_errors_total",
 			Help: "Total number of errors while sending alerts to alertmanager.",
 		}, []string{"alertmanager"}),
 
-		dropped: prometheus.NewCounter(prometheus.CounterOpts{
+		dropped: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_dropped_total",
 			Help: "Total number of alerts dropped in case of all sends to alertmanagers failed.",
 		}),
 
-		latency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		latency: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name: "thanos_alert_sender_latency_seconds",
 			Help: "Latency for sending alert notifications (not including dropped notifications).",
 		}, []string{"alertmanager"}),
-	}
-	if reg != nil {
-		reg.MustRegister(s.sent, s.errs, s.dropped, s.latency)
 	}
 	return s
 }

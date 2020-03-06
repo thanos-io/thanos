@@ -5,7 +5,6 @@ package replicate
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -139,18 +139,15 @@ func RunReplicate(
 		return err
 	}
 
-	replicationRunCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
+	replicationRunCounter := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_replicate_replication_runs_total",
 		Help: "The number of replication runs split by success and error.",
 	}, []string{"result"})
 
-	replicationRunDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	replicationRunDuration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name: "thanos_replicate_replication_run_duration_seconds",
 		Help: "The Duration of replication runs split by success and error.",
 	}, []string{"result"})
-
-	reg.MustRegister(replicationRunCounter)
-	reg.MustRegister(replicationRunDuration)
 
 	blockFilter := NewBlockFilter(
 		logger,
@@ -174,7 +171,7 @@ func RunReplicate(
 		level.Info(logger).Log("msg", "running replication attempt")
 
 		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt, reg).execute(ctx); err != nil {
-			return fmt.Errorf("replication execute: %w", err)
+			return errors.Errorf("replication execute: %w", err)
 		}
 
 		return nil

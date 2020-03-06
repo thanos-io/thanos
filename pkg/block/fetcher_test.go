@@ -22,6 +22,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
@@ -332,7 +333,7 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 		ULID(6): input[ULID(6)],
 	}
 
-	synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+	synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 	f.Filter(input, synced, false)
 
 	testutil.Equals(t, 3.0, promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
@@ -427,7 +428,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 			}
 			deleted := len(input) - len(expected)
 
-			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 			f.Filter(input, synced, false)
 
 			testutil.Equals(t, expected, input)
@@ -488,7 +489,7 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 		ULID(4): input[ULID(4)],
 	}
 
-	synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+	synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 	f.Filter(input, synced, false)
 
 	testutil.Equals(t, 2.0, promtest.ToFloat64(synced.WithLabelValues(timeExcludedMeta)))
@@ -819,7 +820,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 	} {
 		f := NewDeduplicateFilter()
 		if ok := t.Run(tcase.name, func(t *testing.T) {
-			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 			metas := make(map[ulid.ULID]*metadata.Meta)
 			inputLen := len(tcase.input)
 			for id, metaInfo := range tcase.input {
@@ -932,7 +933,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	}
 
 	t.Run("consistency 0 (turned off)", func(t *testing.T) {
-		synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Copy all.
 		for _, id := range u.created {
@@ -950,7 +951,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	})
 
 	t.Run("consistency 30m.", func(t *testing.T) {
-		synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Only certain sources and those with 30m or more age go through.
 		for i, id := range u.created {

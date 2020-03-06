@@ -4,12 +4,12 @@
 package v1
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-kit/kit/log"
@@ -111,7 +111,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 					Type:      "recording",
 				}
 			default:
-				err := fmt.Errorf("rule %q: unsupported type %T", r.Name(), rule)
+				err := errors.Errorf("rule %q: unsupported type %T", r.Name(), rule)
 				return nil, nil, &qapi.ApiError{Typ: qapi.ErrorInternal, Err: err}
 			}
 

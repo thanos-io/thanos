@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -200,42 +201,39 @@ const (
 
 // BucketWithMetrics takes a bucket and registers metrics with the given registry for
 // operations run against the bucket.
-func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
+func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) Bucket {
 	bkt := &metricBucket{
 		bkt: b,
 
-		ops: prometheus.NewCounterVec(prometheus.CounterOpts{
+		ops: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_bucket_operations_total",
 			Help:        "Total number of operations against a bucket.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
-		opsFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
+		opsFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_bucket_operation_failures_total",
 			Help:        "Total number of operations against a bucket that failed.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
-		opsDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		opsDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:        "thanos_objstore_bucket_operation_duration_seconds",
 			Help:        "Duration of operations against the bucket",
 			ConstLabels: prometheus.Labels{"bucket": name},
 			Buckets:     []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 		}, []string{"operation"}),
-		lastSuccessfulUploadTime: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		lastSuccessfulUploadTime: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "thanos_objstore_bucket_last_successful_upload_time",
 			Help: "Second timestamp of the last successful upload to the bucket.",
 		}, []string{"bucket"}),
 	}
-	if r != nil {
-		r.MustRegister(bkt.ops, bkt.opsFailures, bkt.opsDuration, bkt.lastSuccessfulUploadTime)
-		for _, op := range []string{iterOp, sizeOp, getOp, getRangeOp, existsOp, uploadOp, deleteOp} {
-			bkt.ops.WithLabelValues(op)
-			bkt.opsFailures.WithLabelValues(op)
-			bkt.opsDuration.WithLabelValues(op)
-		}
-		bkt.lastSuccessfulUploadTime.WithLabelValues(b.Name())
+	for _, op := range []string{iterOp, sizeOp, getOp, getRangeOp, existsOp, uploadOp, deleteOp} {
+		bkt.ops.WithLabelValues(op)
+		bkt.opsFailures.WithLabelValues(op)
+		bkt.opsDuration.WithLabelValues(op)
 	}
+	bkt.lastSuccessfulUploadTime.WithLabelValues(b.Name())
 	return bkt
 }
 

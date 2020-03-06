@@ -18,6 +18,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -204,11 +205,10 @@ func runQuery(
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
-	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
+	duplicatedStores := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_query_duplicated_store_addresses_total",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
-	reg.MustRegister(duplicatedStores)
 
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {

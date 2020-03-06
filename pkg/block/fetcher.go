@@ -19,6 +19,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
@@ -54,26 +55,26 @@ const (
 	duplicateMeta     = "duplicate"
 )
 
-func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
+func newSyncMetrics(reg prometheus.Registerer) *syncMetrics {
 	var m syncMetrics
 
-	m.syncs = prometheus.NewCounter(prometheus.CounterOpts{
+	m.syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Subsystem: syncMetricSubSys,
 		Name:      "syncs_total",
 		Help:      "Total blocks metadata synchronization attempts",
 	})
-	m.syncFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	m.syncFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Subsystem: syncMetricSubSys,
 		Name:      "sync_failures_total",
 		Help:      "Total blocks metadata synchronization failures",
 	})
-	m.syncDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+	m.syncDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Subsystem: syncMetricSubSys,
 		Name:      "sync_duration_seconds",
 		Help:      "Duration of the blocks metadata synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 1000},
 	})
-	m.synced = extprom.NewTxGaugeVec(prometheus.GaugeOpts{
+	m.synced = extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
 		Subsystem: syncMetricSubSys,
 		Name:      "synced",
 		Help:      "Number of block metadata synced",
@@ -88,14 +89,6 @@ func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
 		[]string{timeExcludedMeta},
 		[]string{duplicateMeta},
 	)
-	if r != nil {
-		r.MustRegister(
-			m.syncs,
-			m.syncFailures,
-			m.syncDuration,
-			m.synced,
-		)
-	}
 	return &m
 }
 
@@ -544,13 +537,12 @@ func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Dura
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	consistencyDelayMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "consistency_delay_seconds",
 		Help: "Configured consistency delay in seconds.",
 	}, func() float64 {
 		return consistencyDelay.Seconds()
 	})
-	reg.MustRegister(consistencyDelayMetric)
 
 	return &ConsistencyDelayMetaFilter{
 		logger:           logger,
