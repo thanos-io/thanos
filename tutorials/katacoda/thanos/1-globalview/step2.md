@@ -10,7 +10,7 @@ component and can be invoked in a single command.
 Let's take a look at all the Thanos commands:
 
 ```
-docker run --rm quay.io/thanos/thanos:0.11.0 --help
+docker run --rm quay.io/thanos/thanos:v0.11.0 --help
 ```{{execute}}
 
 You should see multiple commands that solves different purposes.
