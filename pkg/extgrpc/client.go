@@ -4,7 +4,11 @@
 package extgrpc
 
 import (
+	"context"
+	gotls "crypto/tls"
 	"math"
+	"net"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -49,7 +53,7 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 	}
 
 	if !secure {
-		return append(dialOpts, grpc.WithInsecure()), nil
+		return append(dialOpts, grpc.WithInsecure(), grpc.WithContextDialer(insecureDialer)), nil
 	}
 
 	level.Info(logger).Log("msg", "enabling client to server TLS")
@@ -59,4 +63,13 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		return nil, err
 	}
 	return append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))), nil
+}
+
+func insecureDialer(ctx context.Context, addr string) (net.Conn, error) {
+	i := strings.LastIndex(addr, ":")
+	if i >= 0 && addr[i:] == ":443" {
+		return gotls.Dial("tcp", addr, &gotls.Config{NextProtos: []string{"h2"}})
+	}
+
+	return net.Dial("tcp", addr)
 }
