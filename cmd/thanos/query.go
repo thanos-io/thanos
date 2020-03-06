@@ -295,6 +295,8 @@ func runQuery(
 
 		dialOpts, err := extgrpc.StoreClientGRPCOptsFromTlsConfig(logger, config.Name, reg, tracer, config.TlsConfig)
 		if err != nil {
+			_, cancelRun := context.WithCancel(context.Background())
+			cancelRun()
 			return errors.Wrap(err, "building gRPC client")
 		}
 
