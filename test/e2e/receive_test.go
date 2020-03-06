@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/store"
 	"testing"
 	"time"
 
@@ -64,7 +65,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil)
+		storeCfg := []store.Config{
+			{
+				EndpointsConfig: store.EndpointsConfig{
+					StaticAddresses: []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()},
+				},
+			},
+		}
+		q, err := e2ethanos.NewQuerier("1", storeCfg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -136,7 +144,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil)
+		storeCfg := []store.Config{
+			{
+				EndpointsConfig: store.EndpointsConfig{
+					StaticAddresses: []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()},
+				},
+			},
+		}
+		q, err := e2ethanos.NewQuerier("1", storeCfg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -205,7 +220,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil)
+		storeCfg := []store.Config{
+			{
+				EndpointsConfig: store.EndpointsConfig{
+					StaticAddresses: []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
+				},
+			},
+		}
+		q, err := e2ethanos.NewQuerier("1", storeCfg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 

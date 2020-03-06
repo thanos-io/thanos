@@ -354,3 +354,25 @@ Flags:
                                  enabled. 0 disables timeout.
 
 ```
+## Configuration
+
+### Store API
+
+The `--store.config` and `--store.config-file` flags allow specifying multiple store endpoints.
+
+The configuration format is the following:
+
+[embedmd]:# (../flags/config_query_store.txt yaml)
+```yaml
+- tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+  static_configs: []
+  file_sd_configs:
+  - files: []
+    refresh_interval: 0s
+```
+
+If `tls_config` is omitted or set to `null` then TLS will not be used.
