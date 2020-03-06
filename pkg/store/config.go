@@ -1,7 +1,10 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
-	"errors"
+	"fmt"
 	"gopkg.in/yaml.v2"
 
 	"github.com/prometheus/prometheus/discovery/file"
@@ -59,7 +62,7 @@ func LoadConfig(confYAML []byte) ([]Config, error) {
 	seenNames := map[string]string{}
 	for _, cfg := range queryCfg {
 		if _, exists := seenNames[cfg.Name]; exists {
-			return nil, errors.New("config must have a non-empty, unique name")
+			return nil, fmt.Errorf("config must have a non-empty, unique name")
 		} else {
 			seenNames[cfg.Name] = cfg.Name
 		}
