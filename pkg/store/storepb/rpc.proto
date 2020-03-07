@@ -6,7 +6,7 @@ package thanos;
 
 import "types.proto";
 import "gogoproto/gogo.proto";
-import "github.com/prometheus/prometheus/prompb/types.proto";
+import "prompb/types.proto";
 
 option go_package = "storepb";
 
@@ -53,7 +53,7 @@ message WriteResponse {
 }
 
 message WriteRequest {
-  repeated prometheus.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
 }
