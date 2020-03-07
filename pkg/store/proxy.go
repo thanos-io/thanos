@@ -510,7 +510,7 @@ func labelSetMatches(ls storepb.LabelSet, matchers []storepb.LabelMatcher) (bool
 				continue
 			}
 
-			m, err := translateMatcher(m)
+			m, err := promclient.translateMatcher(m)
 			if err != nil {
 				return false, err
 			}

@@ -29,7 +29,8 @@ DIRS="pkg/store/storepb"
 echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
-		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \
+		${PROTOC_BIN} --gogofast_out=plugins=grpc:. \
+		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
 			-I="../../../vendor" \
 			*.proto

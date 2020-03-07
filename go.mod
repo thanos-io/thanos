@@ -18,6 +18,7 @@ require (
 	github.com/go-kit/kit v0.9.0
 	github.com/go-openapi/strfmt v0.19.2
 	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/status v1.0.3
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gophercloud/gophercloud v0.6.0
@@ -42,6 +43,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
 	github.com/prometheus/prometheus v1.8.2-0.20200110114423-1e64d757f711 // master ~ v2.15.2
+	github.com/srikrsna/protoc-gen-gotag v0.5.0 // indirect
 	github.com/uber/jaeger-client-go v2.20.1+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0

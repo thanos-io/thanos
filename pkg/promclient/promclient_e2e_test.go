@@ -147,3 +147,121 @@ func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	_, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
 	testutil.NotOk(t, err)
 }
+
+func TestName(t *testing.T) {
+
+	func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
+		t.Helper()
+
+		defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+		p, err := e2eutil.NewPrometheus()
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, p.Stop()) }()
+
+		baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
+
+		a := p.Appender()
+		_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+		testutil.Ok(t, err)
+		_, err = a.Add(labels.FromStrings("a", "c", "job", "test"), baseT+200, 2)
+		testutil.Ok(t, err)
+		_, err = a.Add(labels.FromStrings("a", "d", "job", "test"), baseT+300, 3)
+		testutil.Ok(t, err)
+		_, err = a.Add(labels.FromStrings("job", "test"), baseT+400, 4)
+		testutil.Ok(t, err)
+		testutil.Ok(t, a.Commit())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		testutil.Ok(t, p.Start())
+
+		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		testutil.Ok(t, err)
+
+		promStore, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
+			func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
+		testutil.Ok(t, err)
+
+		for _, tcase := range []struct{
+			req *storepb.SeriesRequest
+			expected []storepb.Series
+		} {
+			res, err := promStore.Series(ctx, & []storepb.LabelMatcher{
+		{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+		}, baseT, baseT+300)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, len(res), 1)
+			testutil.Equals(t, labels.FromMap(res[0]), labels.Labels{{Name: "a", Value: "b"}})
+		}
+		{
+			res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "foo"},
+			}, baseT, baseT+300)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, len(res), 0)
+		}
+		{
+			res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "b"},
+				{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+			}, baseT, baseT+300)
+			testutil.Ok(t, err)
+
+			// Get two metrics {a="c", job="test"} and {a="d", job="test"}.
+			testutil.Equals(t, len(res), 2)
+			for _, r := range res {
+				testutil.Equals(t, labels.FromMap(r).Has("a"), true)
+				testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
+			}
+		}
+		{
+			res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+			}, baseT, baseT+300)
+			testutil.Ok(t, err)
+
+			// Get two metrics.
+			testutil.Equals(t, len(res), 2)
+			for _, r := range res {
+				testutil.Equals(t, labels.FromMap(r).Has("a"), true)
+				testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
+			}
+		}
+		{
+			res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+			}, baseT+400, baseT+400)
+			testutil.Ok(t, err)
+
+			// In baseT + 400 we can just get one series.
+			testutil.Equals(t, len(res), 1)
+			testutil.Equals(t, len(res[0]), 1)
+			testutil.Equals(t, labels.FromMap(res[0]).Get("job"), "test")
+		}
+		// This test case is to test when start time and end time is not specified.
+		{
+			minTime, maxTime := promStore.timestamps()
+			res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+			}, minTime, maxTime)
+			testutil.Ok(t, err)
+			testutil.Equals(t, len(res), 3)
+			for _, r := range res {
+				testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
+			}
+		} {
+			t.Run("", func(t *testing.T) {
+				srv := newStoreSeriesServer(ctx)
+				err = promStore.Series(tcase.request, srv)
+				testutil.Ok(t, err)
+
+				testutil.Equals(t, tcase.expected, srv.SeriesSet)
+			})
+		}
+	}
+}

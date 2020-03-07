@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package store
+package promclient
 
 import (
 	"github.com/pkg/errors"
@@ -9,7 +9,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-func translateMatcher(m storepb.LabelMatcher) (*labels.Matcher, error) {
+func TranslateMatcher(m storepb.LabelMatcher) (*labels.Matcher, error) {
 	switch m.Type {
 	case storepb.LabelMatcher_EQ:
 		return labels.NewMatcher(labels.MatchEqual, m.Name, m.Value)
@@ -26,9 +26,9 @@ func translateMatcher(m storepb.LabelMatcher) (*labels.Matcher, error) {
 	return nil, errors.Errorf("unknown label matcher type %d", m.Type)
 }
 
-func translateMatchers(ms []storepb.LabelMatcher) (res []*labels.Matcher, err error) {
+func TranslateMatchers(ms []storepb.LabelMatcher) (res []*labels.Matcher, err error) {
 	for _, m := range ms {
-		r, err := translateMatcher(m)
+		r, err := TranslateMatcher(m)
 		if err != nil {
 			return nil, err
 		}
@@ -37,10 +37,10 @@ func translateMatchers(ms []storepb.LabelMatcher) (res []*labels.Matcher, err er
 	return res, nil
 }
 
-// matchersToString converts label matchers to string format.
-func matchersToString(ms []storepb.LabelMatcher) (string, error) {
+// MatchersToString converts label matchers to string format.
+func MatchersToString(ms []storepb.LabelMatcher) (string, error) {
 	var res string
-	matchers, err := translateMatchers(ms)
+	matchers, err := TranslateMatchers(ms)
 	if err != nil {
 		return "", err
 	}

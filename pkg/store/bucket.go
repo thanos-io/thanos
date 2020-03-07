@@ -835,7 +835,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 	defer s.queryGate.Done()
 
-	matchers, err := translateMatchers(req.Matchers)
+	matchers, err := promclient.translateMatchers(req.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

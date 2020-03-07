@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -220,15 +221,27 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
 	testutil.Ok(t, err)
 
+	for _, tcase := range []struct{
+		req *storepb.SeriesRequest
+		expected []storepb.Series
+	} {
 	{
-		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
-		}, baseT, baseT+300)
-		testutil.Ok(t, err)
+		req: &storepb.SeriesRequest{
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			},
+			MinTime: baseT,
+			MaxTime: baseT + 300,
+		},
+		expected: []storepb.Series{
+			{
+				Labels: labels.FromMap(res[0])
+			}
+		}
 
 		testutil.Equals(t, len(res), 1)
 		testutil.Equals(t, labels.FromMap(res[0]), labels.Labels{{Name: "a", Value: "b"}})
-	}
+	},
 	{
 		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "foo"},
@@ -236,7 +249,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, len(res), 0)
-	}
+	},
 	{
 		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "b"},
@@ -250,7 +263,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			testutil.Equals(t, labels.FromMap(r).Has("a"), true)
 			testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
 		}
-	}
+	},
 	{
 		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
@@ -263,7 +276,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 			testutil.Equals(t, labels.FromMap(r).Has("a"), true)
 			testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
 		}
-	}
+	},
 	{
 		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
@@ -274,7 +287,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		testutil.Equals(t, len(res), 1)
 		testutil.Equals(t, len(res[0]), 1)
 		testutil.Equals(t, labels.FromMap(res[0]).Get("job"), "test")
-	}
+	},
 	// This test case is to test when start time and end time is not specified.
 	{
 		minTime, maxTime := promStore.timestamps()
@@ -286,6 +299,15 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		for _, r := range res {
 			testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
 		}
+	},
+	}{
+		t.Run("", func(t *testing.T) {
+			srv := newStoreSeriesServer(ctx)
+			err = promStore.Series(tcase.request, srv)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tcase.expected, srv.SeriesSet)
+		})
 	}
 }
 
@@ -524,4 +546,12 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 
 		return proxy
 	})
+}
+
+func TestRuleGroupToProto(t *testing.T) {
+
+}
+
+func TestRuleGroupFromProto(t *testing.T) {
+
 }

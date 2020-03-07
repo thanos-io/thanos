@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package store
+package promclient
 
 import (
 	"testing"
@@ -82,7 +82,7 @@ func TestMatchersToString(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		actual, err := matchersToString(c.ms)
+		actual, err := MatchersToString(c.ms)
 		testutil.Ok(t, err)
 		testutil.Assert(t, actual == c.expected, "test case %d failed, expected %s, actual %s", i, c.expected, actual)
 	}
