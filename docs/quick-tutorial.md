@@ -163,7 +163,7 @@ thanos query \
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
-* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-querier-deployment.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-query-deployment.yaml)_
 
 #### Communication Between Components
 
