@@ -5,6 +5,7 @@ syntax = "proto3";
 package thanos;
 
 import "types.proto";
+import "rules.proto";
 import "gogoproto/gogo.proto";
 import "github.com/prometheus/prometheus/prompb/types.proto";
 
@@ -83,20 +84,6 @@ message LabelSet {
   repeated Label labels = 1 [(gogoproto.nullable) = false];
 }
 
-/// PartialResponseStrategy controls partial response handling.
-enum PartialResponseStrategy {
-  /// WARN strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
-  /// storeAPI is temporarily not available) as warning which will not fail the whole query (still OK response).
-  /// Server should produce those as a warnings field in response.
-  WARN = 0;
-  /// ABORT strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
-  /// storeAPI is temporarily not available) as the gRPC error that aborts the query.
-  ///
-  /// This is especially useful for any rule/alert evaluations on top of StoreAPI which usually does not tolerate partial
-  /// errors.
-  ABORT = 1;
-}
-
 message SeriesRequest {
   int64 min_time                 = 1;
   int64 max_time                 = 2;
@@ -142,7 +129,7 @@ message LabelNamesRequest {
 }
 
 message LabelNamesResponse {
-  repeated string names = 1;
+  repeated string names    = 1;
   repeated string warnings = 2;
 }
 
@@ -156,7 +143,7 @@ message LabelValuesRequest {
 }
 
 message LabelValuesResponse {
-  repeated string values = 1;
+  repeated string values   = 1;
   repeated string warnings = 2;
 }
 
@@ -166,67 +153,14 @@ service Rules {
   rpc Rules(RulesRequest) returns (stream RulesResponse);
 }
 
-/// RuleGroup has info for rules which are part of a group.
-message RuleGroup {
-  string name = 1;
-  string file = 2;
-  // In order to preserve rule ordering, while exposing type (alerting or recording)
-  // specific properties, both alerting and recording rules are exposed in the
-  // same array.
-  repeated Rule rules = 3;
-  double interval = 4;
-  int64 evaluation_time = 5;
-  int64 last_evaluation_time = 6;
-}
-
-message Rule {
-  oneof result {
-    RecordingRule recording_rule = 1;
-    Alert alert= 2;
-  }
-}
-
-message Alert {
-  enum State {
-    PENDING     = 0;
-    FIRING      = 1;
-    INACTIVE    = 2;
-  }
-
-  State state = 1;
-  string name = 2;
-  string query = 3;
-  double duration_seconds = 4; // Is it second?
-  repeated Label labels = 5;
-  repeated Label annotations = 6;
-  repeated Alert alerts = 7;
-  string health = 8;
-  string last_error = 9;
-  double evaluation_duration_seconds = 10; // Is it second?
-  int64 last_evaluation_time = 11;
-}
-
-message RecordingRule {
-  string name = 1;
-  string query = 2;
-  repeated Label labels = 3;
-  string health = 4;
-  string last_error = 5;
-  double evaluation_duration_seconds = 6; // Is it second?
-  int64 last_evaluation_time = 7;
-}
-
 message RulesRequest {
   enum Type {
-    ALL     = 0;
-    ALERTING      = 1;
-    RECORDING    = 2;
+    ALL       = 0;
+    ALERTING  = 1;
+    RECORDING = 2;
   }
   Type type = 1;
-}
-
-message RuleGroups {
-  repeated RuleGroup groups = 1;
+  PartialResponseStrategy partial_response_strategy = 2;
 }
 
 message RulesResponse {
