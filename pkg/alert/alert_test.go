@@ -19,6 +19,30 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+func TestQueue_Pop_all_Pushed(t *testing.T) {
+	qcapacity := 5
+	batchsize := 1
+	pushes := 3
+
+	q := NewQueue(
+		nil, nil, qcapacity, batchsize, nil, nil,
+	)
+	for i := 0; i < pushes; i++ {
+		q.Push([]*Alert{
+			{},
+			{},
+		})
+	}
+
+	timeoutc := time.After(time.Second)
+	popped := 0
+	for p := q.Pop(timeoutc); p != nil; p = q.Pop(timeoutc) {
+		popped += len(p)
+	}
+
+	testutil.Equals(t, qcapacity, popped)
+}
+
 func TestQueue_Push_Relabelled(t *testing.T) {
 	q := NewQueue(
 		nil, nil, 10, 10,
