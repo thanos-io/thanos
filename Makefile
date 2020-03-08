@@ -37,12 +37,10 @@ HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-
 GOLANGCILINT_VERSION ?= d2b1eea2c6171a1a1141a448a745335ce2e928a1
 GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
 MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
-
 GOJSONTOYAML_VERSION    ?= e8bd32d46b3d764bef60f12b3bada1c132c4be55
 GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
 # v0.14.0
@@ -54,6 +52,9 @@ JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 # Prometheus v2.14.0
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
 PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
+FUNCBENCH_VERSION       ?= 36bc2803457da1bb58ae220523c78ed229834546
+FUNCBENCH               ?= $(GOBIN)/funcbench-$(FUNCBENCH_VERSION)
+THANOS_BENCH_FUNC		?="*"
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
 # systems gsed won't be installed, so will use sed as expected.
@@ -111,6 +112,32 @@ define fetch_go_bin_version
 	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
 
 endef
+
+# fetch_go_bin_version_mod downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
+# arguments:
+# $(1): Install path. (e.g github.com/campoy/embedmd)
+# $(2): Tag or revision for checkout.
+# TODO(bwplotka): Move to just using modules, however make sure to not use or edit Thanos go.mod file!
+define fetch_go_bin_version_mod
+	@mkdir -p $(GOBIN)
+	@mkdir -p $(TMP_GOPATH)
+
+	@echo ">> fetching $(1)@$(2) revision/version"
+	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
+    GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
+  else \
+    CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
+  fi
+	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
+	@echo ">> installing $(1)@$(2)"
+	@ # Extra step for those who does not vendor deps.
+	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && go mod vendor
+	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
+	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
+	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
+
+endef
+
 
 define require_clean_work_tree
 	@git update-index -q --ignore-submodules --refresh
@@ -172,6 +199,25 @@ react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app"
 	cd $(REACT_APP_PATH) && yarn start
+
+.PHONY: bench
+bench: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with master using https://github.com/prometheus/test-infra/tree/master/funcbench.
+bench: $(FUNCBENCH)
+	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with master"
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache master $(THANOS_BENCH_FUNC)
+
+.PHONY: bench-master
+bench-master: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with newest using https://github.com/prometheus/test-infra/tree/master/funcbench.
+bench-master: $(FUNCBENCH)
+	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with: $(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | tail -1)"
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache  "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | tail -1)" $(THANOS_BENCH_FUNC)
+
+.PHONY: bench-release
+bench-release: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with older release using https://github.com/prometheus/test-infra/tree/master/funcbench.
+bench-release: $(FUNCBENCH)
+	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with"
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | grep -B1 $(CURRENT_RELEASE) | head -1)" $(THANOS_BENCH_FUNC)
+>>>>>>> Add extra benchmark for Series in GithubAction for each PRs, master push and releases.
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
@@ -506,3 +552,6 @@ $(JSONNET_BUNDLER):
 
 $(PROMTOOL):
 	$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/promtool,$(PROMTOOL_VERSION))
+
+$(FUNCBENCH):
+	$(call fetch_go_bin_version_mod,github.com/prometheus/test-infra/funcbench,$(FUNCBENCH_VERSION))
