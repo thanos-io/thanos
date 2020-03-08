@@ -20,7 +20,7 @@ import (
 )
 
 func TestQueue_Pop_all_Pushed(t *testing.T) {
-	qcapacity := 5
+	qcapacity := 10
 	batchsize := 1
 	pushes := 3
 
@@ -34,13 +34,14 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 		})
 	}
 
-	timeoutc := time.After(time.Second)
+	timeoutc := make(chan struct{}, 1)
+	time.AfterFunc(time.Second, func() { timeoutc <- struct{}{} })
 	popped := 0
 	for p := q.Pop(timeoutc); p != nil; p = q.Pop(timeoutc) {
 		popped += len(p)
 	}
 
-	testutil.Equals(t, qcapacity, popped)
+	testutil.Equals(t, pushes*2, popped)
 }
 
 func TestQueue_Push_Relabelled(t *testing.T) {
