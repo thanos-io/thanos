@@ -13,7 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
-- [#TODO](https://github.com/thanos-io/thanos/pull/#TODO) Ruler: Fixed Issue #2204 bug in alert queue signalling filled up queue and alerts were dropped
+- [#2238](https://github.com/thanos-io/thanos/pull/2238) Ruler: Fixed Issue #2204 bug in alert queue signalling filled up queue and alerts were dropped
 
 ## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0-rc.1) - 2020.03.02
 
