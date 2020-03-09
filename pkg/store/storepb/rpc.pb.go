@@ -1139,6 +1139,7 @@ var _WriteableStore_serviceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type RulesClient interface {
 	/// Rules has info for all rules.
+	/// Returned rules are expected to include external labels.
 	Rules(ctx context.Context, in *RulesRequest, opts ...grpc.CallOption) (Rules_RulesClient, error)
 }
 
@@ -1185,6 +1186,7 @@ func (x *rulesRulesClient) Recv() (*RulesResponse, error) {
 // RulesServer is the server API for Rules service.
 type RulesServer interface {
 	/// Rules has info for all rules.
+	/// Returned rules are expected to include external labels.
 	Rules(*RulesRequest, Rules_RulesServer) error
 }
 

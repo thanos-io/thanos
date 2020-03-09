@@ -33,6 +33,28 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
+func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
+	return &RulesResponse{
+		Result: &RulesResponse_Group{
+			Group: rg,
+		},
+	}
+}
+
+func NewWarningRulesResponse(warning error) *RulesResponse {
+	return &RulesResponse{
+		Result: &RulesResponse_Warning{
+			Warning: warning.Error(),
+		},
+	}
+}
+
+func NewRecordingRule(r *RecordingRule) *Rule {
+	return &Rule{
+		Result: &Rule_Recording{Recording: r},
+	}
+}
+
 // CompareLabels compares two sets of labels.
 func CompareLabels(a, b []Label) int {
 	l := len(a)

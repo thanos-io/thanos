@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -96,12 +97,17 @@ func SetCORS(w http.ResponseWriter) {
 
 type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 
+type rulesRetriever interface {
+	RuleGroups() ([]*rules.Group, error)
+}
+
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
 type API struct {
 	logger          log.Logger
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
+	rulesRetriever  rulesRetriever
 
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
@@ -122,6 +128,7 @@ func NewAPI(
 	enablePartialResponse bool,
 	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
+	rr rulesRetriever,
 ) *API {
 	return &API{
 		logger:                                 logger,
@@ -132,6 +139,7 @@ func NewAPI(
 		replicaLabels:                          replicaLabels,
 		reg:                                    reg,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		rulesRetriever:                         rr,
 
 		now: time.Now,
 	}
@@ -168,6 +176,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
+
+	r.Get("/rules", instr("rules", api.rules))
 }
 
 type queryData struct {
@@ -625,4 +635,8 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	return names, warnings, nil
+}
+
+func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
+	panic("implement me")
 }
