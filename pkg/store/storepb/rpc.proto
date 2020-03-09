@@ -181,7 +181,7 @@ message RuleGroup {
 
 message Rule {
   oneof result {
-    Rule rule = 1;
+    RecordingRule recording_rule = 1;
     Alert alert= 2;
   }
 }
