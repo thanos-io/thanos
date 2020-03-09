@@ -193,6 +193,12 @@ func (q *Queue) Pop(termc <-chan struct{}) []*Alert {
 
 	q.popped.Add(float64(n))
 
+	if len(q.queue) > 0 {
+		select {
+		case q.morec <- struct{}{}:
+		default:
+		}
+	}
 	return as[:n]
 }
 
