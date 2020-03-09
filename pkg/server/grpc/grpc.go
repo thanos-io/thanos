@@ -39,8 +39,9 @@ type Server struct {
 	opts options
 }
 
-// New creates a new Server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, opts ...Option) *Server {
+// New creates a new gRPC Store API or Store API + Rules API server based on what storeSrv and rulesSrv.
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv storepb.RulesServer, opts ...Option) *Server {
+	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
@@ -81,13 +82,21 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 	s := grpc.NewServer(grpcOpts...)
 
-	storepb.RegisterStoreServer(s, storeSrv)
+	if rulesSrv != nil {
+		storepb.RegisterRulesServer(s, rulesSrv)
+		storepb.RegisterStoreServer(s, storeSrv)
+		level.Info(logger).Log("msg", "registering as gRPC StoreAPI and RulesAPI")
+	} else {
+		storepb.RegisterStoreServer(s, storeSrv)
+		level.Info(logger).Log("msg", "registering as gRPC StoreAPI")
+	}
+
 	met.InitializeMetrics(s)
 
 	grpc_health.RegisterHealthServer(s, probe.HealthServer())
 
 	return &Server{
-		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
+		logger: logger,
 		comp:   comp,
 		srv:    s,
 		opts:   options,
@@ -143,7 +152,7 @@ type ReadWriteStoreServer interface {
 
 // NewReadWrite creates a new server that can be written to.
 func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
-	s := New(logger, reg, tracer, comp, probe, storeSrv, opts...)
+	s := New(logger, reg, tracer, comp, probe, storeSrv, nil, opts...)
 	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
 	return s
 }

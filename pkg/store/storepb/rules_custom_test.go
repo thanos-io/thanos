@@ -10,68 +10,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/rules"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
-
-type prometheusAlert struct {
-	Labels      labels.Labels `json:"labels"`
-	Annotations labels.Labels `json:"annotations"`
-	State       string        `json:"state"`
-	ActiveAt    *time.Time    `json:"activeAt,omitempty"`
-	Value       string        `json:"value"`
-
-	PartialResponseStrategy string `json:"partialResponseStrategy"`
-}
-
-// Same as https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L955
-// but with Partial Response.
-type prometheusRuleGroup struct {
-	Name           string           `json:"name"`
-	File           string           `json:"file"`
-	Rules          []prometheusRule `json:"rules"`
-	Interval       float64          `json:"interval"`
-	EvaluationTime float64          `json:"evaluationTime"`
-	LastEvaluation time.Time        `json:"lastEvaluation"`
-
-	DeprecatedPartialResponseStrategy string `json:"partial_response_strategy"`
-	PartialResponseStrategy           string `json:"partialResponseStrategy"`
-}
-
-type prometheusRuleDiscovery struct {
-	RuleGroups []*prometheusRuleGroup `json:"groups"`
-}
-
-type prometheusRule interface{}
-
-type prometheusAlertingRule struct {
-	// State can be "pending", "firing", "inactive".
-	State          string             `json:"state"`
-	Name           string             `json:"name"`
-	Query          string             `json:"query"`
-	Duration       float64            `json:"duration"`
-	Labels         labels.Labels      `json:"labels"`
-	Annotations    labels.Labels      `json:"annotations"`
-	Alerts         []*prometheusAlert `json:"alerts"`
-	Health         rules.RuleHealth   `json:"health"`
-	LastError      string             `json:"lastError,omitempty"`
-	EvaluationTime float64            `json:"evaluationTime"`
-	LastEvaluation time.Time          `json:"lastEvaluation"`
-	// Type of an prometheusAlertingRule is always "alerting".
-	Type string `json:"type"`
-}
-
-type prometheusRecordingRule struct {
-	Name           string           `json:"name"`
-	Query          string           `json:"query"`
-	Labels         labels.Labels    `json:"labels,omitempty"`
-	Health         rules.RuleHealth `json:"health"`
-	LastError      string           `json:"lastError,omitempty"`
-	EvaluationTime float64          `json:"evaluationTime"`
-	LastEvaluation time.Time        `json:"lastEvaluation"`
-	// Type of a prometheusRecordingRule is always "recording".
-	Type string `json:"type"`
-}
 
 func TestJSONUnmarshalMarshal(t *testing.T) {
 	now := time.Now()
@@ -79,7 +20,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 
 	for _, tcase := range []struct {
 		name  string
-		input *prometheusRuleDiscovery
+		input *testpromcompatibility.RuleDiscovery
 
 		expectedProto      *RuleGroups
 		expectedErr        error
@@ -87,13 +28,13 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 	}{
 		{
 			name:          "Empty JSON",
-			input:         &prometheusRuleDiscovery{},
+			input:         &testpromcompatibility.RuleDiscovery{},
 			expectedProto: &RuleGroups{},
 		},
 		{
 			name: "one empty group",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name:                              "group1",
 						File:                              "file1.yml",
@@ -121,8 +62,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one group with one empty group",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{},
 				},
 			},
@@ -139,12 +80,12 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one valid group, with 1 with no rule type",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name: "group1",
-						Rules: []prometheusRule{
-							prometheusRecordingRule{
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.RecordingRule{
 								Name: "recording1",
 							},
 						},
@@ -161,12 +102,12 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one valid group, with 1 rule with invalid rule type",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name: "group1",
-						Rules: []prometheusRule{
-							prometheusRecordingRule{
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.RecordingRule{
 								Name: "recording1",
 								Type: "wrong",
 							},
@@ -184,12 +125,12 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one valid group, with 1 rule with invalid alert state",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name: "group1",
-						Rules: []prometheusRule{
-							prometheusAlertingRule{
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.AlertingRule{
 								Name:  "alert1",
 								Type:  RuleAlertingType,
 								State: "sdfsdf",
@@ -208,8 +149,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one group with WRONG partial response fields",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name:                    "group1",
 						File:                    "file1.yml",
@@ -224,12 +165,12 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",
-			input: &prometheusRuleDiscovery{
-				RuleGroups: []*prometheusRuleGroup{
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
 						Name: "group1",
-						Rules: []prometheusRule{
-							prometheusRecordingRule{
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.RecordingRule{
 								Type:  RuleRecordingType,
 								Query: "up",
 								Name:  "recording1",
@@ -243,7 +184,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								LastEvaluation: now.Add(-2 * time.Minute),
 								EvaluationTime: 2.6,
 							},
-							prometheusAlertingRule{
+							testpromcompatibility.AlertingRule{
 								Type:  RuleAlertingType,
 								Name:  "alert1",
 								Query: "up == 0",
@@ -256,7 +197,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 									{Name: "ann2", Value: "ann33"},
 								},
 								Health: "health2",
-								Alerts: []*prometheusAlert{
+								Alerts: []*testpromcompatibility.Alert{
 									{
 										Labels: labels.Labels{
 											{Name: "instance1", Value: "1"},

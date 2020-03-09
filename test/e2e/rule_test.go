@@ -12,9 +12,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -470,7 +470,7 @@ func TestRule(t *testing.T) {
 		},
 	}
 
-	alrts, err := queryAlertmanagerAlerts(ctx, "http://"+am2.HTTPEndpoint())
+	alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustUrlParse(t, "http://"+am2.HTTPEndpoint()))
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, len(expAlertLabels), len(alrts))
@@ -479,51 +479,15 @@ func TestRule(t *testing.T) {
 	}
 }
 
+func mustUrlParse(t *testing.T, addr string) *url.URL {
+	u, err := url.Parse(addr)
+	testutil.Ok(t, err)
+	return u
+}
+
 // Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 
 	// TODO: Implement with failing store.
-}
-
-// TODO(bwplotka): Move to promclient.
-func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {
-	code, body, err := getAPIEndpoint(ctx, url+"/api/v1/alerts")
-	if err != nil {
-		return nil, err
-	}
-	if code != 200 {
-		return nil, errors.Errorf("expected 200 response, got %d", code)
-	}
-
-	var v struct {
-		Data []*model.Alert `json:"data"`
-	}
-	if err = json.Unmarshal(body, &v); err != nil {
-		return nil, err
-	}
-
-	sort.Slice(v.Data, func(i, j int) bool {
-		return v.Data[i].Labels.Before(v.Data[j].Labels)
-	})
-	return v.Data, nil
-}
-
-func getAPIEndpoint(ctx context.Context, url string) (int, []byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return 0, nil, err
-	}
-	req = req.WithContext(ctx)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer runutil.CloseWithLogOnErr(nil, resp.Body, "%s: close body", req.URL.String())
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return 0, nil, err
-	}
-	return resp.StatusCode, body, nil
 }

@@ -81,6 +81,7 @@ message AlertInstance {
 }
 
 message Alert {
+  /// state returns the maximum state of alert instances for this rule.
   AlertState state                          = 1 [(gogoproto.jsontag) = "state" ];
   string name                               = 2 [(gogoproto.jsontag) = "name" ];
   string query                              = 3 [(gogoproto.jsontag) = "query" ];
@@ -97,7 +98,7 @@ message Alert {
 message RecordingRule {
   string name                               = 1 [(gogoproto.jsontag) = "name" ];
   string query                              = 2 [(gogoproto.jsontag) = "query" ];
-  PromLabels labels                         = 3 [(gogoproto.jsontag) = "labels" ];
+  PromLabels labels                         = 3 [(gogoproto.jsontag) = "labels,omitempty" ];
   string health                             = 4 [(gogoproto.jsontag) = "health" ];
   string last_error                         = 5 [(gogoproto.jsontag) = "lastError,omitempty" ];
   double evaluation_duration_seconds        = 6 [(gogoproto.jsontag) = "evaluationTime" ];

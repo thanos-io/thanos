@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -50,7 +49,7 @@ global:
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		ext, err := ExternalLabels(context.Background(), log.NewNopLogger(), u)
+		ext, err := NewDefaultClient().ExternalLabels(context.Background(), u)
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, 2, len(ext))
@@ -66,7 +65,7 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		flags, err := ConfiguredFlags(context.Background(), log.NewNopLogger(), u)
+		flags, err := NewDefaultClient().ConfiguredFlags(context.Background(), u)
 		testutil.Ok(t, err)
 
 		testutil.Assert(t, flags.WebEnableAdminAPI, "")
@@ -104,7 +103,7 @@ func TestSnapshot_e2e(t *testing.T) {
 		// Prometheus since 2.7.0 don't write empty blocks even if it's head block. So it's no matter passing skip_head true or false here
 		// Pass skipHead = true to support all prometheus versions and assert that snapshot creates only one file
 		// https://github.com/prometheus/tsdb/pull/374.
-		dir, err := Snapshot(ctx, log.NewNopLogger(), u, true)
+		dir, err := NewDefaultClient().Snapshot(ctx, u, true)
 		testutil.Ok(t, err)
 
 		_, err = os.Stat(path.Join(p.Dir(), dir, id.String()))

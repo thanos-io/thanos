@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -510,7 +511,7 @@ func labelSetMatches(ls storepb.LabelSet, matchers []storepb.LabelMatcher) (bool
 				continue
 			}
 
-			m, err := translateMatcher(m)
+			m, err := promclient.TranslateMatcher(m)
 			if err != nil {
 				return false, err
 			}

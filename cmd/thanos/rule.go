@@ -538,7 +538,8 @@ func runRule(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store,
+		// TODO: Add rules API implementation when ready.
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store, nil,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -709,7 +710,7 @@ func queryFunc(
 
 	promClients := make([]*promclient.Client, 0, len(queriers))
 	for _, q := range queriers {
-		promClients = append(promClients, promclient.NewClient(logger, q))
+		promClients = append(promClients, promclient.NewClient(q, logger, "thanos-rule"))
 	}
 
 	return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {

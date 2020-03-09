@@ -144,6 +144,7 @@ func runSidecar(
 		maxt: math.MaxInt64,
 
 		limitMinTime: limitMinTime,
+		client:       promclient.NewWithTracingClient(logger, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
@@ -198,7 +199,7 @@ func runSidecar(
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
 				// Check prometheus's flags to ensure sane sidecar flags.
-				if err := validatePrometheus(ctx, logger, ignoreBlockSize, m); err != nil {
+				if err := validatePrometheus(ctx, m.client, logger, ignoreBlockSize, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
 				}
 			}
@@ -206,7 +207,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := m.UpdateLabels(ctx, logger); err != nil {
+				if err := m.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -239,7 +240,7 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				if err := m.UpdateLabels(iterCtx, logger); err != nil {
+				if err := m.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
@@ -278,7 +279,7 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, promStore,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, promStore, promStore,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -356,14 +357,14 @@ func runSidecar(
 	return nil
 }
 
-func validatePrometheus(ctx context.Context, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
 	var (
 		flagErr error
 		flags   promclient.Flags
 	)
 
 	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-		if flags, flagErr = promclient.ConfiguredFlags(ctx, logger, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
+		if flags, flagErr = client.ConfiguredFlags(ctx, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
 			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", flagErr)
 			return errors.Wrapf(flagErr, "fetch Prometheus flags")
 		}
@@ -402,10 +403,12 @@ type promMetadata struct {
 	labels labels.Labels
 
 	limitMinTime thanosmodel.TimeOrDurationValue
+
+	client *promclient.Client
 }
 
-func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
-	elset, err := promclient.ExternalLabels(ctx, logger, s.promURL)
+func (s *promMetadata) UpdateLabels(ctx context.Context) error {
+	elset, err := s.client.ExternalLabels(ctx, s.promURL)
 	if err != nil {
 		return err
 	}

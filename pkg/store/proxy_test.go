@@ -1337,6 +1337,42 @@ func (s *storeSeriesServer) Context() context.Context {
 	return s.ctx
 }
 
+// rulesServer is test gRPC storeAPI series server.
+type rulesServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Rules_RulesServer
+
+	ctx context.Context
+
+	Groups   []storepb.RuleGroup
+	Warnings []string
+
+	Size int64
+}
+
+func newRulesServer(ctx context.Context) *rulesServer {
+	return &rulesServer{ctx: ctx}
+}
+
+func (s *rulesServer) Send(r *storepb.RulesResponse) error {
+	s.Size += int64(r.Size())
+
+	if r.GetWarning() != "" {
+		s.Warnings = append(s.Warnings, r.GetWarning())
+		return nil
+	}
+
+	if r.GetGroup() == nil {
+		return errors.New("no grup")
+	}
+	s.Groups = append(s.Groups, *r.GetGroup())
+	return nil
+}
+
+func (s *rulesServer) Context() context.Context {
+	return s.ctx
+}
+
 // mockedStoreAPI is test gRPC store API client.
 type mockedStoreAPI struct {
 	RespSeries      []*storepb.SeriesResponse
