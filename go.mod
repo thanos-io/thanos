@@ -38,7 +38,7 @@ require (
 	github.com/opentracing/opentracing-go v1.1.1-0.20200124165624-2876d2018785
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/alertmanager v0.20.0
-	github.com/prometheus/client_golang v1.4.2-0.20200214154132-b25ce2693a6d
+	github.com/prometheus/client_golang v1.5.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
 	github.com/prometheus/prometheus v1.8.2-0.20200213233353-b90be6f32a33

@@ -17,6 +17,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -183,15 +184,14 @@ func runSidecar(
 
 	// Setup all the concurrent groups.
 	{
-		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
+		promUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
-		lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
+		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
 			Help: "Second timestamp of the last successful heartbeat.",
 		})
-		reg.MustRegister(promUp, lastHeartbeat)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {

@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -71,12 +72,10 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 
 	reg := prometheus.NewRegistry()
 	expReg := prometheus.NewRegistry()
-	genIndexExp := prometheus.NewCounter(prometheus.CounterOpts{
+	genIndexExp := promauto.With(expReg).NewCounter(prometheus.CounterOpts{
 		Name: metricIndexGenerateName,
 		Help: metricIndexGenerateHelp,
 	})
-	expReg.MustRegister(genIndexExp)
-
 	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
 	testutil.Ok(t, err)
 

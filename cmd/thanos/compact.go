@@ -19,6 +19,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -170,25 +171,23 @@ func runCompact(
 	concurrency int,
 	selectorRelabelConf *extflag.PathOrContent,
 ) error {
-	halted := prometheus.NewGauge(prometheus.GaugeOpts{
+	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
 		Help: "Set to 1 if the compactor halted due to an unexpected error.",
 	})
 	halted.Set(0)
-	retried := prometheus.NewCounter(prometheus.CounterOpts{
+	retried := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_retries_total",
 		Help: "Total number of retries after retriable compactor error.",
 	})
-	iterations := prometheus.NewCounter(prometheus.CounterOpts{
+	iterations := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_iterations_total",
 		Help: "Total number of iterations that were executed successfully.",
 	})
-	partialUploadDeleteAttempts := prometheus.NewCounter(prometheus.CounterOpts{
+	partialUploadDeleteAttempts := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
 	})
-	reg.MustRegister(halted, retried, iterations, partialUploadDeleteAttempts)
-
 	downsampleMetrics := newDownsampleMetrics(reg)
 
 	httpProbe := prober.NewHTTP()
@@ -390,11 +389,10 @@ func runCompact(
 
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
 func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, fetcher block.MetadataFetcher, dir string) error {
-	genIndex := prometheus.NewCounter(prometheus.CounterOpts{
+	genIndex := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: metricIndexGenerateName,
 		Help: metricIndexGenerateHelp,
 	})
-	reg.MustRegister(genIndex)
 
 	if err := os.RemoveAll(dir); err != nil {
 		return errors.Wrap(err, "clean index cache directory")

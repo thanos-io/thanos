@@ -78,9 +78,8 @@ ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
 MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 
-FAILLINT_VERSION        ?= v1.0.1
+FAILLINT_VERSION        ?= v1.2.0
 FAILLINT                ?=$(GOBIN)/faillint-$(FAILLINT_VERSION)
-MODULES_TO_AVOID        ?=errors,github.com/prometheus/tsdb,github.com/prometheus/prometheus/pkg/testutils
 
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
@@ -138,7 +137,6 @@ assets: $(GOBINDATA)
 	@echo ">> writing assets"
 	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
-
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
@@ -295,7 +293,15 @@ lint: ## Runs various static analysis against our code.
 lint: check-git deps $(GOLANGCILINT) $(MISSPELL) $(FAILLINT)
 	$(call require_clean_work_tree,"detected not clean master before running lint")
 	@echo ">> verifying modules being imported"
-	@$(FAILLINT) -paths $(MODULES_TO_AVOID) ./...
+	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
+	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
+github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
+github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
+github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
+github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
+NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
+NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}" ./...
+	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> examining all of the Go files"
 	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"

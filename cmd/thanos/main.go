@@ -119,6 +119,7 @@ func main() {
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
 
+	// Some packages still use default Register. Replace to have those metrics.
 	prometheus.DefaultRegisterer = metrics
 	// Memberlist uses go-metrics.
 	sink, err := gprom.NewPrometheusSink()

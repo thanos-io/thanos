@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -57,7 +58,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnoreID2.String(), "chunks", "000001"), &fakeChunk))
 
-	deleteAttempts := prometheus.NewCounter(prometheus.CounterOpts{})
+	deleteAttempts := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts)
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
 

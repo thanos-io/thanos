@@ -5,7 +5,6 @@ package ui
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 )
@@ -58,15 +58,15 @@ func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 func (bu *BaseUI) getTemplate(name string) (string, error) {
 	baseTmpl, err := Asset("pkg/ui/templates/_base.html")
 	if err != nil {
-		return "", fmt.Errorf("error reading base template: %s", err)
+		return "", errors.Errorf("error reading base template: %s", err)
 	}
 	menuTmpl, err := Asset(filepath.Join("pkg/ui/templates", bu.menuTmpl))
 	if err != nil {
-		return "", fmt.Errorf("error reading menu template %s: %s", bu.menuTmpl, err)
+		return "", errors.Errorf("error reading menu template %s: %s", bu.menuTmpl, err)
 	}
 	pageTmpl, err := Asset(filepath.Join("pkg/ui/templates", name))
 	if err != nil {
-		return "", fmt.Errorf("error reading page template %s: %s", name, err)
+		return "", errors.Errorf("error reading page template %s: %s", name, err)
 	}
 	return string(baseTmpl) + string(menuTmpl) + string(pageTmpl), nil
 }

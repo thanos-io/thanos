@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -126,21 +127,18 @@ func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 // NewStoreSet returns a new set of stores from cluster peers and statically configured ones.
 func NewStoreSet(
 	logger log.Logger,
-	reg *prometheus.Registry,
+	reg prometheus.Registerer,
 	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
-	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
+	storeNodeConnections := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_nodes_grpc_connections",
 		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
 	})
 
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-	if reg != nil {
-		reg.MustRegister(storeNodeConnections)
 	}
 	if storeSpecs == nil {
 		storeSpecs = func() []StoreSpec { return nil }

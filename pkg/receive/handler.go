@@ -22,6 +22,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
@@ -90,7 +91,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		router:  route.New(),
 		options: o,
 		peers:   newPeerGroup(o.DialOpts...),
-		forwardRequestsTotal: prometheus.NewCounterVec(
+		forwardRequestsTotal: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
@@ -101,7 +102,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
 		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry)
-		o.Registry.MustRegister(h.forwardRequestsTotal)
 	}
 
 	readyf := h.testReady

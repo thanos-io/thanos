@@ -19,6 +19,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -63,16 +64,11 @@ type proxyStoreMetrics struct {
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 	var m proxyStoreMetrics
 
-	m.emptyStreamResponses = prometheus.NewCounter(prometheus.CounterOpts{
+	m.emptyStreamResponses = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_proxy_store_empty_stream_responses_total",
 		Help: "Total number of empty responses received.",
 	})
 
-	if reg != nil {
-		reg.MustRegister(
-			m.emptyStreamResponses,
-		)
-	}
 	return &m
 }
 

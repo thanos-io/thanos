@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 )
@@ -57,24 +58,18 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 		resolver: NewResolver(resolverType.ToResolver(logger)),
 		resolved: make(map[string][]string),
 		logger:   logger,
-		resolverAddrs: extprom.NewTxGaugeVec(prometheus.GaugeOpts{
+		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
 			Name: "dns_provider_results",
 			Help: "The number of resolved endpoints for each configured address",
 		}, []string{"addr"}),
-		resolverLookupsCount: prometheus.NewCounter(prometheus.CounterOpts{
+		resolverLookupsCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "dns_lookups_total",
 			Help: "The number of DNS lookups resolutions attempts",
 		}),
-		resolverFailuresCount: prometheus.NewCounter(prometheus.CounterOpts{
+		resolverFailuresCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "dns_failures_total",
 			Help: "The number of DNS lookup failures",
 		}),
-	}
-
-	if reg != nil {
-		reg.MustRegister(p.resolverAddrs)
-		reg.MustRegister(p.resolverLookupsCount)
-		reg.MustRegister(p.resolverFailuresCount)
 	}
 
 	return p

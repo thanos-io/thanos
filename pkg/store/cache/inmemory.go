@@ -16,6 +16,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"gopkg.in/yaml.v2"
 )
@@ -89,77 +90,74 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 		maxItemSizeBytes: uint64(config.MaxItemSize),
 	}
 
-	c.evicted = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.evicted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_evicted_total",
 		Help: "Total number of items that were evicted from the index cache.",
 	}, []string{"item_type"})
 	c.evicted.WithLabelValues(cacheTypePostings)
 	c.evicted.WithLabelValues(cacheTypeSeries)
 
-	c.added = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.added = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_added_total",
 		Help: "Total number of items that were added to the index cache.",
 	}, []string{"item_type"})
 	c.added.WithLabelValues(cacheTypePostings)
 	c.added.WithLabelValues(cacheTypeSeries)
 
-	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.requests = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_requests_total",
 		Help: "Total number of requests to the cache.",
 	}, []string{"item_type"})
 	c.requests.WithLabelValues(cacheTypePostings)
 	c.requests.WithLabelValues(cacheTypeSeries)
 
-	c.overflow = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.overflow = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_overflowed_total",
 		Help: "Total number of items that could not be added to the cache due to being too big.",
 	}, []string{"item_type"})
 	c.overflow.WithLabelValues(cacheTypePostings)
 	c.overflow.WithLabelValues(cacheTypeSeries)
 
-	c.hits = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.hits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_hits_total",
 		Help: "Total number of requests to the cache that were a hit.",
 	}, []string{"item_type"})
 	c.hits.WithLabelValues(cacheTypePostings)
 	c.hits.WithLabelValues(cacheTypeSeries)
 
-	c.current = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	c.current = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items",
 		Help: "Current number of items in the index cache.",
 	}, []string{"item_type"})
 	c.current.WithLabelValues(cacheTypePostings)
 	c.current.WithLabelValues(cacheTypeSeries)
 
-	c.currentSize = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	c.currentSize = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items_size_bytes",
 		Help: "Current byte size of items in the index cache.",
 	}, []string{"item_type"})
 	c.currentSize.WithLabelValues(cacheTypePostings)
 	c.currentSize.WithLabelValues(cacheTypeSeries)
 
-	c.totalCurrentSize = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	c.totalCurrentSize = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_total_size_bytes",
 		Help: "Current byte size of items (both value and key) in the index cache.",
 	}, []string{"item_type"})
 	c.totalCurrentSize.WithLabelValues(cacheTypePostings)
 	c.totalCurrentSize.WithLabelValues(cacheTypeSeries)
 
-	if reg != nil {
-		reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-			Name: "thanos_store_index_cache_max_size_bytes",
-			Help: "Maximum number of bytes to be held in the index cache.",
-		}, func() float64 {
-			return float64(c.maxSizeBytes)
-		}))
-		reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-			Name: "thanos_store_index_cache_max_item_size_bytes",
-			Help: "Maximum number of bytes for single entry to be held in the index cache.",
-		}, func() float64 {
-			return float64(c.maxItemSizeBytes)
-		}))
-		reg.MustRegister(c.requests, c.hits, c.added, c.evicted, c.current, c.currentSize, c.totalCurrentSize, c.overflow)
-	}
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_store_index_cache_max_size_bytes",
+		Help: "Maximum number of bytes to be held in the index cache.",
+	}, func() float64 {
+		return float64(c.maxSizeBytes)
+	})
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_store_index_cache_max_item_size_bytes",
+		Help: "Maximum number of bytes for single entry to be held in the index cache.",
+	}, func() float64 {
+		return float64(c.maxItemSizeBytes)
+	})
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.

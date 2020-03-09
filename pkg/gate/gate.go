@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/gate"
 )
 
@@ -27,19 +28,15 @@ type Gate struct {
 func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	g := &Gate{
 		g: gate.New(maxConcurrent),
-		inflightQueries: prometheus.NewGauge(prometheus.GaugeOpts{
+		inflightQueries: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "gate_queries_in_flight",
 			Help: "Number of queries that are currently in flight.",
 		}),
-		gateTiming: prometheus.NewHistogram(prometheus.HistogramOpts{
+		gateTiming: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "gate_duration_seconds",
 			Help:    "How many seconds it took for queries to wait at the gate.",
 			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 		}),
-	}
-
-	if reg != nil {
-		reg.MustRegister(g.inflightQueries, g.gateTiming)
 	}
 
 	return g

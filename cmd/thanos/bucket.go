@@ -269,7 +269,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		// Parse selector.
 		selectorLabels, err := parseFlagLabels(*selector)
 		if err != nil {
-			return fmt.Errorf("error parsing selector flag: %v", err)
+			return errors.Errorf("error parsing selector flag: %v", err)
 		}
 
 		confContentYaml, err := objStoreConfig.Content()
@@ -523,7 +523,7 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 	for _, col := range sortBy {
 		index := getIndex(header, col)
 		if index == -1 {
-			return fmt.Errorf("column %s not found", col)
+			return errors.Errorf("column %s not found", col)
 		}
 		sortByColNum = append(sortByColNum, index)
 	}
