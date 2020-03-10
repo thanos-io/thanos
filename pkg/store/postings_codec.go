@@ -80,7 +80,7 @@ func diffVarintSnappyDecode(input []byte) (index.Postings, error) {
 
 	raw, err := snappy.Decode(nil, input[len(codecHeaderSnappy):])
 	if err != nil {
-		return nil, errors.Errorf("snappy decode: %w", err)
+		return nil, errors.Wrap(err, "snappy decode")
 	}
 
 	return newDiffVarintPostings(raw), nil

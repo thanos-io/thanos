@@ -78,6 +78,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
+	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
+		PlaceHolder("<staticstore>").Strings()
+
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
@@ -162,6 +165,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			*strictStores,
 			component.Query,
 		)
 	}
@@ -202,6 +206,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	strictStores []string,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -222,14 +227,24 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	for _, store := range strictStores {
+		if dns.IsDynamicNode(store) {
+			return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
+		}
+	}
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add DNS resolved addresses from static flags and file SD.
+				// Add DNS resolved addresses.
 				for _, addr := range dnsProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+				}
+				// Add strict & static nodes.
+				for _, addr := range strictStores {
+					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
