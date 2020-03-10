@@ -40,18 +40,16 @@ func TestCompact(t *testing.T) {
 	m := e2edb.NewMinio(80, bucket)
 	testutil.Ok(t, s.StartAndWaitReady(m))
 
-	s3Config := s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.NetworkHTTPEndpoint(),
-		Insecure:  true,
-	}
-
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 
-	bkt, err := s3.NewBucketWithConfig(l, s3Config, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
+		Bucket:    bucket,
+		AccessKey: e2edb.MinioAccessKey,
+		SecretKey: e2edb.MinioSecretKey,
+		Endpoint:  m.HTTPEndpoint(),
+		Insecure:  true,
+	}, "test-feed")
 	testutil.Ok(t, err)
 
 	dir := filepath.Join(s.SharedDir(), "tmp")
@@ -63,8 +61,14 @@ func TestCompact(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 
 	compact, err := e2ethanos.NewCompact(s.SharedDir(), "compact", client.BucketConfig{
-		Type:   client.S3,
-		Config: s3Config,
+		Type: client.S3,
+		Config: s3.Config{
+			Bucket:    bucket,
+			AccessKey: e2edb.MinioAccessKey,
+			SecretKey: e2edb.MinioSecretKey,
+			Endpoint:  m.NetworkHTTPEndpoint(),
+			Insecure:  true,
+		},
 	})
 
 	testutil.Ok(t, err)
