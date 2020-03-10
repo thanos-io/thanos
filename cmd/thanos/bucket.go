@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	downsamplepkg "github.com/thanos-io/thanos/pkg/downsample"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -73,6 +74,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketInspect(m, cmd, name, objStoreConfig)
 	registerBucketWeb(m, cmd, name, objStoreConfig)
 	registerBucketReplicate(m, cmd, name, objStoreConfig)
+	registerBucketDownsample(m, cmd, name, objStoreConfig)
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
@@ -422,6 +424,21 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 		)
 	}
 
+}
+
+func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
+
+	comp := component.Downsample
+	cmd := root.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
+
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
+
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
+		Default("./data").String()
+
+	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return downsamplepkg.RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
+	}
 }
 
 // refresh metadata from remote storage periodically and update UI.
