@@ -6,13 +6,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 	"math"
 	"net/http"
 	"path"
 	"strings"
 	"time"
+
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v2"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
