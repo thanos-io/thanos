@@ -877,30 +877,54 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 	}
 }
 
-func TestReplicaLabel_Filter(t *testing.T) {
+func TestReplicaLabelRemover_Modify(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-
 	rm := NewReplicaLabelRemover([]string{"replica", "rule_replica"})
 
-	input := map[ulid.ULID]*metadata.Meta{
-		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-		ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "message": "something"}}},
-		ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1", "message": "something"}}},
-		ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1"}}},
-	}
-	expected := map[ulid.ULID]*metadata.Meta{
-		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-		ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-		ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-		ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
-	}
+	for _, tcase := range []struct {
+		name     string
+		input    map[ulid.ULID]*metadata.Meta
+		expected map[ulid.ULID]*metadata.Meta
+		modified float64
+	}{
+		{
+			name: "without replica labels",
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
+			},
+			modified: 0,
+		},
+		{
+			name: "with replica labels",
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1", "message": "something"}}},
+				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "rule_replica": "rule1"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
+			},
+			modified: 5.0,
+		},
+	} {
+		m := newTestSyncMetrics()
+		testutil.Ok(t, rm.Modify(ctx, tcase.input, m, false))
 
-	m := newTestSyncMetrics()
-	testutil.Ok(t, rm.Modify(ctx, input, m, false))
-
-	testutil.Equals(t, 5.0, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
-	testutil.Equals(t, expected, input)
+		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
+		testutil.Equals(t, tcase.expected, tcase.input)
+	}
 }
 
 func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
