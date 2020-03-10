@@ -9,7 +9,6 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -208,23 +207,6 @@ func PromLabelsToLabels(lset labels.Labels) []Label {
 //
 // // NOTE: This depends on order of struct fields etc, so use with extreme care.
 func PromLabelsToLabelsUnsafe(lset labels.Labels) []Label {
-	return *(*[]Label)(unsafe.Pointer(&lset))
-}
-
-// PrompbLabelsToLabels converts Prometheus labels to Thanos proto labels in type safe manner.
-func PrompbLabelsToLabels(lset []prompb.Label) []Label {
-	ret := make([]Label, len(lset))
-	for i, l := range lset {
-		ret[i] = Label{Name: l.Name, Value: l.Value}
-	}
-	return ret
-}
-
-// PrompbLabelsToLabelsUnsafe converts Prometheus proto labels to Thanos proto labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-//
-// // NOTE: This depends on order of struct fields etc, so use with extreme care.
-func PrompbLabelsToLabelsUnsafe(lset []prompb.Label) []Label {
 	return *(*[]Label)(unsafe.Pointer(&lset))
 }
 
