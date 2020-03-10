@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
