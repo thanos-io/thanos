@@ -133,8 +133,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h"))
 
-	dedupReplicaLabels := cmd.Flag("offline-deduplication.replica-labels", "Label to treat as a replica indicator of blocks that can be deduplicated. This will merge multiple replica blocks into one. This process is irrevertable. Experminteal").
-		Hidden().String()
+	dedupReplicaLabels := cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
+		"Experimental. When it is set true, this will given labels from blocks so that vertical compaction could merge blocks.").
+		Hidden().Strings()
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
@@ -187,7 +188,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
-	dedupReplicaLabels string,
+	dedupReplicaLabels []string,
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
 ) error {
@@ -283,14 +284,13 @@ func runCompact(
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(deleteDelay.Seconds()/2)*time.Second)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
-	replicaLabelFilter := block.ReplicaLabelsFilter{ReplicaLabels: strings.Split(dedupReplicaLabels, ",")}
 
 	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
 		ignoreDeletionMarkFilter.Filter,
 		duplicateBlocksFilter.Filter,
-		replicaLabelFilter.Filter,
+		block.NewReplicaLabelRemover(dedupReplicaLabels).Modify,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")

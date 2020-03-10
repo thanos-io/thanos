@@ -327,8 +327,6 @@ func NewCompact(sharedDir string, name string, bucketConfig client.BucketConfig)
 		return nil, errors.Wrapf(err, "generate compact config file: %v", bucketConfig)
 	}
 
-	fmt.Println(string(bktConfigBytes))
-
 	return NewService(
 		fmt.Sprintf("compact-%s", name),
 		DefaultImage(),

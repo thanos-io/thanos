@@ -32,12 +32,19 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
+type txLabeledGauge interface {
+	WithLabelValues(lvs ...string) prometheus.Gauge
+	ResetTx()
+	Submit()
+}
+
 type syncMetrics struct {
 	syncs        prometheus.Counter
 	syncFailures prometheus.Counter
 	syncDuration prometheus.Histogram
 
-	synced *extprom.TxGaugeVec
+	synced   txLabeledGauge
+	modified txLabeledGauge
 }
 
 const (
@@ -49,15 +56,15 @@ const (
 	failedMeta    = "failed"
 
 	// Filter's label values.
-	labelExcludedMeta = "label-excluded"
-	timeExcludedMeta  = "time-excluded"
-	tooFreshMeta      = "too-fresh"
-	duplicateMeta     = "duplicate"
+	labelExcludedMeta  = "label-excluded"
+	timeExcludedMeta   = "time-excluded"
+	tooFreshMeta       = "too-fresh"
+	duplicateMeta      = "duplicate"
+	replicaRemovedMeta = "replica-label-removed"
 
 	// Blocks that are marked for deletion can be loaded as well. This is done to make sure that we load blocks that are meant to be deleted,
 	// but don't have a replacement block yet.
 	markedForDeletionMeta = "marked-for-deletion"
-	replicaExclude        = "replica-exclude"
 )
 
 func newSyncMetrics(reg prometheus.Registerer) *syncMetrics {
@@ -95,6 +102,14 @@ func newSyncMetrics(reg prometheus.Registerer) *syncMetrics {
 		[]string{duplicateMeta},
 		[]string{markedForDeletionMeta},
 	)
+	m.modified = extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
+		Subsystem: syncMetricSubSys,
+		Name:      "modified",
+		Help:      "Number of block metadata that modified",
+	},
+		[]string{"modified"},
+		[]string{replicaRemovedMeta},
+	)
 	return &m
 }
 
@@ -102,11 +117,7 @@ type MetadataFetcher interface {
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
 }
 
-type GaugeLabeled interface {
-	WithLabelValues(lvs ...string) prometheus.Gauge
-}
-
-type MetaFetcherFilter func(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, incompleteView bool) error
+type MetaFetcherFilter func(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, incompleteView bool) error
 
 // MetaFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
 // Not go-routine safe.
@@ -352,7 +363,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 
 	for _, f := range s.filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
-		if err := f(ctx, metas, s.metrics.synced, incompleteView); err != nil {
+		if err := f(ctx, metas, s.metrics, incompleteView); err != nil {
 			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
@@ -382,12 +393,12 @@ func NewTimePartitionMetaFilter(MinTime, MaxTime model.TimeOrDurationValue) *Tim
 }
 
 // Filter filters out blocks that are outside of specified time range.
-func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, _ bool) error {
 	for id, m := range metas {
 		if m.MaxTime >= f.minTime.PrometheusTimestamp() && m.MinTime <= f.maxTime.PrometheusTimestamp() {
 			continue
 		}
-		synced.WithLabelValues(timeExcludedMeta).Inc()
+		metrics.synced.WithLabelValues(timeExcludedMeta).Inc()
 		delete(metas, id)
 	}
 	return nil
@@ -410,7 +421,7 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 const blockIDLabel = "__block_id"
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
-func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, _ bool) error {
 	var lbls labels.Labels
 	for id, m := range metas {
 		lbls = lbls[:0]
@@ -420,7 +431,7 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 		}
 
 		if processedLabels := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
-			synced.WithLabelValues(labelExcludedMeta).Inc()
+			metrics.synced.WithLabelValues(labelExcludedMeta).Inc()
 			delete(metas, id)
 		}
 	}
@@ -440,7 +451,7 @@ func NewDeduplicateFilter() *DeduplicateFilter {
 
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
-func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, _ bool) error {
 	var wg sync.WaitGroup
 
 	metasByResolution := make(map[int64][]*metadata.Meta)
@@ -457,7 +468,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 				BlockMeta: tsdb.BlockMeta{
 					ULID: ulid.MustNew(uint64(0), nil),
 				},
-			}), metasByResolution[res], metas, res, synced)
+			}), metasByResolution[res], metas, res, metrics.synced)
 		}(res)
 	}
 
@@ -466,7 +477,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	return nil
 }
 
-func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced GaugeLabeled) {
+func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced txLabeledGauge) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -541,21 +552,29 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 	return true
 }
 
-type ReplicaLabelsFilter struct {
-	ReplicaLabels []string
+// ReplicaLabelRemover is a MetaFetcher modifier modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
+type ReplicaLabelRemover struct {
+	replicaLabels []string
 }
 
-func (f *ReplicaLabelsFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, view bool) {
+// NewReplicaLabelRemover creates a ReplicaLabelRemover.
+func NewReplicaLabelRemover(replicaLabels []string) *ReplicaLabelRemover {
+	return &ReplicaLabelRemover{replicaLabels: replicaLabels}
+}
+
+// Modify modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
+func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, view bool) error {
 	for u, meta := range metas {
 		labels := meta.Thanos.Labels
-		for _, replicaLabel := range f.ReplicaLabels {
+		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := labels[replicaLabel]; exists {
 				delete(labels, replicaLabel)
-				synced.WithLabelValues(replicaExclude).Inc()
+				metrics.modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
 		}
 		metas[u].Thanos.Labels = labels
 	}
+	return nil
 }
 
 // ConsistencyDelayMetaFilter is a MetaFetcher filter that filters out blocks that are created before a specified consistency delay.
@@ -584,7 +603,7 @@ func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Dura
 }
 
 // Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
-func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, _ bool) error {
 	for id, meta := range metas {
 		// TODO(khyatisoneji): Remove the checks about Thanos Source
 		//  by implementing delete delay to fetch metas.
@@ -595,7 +614,7 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 			meta.Thanos.Source != metadata.CompactorRepairSource {
 
 			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
-			synced.WithLabelValues(tooFreshMeta).Inc()
+			metrics.synced.WithLabelValues(tooFreshMeta).Inc()
 			delete(metas, id)
 		}
 	}
@@ -630,7 +649,7 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
-func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, m *syncMetrics, _ bool) error {
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
@@ -647,7 +666,7 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 		}
 		f.deletionMarkMap[id] = deletionMark
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
-			synced.WithLabelValues(markedForDeletionMeta).Inc()
+			m.synced.WithLabelValues(markedForDeletionMeta).Inc()
 			delete(metas, id)
 		}
 	}

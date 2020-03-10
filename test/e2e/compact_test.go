@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package e2e
 
 import (
@@ -63,7 +66,7 @@ func TestCompact(t *testing.T) {
 		Type:   client.S3,
 		Config: s3Config,
 	})
+
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(compact))
-
 }

@@ -35,6 +35,23 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type testTxLabeledGauge struct {
+	g *prometheus.GaugeVec
+}
+
+func (t *testTxLabeledGauge) WithLabelValues(lvs ...string) prometheus.Gauge {
+	return t.g.WithLabelValues(lvs...)
+}
+func (t *testTxLabeledGauge) ResetTx() {}
+func (t *testTxLabeledGauge) Submit()  {}
+
+func newTestSyncMetrics() *syncMetrics {
+	return &syncMetrics{
+		synced:   &testTxLabeledGauge{promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})},
+		modified: &testTxLabeledGauge{promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"modified"})},
+	}
+}
+
 func ULID(i int) ulid.ULID { return ulid.MustNew(uint64(i), nil) }
 
 func ULIDs(is ...int) []ulid.ULID {
@@ -57,9 +74,9 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, func(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) error {
+		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, func(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, incompleteView bool) error {
 			if _, ok := metas[ulidToDelete]; ok {
-				synced.WithLabelValues("filtered").Inc()
+				metrics.synced.WithLabelValues("filtered").Inc()
 				delete(metas, ulidToDelete)
 			}
 			return nil
@@ -337,9 +354,10 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 		ULID(6): input[ULID(6)],
 	}
 
-	synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
-	testutil.Ok(t, f.Filter(ctx, input, synced, false))
-	testutil.Equals(t, 3.0, promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
+	m := newTestSyncMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m, false))
+
+	testutil.Equals(t, 3.0, promtest.ToFloat64(m.synced.WithLabelValues(labelExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
 }
@@ -434,10 +452,11 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 			}
 			deleted := len(input) - len(expected)
 
-			synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
-			testutil.Ok(t, f.Filter(ctx, input, synced, false))
+			m := newTestSyncMetrics()
+			testutil.Ok(t, f.Filter(ctx, input, m, false))
+
 			testutil.Equals(t, expected, input)
-			testutil.Equals(t, float64(deleted), promtest.ToFloat64(synced.WithLabelValues(labelExcludedMeta)))
+			testutil.Equals(t, float64(deleted), promtest.ToFloat64(m.synced.WithLabelValues(labelExcludedMeta)))
 
 		})
 
@@ -497,9 +516,10 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 		ULID(4): input[ULID(4)],
 	}
 
-	synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
-	testutil.Ok(t, f.Filter(ctx, input, synced, false))
-	testutil.Equals(t, 2.0, promtest.ToFloat64(synced.WithLabelValues(timeExcludedMeta)))
+	m := newTestSyncMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m, false))
+
+	testutil.Equals(t, 2.0, promtest.ToFloat64(m.synced.WithLabelValues(timeExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
 }
@@ -830,7 +850,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 	} {
 		f := NewDeduplicateFilter()
 		if ok := t.Run(tcase.name, func(t *testing.T) {
-			synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			m := newTestSyncMetrics()
 			metas := make(map[ulid.ULID]*metadata.Meta)
 			inputLen := len(tcase.input)
 			for id, metaInfo := range tcase.input {
@@ -848,9 +868,9 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 					},
 				}
 			}
-			testutil.Ok(t, f.Filter(ctx, metas, synced, false))
+			testutil.Ok(t, f.Filter(ctx, metas, m, false))
 			compareSliceWithMapKeys(t, metas, tcase.expected)
-			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(synced.WithLabelValues(duplicateMeta)))
+			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(m.synced.WithLabelValues(duplicateMeta)))
 		}); !ok {
 			return
 		}
@@ -858,7 +878,10 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 }
 
 func TestReplicaLabel_Filter(t *testing.T) {
-	rf := ReplicaLabelsFilter{ReplicaLabels: []string{"replica", "rule_replica"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	rm := NewReplicaLabelRemover([]string{"replica", "rule_replica"})
 
 	input := map[ulid.ULID]*metadata.Meta{
 		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
@@ -873,10 +896,10 @@ func TestReplicaLabel_Filter(t *testing.T) {
 		ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
 	}
 
-	synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
-	rf.Filter(input, synced, false)
+	m := newTestSyncMetrics()
+	testutil.Ok(t, rm.Modify(ctx, input, m, false))
 
-	testutil.Equals(t, 5.0, promtest.ToFloat64(synced.WithLabelValues(replicaExclude)))
+	testutil.Equals(t, 5.0, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
 	testutil.Equals(t, expected, input)
 }
 
@@ -968,7 +991,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	}
 
 	t.Run("consistency 0 (turned off)", func(t *testing.T) {
-		synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		m := newTestSyncMetrics()
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Copy all.
 		for _, id := range u.created {
@@ -979,13 +1002,13 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
-		testutil.Ok(t, f.Filter(ctx, input, synced, false))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(synced.WithLabelValues(tooFreshMeta)))
+		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
 
 	t.Run("consistency 30m.", func(t *testing.T) {
-		synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+		m := newTestSyncMetrics()
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Only certain sources and those with 30m or more age go through.
 		for i, id := range u.created {
@@ -1004,8 +1027,8 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
-		testutil.Ok(t, f.Filter(ctx, input, synced, false))
-		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(synced.WithLabelValues(tooFreshMeta)))
+		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
 }
@@ -1056,9 +1079,9 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 			ULID(4): {},
 		}
 
-		synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
-		testutil.Ok(t, f.Filter(ctx, input, synced, false))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(synced.WithLabelValues(markedForDeletionMeta)))
+		m := newTestSyncMetrics()
+		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
 		testutil.Equals(t, expected, input)
 	})
 }
