@@ -34,13 +34,13 @@ fi
 
 CHECK=${1:-}
 
-commands=("compact" "query" "rule" "sidecar" "store" "downsample" "bucket" "check")
+commands=("compact" "query" "rule" "sidecar" "store" "bucket" "check")
 
 for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-bucketCommands=("verify" "ls" "inspect" "web" "replicate")
+bucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample")
 for x in "${bucketCommands[@]}"; do
     ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
 done
