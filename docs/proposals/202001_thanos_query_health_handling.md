@@ -2,7 +2,7 @@
 title: Thanos Query store nodes healthiness handling
 type: proposal
 menu: proposals
-status: accepted
+status: complete
 owner: GiedriusS
 ---
 
