@@ -29,13 +29,14 @@ DIRS="pkg/store/storepb"
 echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
-		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \
+		${PROTOC_BIN} --gogofast_out=plugins=grpc:. \
+		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
 			-I="../../../vendor" \
 			*.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
-		sed -i.bak -E 's/import _ \"google\/protobuf\"//g' *.pb.go
+		sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
 		rm -f *.bak
 		${GOIMPORTS_BIN} -w *.pb.go
 	popd

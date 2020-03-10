@@ -171,7 +171,14 @@ func LabelsToPromLabels(lset []Label) labels.Labels {
 	for i, l := range lset {
 		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
 	}
+	return ret
+}
 
+func PromLabelsToLabels(lset labels.Labels) []Label {
+	ret := make([]Label, len(lset))
+	for i, l := range lset {
+		ret[i] = Label{Name: l.Name, Value: l.Value}
+	}
 	return ret
 }
 
