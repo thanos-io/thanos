@@ -5,12 +5,13 @@ package e2e_test
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/store"
 	"os"
 	"path"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/store"
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	e2edb "github.com/cortexproject/cortex/integration/e2e/db"

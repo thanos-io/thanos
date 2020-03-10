@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/store"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +18,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/store"
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
