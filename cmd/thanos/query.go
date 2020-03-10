@@ -227,7 +227,6 @@ func runQuery(
 	})
 	reg.MustRegister(duplicatedStores)
 
-
 	var storesConfig []store.Config
 	if len(storeConfigYAML) > 0 {
 		var err error
@@ -242,26 +241,26 @@ func runQuery(
 			}
 		}
 
-		endpointsConfig := store.EndpointsConfig {
+		endpointsConfig := store.EndpointsConfig{
 			StaticAddresses: storeAddrs,
 		}
 		if fileSDConfig != nil {
 			endpointsConfig.FileSDConfigs = []file.SDConfig{*fileSDConfig}
 		}
 		storeConfig := store.Config{
-			Name: "default",
+			Name:            "default",
 			EndpointsConfig: endpointsConfig,
 		}
 		if secure {
-			storeConfig.TlsConfig = &store.TlsConfig {
-				Cert: cert,
-				Key: key,
-				CaCert: caCert,
+			storeConfig.TlsConfig = &store.TlsConfig{
+				Cert:       cert,
+				Key:        key,
+				CaCert:     caCert,
 				ServerName: serverName,
 			}
 		}
 
-		storesConfig = []store.Config{ storeConfig }
+		storesConfig = []store.Config{storeConfig}
 	}
 
 	// todo: sml: remove - for debugging
@@ -312,12 +311,11 @@ func runQuery(
 			logger,
 			// todo: sml: looks a bit iffy
 			extprom.WrapRegistererWith(
-				map[string]string{"config_name":config.Name},
+				map[string]string{"config_name": config.Name},
 				extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
-		    ),
+			),
 			dns.ResolverType(dnsSDResolver),
 		)
-
 
 		stores := query.NewStoreSet(
 			logger,
@@ -354,11 +352,10 @@ func runQuery(
 		// Run File Service Discovery and update the store set when the files are modified.
 		if config.EndpointsConfig.FileSDConfigs != nil && len(config.EndpointsConfig.FileSDConfigs) > 0 {
 			var fileSDUpdates chan []*targetgroup.Group
-			ctxRun, cancelRun := context.WithCancel(context.Background())
-
 			fileSDUpdates = make(chan []*targetgroup.Group)
 
 			for _, fsdConfig := range config.EndpointsConfig.FileSDConfigs {
+				ctxRun, cancelRun := context.WithCancel(context.Background())
 				fileSD := file.NewDiscovery(&fsdConfig, logger)
 				g.Add(func() error {
 					fileSD.Run(ctxRun, fileSDUpdates)
