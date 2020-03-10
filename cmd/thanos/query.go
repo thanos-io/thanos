@@ -264,11 +264,6 @@ func runQuery(
 		storesConfig = []store.Config{storeConfig}
 	}
 
-	// todo: sml: remove - for debugging
-	level.Info(logger).Log("msg", fmt.Sprintf("%v", storesConfig))
-	storeBytes, _ := yaml.Marshal(storesConfig)
-	level.Info(logger).Log("msg", string(storeBytes))
-
 	var storeSets []*query.StoreSet
 	var (
 		allClients = func() []store.Client {
