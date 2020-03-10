@@ -319,6 +319,9 @@ Flags:
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
+      --store.strict-mode        Enable strict mode which makes Thanos Query
+                                 always keep statically specified StoreAPIs
+                                 around.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

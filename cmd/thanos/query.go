@@ -70,6 +70,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	replicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		Strings()
 
+	strictMode := cmd.Flag("store.strict-mode", "Enable strict mode which makes Thanos Query always keep statically specified StoreAPIs around.").Default("false").Bool()
+
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
@@ -162,6 +164,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			*strictMode,
 			component.Query,
 		)
 	}
@@ -202,6 +205,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	strictMode bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -222,14 +226,20 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	staticStores, dynamicStores := dns.FilterStaticNodes(storeAddrs...)
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add DNS resolved addresses from static flags and file SD.
+				// Add DNS resolved addresses.
 				for _, addr := range dnsProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+				}
+				// Add static nodes.
+				for _, addr := range staticStores {
+					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
@@ -257,7 +267,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.Update(ctx)
+				stores.Update(ctx, strictMode)
 				return nil
 			})
 		}, func(error) {
@@ -289,8 +299,8 @@ func runQuery(
 						continue
 					}
 					fileSDCache.Update(update)
-					stores.Update(ctxUpdate)
-					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
+					stores.Update(ctxUpdate, strictMode)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), dynamicStores...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
@@ -305,7 +315,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...))
+				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), dynamicStores...))
 				return nil
 			})
 		}, func(error) {
