@@ -335,7 +335,7 @@ Flags:
                                  '--store' and '--store.sd-files' flags.
       --store.config=<content>   Alternative to 'store.config-file' flag (lower
                                  priority). Content of YAML file that contains
-                                 store API servers configuration. See forma
+                                 store API servers configuration. See format
                                  details:
                                  https://thanos.io/components/query.md/#configuration.
                                  If defined, it takes precedence over the
