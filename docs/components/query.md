@@ -364,7 +364,8 @@ The configuration format is the following:
 
 [embedmd]:# (../flags/config_query_store.txt yaml)
 ```yaml
-- tls_config:
+- name: "default"
+  tls_config:
     ca_file: ""
     cert_file: ""
     key_file: ""
@@ -375,4 +376,4 @@ The configuration format is the following:
     refresh_interval: 0s
 ```
 
-If `tls_config` is omitted or set to `null` then TLS will not be used.
+If `tls_config` is omitted or set to `null` then TLS will not be used. Configs must have a name and they must be unique.
