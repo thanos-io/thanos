@@ -286,20 +286,11 @@ func runQuery(
 		)
 	)
 
-	// run through once so we don't leave funcs hanging
-	perConfigDialOpts := make(map[string][]grpc.DialOption)
 	for _, config := range storesConfig {
-
 		dialOpts, err := extgrpc.StoreClientGRPCOptsFromTlsConfig(logger, config.Name, reg, tracer, config.TlsConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")
 		}
-		perConfigDialOpts[config.Name] = dialOpts
-	}
-
-	for _, config := range storesConfig {
-
-		dialOpts := perConfigDialOpts[config.Name]
 
 		fileSDCache := cache.New()
 		dnsProvider := dns.NewProvider(
