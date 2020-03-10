@@ -18,11 +18,11 @@ type Config struct {
 }
 
 type TlsConfig struct {
-	// TLS Certificates to use to identify this client to the server
+	// TLS Certificates to use to identify this client to the server.
 	Cert string `yaml:"cert_file"`
-	// TLS Key for the client's certificate
+	// TLS Key for the client's certificate.
 	Key string `yaml:"key_file"`
-	// TLS CA Certificates to use to verify gRPC servers
+	// TLS CA Certificates to use to verify gRPC servers.
 	CaCert string `yaml:"ca_file"`
 	// Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1
 	ServerName string `yaml:"server_name"`
