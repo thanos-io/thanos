@@ -5,13 +5,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/prometheus/prometheus/discovery/file"
-	"github.com/thanos-io/thanos/pkg/store"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/thanos-io/thanos/pkg/store"
 
 	"github.com/fatih/structtag"
 	"github.com/go-kit/kit/log"
