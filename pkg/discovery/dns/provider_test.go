@@ -102,3 +102,36 @@ func (d *mockResolver) Resolve(_ context.Context, name string, _ QType) ([]strin
 	}
 	return d.res[name], nil
 }
+
+// TestFilterStaticNodes tests if the provided nodes are separated correctly
+// into static nodes and dynamic ones.
+func TestFilterStaticNodes(t *testing.T) {
+	for _, tcase := range []struct {
+		nodes           []string
+		expectedStatic  []string
+		expectedDynamic []string
+	}{
+		// All valid cases.
+		{
+			nodes:           []string{"1.2.3.4", "dns+1.2.3.4", "dnssrv+13.3.3.3", "dnssrvnoa+1.1.1.1"},
+			expectedStatic:  []string{"1.2.3.4"},
+			expectedDynamic: []string{"dns+1.2.3.4", "dnssrv+13.3.3.3", "dnssrvnoa+1.1.1.1"},
+		},
+		// Negative test that will be caught later on.
+		{
+			nodes:           []string{"gibberish+1.1.1.1+noa"},
+			expectedStatic:  []string{},
+			expectedDynamic: []string{"gibberish+1.1.1.1+noa"},
+		},
+		// Negative test with no nodes.
+		{
+			nodes:           []string{},
+			expectedStatic:  []string{},
+			expectedDynamic: []string{},
+		},
+	} {
+		gotStatic, gotDynamic := FilterStaticNodes(tcase.nodes...)
+		testutil.Equals(t, tcase.expectedStatic, gotStatic, "mismatch between static nodes")
+		testutil.Equals(t, tcase.expectedDynamic, gotDynamic, "mismatch between dynamic nodes")
+	}
+}

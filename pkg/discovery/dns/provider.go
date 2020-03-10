@@ -90,12 +90,14 @@ func (p *Provider) Clone() *Provider {
 // FilterStaticNodes walks through the whole list of addresses and returns
 // two lists of statically and dynamically defined nodes.
 func FilterStaticNodes(addrs ...string) (static []string, dynamic []string) {
+	static, dynamic = []string{}, []string{}
+
 	for _, addr := range addrs {
-		qtype, name := GetQTypeName(addr)
+		qtype, _ := GetQTypeName(addr)
 		if qtype != "" {
-			dynamic = append(dynamic, name)
+			dynamic = append(dynamic, addr)
 		} else {
-			static = append(static, name)
+			static = append(static, addr)
 		}
 	}
 	return
