@@ -120,7 +120,7 @@ func TestQuery(t *testing.T) {
 	sdFilePath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()})
 	testutil.Ok(t, err)
 
-	// Both fileSD and directly by seperate configs
+	// Both fileSD and directly by separate configs
 	queryCfg := []store.Config{
 		{
 			Name: "static",
