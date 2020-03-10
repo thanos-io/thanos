@@ -211,7 +211,6 @@ type storeRef struct {
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
-	dialOpts []grpc.DialOption
 
 	// Meta (can change during runtime).
 	labelSets []storepb.LabelSet

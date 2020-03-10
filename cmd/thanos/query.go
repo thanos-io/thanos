@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 	"math"
@@ -31,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -351,8 +351,7 @@ func runQuery(
 		}
 		// Run File Service Discovery and update the store set when the files are modified.
 		if config.EndpointsConfig.FileSDConfigs != nil && len(config.EndpointsConfig.FileSDConfigs) > 0 {
-			var fileSDUpdates chan []*targetgroup.Group
-			fileSDUpdates = make(chan []*targetgroup.Group)
+			fileSDUpdates := make(chan []*targetgroup.Group)
 
 			for _, fsdConfig := range config.EndpointsConfig.FileSDConfigs {
 				ctxRun, cancelRun := context.WithCancel(context.Background())

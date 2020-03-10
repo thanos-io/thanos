@@ -6,7 +6,6 @@ package e2ethanos
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/store"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/store"
 	"gopkg.in/yaml.v2"
 )
 

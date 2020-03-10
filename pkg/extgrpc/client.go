@@ -4,7 +4,6 @@
 package extgrpc
 
 import (
-	"github.com/thanos-io/thanos/pkg/store"
 	"math"
 
 	"github.com/go-kit/kit/log"
@@ -13,6 +12,7 @@ import (
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
