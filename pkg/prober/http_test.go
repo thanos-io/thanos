@@ -72,7 +72,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 
 	var g run.Group
 	g.Add(func() error {
-		return errors.Errorf("serve probes %w", http.Serve(l, mux))
+		return errors.Errorf("serve probes %v", http.Serve(l, mux))
 	}, func(err error) {
 		t.Fatalf("server failed: %v", err)
 	})
