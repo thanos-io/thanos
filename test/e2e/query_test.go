@@ -6,10 +6,6 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/prometheus/discovery/file"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"github.com/thanos-io/thanos/pkg/store"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -17,6 +13,11 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/thanos/pkg/store"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
@@ -132,7 +133,7 @@ func TestQuery(t *testing.T) {
 			EndpointsConfig: store.EndpointsConfig{
 				FileSDConfigs: []file.SDConfig{
 					{
-						Files: []string{sdFilePath},
+						Files:           []string{sdFilePath},
 						RefreshInterval: model.Duration(time.Minute),
 					},
 				},

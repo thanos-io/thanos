@@ -49,13 +49,13 @@ func NewQueryUI(logger log.Logger, reg prometheus.Registerer, getStoreStatus fun
 		cwd = "<error retrieving current working directory>"
 	}
 	return &Query{
-		BaseUI:   NewBaseUI(logger, "query_menu.html", queryTmplFuncs()),
+		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs()),
 		getStoreStatus: getStoreStatus,
-		flagsMap: flagsMap,
-		cwd:      cwd,
-		birth:    time.Now(),
-		reg:      reg,
-		now:      model.Now,
+		flagsMap:       flagsMap,
+		cwd:            cwd,
+		birth:          time.Now(),
+		reg:            reg,
+		now:            model.Now,
 	}
 }
 
