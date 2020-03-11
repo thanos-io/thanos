@@ -22,7 +22,6 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
@@ -35,20 +34,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type testTxLabeledGauge struct {
-	g *prometheus.GaugeVec
-}
-
-func (t *testTxLabeledGauge) WithLabelValues(lvs ...string) prometheus.Gauge {
-	return t.g.WithLabelValues(lvs...)
-}
-func (t *testTxLabeledGauge) ResetTx() {}
-func (t *testTxLabeledGauge) Submit()  {}
-
 func newTestSyncMetrics() *syncMetrics {
 	return &syncMetrics{
-		synced:   &testTxLabeledGauge{promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})},
-		modified: &testTxLabeledGauge{promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{}, []string{"modified"})},
+		synced:   extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"}),
+		modified: extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"modified"}),
 	}
 }
 

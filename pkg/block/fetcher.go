@@ -32,19 +32,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
-type txLabeledGauge interface {
-	WithLabelValues(lvs ...string) prometheus.Gauge
-	ResetTx()
-	Submit()
-}
-
 type syncMetrics struct {
 	syncs        prometheus.Counter
 	syncFailures prometheus.Counter
 	syncDuration prometheus.Histogram
 
-	synced   txLabeledGauge
-	modified txLabeledGauge
+	synced   *extprom.TxGaugeVec
+	modified *extprom.TxGaugeVec
 }
 
 const (
@@ -478,7 +472,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	return nil
 }
 
-func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced txLabeledGauge) {
+func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced *extprom.TxGaugeVec) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
