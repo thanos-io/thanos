@@ -314,7 +314,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 	), nil
 }
 
-func NewCompact(sharedDir string, name string, bucketConfig client.BucketConfig) (*Service, error) {
+func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, extArgs ...string) (*Service, error) {
 	dir := filepath.Join(sharedDir, "data", "compact", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
 
@@ -331,10 +331,13 @@ func NewCompact(sharedDir string, name string, bucketConfig client.BucketConfig)
 		fmt.Sprintf("compact-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
+			"--debug.name":      fmt.Sprintf("compact-%s", name),
+			"--log.level":       logLevel,
 			"--data-dir":        container,
 			"--objstore.config": string(bktConfigBytes),
 			"--http-address":    ":80",
-		}))...),
+			"--wait":            "",
+		}), extArgs...)...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,

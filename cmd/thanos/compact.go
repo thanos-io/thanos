@@ -290,13 +290,19 @@ func runCompact(
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
 		ignoreDeletionMarkFilter.Filter,
 		duplicateBlocksFilter.Filter,
-		block.NewReplicaLabelRemover(dedupReplicaLabels).Modify,
+		block.NewReplicaLabelRemover(logger, dedupReplicaLabels).Modify,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, false)
+	enableVerticalCompaction := false
+	if len(dedupReplicaLabels) > 0 {
+		enableVerticalCompaction = true
+		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedup-replica-labels", strings.Join(dedupReplicaLabels, ","))
+	}
+
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, enableVerticalCompaction)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

@@ -370,6 +370,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 
 	s.metrics.synced.WithLabelValues(loadedMeta).Set(float64(len(metas)))
 	s.metrics.synced.Submit()
+	s.metrics.modified.Submit()
 
 	if incompleteView {
 		return metas, partial, errors.Wrap(metaErrs, "incomplete view")
@@ -554,12 +555,14 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 
 // ReplicaLabelRemover is a MetaFetcher modifier modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
 type ReplicaLabelRemover struct {
+	logger log.Logger
+
 	replicaLabels []string
 }
 
 // NewReplicaLabelRemover creates a ReplicaLabelRemover.
-func NewReplicaLabelRemover(replicaLabels []string) *ReplicaLabelRemover {
-	return &ReplicaLabelRemover{replicaLabels: replicaLabels}
+func NewReplicaLabelRemover(logger log.Logger, replicaLabels []string) *ReplicaLabelRemover {
+	return &ReplicaLabelRemover{logger: logger, replicaLabels: replicaLabels}
 }
 
 // Modify modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
@@ -568,6 +571,7 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 		labels := meta.Thanos.Labels
 		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := labels[replicaLabel]; exists {
+				level.Debug(r.logger).Log("msg", "replica label removed", "label", replicaLabel)
 				delete(labels, replicaLabel)
 				metrics.modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}

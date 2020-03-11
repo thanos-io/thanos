@@ -880,7 +880,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 func TestReplicaLabelRemover_Modify(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	rm := NewReplicaLabelRemover([]string{"replica", "rule_replica"})
+	rm := NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"})
 
 	for _, tcase := range []struct {
 		name     string
