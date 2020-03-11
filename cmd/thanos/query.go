@@ -230,7 +230,7 @@ func runQuery(
 		var err error
 		storesConfig, err = store.LoadConfig(storeConfigYAML)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "loading store config")
 		}
 	} else {
 		for _, addr := range storeAddrs {
