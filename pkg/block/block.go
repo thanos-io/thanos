@@ -87,7 +87,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
-		return errors.Errorf("empty external labels are not allowed for Thanos block.")
+		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {

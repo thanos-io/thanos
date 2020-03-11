@@ -269,7 +269,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		// Parse selector.
 		selectorLabels, err := parseFlagLabels(*selector)
 		if err != nil {
-			return errors.Errorf("error parsing selector flag: %v", err)
+			return errors.Wrap(err, "error parsing selector flag")
 		}
 
 		confContentYaml, err := objStoreConfig.Content()

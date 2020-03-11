@@ -1854,7 +1854,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 
 		l, n := binary.Uvarint(cb)
 		if n < 1 {
-			return errors.Errorf("reading chunk length failed")
+			return errors.New("reading chunk length failed")
 		}
 		if len(cb) < n+int(l)+1 {
 			return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)

@@ -740,7 +740,7 @@ func queryFunc(
 				return v, nil
 			}
 		}
-		return nil, errors.Errorf("no query API server reachable")
+		return nil, errors.New("no query API server reachable")
 	}
 }
 
