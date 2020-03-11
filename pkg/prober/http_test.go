@@ -30,7 +30,7 @@ func TestHTTPProberReadinessInitialState(t *testing.T) {
 }
 
 func TestHTTPProberHealthyStatusSetting(t *testing.T) {
-	testError := errors.Errorf("test error")
+	testError := errors.New("test error")
 	p := NewHTTP()
 
 	p.Healthy()
@@ -43,7 +43,7 @@ func TestHTTPProberHealthyStatusSetting(t *testing.T) {
 }
 
 func TestHTTPProberReadyStatusSetting(t *testing.T) {
-	testError := errors.Errorf("test error")
+	testError := errors.New("test error")
 	p := NewHTTP()
 
 	p.Ready()
@@ -72,7 +72,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 
 	var g run.Group
 	g.Add(func() error {
-		return errors.Errorf("serve probes %v", http.Serve(l, mux))
+		return errors.Wrap(http.Serve(l, mux), "serve probes")
 	}, func(err error) {
 		t.Fatalf("server failed: %v", err)
 	})

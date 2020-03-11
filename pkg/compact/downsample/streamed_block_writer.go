@@ -108,7 +108,7 @@ func NewStreamedBlockWriter(
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
 func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
-		return errors.Errorf("series can't be added, writers has been closed or internal error happened")
+		return errors.New("series can't be added, writers has been closed or internal error happened")
 	}
 
 	if len(chunks) == 0 {

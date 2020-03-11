@@ -347,7 +347,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	// For safety, limit the number of returned points per timeseries.
 	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
 	if end.Sub(start)/step > 11000 {
-		err := errors.Errorf("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
+		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
 		return nil, nil, &ApiError{errorBadData, err}
 	}
 
@@ -456,7 +456,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	if len(r.Form["match[]"]) == 0 {
-		return nil, nil, &ApiError{errorBadData, errors.Errorf("no match[] parameter provided")}
+		return nil, nil, &ApiError{errorBadData, errors.New("no match[] parameter provided")}
 	}
 
 	var start time.Time

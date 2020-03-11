@@ -171,7 +171,7 @@ func RunReplicate(
 		level.Info(logger).Log("msg", "running replication attempt")
 
 		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt, reg).execute(ctx); err != nil {
-			return errors.Errorf("replication execute: %v", err)
+			return errors.Wrap(err, "replication execute")
 		}
 
 		return nil
