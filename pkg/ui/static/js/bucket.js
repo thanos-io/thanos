@@ -29,6 +29,7 @@ function draw() {
         dataTable.addColumn({type: 'date', id: 'End'});
 
         dataTable.addRows(thanos.blocks
+            .sort((a, b) => a.thanos.downsample.resolution - b.thanos.downsample.resolution)
             .map(function(d) {
                 // Title is the first column of the timeline.
                 //
