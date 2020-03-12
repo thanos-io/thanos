@@ -44,8 +44,9 @@ MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
 GOJSONTOYAML_VERSION    ?= e8bd32d46b3d764bef60f12b3bada1c132c4be55
 GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
 # v0.14.0
-JSONNET_VERSION         ?= fbde25be2182caa4345b03f1532450911ac7d1f3
+JSONNET_VERSION         ?= 724650d358b67909a7bea00ea443e23afc3d2a17
 JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
+JSONNETFMT              ?= $(GOBIN)/jsonnetfmt-$(JSONNET_VERSION)
 JSONNET_BUNDLER_VERSION ?= efe0c9e864431e93d5c3376bd5931d0fb9b2a296
 JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 # Prometheus v2.14.0
@@ -371,19 +372,17 @@ jsonnet-vendor: $(JSONNET_BUNDLER) $(MIXIN_ROOT)/jsonnetfile.json $(MIXIN_ROOT)/
 	rm -rf ${JSONNET_VENDOR_DIR}
 	cd ${MIXIN_ROOT} && $(JSONNET_BUNDLER) install
 
-JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
+JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s
 
 .PHONY: jsonnet-format
-jsonnet-format:
-	@which jsonnetfmt 2>&1 >/dev/null || ( \
-		echo "Cannot find jsonnetfmt command, please install from https://github.com/google/jsonnet/releases.\nIf your C++ does not support GLIBCXX_3.4.20, please use xxx-in-container target like jsonnet-format-in-container." \
-		&& exit 1)
+jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
-		xargs -n 1 -- $(JSONNET_FMT) -i
+		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
 .PHONY: jsonnet-format-in-container
 jsonnet-format-in-container:
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
+	$(JSONNET_CONTAINER_CMD) find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
 
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
@@ -446,6 +445,9 @@ $(PROTOC):
 
 $(JSONNET):
 	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnet,$(JSONNET_VERSION))
+
+$(JSONNETFMT):
+	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnetfmt,$(JSONNET_VERSION))
 
 $(GOJSONTOYAML):
 	$(call fetch_go_bin_version,github.com/brancz/gojsontoyaml,$(GOJSONTOYAML_VERSION))
