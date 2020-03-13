@@ -314,7 +314,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 	), nil
 }
 
-func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, extArgs ...string) (*Service, error) {
+func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, downsamplingEnabled bool, extArgs ...string) (*Service, error) {
 	dir := filepath.Join(sharedDir, "data", "compact", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
 
@@ -327,16 +327,26 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 		return nil, errors.Wrapf(err, "generate compact config file: %v", bucketConfig)
 	}
 
+	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig)
+	}
+
+	if !downsamplingEnabled {
+		extArgs = append(extArgs, "--downsampling.disable")
+	}
+
 	return NewService(
 		fmt.Sprintf("compact-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
-			"--debug.name":      fmt.Sprintf("compact-%s", name),
-			"--log.level":       logLevel,
-			"--data-dir":        container,
-			"--objstore.config": string(bktConfigBytes),
-			"--http-address":    ":80",
-			"--wait":            "",
+			"--debug.name":              fmt.Sprintf("compact-%s", name),
+			"--log.level":               logLevel,
+			"--data-dir":                container,
+			"--objstore.config":         string(bktConfigBytes),
+			"--http-address":            ":80",
+			"--selector.relabel-config": string(relabelConfigBytes),
+			"--wait":                    "",
 		}), extArgs...)...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,

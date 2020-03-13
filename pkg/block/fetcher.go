@@ -261,6 +261,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	)
 
 	s.metrics.synced.ResetTx()
+	s.metrics.modified.ResetTx()
 
 	for i := 0; i < s.concurrency; i++ {
 		wg.Add(1)
