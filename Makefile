@@ -170,19 +170,19 @@ assets: $(GOBINDATA)
 bench: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with master using https://github.com/prometheus/test-infra/tree/master/funcbench.
 bench: $(FUNCBENCH)
 	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with master"
-	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache master $(THANOS_BENCH_FUNC)
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache master '"$(THANOS_BENCH_FUNC)"'
 
 .PHONY: bench-master
 bench-master: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with newest using https://github.com/prometheus/test-infra/tree/master/funcbench.
 bench-master: $(FUNCBENCH)
 	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with: $(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | tail -1)"
-	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache  "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | tail -1)" $(THANOS_BENCH_FUNC)
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache  "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | tail -1)" '"$(THANOS_BENCH_FUNC)"'
 
 .PHONY: bench-release
 bench-release: ## Run $(THANOS_BENCH_FUNC) benchmarks and compare with older release using https://github.com/prometheus/test-infra/tree/master/funcbench.
 bench-release: $(FUNCBENCH)
 	@echo ">> benchmark $(THANOS_BENCH_FUNC) and compare with"
-	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | grep -B1 $(CURRENT_RELEASE) | head -1)" $(THANOS_BENCH_FUNC)
+	@$(FUNCBENCH) -v --bench-time=30s --timeout=2h --result-cache=/tmp/cache "$(shell git tag | grep -E ^v[0-9]+\.[0-9]\.[0-9]+$$ | sort -t . -k1,1n -k2,2n -k3,3n | grep -B1 $(CURRENT_RELEASE) | head -1)" '"$(THANOS_BENCH_FUNC)"'
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
