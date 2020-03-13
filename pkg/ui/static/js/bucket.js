@@ -7,6 +7,9 @@ function draw() {
     if (thanos.refreshedAt == "0001-01-01T00:00:00Z") {
         thanos.err = "Synchronizing blocks from remote storage";
     }
+    else if (!thanos.err && thanos.blocks.length == 0) {
+        thanos.err = "No blocks are currently loaded";
+    }
 
     if (thanos.err != null) {
         $("#err").show().find('.alert').text(JSON.stringify(thanos.err, null, 4));
