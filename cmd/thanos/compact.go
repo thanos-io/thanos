@@ -103,8 +103,12 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	retention5m := modelDuration(cmd.Flag("retention.resolution-5m", "How long to retain samples of resolution 1 (5 minutes) in bucket. Setting this to 0d will retain samples of this resolution forever").Default("0d"))
 	retention1h := modelDuration(cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. Setting this to 0d will retain samples of this resolution forever").Default("0d"))
 
+	// TODO(kakkoyun): https://github.com/thanos-io/thanos/issues/2266.
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
+
+	waitInterval := cmd.Flag("wait-interval", "Wait interval between consecutive compaction runs. Only works when --wait flag specified.").
+		Default("5m").Duration()
 
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
@@ -146,6 +150,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*blockSyncConcurrency,
 			*compactionConcurrency,
 			selectorRelabelConf,
+			*waitInterval,
 		)
 	}
 }
@@ -170,6 +175,7 @@ func runCompact(
 	blockSyncConcurrency int,
 	concurrency int,
 	selectorRelabelConf *extflag.PathOrContent,
+	waitInterval time.Duration,
 ) error {
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -348,7 +354,7 @@ func runCompact(
 		}
 
 		// --wait=true is specified.
-		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+		return runutil.Repeat(waitInterval, ctx.Done(), func() error {
 			err := compactMainFn()
 			if err == nil {
 				iterations.Inc()
