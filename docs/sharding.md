@@ -17,10 +17,17 @@ This means that with time you might want to scale out certain components e.g:
 
 * Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network, disk, memory) with number of Sources pushing blocks to the object storage.
 
+* Store Gateway: Queries against store gateway which are touching large number of Sources might be expensive, so it has to scale up with number of Sources if we assume those queries.
+    * Orthogonally we did not advertise any labels on Store Gateway's Info. This means that querier was not able to do any pre-filtering, so all store gateways in system are always touched for each query.
+
 # Relabelling
 
 Similar to [promtail](https://github.com/grafana/loki/blob/master/docs/promtail.md#scrape-configs) this config will follow native
 [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
+
+Now, thanos only support following relabel action:
+* keep
+* drop
 
 The relabel config defines filtering process done on **every** synchronization with object storage.
 
