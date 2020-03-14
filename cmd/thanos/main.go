@@ -61,7 +61,6 @@ func main() {
 	registerRule(cmds, app)
 	registerCompact(cmds, app)
 	registerBucket(cmds, app, "bucket")
-	registerDownsample(cmds, app)
 	registerReceive(cmds, app)
 	registerChecks(cmds, app, "check")
 
