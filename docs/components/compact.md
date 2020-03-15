@@ -121,6 +121,8 @@ Flags:
                                samples of this resolution forever
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.
+      --wait-interval=5m       Wait interval between consecutive compaction
+                               runs. Only works when --wait flag specified.
       --downsampling.disable   Disables downsampling. This is not recommended as
                                querying long time ranges without non-downsampled
                                data is not efficient and useful e.g it is not
