@@ -25,9 +25,12 @@ This means that with time you might want to scale out certain components e.g:
 Similar to [promtail](https://github.com/grafana/loki/blob/master/docs/promtail.md#scrape-configs) this config will follow native
 [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
 
-Now, thanos only support following relabel action:
+Now, thanos only support following relabel actions:
 * keep
 * drop
+* hashmod
+    * `externa labels` for all components
+    * `__block_id` for store gateway, see this [example](https://github.com/observatorium/configuration/blob/master/environments/openshift/manifests/observatorium-template.yaml#L1511)
 
 The relabel config defines filtering process done on **every** synchronization with object storage.
 
