@@ -6,7 +6,7 @@ package receive
 import (
 	"testing"
 
-	"github.com/prometheus/prometheus/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 func TestHash(t *testing.T) {

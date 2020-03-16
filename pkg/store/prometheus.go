@@ -29,13 +29,13 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -178,12 +178,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			for k, v := range lbm {
 				lset = append(lset, storepb.Label{Name: k, Value: v})
 			}
-			for _, l := range externalLabels {
-				lset = append(lset, storepb.Label{
-					Name:  l.Name,
-					Value: l.Value,
-				})
-			}
+			lset = append(lset, storepb.PromLabelsToLabelsUnsafe(externalLabels)...)
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
@@ -518,32 +513,34 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 
 // translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
 // attaches the given labels to it, overwriting existing ones on collision.
+// Both input labels are expected to be sorted.
+//
+// NOTE(bwplotka): Don't use modify passed slices as we reuse underlying memory.
 func (p *PrometheusStore) translateAndExtendLabels(m []prompb.Label, extend labels.Labels) []storepb.Label {
+	pbLabels := storepb.PrompbLabelsToLabelsUnsafe(m)
+	pbExtend := storepb.PromLabelsToLabelsUnsafe(extend)
+
 	lset := make([]storepb.Label, 0, len(m)+len(extend))
+	ei := 0
 
-	for _, l := range m {
-		if extend.Get(l.Name) != "" {
-			continue
+Outer:
+	for _, l := range pbLabels {
+		for ei < len(pbExtend) {
+			if l.Name < pbExtend[ei].Name {
+				break
+			}
+			lset = append(lset, pbExtend[ei])
+			ei++
+			if l.Name == pbExtend[ei-1].Name {
+				continue Outer
+			}
 		}
-		lset = append(lset, storepb.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
+		lset = append(lset, l)
 	}
-
-	return extendLset(lset, extend)
-}
-
-func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
-	for _, l := range extend {
-		lset = append(lset, storepb.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
+	for ei < len(pbExtend) {
+		lset = append(lset, pbExtend[ei])
+		ei++
 	}
-	sort.Slice(lset, func(i, j int) bool {
-		return lset[i].Name < lset[j].Name
-	})
 	return lset
 }
 

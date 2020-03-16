@@ -5,8 +5,10 @@ package storepb
 
 import (
 	"strings"
+	"unsafe"
 
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -166,13 +168,55 @@ func (s *mergedSeriesSet) Next() bool {
 	return true
 }
 
+// LabelsToPromLabels converts Thanos proto labels to Prometheus labels in type safe manner.
 func LabelsToPromLabels(lset []Label) labels.Labels {
 	ret := make(labels.Labels, len(lset))
 	for i, l := range lset {
 		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
 	}
-
 	return ret
+}
+
+// LabelsToPromLabelsUnsafe converts Thanos proto labels to Prometheus labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed []Labels.
+//
+// NOTE: This depends on order of struct fields etc, so use with extreme care.
+func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
+	return *(*[]labels.Label)(unsafe.Pointer(&lset))
+}
+
+// PromLabelsToLabels converts Prometheus labels to Thanos proto labels in type safe manner.
+func PromLabelsToLabels(lset labels.Labels) []Label {
+	ret := make([]Label, len(lset))
+	for i, l := range lset {
+		ret[i] = Label{Name: l.Name, Value: l.Value}
+	}
+	return ret
+}
+
+// PromLabelsToLabelsUnsafe converts Prometheus labels to Thanos proto labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed labels.Labels.
+//
+// // NOTE: This depends on order of struct fields etc, so use with extreme care.
+func PromLabelsToLabelsUnsafe(lset labels.Labels) []Label {
+	return *(*[]Label)(unsafe.Pointer(&lset))
+}
+
+// PrompbLabelsToLabels converts Prometheus labels to Thanos proto labels in type safe manner.
+func PrompbLabelsToLabels(lset []prompb.Label) []Label {
+	ret := make([]Label, len(lset))
+	for i, l := range lset {
+		ret[i] = Label{Name: l.Name, Value: l.Value}
+	}
+	return ret
+}
+
+// PrompbLabelsToLabelsUnsafe converts Prometheus proto labels to Thanos proto labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed labels.Labels.
+//
+// // NOTE: This depends on order of struct fields etc, so use with extreme care.
+func PrompbLabelsToLabelsUnsafe(lset []prompb.Label) []Label {
+	return *(*[]Label)(unsafe.Pointer(&lset))
 }
 
 func LabelsToString(lset []Label) string {
