@@ -272,7 +272,7 @@ func testEndpoints(t *testing.T, api *API) {
 				testutil.Ok(t, err)
 				got, err := json.Marshal(test.response)
 				testutil.Ok(t, err)
-				testutil.Equals(t, exp, got)
+				testutil.Equals(t, string(exp), string(got))
 			})
 		}
 	}

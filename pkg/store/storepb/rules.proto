@@ -98,7 +98,7 @@ message Alert {
 message RecordingRule {
   string name                               = 1 [(gogoproto.jsontag) = "name" ];
   string query                              = 2 [(gogoproto.jsontag) = "query" ];
-  PromLabels labels                         = 3 [(gogoproto.jsontag) = "labels,omitempty" ];
+  PromLabels labels                         = 3 [(gogoproto.jsontag) = "labels" ];
   string health                             = 4 [(gogoproto.jsontag) = "health" ];
   string last_error                         = 5 [(gogoproto.jsontag) = "lastError,omitempty" ];
   double evaluation_duration_seconds        = 6 [(gogoproto.jsontag) = "evaluationTime" ];
