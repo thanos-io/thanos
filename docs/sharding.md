@@ -29,7 +29,7 @@ Now, thanos only support following relabel actions:
 * keep
 * drop
 * hashmod
-    * `externa labels` for all components
+    * `external labels` for all components
     * `__block_id` for store gateway, see this [example](https://github.com/observatorium/configuration/blob/master/environments/openshift/manifests/observatorium-template.yaml#L1511)
 
 The relabel config defines filtering process done on **every** synchronization with object storage.
