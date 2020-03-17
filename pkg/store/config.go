@@ -4,6 +4,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 
 	"gopkg.in/yaml.v2"
@@ -46,6 +47,34 @@ func DefaultConfig() Config {
 			FileSDConfigs:   []file.SDConfig{},
 		},
 	}
+}
+
+func NewConfig(storeAddrs []string, fileSDConfig *file.SDConfig, secure bool, cert string, key string, caCert string, serverName string) (Config, error) {
+	for _, addr := range storeAddrs {
+		if addr == "" {
+			return Config{}, errors.New("static store address cannot be empty")
+		}
+	}
+
+	endpointsConfig := EndpointsConfig{
+		StaticAddresses: storeAddrs,
+	}
+	if fileSDConfig != nil {
+		endpointsConfig.FileSDConfigs = []file.SDConfig{*fileSDConfig}
+	}
+	storeConfig := Config{
+		Name:            "default",
+		EndpointsConfig: endpointsConfig,
+	}
+	if secure {
+		storeConfig.TlsConfig = &TlsConfig{
+			Cert:       cert,
+			Key:        key,
+			CaCert:     caCert,
+			ServerName: serverName,
+		}
+	}
+	return storeConfig, nil
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.

@@ -233,31 +233,10 @@ func runQuery(
 			return errors.Wrap(err, "loading store config")
 		}
 	} else {
-		for _, addr := range storeAddrs {
-			if addr == "" {
-				return errors.New("static store address cannot be empty")
-			}
+		storeConfig, err := store.NewConfig(storeAddrs, fileSDConfig, secure, cert, key, caCert, serverName)
+		if err != nil {
+			return errors.Wrap(err, "initialising stores config from individual flags")
 		}
-
-		endpointsConfig := store.EndpointsConfig{
-			StaticAddresses: storeAddrs,
-		}
-		if fileSDConfig != nil {
-			endpointsConfig.FileSDConfigs = []file.SDConfig{*fileSDConfig}
-		}
-		storeConfig := store.Config{
-			Name:            "default",
-			EndpointsConfig: endpointsConfig,
-		}
-		if secure {
-			storeConfig.TlsConfig = &store.TlsConfig{
-				Cert:       cert,
-				Key:        key,
-				CaCert:     caCert,
-				ServerName: serverName,
-			}
-		}
-
 		storesConfig = []store.Config{storeConfig}
 	}
 
