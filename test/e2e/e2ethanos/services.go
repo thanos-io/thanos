@@ -29,7 +29,7 @@ const logLevel = "info"
 
 var defaultBackoffConfig = util.BackoffConfig{
 	MinBackoff: 300 * time.Millisecond,
-	MaxBackoff: 10 * time.Second,
+	MaxBackoff: 60 * time.Second,
 }
 
 // TODO(bwplotka): Run against multiple?
