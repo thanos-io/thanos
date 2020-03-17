@@ -241,28 +241,6 @@ func runQuery(
 	}
 
 	var storeSets []*query.StoreSet
-	var (
-		allClients = func() []store.Client {
-			var ret []store.Client
-			for _, ss := range storeSets {
-				ret = append(ret, ss.Get()...)
-			}
-			return ret
-		}
-		proxy            = store.NewProxyStore(logger, reg, allClients, component.Query, selectorLset, storeResponseTimeout)
-		queryableCreator = query.NewQueryableCreator(logger, proxy)
-		engine           = promql.NewEngine(
-			promql.EngineOpts{
-				Logger:        logger,
-				Reg:           reg,
-				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
-			},
-		)
-	)
-
 	for _, config := range storesConfig {
 		dialOpts, err := extgrpc.StoreClientGRPCOptsFromTlsConfig(logger, config.Name, reg, tracer, config.TlsConfig)
 		if err != nil {
@@ -363,14 +341,34 @@ func runQuery(
 		}
 	}
 
-	grpcProbe := prober.NewGRPC()
-	httpProbe := prober.NewHTTP()
-	statusProber := prober.Combine(
-		httpProbe,
-		grpcProbe,
-		prober.NewInstrumentation(comp, logger, reg),
+	var (
+		allClients = func() []store.Client {
+			var ret []store.Client
+			for _, ss := range storeSets {
+				ret = append(ret, ss.Get()...)
+			}
+			return ret
+		}
+		proxy            = store.NewProxyStore(logger, reg, allClients, component.Query, selectorLset, storeResponseTimeout)
+		queryableCreator = query.NewQueryableCreator(logger, proxy)
+		engine           = promql.NewEngine(
+			promql.EngineOpts{
+				Logger:        logger,
+				Reg:           reg,
+				MaxConcurrent: maxConcurrentQueries,
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+				MaxSamples: math.MaxInt32,
+				Timeout:    queryTimeout,
+			},
+		)
+		grpcProbe = prober.NewGRPC()
+		httpProbe = prober.NewHTTP()
+		statusProber = prober.Combine(
+			httpProbe,
+			grpcProbe,
+			prober.NewInstrumentation(comp, logger, reg),
+		)
 	)
-
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
