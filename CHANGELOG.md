@@ -23,7 +23,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Changed
 
-- [#2090](https://github.com/thanos-io/thanos/issues/2090) *breaking* Downsample: `Downsample` has moved as `thanos bucket` sub-command, can not call by `thanos downsample` any more.
+- [#2090](https://github.com/thanos-io/thanos/issues/2090) *breaking* Downsample command: the `downsample` command has moved as the `thanos bucket` sub-command, and cannot be called via `thanos downsample` any more.
 
 ## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0) - 2020.03.02
 
