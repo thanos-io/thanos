@@ -5,7 +5,6 @@ package storecache
 
 import (
 	"context"
-	"math"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -27,6 +26,8 @@ var (
 		MaxItemSize: 125 * 1024 * 1024,
 	}
 )
+
+const maxInt = int(^uint(0) >> 1)
 
 type InMemoryIndexCache struct {
 	mtx sync.Mutex
@@ -161,7 +162,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(math.MaxInt64, c.onEvict)
+	l, err := lru.NewLRU(maxInt, c.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +172,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
 		"maxSizeBytes", c.maxSizeBytes,
-		"maxItems", "math.MaxInt64",
+		"maxItems", "maxInt",
 	)
 	return c, nil
 }
