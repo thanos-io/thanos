@@ -11,14 +11,14 @@ import (
 	"github.com/prometheus/prometheus/discovery/file"
 )
 
-// Config represents the configuration of a set of Store API endpoints
+// Config represents the configuration of a set of Store API endpoints.
 type Config struct {
 	Name            string          `yaml:"name"`
 	TlsConfig       *TlsConfig      `yaml:"tls_config"`
 	EndpointsConfig EndpointsConfig `yaml:",inline"`
 }
 
-// TlsConfig represents the TLS configuration for a set of Store API endpoints
+// TlsConfig represents the TLS configuration for a set of Store API endpoints.
 type TlsConfig struct {
 	// TLS Certificates to use to identify this client to the server.
 	Cert string `yaml:"cert_file"`
@@ -30,7 +30,7 @@ type TlsConfig struct {
 	ServerName string `yaml:"server_name"`
 }
 
-// EndpointsConfig represents the address discovery configuration for a set of Store API endpoints
+// EndpointsConfig represents the address discovery configuration for a set of Store API endpoints.
 type EndpointsConfig struct {
 	// List of addresses with DNS prefixes.
 	StaticAddresses []string `yaml:"static_configs"`
