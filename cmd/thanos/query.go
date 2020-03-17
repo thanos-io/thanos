@@ -361,8 +361,8 @@ func runQuery(
 				Timeout:    queryTimeout,
 			},
 		)
-		grpcProbe = prober.NewGRPC()
-		httpProbe = prober.NewHTTP()
+		grpcProbe    = prober.NewGRPC()
+		httpProbe    = prober.NewHTTP()
 		statusProber = prober.Combine(
 			httpProbe,
 			grpcProbe,
