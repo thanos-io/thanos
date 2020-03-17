@@ -26,11 +26,12 @@ config:
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
 by adding a new command within `/cmd/thanos/bucket.go`.
 
-
 ## Deployment
+
 ## Flags
 
-[embedmd]:# (flags/bucket.txt $)
+[embedmd]: # "flags/bucket.txt $"
+
 ```$
 usage: thanos bucket [<flags>] <command> [<args> ...]
 
@@ -98,7 +99,8 @@ Example:
 $ thanos bucket web --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_web.txt)
+[embedmd]: # "flags/bucket_web.txt"
+
 ```txt
 usage: thanos bucket web [<flags>]
 
@@ -170,7 +172,8 @@ Example:
 $ thanos bucket verify --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_verify.txt)
+[embedmd]: # "flags/bucket_verify.txt"
+
 ```txt
 usage: thanos bucket verify [<flags>]
 
@@ -222,7 +225,11 @@ Flags:
                            Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
-
+  --delete-delay=0s        Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component.
+                           If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket.
+                           If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately.
+                           Note that deleting blocks immediately can cause query failures, if store gateway still has the block
+                           loaded, or compactor is ignoring the deletion because it's compacting the block at the same time.
 ```
 
 ### ls
@@ -235,7 +242,8 @@ Example:
 $ thanos bucket ls -o json --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_ls.txt)
+[embedmd]: # "flags/bucket_ls.txt"
+
 ```txt
 usage: thanos bucket ls [<flags>]
 
@@ -276,11 +284,13 @@ Flags:
 `bucket inspect` is used to inspect buckets in a detailed way using stdout in ASCII table format.
 
 Example:
+
 ```
 $ thanos bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_inspect.txt)
+[embedmd]: # "flags/bucket_inspect.txt"
+
 ```txt
 usage: thanos bucket inspect [<flags>]
 

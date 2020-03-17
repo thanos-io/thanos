@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
@@ -94,7 +95,9 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, 1, false, false)
+		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -103,7 +106,16 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		var rem []ulid.ULID
 		err = bkt.Iter(ctx, "", func(n string) error {
-			rem = append(rem, ulid.MustParse(n[:len(n)-1]))
+			id := ulid.MustParse(n[:len(n)-1])
+			deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+
+			exists, err := bkt.Exists(ctx, deletionMarkFile)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				rem = append(rem, id)
+			}
 			return nil
 		})
 		testutil.Ok(t, err)
@@ -164,13 +176,16 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 48*time.Hour)
 		duplicateBlocksFilter := block.NewDeduplicateFilter()
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil,
+			ignoreDeletionMarkFilter.Filter,
 			duplicateBlocksFilter.Filter,
 		)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, 5, false, false)
+		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -182,6 +197,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		// Compaction on empty should not fail.
 		testutil.Ok(t, bComp.Compact(ctx))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactions))
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsStarted))
@@ -270,6 +286,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		testutil.Ok(t, bComp.Compact(ctx))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[0].Thanos))))

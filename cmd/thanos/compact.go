@@ -126,6 +126,13 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
+		"If delete-delay is 0, blocks will be deleted straight away. "+
+		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
+		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
+		Default("48h"))
+
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -135,6 +142,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*dataDir,
 			objStoreConfig,
 			time.Duration(*consistencyDelay),
+			time.Duration(*deleteDelay),
 			*haltOnError,
 			*acceptMalformedIndex,
 			*wait,
@@ -164,6 +172,7 @@ func runCompact(
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
+	deleteDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
 	wait bool,
@@ -194,6 +203,25 @@ func runCompact(
 		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
 	})
+	blocksCleaned := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_cleaned_total",
+		Help: "Total number of blocks deleted in compactor.",
+	})
+	blockCleanupFailures := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_block_cleanup_failures_total",
+		Help: "Failures encountered while deleting blocks in compactor.",
+	})
+	blocksMarkedForDeletion := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_marked_for_deletion_total",
+		Help: "Total number of blocks marked for deletion in compactor.",
+	})
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_delete_delay_seconds",
+		Help: "Configured delete delay in seconds.",
+	}, func() float64 {
+		return deleteDelay.Seconds()
+	})
+
 	downsampleMetrics := newDownsampleMetrics(reg)
 
 	httpProbe := prober.NewHTTP()
@@ -245,18 +273,22 @@ func runCompact(
 		}
 	}()
 
+	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+	// The delay of  deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(deleteDelay.Seconds()/2)*time.Second)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
 	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
+		ignoreDeletionMarkFilter.Filter,
 		duplicateBlocksFilter.Filter,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, blockSyncConcurrency, acceptMalformedIndex, false)
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, false)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -290,6 +322,7 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
+	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
 	if err != nil {
 		cancel()
@@ -331,11 +364,15 @@ func runCompact(
 			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, retentionByResolution); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, retentionByResolution, blocksMarkedForDeletion); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, partialUploadDeleteAttempts)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "error cleaning blocks")
+		}
+
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, partialUploadDeleteAttempts, blocksMarkedForDeletion)
 		return nil
 	}
 
