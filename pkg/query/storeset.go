@@ -89,6 +89,10 @@ type storeSetNodeCollector struct {
 }
 
 func newStoreSetNodeCollector(configInstance string) *storeSetNodeCollector {
+	if configInstance == "" {
+		configInstance = "default"
+	}
+
 	return &storeSetNodeCollector{
 		storeNodes: map[component.StoreAPI]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(

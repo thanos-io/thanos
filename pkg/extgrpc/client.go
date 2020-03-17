@@ -21,20 +21,19 @@ import (
 
 func StoreClientGRPCOptsFromTlsConfig(logger log.Logger, clientInstance string, reg *prometheus.Registry, tracer opentracing.Tracer, tlsConfig *store.TlsConfig) ([]grpc.DialOption, error) {
 	if tlsConfig != nil {
-		return StoreClientGRPCOpts(logger, &clientInstance, reg, tracer, true, tlsConfig.Cert, tlsConfig.Key, tlsConfig.CaCert, tlsConfig.ServerName)
-	} else {
-		return StoreClientGRPCOpts(logger, &clientInstance, reg, tracer, false, "", "", "", "")
+		return StoreClientGRPCOpts(logger, clientInstance, reg, tracer, true, tlsConfig.Cert, tlsConfig.Key, tlsConfig.CaCert, tlsConfig.ServerName)
 	}
+	return StoreClientGRPCOpts(logger, clientInstance, reg, tracer, false, "", "", "", "")
 }
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, clientInstance *string, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
+func StoreClientGRPCOpts(logger log.Logger, clientInstance string, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	var grpcMets *grpc_prometheus.ClientMetrics
 	histogramBuckets := grpc_prometheus.WithHistogramBuckets(
 		[]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	)
-	if clientInstance != nil {
-		constLabels := map[string]string{"config_name": *clientInstance}
+	if clientInstance != "" {
+		constLabels := map[string]string{"config_name": clientInstance}
 		grpcMets = grpc_prometheus.NewClientMetrics(grpc_prometheus.WithConstLabels(constLabels))
 		grpcMets.EnableClientHandlingTimeHistogram(
 			grpc_prometheus.WithHistogramConstLabels(constLabels),

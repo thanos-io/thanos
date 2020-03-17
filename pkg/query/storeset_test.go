@@ -179,7 +179,7 @@ func TestStoreSet_Update(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	discoveredStoreAddr = append(discoveredStoreAddr, discoveredStoreAddr[0])
-	storeSet := NewStoreSet(nil, "default", nil, func() (specs []StoreSpec) {
+	storeSet := NewStoreSet(nil, "", nil, func() (specs []StoreSpec) {
 		for _, addr := range discoveredStoreAddr {
 			specs = append(specs, NewGRPCStoreSpec(addr))
 		}
