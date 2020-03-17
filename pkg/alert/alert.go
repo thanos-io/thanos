@@ -395,6 +395,7 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 					}
 					s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
 					s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
+					s.errs.WithLabelValues(u.Host) // initialize metrics with corresponding label.
 
 					atomic.AddUint64(&numSuccess, 1)
 				})

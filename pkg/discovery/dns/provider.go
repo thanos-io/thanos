@@ -61,7 +61,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
 			Name: "dns_provider_results",
 			Help: "The number of resolved endpoints for each configured address",
-		}, []string{"addr"}),
+		}, []string{"addr"}, []string{"addr"}),
 		resolverLookupsCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "dns_lookups_total",
 			Help: "The number of DNS lookups resolutions attempts",

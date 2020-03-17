@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -24,6 +26,11 @@ import (
 )
 
 const logLevel = "info"
+
+var defaultBackoffConfig = util.BackoffConfig{
+	MinBackoff: 300 * time.Millisecond,
+	MaxBackoff: 10 * time.Second,
+}
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
@@ -69,7 +76,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		9090,
 	)
 	prom.SetUser("root")
-
+	prom.SetBackoff(defaultBackoffConfig)
 	return prom, container, nil
 }
 
@@ -95,6 +102,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 		80,
 		9091,
 	)
+	prom.SetBackoff(defaultBackoffConfig)
 	return prom, sidecar, nil
 }
 
@@ -138,15 +146,16 @@ func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDSt
 
 		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
 	}
-
-	return NewService(
+	s := NewService(
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	s.SetBackoff(defaultBackoffConfig)
+	return s, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
@@ -171,7 +180,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		return nil, errors.Wrap(err, "creating receive config")
 	}
 
-	return NewService(
+	s := NewService(
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -193,7 +202,9 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		80,
 		9091,
 		81,
-	), nil
+	)
+	s.SetBackoff(defaultBackoffConfig)
+	return s, nil
 }
 
 func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*Service, error) {
@@ -215,7 +226,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 		return nil, errors.Wrapf(err, "generate query file: %v", queryCfg)
 	}
 
-	return NewService(
+	s := NewService(
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("rule", e2e.BuildArgs(map[string]string{
@@ -237,7 +248,9 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	s.SetBackoff(defaultBackoffConfig)
+	return s, nil
 }
 
 func NewAlertmanager(sharedDir string, name string) (*e2e.HTTPService, error) {
@@ -272,6 +285,7 @@ receivers:
 		80,
 	)
 	s.SetUser("root")
+	s.SetBackoff(defaultBackoffConfig)
 	return s, nil
 }
 
@@ -292,7 +306,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
 	}
 
-	return NewService(
+	s := NewService(
 		fmt.Sprintf("store-gw-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("store", append(e2e.BuildArgs(map[string]string{
@@ -311,5 +325,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	s.SetBackoff(defaultBackoffConfig)
+	return s, nil
 }
