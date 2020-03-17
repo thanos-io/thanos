@@ -4,7 +4,6 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 
 	"gopkg.in/yaml.v2"
@@ -52,7 +51,7 @@ func DefaultConfig() Config {
 func NewConfig(storeAddrs []string, fileSDConfig *file.SDConfig, secure bool, cert string, key string, caCert string, serverName string) (Config, error) {
 	for _, addr := range storeAddrs {
 		if addr == "" {
-			return Config{}, errors.New("static store address cannot be empty")
+			return Config{}, fmt.Errorf("static store address cannot be empty")
 		}
 	}
 
