@@ -42,7 +42,7 @@ function draw() {
                 title = function() {
                     var key = thanos.label != "" && d.thanos.labels[thanos.label];
 
-                    if (key != undefined) {
+                    if (key) {
                         return key;
                     } else {
                         title = titles[stringify(d.thanos.labels)];
