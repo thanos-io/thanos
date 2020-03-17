@@ -182,7 +182,8 @@ func main() {
 	reloadCh := make(chan struct{}, 1)
 
 	if err := cmds[cmd](&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
-		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
+		// Use %+v for github.com/pkg/errors error to print with stack.
+		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "preparing %s command failed", cmd)))
 		os.Exit(1)
 	}
 
@@ -207,7 +208,8 @@ func main() {
 	}
 
 	if err := g.Run(); err != nil {
-		level.Error(logger).Log("msg", "running command failed", "err", err)
+		// Use %+v for github.com/pkg/errors error to print with stack.
+		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "%s command failed", cmd)))
 		os.Exit(1)
 	}
 	level.Info(logger).Log("msg", "exiting")
