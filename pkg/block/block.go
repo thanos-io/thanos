@@ -131,7 +131,7 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 // MarkForDeletion creates a file which stores information about when the block was marked for deletion.
 func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) error {
 	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
-	deletionMarkExists, err := objstore.Exists(ctx, bkt, deletionMarkFile)
+	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
 	if err != nil {
 		return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
 	}
