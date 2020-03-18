@@ -172,23 +172,6 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 	return nil
 }
 
-// Exists returns true, if file exists, otherwise false and nil error if presence IsObjNotFoundErr, otherwise false with
-// returning error.
-func Exists(ctx context.Context, bkt Bucket, src string) (bool, error) {
-	rc, err := bkt.Get(ctx, src)
-	if rc != nil {
-		_ = rc.Close()
-	}
-	if err != nil {
-		if bkt.IsObjNotFoundErr(err) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "stat object")
-	}
-
-	return true, nil
-}
-
 const (
 	iterOp     = "iter"
 	sizeOp     = "objectsize"

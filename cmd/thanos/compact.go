@@ -497,7 +497,7 @@ func generateIndexCacheFile(
 	cachePath := filepath.Join(bdir, block.IndexCacheFilename)
 	cache := path.Join(meta.ULID.String(), block.IndexCacheFilename)
 
-	ok, err := objstore.Exists(ctx, bkt, cache)
+	ok, err := bkt.Exists(ctx, cache)
 	if ok {
 		return nil
 	}
