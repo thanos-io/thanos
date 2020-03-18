@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -24,6 +26,11 @@ import (
 )
 
 const logLevel = "info"
+
+var defaultBackoffConfig = util.BackoffConfig{
+	MinBackoff: 300 * time.Millisecond,
+	MaxBackoff: 30 * time.Second,
+}
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
@@ -69,6 +76,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		9090,
 	)
 	prom.SetUser("root")
+	prom.SetBackoff(defaultBackoffConfig)
 
 	return prom, container, nil
 }
@@ -78,6 +86,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	if err != nil {
 		return nil, nil, err
 	}
+	prom.SetBackoff(defaultBackoffConfig)
 
 	sidecar := NewService(
 		fmt.Sprintf("sidecar-%s", name),
@@ -95,6 +104,8 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 		80,
 		9091,
 	)
+	sidecar.SetBackoff(defaultBackoffConfig)
+
 	return prom, sidecar, nil
 }
 
@@ -109,6 +120,7 @@ func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDSt
 		"--query.replica-label":   replicaLabel,
 		"--store.sd-dns-interval": "5s",
 		"--log.level":             logLevel,
+		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
 	})
 	for _, addr := range storeAddresses {
@@ -139,14 +151,17 @@ func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDSt
 		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
 	}
 
-	return NewService(
+	querier := NewService(
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	querier.SetBackoff(defaultBackoffConfig)
+
+	return querier, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
@@ -171,7 +186,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		return nil, errors.Wrap(err, "creating receive config")
 	}
 
-	return NewService(
+	receiver := NewService(
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -193,7 +208,10 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		80,
 		9091,
 		81,
-	), nil
+	)
+	receiver.SetBackoff(defaultBackoffConfig)
+
+	return receiver, nil
 }
 
 func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*Service, error) {
@@ -215,7 +233,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 		return nil, errors.Wrapf(err, "generate query file: %v", queryCfg)
 	}
 
-	return NewService(
+	ruler := NewService(
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("rule", e2e.BuildArgs(map[string]string{
@@ -226,7 +244,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--label":                         fmt.Sprintf(`replica="%s"`, name),
 			"--data-dir":                      container,
 			"--rule-file":                     filepath.Join(e2e.ContainerSharedDir, ruleSubDir, "*.yaml"),
-			"--eval-interval":                 "1s",
+			"--eval-interval":                 "3s",
 			"--alertmanagers.config":          string(amCfgBytes),
 			"--alertmanagers.sd-dns-interval": "1s",
 			"--log.level":                     logLevel,
@@ -237,7 +255,10 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	ruler.SetBackoff(defaultBackoffConfig)
+
+	return ruler, nil
 }
 
 func NewAlertmanager(sharedDir string, name string) (*e2e.HTTPService, error) {
@@ -263,15 +284,19 @@ receivers:
 		fmt.Sprintf("alertmanager-%v", name),
 		DefaultAlertmanagerImage(),
 		e2e.NewCommandWithoutEntrypoint("/bin/alertmanager", e2e.BuildArgs(map[string]string{
-			"--config.file":        filepath.Join(container, "config.yaml"),
-			"--web.listen-address": "0.0.0.0:80",
-			"--log.level":          logLevel,
-			"--storage.path":       container,
+			"--config.file":         filepath.Join(container, "config.yaml"),
+			"--web.listen-address":  "0.0.0.0:80",
+			"--log.level":           logLevel,
+			"--storage.path":        container,
+			"--web.get-concurrency": "1",
+			"--web.timeout":         "2m",
 		})...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 	)
 	s.SetUser("root")
+	s.SetBackoff(defaultBackoffConfig)
+
 	return s, nil
 }
 
@@ -292,7 +317,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
 	}
 
-	return NewService(
+	store := NewService(
 		fmt.Sprintf("store-gw-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("store", append(e2e.BuildArgs(map[string]string{
@@ -304,17 +329,22 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--data-dir":          container,
 			"--objstore.config":   string(bktConfigBytes),
 			// Accelerated sync time for quicker test (3m by default).
-			"--sync-block-duration":     "1s",
-			"--selector.relabel-config": string(relabelConfigBytes),
-			"--consistency-delay":       "30m",
+			"--sync-block-duration":               "3s",
+			"--block-sync-concurrency":            "1",
+			"--store.grpc.series-max-concurrency": "1",
+			"--selector.relabel-config":           string(relabelConfigBytes),
+			"--consistency-delay":                 "30m",
 		}), "--experimental.enable-index-header")...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,
-	), nil
+	)
+	store.SetBackoff(defaultBackoffConfig)
+
+	return store, nil
 }
 
-func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, downsamplingEnabled bool, extArgs ...string) (*Service, error) {
+func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, downsamplingEnabled bool, extArgs ...string) (*e2e.HTTPService, error) {
 	dir := filepath.Join(sharedDir, "data", "compact", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
 
@@ -336,7 +366,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 		extArgs = append(extArgs, "--downsampling.disable")
 	}
 
-	return NewService(
+	compactor := e2e.NewHTTPService(
 		fmt.Sprintf("compact-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
@@ -345,11 +375,15 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--data-dir":                container,
 			"--objstore.config":         string(bktConfigBytes),
 			"--http-address":            ":80",
+			"--delete-delay":            "0s",
+			"--block-sync-concurrency":  "1",
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
-		9091,
-	), nil
+	)
+	compactor.SetBackoff(defaultBackoffConfig)
+
+	return compactor, nil
 }

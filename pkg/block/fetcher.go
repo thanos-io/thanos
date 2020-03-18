@@ -41,6 +41,34 @@ type syncMetrics struct {
 	modified *extprom.TxGaugeVec
 }
 
+func (s *syncMetrics) submit() {
+	if s == nil {
+		return
+	}
+
+	if s.synced != nil {
+		s.synced.Submit()
+	}
+
+	if s.modified != nil {
+		s.modified.Submit()
+	}
+}
+
+func (s *syncMetrics) resetTx() {
+	if s == nil {
+		return
+	}
+
+	if s.synced != nil {
+		s.synced.ResetTx()
+	}
+
+	if s.modified != nil {
+		s.modified.ResetTx()
+	}
+}
+
 const (
 	syncMetricSubSys = "blocks_meta"
 
@@ -260,8 +288,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 		metaErrs tsdberrors.MultiError
 	)
 
-	s.metrics.synced.ResetTx()
-	s.metrics.modified.ResetTx()
+	s.metrics.resetTx()
 
 	for i := 0; i < s.concurrency; i++ {
 		wg.Add(1)
@@ -364,8 +391,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	}
 
 	s.metrics.synced.WithLabelValues(loadedMeta).Set(float64(len(metas)))
-	s.metrics.synced.Submit()
-	s.metrics.modified.Submit()
+	s.metrics.submit()
 
 	if incompleteView {
 		return metas, partial, errors.Wrap(metaErrs, "incomplete view")

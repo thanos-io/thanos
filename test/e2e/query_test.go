@@ -63,8 +63,6 @@ func sortResults(res model.Vector) {
 }
 
 func TestQuery(t *testing.T) {
-	t.Parallel()
-
 	s, err := e2e.NewScenario("e2e_test_query")
 	testutil.Ok(t, err)
 	defer s.Close()

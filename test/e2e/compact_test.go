@@ -30,7 +30,6 @@ import (
 )
 
 func TestCompact(t *testing.T) {
-	t.Parallel()
 	l := log.NewLogfmtLogger(os.Stdout)
 
 	// blockDesc describes a recipe to generate blocks from the given series and external labels.
@@ -109,25 +108,25 @@ func TestCompact(t *testing.T) {
 			expectOfChunks:    2,
 		},
 		{
-			name: "(full) vertically overlapping blocks with replica labels, downsampling disabled",
+			name: "(full) vertically overlapping blocks with replica labels downsampling disabled",
 			blocks: []blockDesc{
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
+					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
 					mint:             timestamp.FromTime(now),
 					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
 					samplesPerSeries: 120,
 				},
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
+					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
 					mint:             timestamp.FromTime(now),
 					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
 					samplesPerSeries: 120,
 				},
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1"),
+					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1", "ext2", "value2"),
 					mint:             timestamp.FromTime(now),
 					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
 					samplesPerSeries: 120,
@@ -142,6 +141,7 @@ func TestCompact(t *testing.T) {
 					"a":    "1",
 					"b":    "2",
 					"ext1": "value1",
+					"ext2": "value2",
 				},
 			},
 			expectOfModBlocks: 3,
@@ -151,21 +151,78 @@ func TestCompact(t *testing.T) {
 			expectOfChunks:    2,
 		},
 		{
+			name: "(full) vertically overlapping blocks with replica labels, downsampling disabled and extra blocks",
+			blocks: []blockDesc{
+				{
+					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 120,
+				},
+				{
+					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 120,
+				},
+				{
+					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1", "ext2", "value2"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 120,
+				},
+				{
+					series:           []labels.Labels{labels.FromStrings("c", "1", "d", "2")},
+					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 120,
+				},
+				{
+					series:           []labels.Labels{labels.FromStrings("c", "1", "d", "2")},
+					extLset:          labels.FromStrings("ext3", "value3"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 120,
+				},
+			},
+			replicaLabels:       []string{"replica", "rule_replica"},
+			downsamplingEnabled: false,
+			query:               "{a=\"1\"}",
+
+			expected: []model.Metric{
+				{
+					"a":    "1",
+					"b":    "2",
+					"ext1": "value1",
+					"ext2": "value2",
+				},
+			},
+			expectOfModBlocks: 3,
+			expectOfBlocks:    2,
+			expectOfSamples:   360,
+			expectOfSeries:    3,
+			expectOfChunks:    6,
+		},
+		{
 			name: "(partial) vertically overlapping blocks with replica labels",
 			blocks: []blockDesc{
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
+					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
 					mint:             timestamp.FromTime(now),
 					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
+					samplesPerSeries: 119,
 				},
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
+					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
 					mint:             timestamp.FromTime(now),
 					maxt:             timestamp.FromTime(now.Add(1 * time.Hour)),
-					samplesPerSeries: 60,
+					samplesPerSeries: 59,
 				},
 			},
 			replicaLabels:       []string{"replica"},
@@ -177,46 +234,12 @@ func TestCompact(t *testing.T) {
 					"a":    "1",
 					"b":    "2",
 					"ext1": "value1",
+					"ext2": "value2",
 				},
 			},
 			expectOfModBlocks: 2,
 			expectOfBlocks:    1,
-			expectOfSamples:   179, // TODO(kakkoyun): ?
-			expectOfSeries:    1,
-			expectOfChunks:    2,
-		},
-		{
-			name: "(contains) vertically overlapping blocks with replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
-					mint:             timestamp.FromTime(now.Add(30 * time.Minute)),
-					maxt:             timestamp.FromTime(now.Add(1 * time.Hour)),
-					samplesPerSeries: 90,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-			},
-			replicaLabels:       []string{"replica"},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-				},
-			},
-			expectOfModBlocks: 2,
-			expectOfBlocks:    1,
-			expectOfSamples:   210, // TODO(kakkoyun): ?
+			expectOfSamples:   119,
 			expectOfSeries:    1,
 			expectOfChunks:    2,
 		},
@@ -228,14 +251,14 @@ func TestCompact(t *testing.T) {
 					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
 					mint:             timestamp.FromTime(now.Add(30 * time.Minute)),
 					maxt:             timestamp.FromTime(now.Add(150 * time.Minute)),
-					samplesPerSeries: 120,
+					samplesPerSeries: 119,
 				},
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
 					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now.Add(-30 * time.Minute)),
-					maxt:             timestamp.FromTime(now.Add(90 * time.Minute)),
-					samplesPerSeries: 120,
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(120 * time.Minute)),
+					samplesPerSeries: 119,
 				},
 			},
 			replicaLabels:       []string{"replica"},
@@ -251,12 +274,12 @@ func TestCompact(t *testing.T) {
 			},
 			expectOfModBlocks: 2,
 			expectOfBlocks:    1,
-			expectOfSamples:   240, // TODO(kakkoyun): ?
+			expectOfSamples:   149,
 			expectOfSeries:    1,
 			expectOfChunks:    2,
 		},
 		{
-			name: "(full) vertically overlapping blocks with replica labels, retention specified",
+			name: "(full) vertically overlapping blocks with replica labels retention specified",
 			blocks: []blockDesc{
 				{
 					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
@@ -345,11 +368,9 @@ func TestCompact(t *testing.T) {
 		i := i
 		tcase := tcase
 		t.Run(tcase.name, func(t *testing.T) {
-			t.Parallel()
-
 			s, err := e2e.NewScenario("e2e_test_compact_" + strconv.Itoa(i))
 			testutil.Ok(t, err)
-			defer s.Close()
+			defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
 
 			dir := filepath.Join(s.SharedDir(), "tmp_"+strconv.Itoa(i))
 			testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), dir), os.ModePerm))
@@ -368,8 +389,8 @@ func TestCompact(t *testing.T) {
 			}, "test-feed")
 			testutil.Ok(t, err)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-			defer cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
 
 			var rawBlockIds []ulid.ULID
 			for _, b := range tcase.blocks {
@@ -405,7 +426,6 @@ func TestCompact(t *testing.T) {
 				tcase.downsamplingEnabled,
 				append(dedupFlags, retenFlags...)...,
 			)
-
 			testutil.Ok(t, err)
 			testutil.Ok(t, s.StartAndWaitReady(cmpt))
 			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIds))), "thanos_blocks_meta_synced"))
