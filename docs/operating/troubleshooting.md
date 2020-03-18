@@ -10,19 +10,22 @@ slug: /troubleshooting.md
 
 ## Overlaps
 
-Overlaps should never happen in healthy and well configured Thanos system. That's why there is no automatic repair.
+**Block overlap**: Set of blocks with exactly the same external labels in meta.json and for the same time or overlapping time period.
 
-Let's take two examples:
+Thanos is designed to never end up with overlapped blocks. This means that (uncontrolled) block overlap should never happen in a healthy and well configured Thanos system. That's why there is no automatic repair for this. Since it's an unexpected incident:
+* All reader components like Store Gateway will handle this gracefully (overlapped samples will be deduplicated).
+* Thanos compactor will stop all activities and HALT or crash (with metric and will error log). This is because it cannot perform compactions and downsampling. In the overlap situation, we know something unexpected happened (e.g manual block upload, some malformed data etc), so it's safer to stop or crash loop (it's configurable).
+
+Let's take an example:
 
 - `msg="critical error detected; halting" err="compaction failed: compaction: pre compaction overlap check: overlaps found while gathering blocks. [mint: 1555128000000, maxt: 1555135200000, range: 2h0m0s, blocks: 2]: <ulid: 01D94ZRM050JQK6NDYNVBNR6WQ, mint: 1555128000000, maxt: 1555135200000, range: 2h0m0s>, <ulid: 01D8AQXTF2X914S419TYTD4P5B, mint: 1555128000000, maxt: 1555135200000, range: 2h0m0s>`
 
-It shows that you have really the same blocks for 2h overlaps. It worth checking whether are those blocks the same (check the number of series and samples, checksum the index and chunks).
+In this halted example, we can read that compactor detected 2 overlapped blocks. What's interesting is that those two blocks look like they are "similar". They are exactly for the same period of time. This might mean that potential reasons are:
 
-- `msg="critical error detected; halting" err="compaction failed: compaction: pre compaction overlap check: overlaps found while gathering blocks. [mint: 1555128000000, maxt: 1555135200000, range: 2h0m0s, blocks: 2]: <ulid: 01D94ZRM050JQK6NDYNVBNR6WQ, mint: 1555128000000, maxt: 1555135200000, range: 2h0m0s>, <ulid: 01D8AQXTF2X914S419TYTD4P5B, mint: 1555128000000, maxt: 1555142400000, range: 4h0m0s>`
+* Duplicated upload with different ULID (non-persistent storage for Prometheus can cause this)
+* 2 Prometheus instances are misconfigured and they are uploading the data with exactly the same external labels. This is wrong, they should be unique.
 
-It shows there are two blocks overlapping in 2h time range. One is 4h, the other is 2h.It's more tricky. This suggests you uploaded compacted blocks rather. Again looking on meta.json would help.
-
-You can read following reasons and choose a right solution to fix it by hand.
+Checking producers log for such ULID, and checking meta.json (e.g if sample stats are the same or not) helps. Checksum the index and chunks files as well to reveal if data is exactly the same, thus ok to be removed manually.
 
 ### Reasons
 
