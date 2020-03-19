@@ -98,7 +98,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: no type field provided: {\"name\":\"recording1\",\"query\":\"\",\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"\"}"),
+			expectedErr: errors.New("rule: no type field provided: {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"\"}"),
 		},
 		{
 			name: "one valid group, with 1 rule with invalid rule type",
@@ -121,7 +121,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: unknown type field provided wrong; {\"name\":\"recording1\",\"query\":\"\",\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"wrong\"}"),
+			expectedErr: errors.New("rule: unknown type field provided wrong; {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"wrong\"}"),
 		},
 		{
 			name: "one valid group, with 1 rule with invalid alert state",
