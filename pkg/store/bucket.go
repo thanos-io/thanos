@@ -1321,6 +1321,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
 
+		// interesction would return no postings anyway
+		if pg.AlwaysEmptyPostings() {
+			return nil, nil
+		}
+
 		postingGroups = append(postingGroups, pg)
 		pg.contributeKeysToFetchMap(fetchMap)
 	}
@@ -1365,20 +1370,16 @@ func newPostingGroup(addKeys, removeKeys []labels.Label) *postingGroup {
 	}
 }
 
+// returns true, if this postingGroup will always return empty postings.
+func (p *postingGroup) AlwaysEmptyPostings() bool {
+	return len(p.addKeys) == 0
+}
+
 func (p *postingGroup) Postings(fetched map[labels.Label]index.Postings) index.Postings {
 	toAdd := collectPostings(p.addKeys, fetched)
 	toRemove := collectPostings(p.removeKeys, fetched)
 
 	return index.Without(index.Merge(toAdd...), index.Merge(toRemove...))
-}
-
-func (p *postingGroup) contributeKeysToFetchMap(fetchMap map[labels.Label]index.Postings) {
-	for _, k := range p.addKeys {
-		fetchMap[k] = nil
-	}
-	for _, k := range p.removeKeys {
-		fetchMap[k] = nil
-	}
 }
 
 func collectPostings(lbls []labels.Label, fetched map[labels.Label]index.Postings) []index.Postings {
@@ -1395,6 +1396,15 @@ func collectPostings(lbls []labels.Label, fetched map[labels.Label]index.Posting
 	return result
 }
 
+func (p *postingGroup) contributeKeysToFetchMap(fetchMap map[labels.Label]index.Postings) {
+	for _, k := range p.addKeys {
+		fetchMap[k] = nil
+	}
+	for _, k := range p.removeKeys {
+		fetchMap[k] = nil
+	}
+}
+
 var allPostingsKeyLabel labels.Label
 
 // init allPostingsKeyLabel
@@ -1405,25 +1415,33 @@ func init() {
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
+	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
+		// This matches all values, including no value. If it is the only matcher, it will return all postings.
+		return newPostingGroup([]labels.Label{allPostingsKeyLabel}, nil), nil
+	}
+
+	// NOT matching any value = match nothing. We can shortcut this easily.
+	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
+		return newPostingGroup(nil, []labels.Label{allPostingsKeyLabel}), nil
+	}
+
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
-		var toAdd, toRemove []labels.Label
-
-		toAdd = append(toAdd, allPostingsKeyLabel)
-
 		vals, err := lvalsFn(m.Name)
 		if err != nil {
 			return nil, err
 		}
+
+		var toRemove []labels.Label
 		for _, val := range vals {
 			if !m.Matches(val) {
 				toRemove = append(toRemove, labels.Label{Name: m.Name, Value: val})
 			}
 		}
 
-		return newPostingGroup(toAdd, toRemove), nil
+		return newPostingGroup([]labels.Label{allPostingsKeyLabel}, toRemove), nil
 	}
 
 	// Fast-path for equal matching.
