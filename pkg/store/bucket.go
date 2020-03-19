@@ -1351,9 +1351,9 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	// get add/remove postings from groups
-	var groupAdds []index.Postings
-	removals := map[labels.Label]index.Postings{} // use map to skip duplicates
+	var groupAdds, removals []index.Postings
 	for _, g := range postingGroups {
+		// we cannot add empty set to groupAdds, since they are intersected
 		if len(g.addKeys) > 0 {
 			var toMerge []index.Postings
 			for _, l := range g.addKeys {
@@ -1364,7 +1364,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		for _, l := range g.removeKeys {
-			removals[l] = getFetchedPosting(l, fetchMap)
+			removals = append(removals, getFetchedPosting(l, fetchMap))
 		}
 	}
 
@@ -1373,10 +1373,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		groupAdds = append(groupAdds, getFetchedPosting(allPostingsKeyLabel, fetchMap))
 	}
 
-	result := index.Intersect(groupAdds...)
-	for _, p := range removals {
-		result = index.Without(result, p)
-	}
+	result := index.Without(index.Intersect(groupAdds...), index.Merge(removals...))
 
 	ps, err := index.ExpandPostings(result)
 	if err != nil {
