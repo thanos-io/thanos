@@ -1312,7 +1312,7 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, error) {
 	var postingGroups []*postingGroup
 
-	all := false
+	allRequested := false
 	hasAdds := false
 	keys := []labels.Label(nil)
 
@@ -1330,7 +1330,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		postingGroups = append(postingGroups, pg)
-		all = all || pg.addAll
+		allRequested = allRequested || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
 		// postings returned by fetchPostings will be in the same order as keys
@@ -1346,7 +1346,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 
 	allKeyIndex := -1
 	// we only need All postings if there are no other adds. If there are, we can skip fetching ALL postings completely.
-	if all && !hasAdds {
+	if allRequested && !hasAdds {
 		// remember the index (will be used later as a flag, and also to access postings),
 		// and ask fetchPostings to fetch ALL postings too
 		allKeyIndex = len(keys)
