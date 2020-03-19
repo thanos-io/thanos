@@ -1324,7 +1324,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
 
-		// intersection would return no postings anyway
+		// Intersection with empty postings would return no postings anyway.
 		if pg.alwaysEmptyPostings() {
 			return nil, nil
 		}
@@ -1333,9 +1333,9 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		allRequested = allRequested || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
-		// postings returned by fetchPostings will be in the same order as keys
+		// Postings returned by fetchPostings will be in the same order as keys
 		// so it's important that we iterate them in the same order later,
-		// since we don't build any label -> keys index map
+		// since we don't build any label -> keys index map.
 		keys = append(keys, pg.addKeys...)
 		keys = append(keys, pg.removeKeys...)
 	}
@@ -1347,8 +1347,8 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	allKeyIndex := -1
 	// we only need All postings if there are no other adds. If there are, we can skip fetching ALL postings completely.
 	if allRequested && !hasAdds {
-		// remember the index (will be used later as a flag, and also to access postings),
-		// and ask fetchPostings to fetch ALL postings too
+		// Remember the index (will be used later as a flag, and also to access postings),
+		// and ask fetchPostings to fetch ALL postings too.
 		allKeyIndex = len(keys)
 		keys = append(keys, getAllPostingsKeyLabel())
 	}
@@ -1365,7 +1365,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 
 	var groupAdds, removals []index.Postings
 	for _, g := range postingGroups {
-		// we cannot add empty set to groupAdds, since they are intersected
+		// We cannot add empty set to groupAdds, since they are intersected.
 		if len(g.addKeys) > 0 {
 			var toMerge []index.Postings
 			for _, l := range g.addKeys {
@@ -1383,7 +1383,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	if allKeyIndex >= 0 {
-		// if we have fetched "ALL" postings, add it
+		// If we have fetched "ALL" postings, add it.
 		groupAdds = append(groupAdds, checkNilPosting(getAllPostingsKeyLabel(), fetchedPostings[allKeyIndex]))
 	}
 
@@ -1443,14 +1443,13 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
+	// This matches all values, including no value. If it is the only matcher, it will return all postings.
 	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		// This matches all values, including no value. If it is the only matcher, it will return all postings.
 		return newPostingGroup(true, nil, nil), nil
 	}
 
 	// NOT matching any value = match nothing. We can shortcut this easily.
 	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		// empty result
 		return newPostingGroup(false, nil, nil), nil
 	}
 
