@@ -263,7 +263,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "size_bytes", len(value), "err", err)
 			return
 		}
 
@@ -272,9 +272,13 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 }
 
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	if len(keys) == 0 {
+		return nil
+	}
+
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "err", err)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "num_keys", len(keys), "first_key", keys[0], "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
