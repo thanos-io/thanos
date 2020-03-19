@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
@@ -27,6 +26,8 @@ import (
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
 // NewStorage returns a new storage for testing purposes
@@ -193,37 +194,38 @@ func testEndpoints(t *testing.T, api *API) {
 		{
 			endpointFn:   api.rules,
 			endpointName: "rules",
-			response: &RuleDiscovery{
-				RuleGroups: []*RuleGroup{
+			response: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                    "grp",
-						File:                    "",
-						Interval:                1,
-						PartialResponseStrategy: "WARN",
-						Rules: []rule{
-							alertingRule{
-								Name:                    "test_metric3",
-								Query:                   "absent(test_metric3) != 1",
-								Duration:                1,
-								Labels:                  labels.Labels{},
-								Annotations:             labels.Labels{},
-								Alerts:                  []*Alert{},
-								Health:                  "unknown",
-								Type:                    "alerting",
-								PartialResponseStrategy: "WARN",
+						Name:                              "grp",
+						File:                              "",
+						Interval:                          1,
+						PartialResponseStrategy:           "WARN",
+						DeprecatedPartialResponseStrategy: "WARN",
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.AlertingRule{
+								State:       "INACTIVE",
+								Name:        "test_metric3",
+								Query:       "absent(test_metric3) != 1",
+								Duration:    1,
+								Labels:      labels.Labels{},
+								Annotations: labels.Labels{},
+								Alerts:      []*testpromcompatibility.Alert{},
+								Health:      "unknown",
+								Type:        "alerting",
 							},
-							alertingRule{
-								Name:                    "test_metric4",
-								Query:                   "up == 1",
-								Duration:                1,
-								Labels:                  labels.Labels{},
-								Annotations:             labels.Labels{},
-								Alerts:                  []*Alert{},
-								Health:                  "unknown",
-								Type:                    "alerting",
-								PartialResponseStrategy: "WARN",
+							testpromcompatibility.AlertingRule{
+								State:       "INACTIVE",
+								Name:        "test_metric4",
+								Query:       "up == 1",
+								Duration:    1,
+								Labels:      labels.Labels{},
+								Annotations: labels.Labels{},
+								Alerts:      []*testpromcompatibility.Alert{},
+								Health:      "unknown",
+								Type:        "alerting",
 							},
-							recordingRule{
+							testpromcompatibility.RecordingRule{
 								Name:   "recording-rule-1",
 								Query:  "vector(1)",
 								Labels: labels.Labels{},
@@ -264,7 +266,13 @@ func testEndpoints(t *testing.T, api *API) {
 					return
 				}
 				assertAPIError(t, apiError)
-				assertAPIResponse(t, endpoint, test.response)
+
+				// Those are different types now, but let's JSON outputs.
+				exp, err := json.Marshal(endpoint)
+				testutil.Ok(t, err)
+				got, err := json.Marshal(test.response)
+				testutil.Ok(t, err)
+				testutil.Equals(t, string(exp), string(got))
 			})
 		}
 	}
@@ -274,26 +282,5 @@ func assertAPIError(t *testing.T, got *qapi.ApiError) {
 	t.Helper()
 	if got != nil {
 		t.Fatalf("Unexpected error: %s", got)
-	}
-}
-
-func assertAPIResponse(t *testing.T, got interface{}, exp interface{}) {
-	t.Helper()
-	if !reflect.DeepEqual(exp, got) {
-		respJSON, err := json.Marshal(got)
-		if err != nil {
-			t.Fatalf("failed to marshal response as JSON: %v", err.Error())
-		}
-
-		expectedRespJSON, err := json.Marshal(exp)
-		if err != nil {
-			t.Fatalf("failed to marshal expected response as JSON: %v", err.Error())
-		}
-
-		t.Fatalf(
-			"Response does not match, expected:\n%+v\ngot:\n%+v",
-			string(expectedRespJSON),
-			string(respJSON),
-		)
 	}
 }

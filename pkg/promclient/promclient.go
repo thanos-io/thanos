@@ -6,13 +6,9 @@
 package promclient
 
 import (
-	"bufio"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -26,19 +22,103 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/gogo/status"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/textparse"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
+	"google.golang.org/grpc/codes"
 	yaml "gopkg.in/yaml.v2"
 )
 
-var ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
+var (
+	ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
+
+	statusToCode = map[int]codes.Code{
+		http.StatusBadRequest:          codes.InvalidArgument,
+		http.StatusNotFound:            codes.NotFound,
+		http.StatusUnprocessableEntity: codes.Internal,
+		http.StatusServiceUnavailable:  codes.Unavailable,
+		http.StatusInternalServerError: codes.Internal,
+	}
+)
+
+const (
+	SUCCESS = "success"
+)
+
+// HTTPClient sends an HTTP request and returns the response.
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Client represents a Prometheus API client.
+type Client struct {
+	HTTPClient
+	userAgent string
+	logger    log.Logger
+}
+
+// NewClient returns a new Prometheus API client.
+func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+	return &Client{
+		HTTPClient: c,
+		logger:     logger,
+		userAgent:  userAgent,
+	}
+}
+
+// NewDefaultClient returns Client with tracing tripperware.
+func NewDefaultClient() *Client {
+	return NewWithTracingClient(
+		log.NewNopLogger(),
+		"",
+	)
+}
+
+// NewWithTracingClient returns client with tracing tripperware.
+func NewWithTracingClient(logger log.Logger, userAgent string) *Client {
+	return NewClient(
+		&http.Client{
+			Transport: tracing.HTTPTripperware(log.NewNopLogger(), http.DefaultTransport),
+		},
+		logger,
+		userAgent,
+	)
+}
+
+func (c *Client) get2xx(ctx context.Context, u *url.URL) (_ []byte, _ int, err error) {
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "create GET request")
+	}
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	resp, err := c.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "perform GET request against %s", u.String())
+	}
+	defer runutil.ExhaustCloseWithErrCapture(&err, resp.Body, "%s: close body", req.URL.String())
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, errors.Wrap(err, "read body")
+	}
+	if resp.StatusCode/100 != 2 {
+		return nil, resp.StatusCode, errors.Errorf("expected 2xx response, got %d. Body: %v", resp.StatusCode, string(body))
+	}
+	return body, resp.StatusCode, nil
+}
 
 // IsWALDirAccessible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
@@ -59,36 +139,24 @@ func IsWALDirAccessible(dir string) error {
 
 // ExternalLabels returns external labels from /api/v1/status/config Prometheus endpoint.
 // Note that configuration can be hot reloadable on Prometheus, so this config might change in runtime.
-func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labels.Labels, error) {
+func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/config")
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "create request")
-	}
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return nil, errors.Wrapf(err, "request flags against %s", u.String())
-	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
+	span, ctx := tracing.StartSpan(ctx, "/prom_config HTTP[client]")
+	defer span.Finish()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	body, _, err := c.get2xx(ctx, &u)
 	if err != nil {
-		return nil, errors.New("failed to read body")
+		return nil, err
 	}
-
-	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
-	}
-
 	var d struct {
 		Data struct {
 			YAML string `json:"yaml"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(b, &d); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal response: %v", string(b))
+	if err := json.Unmarshal(body, &d); err != nil {
+		return nil, errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
 	var cfg struct {
 		Global struct {
@@ -175,7 +243,7 @@ func (m *modelBool) UnmarshalJSON(b []byte) error {
 
 // ConfiguredFlags returns configured flags from /api/v1/status/flags Prometheus endpoint.
 // Added to Prometheus from v2.2.
-func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Flags, error) {
+func (c *Client) ConfiguredFlags(ctx context.Context, base *url.URL) (Flags, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/flags")
 
@@ -184,11 +252,14 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 		return Flags{}, errors.Wrap(err, "create request")
 	}
 
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	span, ctx := tracing.StartSpan(ctx, "/prom_flags HTTP[client]")
+	defer span.Finish()
+
+	resp, err := c.Do(req.WithContext(ctx))
 	if err != nil {
 		return Flags{}, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -219,7 +290,7 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 // NOTE: `--web.enable-admin-api` flag has to be set on Prometheus.
 // Added to Prometheus from v2.1.
 // TODO(bwplotka): Add metrics.
-func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bool) (string, error) {
+func (c *Client) Snapshot(ctx context.Context, base *url.URL, skipHead bool) (string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/admin/tsdb/snapshot")
 
@@ -233,11 +304,14 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	span, ctx := tracing.StartSpan(ctx, "/prom_snapshot HTTP[client]")
+	defer span.Finish()
+
+	resp, err := c.Do(req.WithContext(ctx))
 	if err != nil {
 		return "", errors.Wrapf(err, "request snapshot against %s", u.String())
 	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -284,41 +358,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	return nil
 }
 
-// HTTPClient sends an HTTP request and returns the response.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
-// Client represents a Prometheus API client.
-type Client struct {
-	httpClient HTTPClient
-	logger     log.Logger
-}
-
-// NewClient returns a new Prometheus API client.
-func NewClient(logger log.Logger, c HTTPClient) *Client {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-	return &Client{
-		httpClient: c,
-		logger:     logger,
-	}
-}
-
-func defaultClient(logger log.Logger) *Client {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-	return NewClient(
-		logger,
-		&http.Client{
-			Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
-		},
-	)
-}
-
-// QueryInstant performs an instant query and returns results in model.Vector type.
+// QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
 func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
@@ -336,18 +376,13 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 
 	level.Debug(c.logger).Log("msg", "querying instant", "url", u.String())
 
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "create GET request")
-	}
+	span, ctx := tracing.StartSpan(ctx, "/prom_query_instant HTTP[client]")
+	defer span.Finish()
 
-	req = req.WithContext(ctx)
-
-	resp, err := c.httpClient.Do(req)
+	body, _, err := c.get2xx(ctx, &u)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "perform GET request against %s", u.String())
+		return nil, nil, err
 	}
-	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
@@ -361,11 +396,6 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 		ErrorType string `json:"errorType,omitempty"`
 		// Extra field supported by Thanos Querier.
 		Warnings []string `json:"warnings"`
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query instant response")
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
@@ -394,14 +424,9 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
 
-		return nil, nil, errors.Errorf("received status code: %d, unknown response type: '%q'", resp.StatusCode, m.Data.ResultType)
+		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
 	return vectorResult, m.Warnings, nil
-}
-
-// QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
-func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
-	return defaultClient(logger).QueryInstant(ctx, base, query, t, opts)
 }
 
 // PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
@@ -433,11 +458,6 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 	return vec, warnings, nil
 }
 
-// PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
-func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
-	return defaultClient(logger).PromqlQueryInstant(ctx, base, query, t, opts)
-}
-
 // Scalar response consists of array with mixed types so it needs to be
 // unmarshaled separately.
 func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
@@ -466,77 +486,141 @@ func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, 
 		Timestamp: resultTime}}, nil
 }
 
-// MetricValues returns current value of  instant query and returns results in model.Vector type.
-func MetricValues(ctx context.Context, logger log.Logger, base *url.URL, perMetricFn func(metric promlabels.Labels, val float64) error) error {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-
+// AlertmanagerAlerts returns alerts from Alertmanager.
+func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*model.Alert, error) {
 	u := *base
-	u.Path = path.Join(u.Path, "/metrics")
+	u.Path = path.Join(u.Path, "/api/v1/alerts")
 
-	req, err := http.NewRequest("GET", u.String(), nil)
+	level.Debug(c.logger).Log("msg", "querying instant", "url", u.String())
+
+	span, ctx := tracing.StartSpan(ctx, "/alertmanager_alerts HTTP[client]")
+	defer span.Finish()
+
+	body, _, err := c.get2xx(ctx, &u)
 	if err != nil {
-		return errors.Wrap(err, "create GET request")
+		return nil, err
 	}
 
-	req.Header.Add("Accept", `application/openmetrics-text; version=0.0.1,text/plain;version=0.0.4;q=0.5,*/*;q=0.1`)
-	req.Header.Add("Accept-Encoding", "gzip")
-
-	req = req.WithContext(ctx)
-
-	client := &http.Client{
-		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+	// Decode only ResultType and load Result only as RawJson since we don't know
+	// structure of the Result yet.
+	var v struct {
+		Data []*model.Alert `json:"data"`
 	}
-	resp, err := client.Do(req)
+	if err = json.Unmarshal(body, &v); err != nil {
+		return nil, errors.Wrap(err, "unmarshal alertmanager alert API response")
+	}
+	sort.Slice(v.Data, func(i, j int) bool {
+		return v.Data[i].Labels.Before(v.Data[j].Labels)
+	})
+	return v.Data, nil
+}
+
+func formatTime(t time.Time) string {
+	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
+}
+
+func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data interface{}) error {
+	span, ctx := tracing.StartSpan(ctx, spanName)
+	defer span.Finish()
+
+	body, code, err := c.get2xx(ctx, u)
 	if err != nil {
-		return errors.Wrapf(err, "perform GET request against %s", u.String())
-	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "metrics body")
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.Errorf("server returned HTTP status %s", resp.Status)
+		if code, exists := statusToCode[code]; exists && code != 0 {
+			return status.Error(code, err.Error())
+		}
+		return status.Error(codes.Internal, err.Error())
 	}
 
-	b := &bytes.Buffer{}
-	if resp.Header.Get("Content-Encoding") != "gzip" {
-		_, err = io.Copy(b, resp.Body)
-		if err != nil {
-			return err
-		}
-	} else {
-		buf := bufio.NewReader(resp.Body)
-		gzipr, err := gzip.NewReader(buf)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(b, gzipr)
-		_ = gzipr.Close()
-		if err != nil {
-			return err
-		}
+	if code == http.StatusNoContent {
+		return nil
 	}
 
-	p := textparse.New(b.Bytes(), resp.Header.Get("Content-Type"))
-	for {
-		var et textparse.Entry
-		if et, err = p.Next(); err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		}
-
-		if et != textparse.EntrySeries {
-			continue
-		}
-
-		var lset promlabels.Labels
-		_ = p.Metric(&lset)
-		_, _, v := p.Series()
-
-		if err := perMetricFn(lset, v); err != nil {
-			return err
-		}
+	var m struct {
+		Data   interface{} `json:"data"`
+		Status string      `json:"status"`
+		Error  string      `json:"error"`
 	}
+
+	if err = json.Unmarshal(body, &m); err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+
+	if m.Status != SUCCESS {
+		code, exists := statusToCode[code]
+		if !exists {
+			return status.Error(codes.Internal, m.Error)
+		}
+		return status.Error(code, m.Error)
+	}
+
+	if err = json.Unmarshal(body, &data); err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+
+	return nil
+}
+
+// SeriesInGRPC returns the labels from Prometheus series API. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]map[string]string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/series")
+	q := u.Query()
+
+	matcher, err := matchersToString(matchers)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid matchers")
+	}
+	q.Add("match[]", matcher)
+	q.Add("start", formatTime(timestamp.Time(startTime)))
+	q.Add("end", formatTime(timestamp.Time(endTime)))
+	u.RawQuery = q.Encode()
+
+	var m struct {
+		Data []map[string]string `json:"data"`
+	}
+
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_series HTTP[client]", &u, &m)
+}
+
+// LabelNames returns all known label names. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL) ([]string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/labels")
+
+	var m struct {
+		Data []string `json:"data"`
+	}
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_names HTTP[client]", &u, &m)
+}
+
+// LabelValuesInGRPC returns all known label values for a given label name. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label string) ([]string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/label/", label, "/values")
+
+	var m struct {
+		Data []string `json:"data"`
+	}
+	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_label_values HTTP[client]", &u, &m)
+}
+
+// RulesInGRPC returns the rules from Prometheus rules API. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules string) ([]*storepb.RuleGroup, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/rules")
+
+	if typeRules != "" {
+		q := u.Query()
+		q.Add("type", typeRules)
+		u.RawQuery = q.Encode()
+	}
+
+	var m struct {
+		Data *storepb.RuleGroups `json:"data"`
+	}
+	return m.Data.Groups, c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m)
 }

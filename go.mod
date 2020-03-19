@@ -18,6 +18,7 @@ require (
 	github.com/go-kit/kit v0.9.0
 	github.com/go-openapi/strfmt v0.19.2
 	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/status v1.0.3
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gophercloud/gophercloud v0.6.0

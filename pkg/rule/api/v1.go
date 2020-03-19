@@ -15,7 +15,6 @@ import (
 	"github.com/go-kit/kit/log"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/rules"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
@@ -68,20 +67,17 @@ type RulesRetriever interface {
 	AlertingRules() []thanosrule.AlertingRule
 }
 
-func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
-	res := &RuleDiscovery{}
+func (api *API) rules(*http.Request) (interface{}, []error, *qapi.ApiError) {
+	res := &storepb.RuleGroups{}
 	for _, grp := range api.ruleRetriever.RuleGroups() {
-		apiRuleGroup := &RuleGroup{
+		apiRuleGroup := &storepb.RuleGroup{
 			Name:                    grp.Name(),
 			File:                    grp.OriginalFile(),
 			Interval:                grp.Interval().Seconds(),
-			Rules:                   []rule{},
-			PartialResponseStrategy: grp.PartialResponseStrategy.String(),
+			PartialResponseStrategy: grp.PartialResponseStrategy,
 		}
 
 		for _, r := range grp.Rules() {
-			var enrichedRule rule
-
 			lastError := ""
 			if r.LastError() != nil {
 				lastError = r.LastError().Error()
@@ -89,118 +85,65 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 
 			switch rule := r.(type) {
 			case *rules.AlertingRule:
-				enrichedRule = alertingRule{
-					Name:                    rule.Name(),
-					Query:                   rule.Query().String(),
-					Duration:                rule.Duration().Seconds(),
-					Labels:                  rule.Labels(),
-					Annotations:             rule.Annotations(),
-					Alerts:                  rulesAlertsToAPIAlerts(grp.PartialResponseStrategy, rule.ActiveAlerts()),
-					Health:                  rule.Health(),
-					LastError:               lastError,
-					Type:                    "alerting",
-					PartialResponseStrategy: grp.PartialResponseStrategy.String(),
-				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &storepb.Rule{
+					Result: &storepb.Rule_Alert{Alert: &storepb.Alert{
+						State:                     storepb.AlertState(rule.State()),
+						Name:                      rule.Name(),
+						Query:                     rule.Query().String(),
+						DurationSeconds:           rule.Duration().Seconds(),
+						Labels:                    &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+						Annotations:               &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
+						Alerts:                    rulesAlertsToAPIAlerts(grp.PartialResponseStrategy, rule.ActiveAlerts()),
+						Health:                    string(rule.Health()),
+						LastError:                 lastError,
+						EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
+						LastEvaluation:            rule.GetEvaluationTimestamp(),
+					}}})
 			case *rules.RecordingRule:
-				enrichedRule = recordingRule{
-					Name:      rule.Name(),
-					Query:     rule.Query().String(),
-					Labels:    rule.Labels(),
-					Health:    rule.Health(),
-					LastError: lastError,
-					Type:      "recording",
-				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &storepb.Rule{
+					Result: &storepb.Rule_Recording{Recording: &storepb.RecordingRule{
+						Name:                      rule.Name(),
+						Query:                     rule.Query().String(),
+						Labels:                    &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+						Health:                    string(rule.Health()),
+						LastError:                 lastError,
+						EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
+						LastEvaluation:            rule.GetEvaluationTimestamp(),
+					}}})
 			default:
 				err := fmt.Errorf("rule %q: unsupported type %T", r.Name(), rule)
 				return nil, nil, &qapi.ApiError{Typ: qapi.ErrorInternal, Err: err}
 			}
-
-			apiRuleGroup.Rules = append(apiRuleGroup.Rules, enrichedRule)
 		}
-		res.RuleGroups = append(res.RuleGroups, apiRuleGroup)
+		res.Groups = append(res.Groups, apiRuleGroup)
 	}
 
 	return res, nil, nil
 }
 
-func (api *API) alerts(r *http.Request) (interface{}, []error, *qapi.ApiError) {
-	var alerts []*Alert
+func (api *API) alerts(*http.Request) (interface{}, []error, *qapi.ApiError) {
+	var alerts []*storepb.AlertInstance
 	for _, alertingRule := range api.ruleRetriever.AlertingRules() {
 		alerts = append(
 			alerts,
 			rulesAlertsToAPIAlerts(alertingRule.PartialResponseStrategy, alertingRule.ActiveAlerts())...,
 		)
 	}
-	res := &AlertDiscovery{Alerts: alerts}
-
-	return res, nil, nil
+	return struct{ Alerts []*storepb.AlertInstance }{Alerts: alerts}, nil, nil
 }
 
-type AlertDiscovery struct {
-	Alerts []*Alert `json:"alerts"`
-}
-
-type Alert struct {
-	Labels                  labels.Labels `json:"labels"`
-	Annotations             labels.Labels `json:"annotations"`
-	State                   string        `json:"state"`
-	ActiveAt                *time.Time    `json:"activeAt,omitempty"`
-	Value                   string        `json:"value"`
-	PartialResponseStrategy string        `json:"partial_response_strategy"`
-}
-
-func rulesAlertsToAPIAlerts(s storepb.PartialResponseStrategy, rulesAlerts []*rules.Alert) []*Alert {
-	apiAlerts := make([]*Alert, len(rulesAlerts))
+func rulesAlertsToAPIAlerts(s storepb.PartialResponseStrategy, rulesAlerts []*rules.Alert) []*storepb.AlertInstance {
+	apiAlerts := make([]*storepb.AlertInstance, len(rulesAlerts))
 	for i, ruleAlert := range rulesAlerts {
-		apiAlerts[i] = &Alert{
-			PartialResponseStrategy: s.String(),
-			Labels:                  ruleAlert.Labels,
-			Annotations:             ruleAlert.Annotations,
-			State:                   ruleAlert.State.String(),
+		apiAlerts[i] = &storepb.AlertInstance{
+			PartialResponseStrategy: s,
+			Labels:                  &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
+			Annotations:             &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
+			State:                   storepb.AlertState(ruleAlert.State),
 			ActiveAt:                &ruleAlert.ActiveAt,
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}
 
 	return apiAlerts
-}
-
-type RuleDiscovery struct {
-	RuleGroups []*RuleGroup `json:"groups"`
-}
-
-type RuleGroup struct {
-	Name string `json:"name"`
-	File string `json:"file"`
-	// In order to preserve rule ordering, while exposing type (alerting or recording)
-	// specific properties, both alerting and recording rules are exposed in the
-	// same array.
-	Rules                   []rule  `json:"rules"`
-	Interval                float64 `json:"interval"`
-	PartialResponseStrategy string  `json:"partial_response_strategy"`
-}
-
-type rule interface{}
-
-type alertingRule struct {
-	Name                    string           `json:"name"`
-	Query                   string           `json:"query"`
-	Duration                float64          `json:"duration"`
-	Labels                  labels.Labels    `json:"labels"`
-	Annotations             labels.Labels    `json:"annotations"`
-	Alerts                  []*Alert         `json:"alerts"`
-	Health                  rules.RuleHealth `json:"health"`
-	LastError               string           `json:"lastError,omitempty"`
-	Type                    string           `json:"type"`
-	PartialResponseStrategy string           `json:"partial_response_strategy"`
-}
-
-type recordingRule struct {
-	Name      string           `json:"name"`
-	Query     string           `json:"query"`
-	Labels    labels.Labels    `json:"labels,omitempty"`
-	Health    rules.RuleHealth `json:"health"`
-	LastError string           `json:"lastError,omitempty"`
-	// Type of a recordingRule is always "recording".
-	Type string `json:"type"`
 }

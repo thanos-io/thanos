@@ -165,7 +165,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, query string
 	fmt.Println("queryAndAssert: Waiting for", len(expected), "results for query", query)
 	var result model.Vector
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+addr), query, time.Now(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), query, time.Now(), opts)
 		if err != nil {
 			return err
 		}
