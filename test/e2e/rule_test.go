@@ -263,6 +263,8 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 }
 
 func TestRule(t *testing.T) {
+	t.Parallel()
+
 	s, err := e2e.NewScenario("e2e_test_rule")
 	testutil.Ok(t, err)
 	defer s.Close()

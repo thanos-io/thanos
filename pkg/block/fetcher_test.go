@@ -34,8 +34,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func newTestSyncMetrics() *syncMetrics {
-	return &syncMetrics{
+func newTestFetcherMetrics() *fetcherMetrics {
+	return &fetcherMetrics{
 		synced:   extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"}),
 		modified: extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"modified"}),
 	}
@@ -63,7 +63,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, func(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *syncMetrics, incompleteView bool) error {
+		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, func(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *fetcherMetrics, incompleteView bool) error {
 			if _, ok := metas[ulidToDelete]; ok {
 				metrics.synced.WithLabelValues("filtered").Inc()
 				delete(metas, ulidToDelete)
@@ -343,7 +343,7 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 		ULID(6): input[ULID(6)],
 	}
 
-	m := newTestSyncMetrics()
+	m := newTestFetcherMetrics()
 	testutil.Ok(t, f.Filter(ctx, input, m, false))
 
 	testutil.Equals(t, 3.0, promtest.ToFloat64(m.synced.WithLabelValues(labelExcludedMeta)))
@@ -441,7 +441,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 			}
 			deleted := len(input) - len(expected)
 
-			m := newTestSyncMetrics()
+			m := newTestFetcherMetrics()
 			testutil.Ok(t, f.Filter(ctx, input, m, false))
 
 			testutil.Equals(t, expected, input)
@@ -505,7 +505,7 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 		ULID(4): input[ULID(4)],
 	}
 
-	m := newTestSyncMetrics()
+	m := newTestFetcherMetrics()
 	testutil.Ok(t, f.Filter(ctx, input, m, false))
 
 	testutil.Equals(t, 2.0, promtest.ToFloat64(m.synced.WithLabelValues(timeExcludedMeta)))
@@ -839,7 +839,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 	} {
 		f := NewDeduplicateFilter()
 		if ok := t.Run(tcase.name, func(t *testing.T) {
-			m := newTestSyncMetrics()
+			m := newTestFetcherMetrics()
 			metas := make(map[ulid.ULID]*metadata.Meta)
 			inputLen := len(tcase.input)
 			for id, metaInfo := range tcase.input {
@@ -908,7 +908,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 			modified: 5.0,
 		},
 	} {
-		m := newTestSyncMetrics()
+		m := newTestFetcherMetrics()
 		testutil.Ok(t, rm.Modify(ctx, tcase.input, m, false))
 
 		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
@@ -1004,7 +1004,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	}
 
 	t.Run("consistency 0 (turned off)", func(t *testing.T) {
-		m := newTestSyncMetrics()
+		m := newTestFetcherMetrics()
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Copy all.
 		for _, id := range u.created {
@@ -1021,7 +1021,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	})
 
 	t.Run("consistency 30m.", func(t *testing.T) {
-		m := newTestSyncMetrics()
+		m := newTestFetcherMetrics()
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Only certain sources and those with 30m or more age go through.
 		for i, id := range u.created {
@@ -1092,7 +1092,7 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 			ULID(4): {},
 		}
 
-		m := newTestSyncMetrics()
+		m := newTestFetcherMetrics()
 		testutil.Ok(t, f.Filter(ctx, input, m, false))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
 		testutil.Equals(t, expected, input)

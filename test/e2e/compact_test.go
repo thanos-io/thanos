@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -30,6 +31,8 @@ import (
 )
 
 func TestCompact(t *testing.T) {
+	t.Parallel()
+
 	l := log.NewLogfmtLogger(os.Stdout)
 
 	// blockDesc describes a recipe to generate blocks from the given series and external labels.
@@ -58,12 +61,10 @@ func TestCompact(t *testing.T) {
 		retention           *retention
 		query               string
 
-		expected          []model.Metric
-		expectOfModBlocks float64
-		expectOfBlocks    uint64
-		expectOfSamples   uint64
-		expectOfSeries    uint64
-		expectOfChunks    uint64
+		expected           []model.Metric
+		expectNumModBlocks float64
+		expectNumBlocks    uint64
+		expectedStats      tsdb.BlockStats
 	}{
 		{
 			name: "(full) vertically overlapping blocks with replica labels",
@@ -101,11 +102,57 @@ func TestCompact(t *testing.T) {
 					"ext1": "value1",
 				},
 			},
-			expectOfModBlocks: 3,
-			expectOfBlocks:    1,
-			expectOfSamples:   120,
-			expectOfSeries:    1,
-			expectOfChunks:    2,
+			expectNumModBlocks: 3,
+			expectNumBlocks:    1,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  1,
+				NumSamples: 120,
+			},
+		},
+		{
+			name: "(full) vertically overlapping blocks without replica labels",
+			blocks: []blockDesc{
+				{
+					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 12,
+				},
+				{
+					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
+					mint:             timestamp.FromTime(now),
+					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
+					samplesPerSeries: 12,
+				},
+			},
+			replicaLabels:       []string{},
+			downsamplingEnabled: true,
+			query:               "{a=\"1\"}",
+
+			expected: []model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "2",
+				},
+			},
+			expectNumModBlocks: 0,
+			expectNumBlocks:    2,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  2,
+				NumSamples: 24,
+			},
 		},
 		{
 			name: "(full) vertically overlapping blocks with replica labels downsampling disabled",
@@ -144,11 +191,13 @@ func TestCompact(t *testing.T) {
 					"ext2": "value2",
 				},
 			},
-			expectOfModBlocks: 3,
-			expectOfBlocks:    1,
-			expectOfSamples:   120,
-			expectOfSeries:    1,
-			expectOfChunks:    2,
+			expectNumModBlocks: 3,
+			expectNumBlocks:    1,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  1,
+				NumSamples: 120,
+			},
 		},
 		{
 			name: "(full) vertically overlapping blocks with replica labels, downsampling disabled and extra blocks",
@@ -201,11 +250,13 @@ func TestCompact(t *testing.T) {
 					"ext2": "value2",
 				},
 			},
-			expectOfModBlocks: 3,
-			expectOfBlocks:    2,
-			expectOfSamples:   360,
-			expectOfSeries:    3,
-			expectOfChunks:    6,
+			expectNumModBlocks: 3,
+			expectNumBlocks:    2,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  6,
+				NumSeries:  3,
+				NumSamples: 360,
+			},
 		},
 		{
 			name: "(partial) vertically overlapping blocks with replica labels",
@@ -237,11 +288,13 @@ func TestCompact(t *testing.T) {
 					"ext2": "value2",
 				},
 			},
-			expectOfModBlocks: 2,
-			expectOfBlocks:    1,
-			expectOfSamples:   119,
-			expectOfSeries:    1,
-			expectOfChunks:    2,
+			expectNumModBlocks: 2,
+			expectNumBlocks:    1,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  1,
+				NumSamples: 119,
+			},
 		},
 		{
 			name: "(shifted) vertically overlapping blocks with replica labels",
@@ -272,11 +325,13 @@ func TestCompact(t *testing.T) {
 					"ext1": "value1",
 				},
 			},
-			expectOfModBlocks: 2,
-			expectOfBlocks:    1,
-			expectOfSamples:   149,
-			expectOfSeries:    1,
-			expectOfChunks:    2,
+			expectNumModBlocks: 2,
+			expectNumBlocks:    1,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  1,
+				NumSamples: 149,
+			},
 		},
 		{
 			name: "(full) vertically overlapping blocks with replica labels retention specified",
@@ -319,11 +374,13 @@ func TestCompact(t *testing.T) {
 					"ext1": "value1",
 				},
 			},
-			expectOfModBlocks: 3,
-			expectOfBlocks:    1,
-			expectOfSamples:   120,
-			expectOfSeries:    1,
-			expectOfChunks:    2,
+			expectNumModBlocks: 3,
+			expectNumBlocks:    1,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  1,
+				NumSamples: 120,
+			},
 		},
 		{
 			name: "(full) vertically overlapping blocks without replica labels",
@@ -358,11 +415,13 @@ func TestCompact(t *testing.T) {
 					"ext1": "value2",
 				},
 			},
-			expectOfModBlocks: 0,
-			expectOfBlocks:    2,
-			expectOfSamples:   4,
-			expectOfSeries:    2,
-			expectOfChunks:    2,
+			expectNumModBlocks: 0,
+			expectNumBlocks:    2,
+			expectedStats: tsdb.BlockStats{
+				NumChunks:  2,
+				NumSeries:  2,
+				NumSamples: 4,
+			},
 		},
 	} {
 		i := i
@@ -377,6 +436,7 @@ func TestCompact(t *testing.T) {
 
 			bucket := "thanos_" + strconv.Itoa(i)
 
+			// TODO(kakkoyun): Move to shared minio to improve test speed.
 			m := e2edb.NewMinio(8080+i, bucket)
 			testutil.Ok(t, s.StartAndWaitReady(m))
 
@@ -430,7 +490,7 @@ func TestCompact(t *testing.T) {
 			testutil.Ok(t, s.StartAndWaitReady(cmpt))
 			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIds))), "thanos_blocks_meta_synced"))
 			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
-			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(tcase.expectOfModBlocks), "thanos_blocks_meta_modified"))
+			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(tcase.expectNumModBlocks), "thanos_blocks_meta_modified"))
 
 			str, err := e2ethanos.NewStoreGW(s.SharedDir(), "compact_"+strconv.Itoa(i), client.BucketConfig{
 				Type: client.S3,
@@ -444,7 +504,7 @@ func TestCompact(t *testing.T) {
 			})
 			testutil.Ok(t, err)
 			testutil.Ok(t, s.StartAndWaitReady(str))
-			testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(tcase.expectOfBlocks)), "thanos_blocks_meta_synced"))
+			testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(tcase.expectNumBlocks)), "thanos_blocks_meta_synced"))
 			testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 			q, err := e2ethanos.NewQuerier(s.SharedDir(), "compact_"+strconv.Itoa(i), []string{str.GRPCNetworkEndpoint()}, nil)
@@ -462,39 +522,39 @@ func TestCompact(t *testing.T) {
 				tcase.expected,
 			)
 
-			var actualOfBlocks uint64
-			var actualOfChunks uint64
-			var actualOfSeries uint64
-			var actualOfSamples uint64
-			var sources []ulid.ULID
+			var (
+				actualNumBlocks uint64
+				actual          tsdb.BlockStats
+				sources         []ulid.ULID
+			)
 			testutil.Ok(t, bkt.Iter(ctx, "", func(n string) error {
 				id, ok := block.IsBlockDir(n)
 				if !ok {
 					return nil
 				}
 
-				actualOfBlocks += 1
+				actualNumBlocks += 1
 
 				meta, err := block.DownloadMeta(ctx, l, bkt, id)
 				if err != nil {
 					return err
 				}
 
-				actualOfChunks += meta.Stats.NumChunks
-				actualOfSeries += meta.Stats.NumSeries
-				actualOfSamples += meta.Stats.NumSamples
+				actual.NumChunks += meta.Stats.NumChunks
+				actual.NumSeries += meta.Stats.NumSeries
+				actual.NumSamples += meta.Stats.NumSamples
 				sources = append(sources, meta.Compaction.Sources...)
 				return nil
 			}))
 
 			// Make sure only necessary amount of blocks fetched from store, to observe affects of offline deduplication.
-			testutil.Equals(t, tcase.expectOfBlocks, actualOfBlocks)
-			if len(rawBlockIds) < int(tcase.expectOfBlocks) { // check sources only if compacted.
+			testutil.Equals(t, tcase.expectNumBlocks, actualNumBlocks)
+			if len(rawBlockIds) < int(tcase.expectNumBlocks) { // check sources only if compacted.
 				testutil.Equals(t, rawBlockIds, sources)
 			}
-			testutil.Equals(t, tcase.expectOfChunks, actualOfChunks)
-			testutil.Equals(t, tcase.expectOfSeries, actualOfSeries)
-			testutil.Equals(t, tcase.expectOfSamples, actualOfSamples)
+			testutil.Equals(t, tcase.expectedStats.NumChunks, actual.NumChunks)
+			testutil.Equals(t, tcase.expectedStats.NumSeries, actual.NumSeries)
+			testutil.Equals(t, tcase.expectedStats.NumSamples, actual.NumSamples)
 		})
 	}
 }

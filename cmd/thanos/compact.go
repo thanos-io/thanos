@@ -134,7 +134,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		Default("48h"))
 
 	dedupReplicaLabels := cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. When it is set true, this will given labels from blocks so that vertical compaction could merge blocks.").
+		"Experimental. When it is set true, this will given labels from blocks so that vertical compaction could merge blocks."+
+		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().Strings()
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
@@ -299,7 +301,7 @@ func runCompact(
 	enableVerticalCompaction := false
 	if len(dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
-		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedup-replica-labels", strings.Join(dedupReplicaLabels, ","))
+		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
 	}
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, enableVerticalCompaction)

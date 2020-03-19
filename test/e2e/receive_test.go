@@ -17,7 +17,11 @@ import (
 )
 
 func TestReceive(t *testing.T) {
+	t.Parallel()
+
 	t.Run("hashring", func(t *testing.T) {
+		t.Parallel()
+
 		s, err := e2e.NewScenario("e2e_test_receive_hashring")
 		testutil.Ok(t, err)
 		defer s.Close()
@@ -94,6 +98,7 @@ func TestReceive(t *testing.T) {
 	})
 
 	t.Run("replication", func(t *testing.T) {
+		t.Parallel()
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication")
 		testutil.Ok(t, err)
@@ -165,6 +170,7 @@ func TestReceive(t *testing.T) {
 	})
 
 	t.Run("replication_with_outage", func(t *testing.T) {
+		t.Parallel()
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication_with_outage")
 		testutil.Ok(t, err)

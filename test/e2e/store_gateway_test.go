@@ -31,6 +31,8 @@ import (
 // TODO(bwplotka): Extend this test to have multiple stores and memcached.
 // TODO(bwplotka): Extend this test for downsampling.
 func TestStoreGateway(t *testing.T) {
+	t.Parallel()
+
 	s, err := e2e.NewScenario("e2e_test_store_gateway")
 	testutil.Ok(t, err)
 	defer s.Close()
