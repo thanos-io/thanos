@@ -263,7 +263,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "size_bytes", len(value), "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
 			return
 		}
 
