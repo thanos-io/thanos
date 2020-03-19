@@ -1324,7 +1324,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
 
-		// interesction would return no postings anyway
+		// intersection would return no postings anyway
 		if pg.alwaysEmptyPostings() {
 			return nil, nil
 		}
