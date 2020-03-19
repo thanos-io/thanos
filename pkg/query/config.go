@@ -6,6 +6,7 @@ package query
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -51,7 +52,11 @@ func BuildQueryConfig(queryAddrs []string) ([]Config, error) {
 		if addr == "" {
 			return nil, errors.New("static querier address cannot be empty")
 		}
-		u, err := url.Parse(fmt.Sprintf("http://%s", addr))
+		// If addr is missing schema, add http.
+		if !strings.Contains(addr, "://") {
+			addr = fmt.Sprintf("http://%s", addr)
+		}
+		u, err := url.Parse(addr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse addr %q", addr)
 		}

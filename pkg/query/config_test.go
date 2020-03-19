@@ -47,6 +47,26 @@ func TestBuildQueryConfig(t *testing.T) {
 			},
 		},
 		{
+			desc:      "signe addr with path and http scheme",
+			addresses: []string{"http://localhost:9093"},
+			expected: []Config{{
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"localhost:9093"},
+					Scheme:          "http",
+				},
+			}},
+		},
+		{
+			desc:      "signe addr with path and https scheme",
+			addresses: []string{"https://localhost:9093"},
+			expected: []Config{{
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"localhost:9093"},
+					Scheme:          "https",
+				},
+			}},
+		},
+		{
 			desc:      "invalid addr",
 			addresses: []string{"this is not a valid addr"},
 			err:       true,
