@@ -21,7 +21,7 @@ const (
 	PartialUploadThresholdAge = 2 * 24 * time.Hour
 )
 
-func BestEffortCleanAbortedPartialUploads(ctx context.Context, logger log.Logger, fetcher block.MetadataFetcher, bkt objstore.Bucket, deleteAttempts prometheus.Counter) {
+func BestEffortCleanAbortedPartialUploads(ctx context.Context, logger log.Logger, fetcher block.MetadataFetcher, bkt objstore.Bucket, deleteAttempts prometheus.Counter, blocksMarkedForDeletion prometheus.Counter) {
 	level.Info(logger).Log("msg", "started cleaning of aborted partial uploads")
 	_, partial, err := fetcher.Fetch(ctx)
 	if err != nil {
@@ -41,10 +41,11 @@ func BestEffortCleanAbortedPartialUploads(ctx context.Context, logger log.Logger
 		}
 
 		deleteAttempts.Inc()
-		if err := block.Delete(ctx, logger, bkt, id); err != nil {
+		if err := block.MarkForDeletion(ctx, logger, bkt, id); err != nil {
 			level.Warn(logger).Log("msg", "failed to delete aborted partial upload; skipping", "block", id, "thresholdAge", PartialUploadThresholdAge, "err", err)
 			return
 		}
+		blocksMarkedForDeletion.Inc()
 		level.Info(logger).Log("msg", "deleted aborted partial upload", "block", id, "thresholdAge", PartialUploadThresholdAge)
 	}
 	level.Info(logger).Log("msg", "cleaning of aborted partial uploads done")

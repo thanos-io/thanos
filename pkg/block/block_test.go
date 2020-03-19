@@ -4,7 +4,10 @@
 package block
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -15,6 +18,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -216,5 +220,56 @@ func TestDelete(t *testing.T) {
 		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b2))
 		// Still 2 debug meta entries are expected.
 		testutil.Equals(t, 2, len(bkt.Objects()))
+	}
+}
+
+func TestMarkForDeletion(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx := context.Background()
+
+	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-delete")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bkt := inmem.NewBucket()
+	{
+		blockWithoutDeletionMark, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+			{{Name: "a", Value: "1"}},
+			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "3"}},
+			{{Name: "a", Value: "4"}},
+			{{Name: "b", Value: "1"}},
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+		testutil.Ok(t, err)
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, blockWithoutDeletionMark.String())))
+
+		testutil.Ok(t, MarkForDeletion(ctx, log.NewNopLogger(), bkt, blockWithoutDeletionMark))
+		exists, err := bkt.Exists(ctx, path.Join(blockWithoutDeletionMark.String(), metadata.DeletionMarkFilename))
+		testutil.Ok(t, err)
+		testutil.Equals(t, true, exists)
+	}
+	{
+		blockWithDeletionMark, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+			{{Name: "a", Value: "1"}},
+			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "3"}},
+			{{Name: "a", Value: "4"}},
+			{{Name: "b", Value: "1"}},
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+		testutil.Ok(t, err)
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, blockWithDeletionMark.String())))
+
+		deletionMark, err := json.Marshal(metadata.DeletionMark{
+			ID:           blockWithDeletionMark,
+			DeletionTime: time.Now().Unix(),
+			Version:      metadata.DeletionMarkVersion1,
+		})
+		testutil.Ok(t, err)
+		testutil.Ok(t, bkt.Upload(ctx, path.Join(blockWithDeletionMark.String(), metadata.DeletionMarkFilename), bytes.NewReader(deletionMark)))
+
+		err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, blockWithDeletionMark)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, fmt.Sprintf("file %s already exists in bucket", path.Join(blockWithDeletionMark.String(), metadata.DeletionMarkFilename)), err.Error())
 	}
 }

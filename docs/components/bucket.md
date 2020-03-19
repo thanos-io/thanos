@@ -26,11 +26,12 @@ config:
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
 by adding a new command within `/cmd/thanos/bucket.go`.
 
-
 ## Deployment
+
 ## Flags
 
-[embedmd]:# (flags/bucket.txt $)
+[embedmd]: # "flags/bucket.txt $"
+
 ```$
 usage: thanos bucket [<flags>] <command> [<args> ...]
 
@@ -78,6 +79,9 @@ Subcommands:
     Replicate data from one object storage to another. NOTE: Currently it works
     only with Thanos blocks (meta.json has to have Thanos metadata).
 
+  bucket downsample [<flags>]
+    continuously downsamples blocks in an object store bucket
+
 
 ```
 
@@ -95,7 +99,8 @@ Example:
 $ thanos bucket web --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_web.txt)
+[embedmd]: # "flags/bucket_web.txt"
+
 ```txt
 usage: thanos bucket web [<flags>]
 
@@ -167,7 +172,8 @@ Example:
 $ thanos bucket verify --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_verify.txt)
+[embedmd]: # "flags/bucket_verify.txt"
+
 ```txt
 usage: thanos bucket verify [<flags>]
 
@@ -219,7 +225,11 @@ Flags:
                            Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
-
+  --delete-delay=0s        Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component.
+                           If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket.
+                           If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately.
+                           Note that deleting blocks immediately can cause query failures, if store gateway still has the block
+                           loaded, or compactor is ignoring the deletion because it's compacting the block at the same time.
 ```
 
 ### ls
@@ -232,7 +242,8 @@ Example:
 $ thanos bucket ls -o json --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_ls.txt)
+[embedmd]: # "flags/bucket_ls.txt"
+
 ```txt
 usage: thanos bucket ls [<flags>]
 
@@ -273,11 +284,13 @@ Flags:
 `bucket inspect` is used to inspect buckets in a detailed way using stdout in ASCII table format.
 
 Example:
+
 ```
 $ thanos bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/bucket_inspect.txt)
+[embedmd]: # "flags/bucket_inspect.txt"
+
 ```txt
 usage: thanos bucket inspect [<flags>]
 
@@ -389,3 +402,71 @@ Flags:
       --single-run               Run replication only one time, then exit.
 
 ```
+
+### Downsample
+
+The downsample component of Thanos implements the downsample API on top of historical data in an object storage bucket. It continuously downsamples blocks in an object store bucket as a service.
+
+```bash
+$ thanos downsample \
+    --data-dir        "/local/state/data/dir" \
+    --objstore.config-file "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
+```
+
+#### Flags
+
+[embedmd]:# (flags/bucket_downsample.txt $)
+```$
+usage: thanos bucket downsample [<flags>]
+
+continuously downsamples blocks in an object store bucket
+
+Flags:
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
+      --version               Show application version.
+      --log.level=info        Log filtering level.
+      --log.format=logfmt     Log format to use. Possible options: logfmt or
+                              json.
+      --tracing.config-file=<file-path>
+                              Path to YAML file with tracing configuration. See
+                              format details:
+                              https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>
+                              Alternative to 'tracing.config-file' flag (lower
+                              priority). Content of YAML file with tracing
+                              configuration. See format details:
+                              https://thanos.io/tracing.md/#configuration
+      --objstore.config-file=<file-path>
+                              Path to YAML file that contains object store
+                              configuration. See format details:
+                              https://thanos.io/storage.md/#configuration
+      --objstore.config=<content>
+                              Alternative to 'objstore.config-file' flag (lower
+                              priority). Content of YAML file that contains
+                              object store configuration. See format details:
+                              https://thanos.io/storage.md/#configuration
+      --http-address="0.0.0.0:10902"
+                              Listen host:port for HTTP endpoints.
+      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
+                              Server.
+      --data-dir="./data"     Data directory in which to cache blocks and
+                              process downsamplings.
+
+```
+
+#### Probes
+
+- Thanos downsample exposes two endpoints for probing.
+  - `/-/healthy` starts as soon as initial setup completed.
+  - `/-/ready` starts after all the bootstrapping completed (e.g object store bucket connection) and ready to serve traffic.
+
+> NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.

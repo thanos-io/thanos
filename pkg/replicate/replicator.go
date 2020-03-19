@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -149,6 +150,11 @@ func RunReplicate(
 		Help: "The Duration of replication runs split by success and error.",
 	}, []string{"result"})
 
+	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg)
+	if err != nil {
+		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
+	}
+
 	blockFilter := NewBlockFilter(
 		logger,
 		labelSelector,
@@ -170,7 +176,7 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", ulid.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt, reg).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
 			return errors.Wrap(err, "replication execute")
 		}
 

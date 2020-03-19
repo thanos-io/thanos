@@ -32,6 +32,8 @@ Full list of triage persons is displayed below:
 | Ben Ye                | `@yeya24`                | [@yeya24](https://github.com/yeya24)                       |
 | Martin Chodur         | `@FUSAKLA`               | [@fusakla](https://github.com/fusakla)                     |
 | Michael Dai           | `@jojohappy`             | [@jojohappy](https://github.com/jojohappy)                 |
+| Kemal Akkoyun         | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)                   |
+| Xiang Dai             | `@daixiang0`             | [@daixiang0](https://github.com/daixiang0)                 |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 

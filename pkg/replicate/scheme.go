@@ -105,6 +105,7 @@ type replicationScheme struct {
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
+	fetcher     thanosblock.MetadataFetcher
 
 	logger  log.Logger
 	metrics *replicationMetrics
@@ -152,7 +153,15 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, from objstore.BucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
+func newReplicationScheme(
+	logger log.Logger,
+	metrics *replicationMetrics,
+	blockFilter blockFilterFunc,
+	fetcher thanosblock.MetadataFetcher,
+	from objstore.BucketReader,
+	to objstore.Bucket,
+	reg prometheus.Registerer,
+) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -160,6 +169,7 @@ func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockF
 	return &replicationScheme{
 		logger:      logger,
 		blockFilter: blockFilter,
+		fetcher:     fetcher,
 		fromBkt:     from,
 		toBkt:       to,
 		metrics:     metrics,
@@ -350,12 +360,7 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 // partial, this is just a temporary failure, as the block is still being
 // uploaded to the origin bucket.
 func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metadata.Meta, bool, error) {
-	fetcher, err := thanosblock.NewMetaFetcher(rs.logger, 32, rs.fromBkt, "", rs.reg)
-	if err != nil {
-		return nil, false, errors.Wrapf(err, "create meta fetcher with buecket %v", rs.fromBkt)
-	}
-
-	metas, _, err := fetcher.Fetch(ctx)
+	metas, _, err := rs.fetcher.Fetch(ctx)
 	if err != nil {
 		switch errors.Cause(err) {
 		default:

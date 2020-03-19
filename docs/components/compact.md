@@ -11,8 +11,8 @@ It is generally not semantically concurrency safe and must be deployed as a sing
 
 It is also responsible for downsampling of data:
 
-* creating 5m downsampling for blocks larger than **40 hours** (2d, 2w)
-* creating 1h downsampling for blocks larger than **10 days** (2w).
+- creating 5m downsampling for blocks larger than **40 hours** (2d, 2w)
+- creating 1h downsampling for blocks larger than **10 days** (2w).
 
 Example:
 
@@ -35,9 +35,9 @@ On-disk data is safe to delete between restarts and should be the first attempt 
 
 Resolution - distance between data points on your graphs. E.g.
 
-* raw - the same as scrape interval at the moment of data ingestion
-* 5m - data point is every 5 minutes
-* 1h - data point is every 1h
+- raw - the same as scrape interval at the moment of data ingestion
+- 5m - data point is every 5 minutes
+- 1h - data point is every 1h
 
 Keep in mind, that the initial goal of downsampling is not saving disk space (Read further for elaboration on storage space consumption). The goal of downsampling is providing an opportunity to get fast results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less then `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" to your historical data.
 
@@ -64,9 +64,18 @@ your Prometheus instances, so that the compactor will be able to group blocks by
 By _persistent_, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep
 compacting blocks from an instance even when a Prometheus instance goes down for some time.
 
+## Block Deletion
+
+Depending on the Object Storage provider like S3, GCS, Ceph etc; we can divide the storages into strongly consistent or eventually consistent.
+Since there are no consistency guarantees provided by some Object Storage providers, we have to make sure that we have a consistent lock-free way of dealing with Object Storage irrespective of the choice of object storage.
+
+In order to achieve this co-ordination, blocks are not deleted directly. Instead, blocks are marked for deletion by uploading
+`deletion-mark.json` file for the block that was chosen to be deleted. This file contains unix time of when the block was marked for deletion.
+
 ## Flags
 
-[embedmd]:# (flags/compact.txt $)
+[embedmd]: # "flags/compact.txt $"
+
 ```$
 usage: thanos compact [<flags>]
 
@@ -121,6 +130,8 @@ Flags:
                                samples of this resolution forever
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.
+      --wait-interval=5m       Wait interval between consecutive compaction
+                               runs. Only works when --wait flag specified.
       --downsampling.disable   Disables downsampling. This is not recommended as
                                querying long time ranges without non-downsampled
                                data is not efficient and useful e.g it is not
@@ -144,5 +155,10 @@ Flags:
                                selecting blocks. It follows native Prometheus
                                relabel-config syntax. See format details:
                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-
+      --delete-delay=48h       Time before a block marked for deletion is deleted from bucket.
+		                           If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket.
+		                           If delete-delay is 0, blocks will be deleted straight away.
+                               Use this if you want to get rid of or move the block immediately.
+		                           Note that deleting blocks immediately can cause query failures, if store gateway still has the block
+                               loaded, or compactor is ignoring the deletion because it's compacting the block at the same time.
 ```

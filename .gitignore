@@ -27,3 +27,6 @@ website/docs-pre-processed/
 
 tmp/bin
 examples/tmp/
+
+# Ignore the MacOS Trash (DS-Store)
+.DS_Store

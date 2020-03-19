@@ -73,6 +73,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketInspect(m, cmd, name, objStoreConfig)
 	registerBucketWeb(m, cmd, name, objStoreConfig)
 	registerBucketReplicate(m, cmd, name, objStoreConfig)
+	registerBucketDownsample(m, cmd, name, objStoreConfig)
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
@@ -84,6 +85,12 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	idWhitelist := cmd.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
+	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket. "+
+		"If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately. "+
+		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
+		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
+		Default("0s"))
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -139,9 +146,9 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		}
 
 		if *repair {
-			v = verifier.NewWithRepair(logger, bkt, backupBkt, fetcher, issues)
+			v = verifier.NewWithRepair(logger, reg, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), issues)
 		} else {
-			v = verifier.New(logger, bkt, fetcher, issues)
+			v = verifier.New(logger, reg, bkt, fetcher, time.Duration(*deleteDelay), issues)
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
@@ -422,6 +429,21 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 		)
 	}
 
+}
+
+func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
+
+	comp := component.Downsample
+	cmd := root.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
+
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
+
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
+		Default("./data").String()
+
+	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
+	}
 }
 
 // refresh metadata from remote storage periodically and update UI.

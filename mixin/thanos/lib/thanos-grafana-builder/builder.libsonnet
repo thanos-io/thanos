@@ -150,7 +150,7 @@ local template = grafana.template;
   resourceUtilizationRow()::
     $.row('Resources')
     .addPanel(
-      $.panel('Memory Used') +
+      $.panel('Memory Used (Bytes)') +
       $.queryPanel(
         [
           'go_memstats_alloc_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
