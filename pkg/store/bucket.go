@@ -1311,10 +1311,10 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, error) {
 	var postingGroups []*postingGroup
-	fetchMap := map[labels.Label]index.Postings{}
 
 	all := false
 	hasAdds := false
+	keys := []labels.Label(nil)
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
@@ -1330,47 +1330,61 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		postingGroups = append(postingGroups, pg)
-		pg.contributeKeysToFetchMap(fetchMap)
-
 		all = all || pg.addAll
 		hasAdds = hasAdds || len(pg.addKeys) > 0
+
+		// postings returned by fetchPostings will be in the same order as keys
+		// so it's important that we iterate them in the same order later,
+		// since we don't build any label -> keys index map
+		keys = append(keys, pg.addKeys...)
+		keys = append(keys, pg.removeKeys...)
 	}
 
 	if len(postingGroups) == 0 {
 		return nil, nil
 	}
 
-	// we only need All postings if there are no other adds
+	allKeyIndex := -1
+	// we only need All postings if there are no other adds. If there are, we can skip fetching ALL postings completely.
 	if all && !hasAdds {
-		// ask fetchPostings to fetch 'all' postings too
-		fetchMap[allPostingsKeyLabel] = nil
+		// remember the index (will be used later as a flag, and also to access postings),
+		// and ask fetchPostings to fetch ALL postings too
+		allKeyIndex = len(keys)
+		keys = append(keys, getAllPostingsKeyLabel())
 	}
 
-	if err := r.fetchPostings(fetchMap); err != nil {
+	fetchedPostings, err := r.fetchPostings(keys)
+	if err != nil {
 		return nil, errors.Wrap(err, "get postings")
 	}
 
-	// get add/remove postings from groups
+	// get add/remove postings from groups. While we iterate over postingGroups and their keys
+	// again, this is exactly the same order as before, when building the groups, so we can simply
+	// use one incrementing index to fetch postings from returned slice.
+	postingIndex := 0
+
 	var groupAdds, removals []index.Postings
 	for _, g := range postingGroups {
 		// we cannot add empty set to groupAdds, since they are intersected
 		if len(g.addKeys) > 0 {
 			var toMerge []index.Postings
 			for _, l := range g.addKeys {
-				toMerge = append(toMerge, getFetchedPosting(l, fetchMap))
+				toMerge = append(toMerge, checkNilPosting(l, fetchedPostings[postingIndex]))
+				postingIndex++
 			}
 
 			groupAdds = append(groupAdds, index.Merge(toMerge...))
 		}
 
 		for _, l := range g.removeKeys {
-			removals = append(removals, getFetchedPosting(l, fetchMap))
+			removals = append(removals, checkNilPosting(l, fetchedPostings[postingIndex]))
+			postingIndex++
 		}
 	}
 
-	if all && !hasAdds {
-		// ask fetchPostings to fetch 'all' postings too
-		groupAdds = append(groupAdds, getFetchedPosting(allPostingsKeyLabel, fetchMap))
+	if allKeyIndex >= 0 {
+		// if we have fetched "ALL" postings, add it
+		groupAdds = append(groupAdds, checkNilPosting(getAllPostingsKeyLabel(), fetchedPostings[allKeyIndex]))
 	}
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(removals...))
@@ -1389,6 +1403,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	return ps, nil
+}
+
+func getAllPostingsKeyLabel() labels.Label {
+	name, value := index.AllPostingsKey()
+	return labels.Label{Name: name, Value: value}
 }
 
 // Logical result of each individual group is:
@@ -1414,30 +1433,12 @@ func (p *postingGroup) alwaysEmptyPostings() bool {
 	return !p.addAll && len(p.addKeys) == 0
 }
 
-func getFetchedPosting(l labels.Label, fetched map[labels.Label]index.Postings) index.Postings {
-	p := fetched[l]
+func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
-		p = index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
+		return index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
 	}
 	return p
-}
-
-func (p *postingGroup) contributeKeysToFetchMap(fetchMap map[labels.Label]index.Postings) {
-	for _, k := range p.addKeys {
-		fetchMap[k] = nil
-	}
-	for _, k := range p.removeKeys {
-		fetchMap[k] = nil
-	}
-}
-
-var allPostingsKeyLabel labels.Label
-
-// init allPostingsKeyLabel
-func init() {
-	name, value := index.AllPostingsKey()
-	allPostingsKeyLabel = labels.Label{Name: name, Value: value}
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
@@ -1498,22 +1499,18 @@ type postingPtr struct {
 }
 
 // fetchPostings fill postings requested by posting groups.
-// By forcing client to supply output map, client will deduplicate keys first.
-func (r *bucketIndexReader) fetchPostings(output map[labels.Label]index.Postings) error {
+func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
 	var ptrs []postingPtr
 
-	// Fetch postings from the cache with a single call.
-	keys := make([]labels.Label, 0, len(output))
-	for k, _ := range output {
-		keys = append(keys, k)
-	}
+	output := make([]index.Postings, len(keys))
 
+	// Fetch postings from the cache with a single call.
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(r.ctx, r.block.meta.ULID, keys)
 
 	// Iterate over all groups and fetch posting from cache.
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
-	for j, key := range keys {
+	for ix, key := range keys {
 		// Get postings for the given key from cache first.
 		if b, ok := fromCache[key]; ok {
 			r.stats.postingsTouched++
@@ -1521,10 +1518,10 @@ func (r *bucketIndexReader) fetchPostings(output map[labels.Label]index.Postings
 
 			_, l, err := r.dec.Postings(b)
 			if err != nil {
-				return errors.Wrap(err, "decode postings")
+				return nil, errors.Wrap(err, "decode postings")
 			}
 
-			output[key] = l
+			output[ix] = l
 			continue
 		}
 
@@ -1532,16 +1529,16 @@ func (r *bucketIndexReader) fetchPostings(output map[labels.Label]index.Postings
 		ptr, err := r.block.indexHeaderReader.PostingsOffset(key.Name, key.Value)
 		if err == indexheader.NotFoundRangeErr {
 			// This block does not have any posting for given key.
-			output[key] = index.EmptyPostings()
+			output[ix] = index.EmptyPostings()
 			continue
 		}
 
 		if err != nil {
-			return errors.Wrap(err, "index header PostingsOffset")
+			return nil, errors.Wrap(err, "index header PostingsOffset")
 		}
 
 		r.stats.postingsToFetch++
-		ptrs = append(ptrs, postingPtr{ptr: ptr, keyID: j})
+		ptrs = append(ptrs, postingPtr{ptr: ptr, keyID: ix})
 	}
 
 	sort.Slice(ptrs, func(i, j int) bool {
@@ -1589,7 +1586,7 @@ func (r *bucketIndexReader) fetchPostings(output map[labels.Label]index.Postings
 				r.mtx.Lock()
 				// Return postings and fill LRU cache.
 				// Truncate first 4 bytes which are length of posting.
-				output[keys[p.keyID]] = newBigEndianPostings(pBytes[4:])
+				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], pBytes)
 
 				// If we just fetched it we still have to update the stats for touched postings.
@@ -1601,7 +1598,7 @@ func (r *bucketIndexReader) fetchPostings(output map[labels.Label]index.Postings
 		})
 	}
 
-	return g.Wait()
+	return output, g.Wait()
 }
 
 func resizePostings(b []byte) ([]byte, error) {
