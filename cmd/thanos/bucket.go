@@ -486,13 +486,15 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	})
 }
 
-func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket, fetcher *block.MetaFetcher) (blocks []metadata.Meta, err error) {
+func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket, fetcher *block.MetaFetcher) ([]metadata.Meta, error) {
 	level.Info(logger).Log("msg", "synchronizing block metadata")
 
 	metas, _, err := fetcher.Fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	blocks := []metadata.Meta{}
 
 	for _, meta := range metas {
 		blocks = append(blocks, *meta)
