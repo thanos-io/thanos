@@ -45,7 +45,7 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 	return queryCfg, nil
 }
 
-// BuildQueryConfig initializes and returns an Query client configuration from a static address.
+// BuildQueryConfig returns a query client configuration from a static address.
 func BuildQueryConfig(queryAddrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(queryAddrs))
 	for _, addr := range queryAddrs {

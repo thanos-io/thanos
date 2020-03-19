@@ -288,14 +288,13 @@ func runRule(
 	metrics := newRuleMetrics(reg)
 
 	var queryCfg []query.Config
+	var err error
 	if len(queryConfigYAML) > 0 {
-		var err error
 		queryCfg, err = query.LoadConfigs(queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		var err error
 		queryCfg, err = query.BuildQueryConfig(queryAddrs)
 		if err != nil {
 			return err
