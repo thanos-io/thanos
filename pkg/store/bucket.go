@@ -1313,6 +1313,9 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	var postingGroups []*postingGroup
 	fetchMap := map[labels.Label]index.Postings{}
 
+	all := false
+	hasAdds := false
+
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
 		// Each group is separate to tell later what postings are intersecting with what.
@@ -1322,28 +1325,60 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		// interesction would return no postings anyway
-		if pg.AlwaysEmptyPostings() {
+		if pg.alwaysEmptyPostings() {
 			return nil, nil
 		}
 
 		postingGroups = append(postingGroups, pg)
 		pg.contributeKeysToFetchMap(fetchMap)
+
+		all = all || pg.addAll
+		hasAdds = hasAdds || len(pg.addKeys) > 0
 	}
 
 	if len(postingGroups) == 0 {
 		return nil, nil
 	}
 
+	// we only need All postings if there are no other adds
+	if all && !hasAdds {
+		// ask fetchPostings to fetch 'all' postings too
+		fetchMap[allPostingsKeyLabel] = nil
+	}
+
 	if err := r.fetchPostings(fetchMap); err != nil {
 		return nil, errors.Wrap(err, "get postings")
 	}
 
-	var postings []index.Postings
+	// get add/remove postings from groups
+	var groupAdds []index.Postings
+	removals := map[labels.Label]index.Postings{} // use map to skip duplicates
 	for _, g := range postingGroups {
-		postings = append(postings, g.Postings(fetchMap))
+		if len(g.addKeys) > 0 {
+			var toMerge []index.Postings
+			for _, l := range g.addKeys {
+				toMerge = append(toMerge, getFetchedPosting(l, fetchMap))
+			}
+
+			groupAdds = append(groupAdds, index.Merge(toMerge...))
+		}
+
+		for _, l := range g.removeKeys {
+			removals[l] = getFetchedPosting(l, fetchMap)
+		}
 	}
 
-	ps, err := index.ExpandPostings(index.Intersect(postings...))
+	if all && !hasAdds {
+		// ask fetchPostings to fetch 'all' postings too
+		groupAdds = append(groupAdds, getFetchedPosting(allPostingsKeyLabel, fetchMap))
+	}
+
+	result := index.Intersect(groupAdds...)
+	for _, p := range removals {
+		result = index.Without(result, p)
+	}
+
+	ps, err := index.ExpandPostings(result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
@@ -1359,41 +1394,36 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	return ps, nil
 }
 
+// Logical result of each individual group is:
+// If addAll is set: ALL postings minus postings for removeKeys labels. (No need to merge postings for addKeys in this case)
+// If addAll is not set: Merge of postings for "addKeys" labels minus postings for removeKeys labels
+// This happens in ExpandedPostings.
 type postingGroup struct {
-	addKeys, removeKeys []labels.Label
+	addAll     bool
+	addKeys    []labels.Label
+	removeKeys []labels.Label
 }
 
-func newPostingGroup(addKeys, removeKeys []labels.Label) *postingGroup {
+func newPostingGroup(addAll bool, addKeys, removeKeys []labels.Label) *postingGroup {
 	return &postingGroup{
+		addAll:     addAll,
 		addKeys:    addKeys,
 		removeKeys: removeKeys,
 	}
 }
 
 // returns true, if this postingGroup will always return empty postings.
-func (p *postingGroup) AlwaysEmptyPostings() bool {
-	return len(p.addKeys) == 0
+func (p *postingGroup) alwaysEmptyPostings() bool {
+	return !p.addAll && len(p.addKeys) == 0
 }
 
-func (p *postingGroup) Postings(fetched map[labels.Label]index.Postings) index.Postings {
-	toAdd := collectPostings(p.addKeys, fetched)
-	toRemove := collectPostings(p.removeKeys, fetched)
-
-	return index.Without(index.Merge(toAdd...), index.Merge(toRemove...))
-}
-
-func collectPostings(lbls []labels.Label, fetched map[labels.Label]index.Postings) []index.Postings {
-	var result []index.Postings
-	for _, l := range lbls {
-		p := fetched[l]
-		if p == nil {
-			// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
-			p = index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
-		}
-
-		result = append(result, p)
+func getFetchedPosting(l labels.Label, fetched map[labels.Label]index.Postings) index.Postings {
+	p := fetched[l]
+	if p == nil {
+		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
+		p = index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
 	}
-	return result
+	return p
 }
 
 func (p *postingGroup) contributeKeysToFetchMap(fetchMap map[labels.Label]index.Postings) {
@@ -1417,12 +1447,13 @@ func init() {
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
 		// This matches all values, including no value. If it is the only matcher, it will return all postings.
-		return newPostingGroup([]labels.Label{allPostingsKeyLabel}, nil), nil
+		return newPostingGroup(true, nil, nil), nil
 	}
 
 	// NOT matching any value = match nothing. We can shortcut this easily.
 	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return newPostingGroup(nil, []labels.Label{allPostingsKeyLabel}), nil
+		// empty result
+		return newPostingGroup(false, nil, nil), nil
 	}
 
 	// If the matcher selects an empty value, it selects all the series which don't
@@ -1441,12 +1472,12 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 			}
 		}
 
-		return newPostingGroup([]labels.Label{allPostingsKeyLabel}, toRemove), nil
+		return newPostingGroup(true, nil, toRemove), nil
 	}
 
 	// Fast-path for equal matching.
 	if m.Type == labels.MatchEqual {
-		return newPostingGroup([]labels.Label{{Name: m.Name, Value: m.Value}}, nil), nil
+		return newPostingGroup(false, []labels.Label{{Name: m.Name, Value: m.Value}}, nil), nil
 	}
 
 	vals, err := lvalsFn(m.Name)
@@ -1461,7 +1492,7 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 		}
 	}
 
-	return newPostingGroup(toAdd, nil), nil
+	return newPostingGroup(false, toAdd, nil), nil
 }
 
 type postingPtr struct {
