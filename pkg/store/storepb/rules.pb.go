@@ -286,6 +286,7 @@ func (m *AlertInstance) XXX_DiscardUnknown() {
 var xxx_messageInfo_AlertInstance proto.InternalMessageInfo
 
 type Alert struct {
+	/// state returns the maximum state of alert instances for this rule.
 	State                     AlertState       `protobuf:"varint,1,opt,name=state,proto3,enum=thanos.AlertState" json:"state"`
 	Name                      string           `protobuf:"bytes,2,opt,name=name,proto3" json:"name"`
 	Query                     string           `protobuf:"bytes,3,opt,name=query,proto3" json:"query"`

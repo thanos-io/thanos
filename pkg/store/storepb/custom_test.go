@@ -353,7 +353,7 @@ func TestPrompbLabelsToLabelsUnsafe(t *testing.T) {
 	for _, l := range labels.FromMap(testLsetMap) {
 		pb = append(pb, prompb.Label{Name: l.Name, Value: l.Value})
 	}
-	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabels(pb))
+	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
 	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
 }
 

@@ -81,6 +81,7 @@ message AlertInstance {
 }
 
 message Alert {
+  /// state returns the maximum state of alert instances for this rule.
   AlertState state                          = 1 [(gogoproto.jsontag) = "state" ];
   string name                               = 2 [(gogoproto.jsontag) = "name" ];
   string query                              = 3 [(gogoproto.jsontag) = "query" ];

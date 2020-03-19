@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc/codes"
@@ -95,7 +96,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
-	matchers, err := translateMatchers(newMatchers)
+	matchers, err := promclient.TranslateMatchers(newMatchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
