@@ -69,7 +69,6 @@ func diffVarintDecode(input []byte) (index.Postings, error) {
 	switch {
 	case bytes.HasPrefix(input, []byte(codecHeaderRaw)):
 		headerLen = len(codecHeaderRaw)
-		break
 	case bytes.HasPrefix(input, []byte(codecHeaderSnappy)):
 		headerLen = len(codecHeaderSnappy)
 		compressed = true
