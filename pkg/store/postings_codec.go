@@ -16,6 +16,10 @@ const (
 	codecHeaderSnappy = "diff+varint+snappy"
 )
 
+func isDiffVarintEncodedPostings(input []byte) bool {
+	return bytes.HasPrefix(input, []byte(codecHeaderRaw)) || bytes.HasPrefix(input, []byte(codecHeaderSnappy))
+}
+
 func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
 	return diffVarintEncode(p, true)
 }

@@ -220,6 +220,10 @@ type BucketStore struct {
 	advLabelSets             []storepb.LabelSet
 	enableCompatibilityLabel bool
 	enableIndexHeader        bool
+
+	// Reencode postings using diff+varint+snappy when storing to cache.
+	// This makes them smaller, but takes extra CPU and memory.
+	enablePostingsCompression bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -239,6 +243,7 @@ func NewBucketStore(
 	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
 	enableIndexHeader bool,
+	enablePostingsCompression bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -270,10 +275,11 @@ func NewBucketStore(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
-		samplesLimiter:           NewLimiter(maxSampleCount, metrics.queriesDropped),
-		partitioner:              gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
-		enableCompatibilityLabel: enableCompatibilityLabel,
-		enableIndexHeader:        enableIndexHeader,
+		samplesLimiter:            NewLimiter(maxSampleCount, metrics.queriesDropped),
+		partitioner:               gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+		enableCompatibilityLabel:  enableCompatibilityLabel,
+		enableIndexHeader:         enableIndexHeader,
+		enablePostingsCompression: enablePostingsCompression,
 	}
 	s.metrics = metrics
 
@@ -455,6 +461,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		indexHeaderReader,
 		s.partitioner,
 		s.metrics.seriesRefetches,
+		s.enablePostingsCompression,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -1183,6 +1190,8 @@ type bucketBlock struct {
 	partitioner partitioner
 
 	seriesRefetches prometheus.Counter
+
+	enablePostingsCompression bool
 }
 
 func newBucketBlock(
@@ -1196,17 +1205,19 @@ func newBucketBlock(
 	indexHeadReader indexheader.Reader,
 	p partitioner,
 	seriesRefetches prometheus.Counter,
+	enablePostingsCompression bool,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
-		logger:            logger,
-		bkt:               bkt,
-		indexCache:        indexCache,
-		chunkPool:         chunkPool,
-		dir:               dir,
-		partitioner:       p,
-		meta:              meta,
-		indexHeaderReader: indexHeadReader,
-		seriesRefetches:   seriesRefetches,
+		logger:                    logger,
+		bkt:                       bkt,
+		indexCache:                indexCache,
+		chunkPool:                 chunkPool,
+		dir:                       dir,
+		partitioner:               p,
+		meta:                      meta,
+		indexHeaderReader:         indexHeadReader,
+		seriesRefetches:           seriesRefetches,
+		enablePostingsCompression: enablePostingsCompression,
 	}
 
 	// Get object handles for all chunk files.
@@ -1512,7 +1523,16 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 			r.stats.postingsTouched++
 			r.stats.postingsTouchedSizeSum += len(b)
 
-			_, l, err := r.dec.Postings(b)
+			// Even if this instance is not using compression, there may be compressed
+			// entries in the cache written by other stores.
+			var l index.Postings
+			var err error
+			if isDiffVarintEncodedPostings(b) {
+				l, err = diffVarintDecode(b)
+			} else {
+				_, l, err = r.dec.Postings(b)
+			}
+
 			if err != nil {
 				return nil, errors.Wrap(err, "decode postings")
 			}
@@ -1583,7 +1603,21 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 				// Return postings and fill LRU cache.
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
-				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], pBytes)
+
+				storeData := pBytes
+
+				if r.block.enablePostingsCompression {
+					// Reencode postings before storing to cache. If that fails, we store original bytes.
+					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
+					if err == nil {
+						storeData = data
+					} else {
+						// This can only fail, if postings data was somehow corrupted,
+						// and there is nothing we can do about it. It's not worth reporting here.
+					}
+				}
+
+				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], storeData)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
