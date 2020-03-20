@@ -1608,12 +1608,11 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 
 				if r.block.enablePostingsCompression {
 					// Reencode postings before storing to cache. If that fails, we store original bytes.
+					// This can only fail, if postings data was somehow corrupted,
+					// and there is nothing we can do about it. It's not worth reporting here.
 					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
 					if err == nil {
 						storeData = data
-					} else {
-						// This can only fail, if postings data was somehow corrupted,
-						// and there is nothing we can do about it. It's not worth reporting here.
 					}
 				}
 
