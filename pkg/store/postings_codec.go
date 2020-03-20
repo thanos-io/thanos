@@ -3,10 +3,10 @@ package store
 import (
 	"bytes"
 	encoding_binary "encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/golang/snappy"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/index"
 )
 
