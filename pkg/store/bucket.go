@@ -1326,7 +1326,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		// Intersection with empty postings would return no postings anyway.
-		if pg.alwaysEmptyPostings() {
+		if pg == emptyPostings {
 			return nil, nil
 		}
 
@@ -1429,11 +1429,6 @@ func newPostingGroup(addAll bool, addKeys, removeKeys []labels.Label) *postingGr
 	}
 }
 
-// returns true, if this postingGroup will always return empty postings.
-func (p *postingGroup) alwaysEmptyPostings() bool {
-	return !p.addAll && len(p.addKeys) == 0
-}
-
 func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
@@ -1442,16 +1437,21 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 	return p
 }
 
+var (
+	allPostings   = newPostingGroup(true, nil, nil)
+	emptyPostings = newPostingGroup(false, nil, nil)
+)
+
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	// This matches all values, including no value. If it is the only matcher, it will return all postings.
 	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return newPostingGroup(true, nil, nil), nil
+		return allPostings, nil
 	}
 
 	// NOT matching any value = match nothing. We can shortcut this easily.
 	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return newPostingGroup(false, nil, nil), nil
+		return emptyPostings, nil
 	}
 
 	// If the matcher selects an empty value, it selects all the series which don't
