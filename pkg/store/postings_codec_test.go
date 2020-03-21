@@ -57,7 +57,7 @@ func TestDiffVarintCodec(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Log("postings entries:", p.len())
 				t.Log("original size (4*entries):", 4*p.len(), "bytes")
-				p.reset() // we reuse postings between runs, so we need to reset iterator
+				p.reset() // We reuse postings between runs, so we need to reset iterator.
 
 				data, err := diffVarintEncode(p, snappy)
 				testutil.Ok(t, err)
@@ -131,7 +131,7 @@ func toUint64Postings(p index.Postings) (*uint64Postings, error) {
 	return &uint64Postings{vals: vals, ix: -1}, p.Err()
 }
 
-// postings with no decoding step
+// Postings with no decoding step.
 type uint64Postings struct {
 	vals []uint64
 	ix   int
@@ -157,8 +157,8 @@ func (p *uint64Postings) Seek(x uint64) bool {
 		return true
 	}
 
-	// we cannot do any search due to how values are stored,
-	// so we simply advance until we find the right value
+	// We cannot do any search due to how values are stored,
+	// so we simply advance until we find the right value.
 	for p.Next() {
 		if p.At() >= x {
 			return true
