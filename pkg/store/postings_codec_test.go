@@ -47,16 +47,16 @@ func TestDiffVarintCodec(t *testing.T) {
 		testutil.Ok(t, err)
 
 		for _, snappy := range []bool{false, true} {
-			name := postingName + "/"
+			name := postingName
 			if snappy {
-				name = name + "snappy"
+				name = "snappy/" + name
 			} else {
-				name = name + "raw"
+				name = "raw/" + name
 			}
 
-			t.Run(postingName+"/"+name, func(t *testing.T) {
+			t.Run(name, func(t *testing.T) {
 				t.Log("postings entries:", p.len())
-				t.Log("raw size (4*entries):", 4*p.len(), "bytes")
+				t.Log("original size (4*entries):", 4*p.len(), "bytes")
 				p.reset() // we reuse postings between runs, so we need to reset iterator
 
 				data, err := diffVarintEncode(p, snappy)

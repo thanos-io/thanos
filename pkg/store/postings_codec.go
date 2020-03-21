@@ -5,11 +5,10 @@ package store
 
 import (
 	"bytes"
-	encoding_binary "encoding/binary"
-	"fmt"
 
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
 )
 
@@ -31,21 +30,22 @@ func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
 
 // diffVarintEncode encodes postings into diff+varint representation and optional snappy compression.
 func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
-	varintBuf := make([]byte, encoding_binary.MaxVarintLen64)
-
-	buf := bytes.Buffer{}
+	buf := encoding.Encbuf{}
 
 	// If we're returning raw data, write the header to the buffer, and then return buffer directly.
 	if !useSnappy {
-		buf.WriteString(codecHeaderRaw)
+		buf.PutString(codecHeaderRaw)
 	}
 
 	prev := uint64(0)
 	for p.Next() {
 		v := p.At()
-		n := encoding_binary.PutUvarint(varintBuf, v-prev)
-		buf.Write(varintBuf[:n])
+		if v < prev {
+			// Postings entries must be in increasing order.
+			return nil, errors.Errorf("decreasing entry, val: %d, prev: %d", v, prev)
+		}
 
+		buf.PutUvarint64(v - prev)
 		prev = v
 	}
 
@@ -54,15 +54,15 @@ func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	}
 
 	if !useSnappy {
-		// This already has the correct header.
-		return buf.Bytes(), nil
+		// When not using Snappy, buffer already has the correct header.
+		return buf.B, nil
 	}
 
 	// Make result buffer large enough to hold our header and compressed block.
 	resultBuf := make([]byte, len(codecHeaderSnappy)+snappy.MaxEncodedLen(buf.Len()))
 	copy(resultBuf, codecHeaderSnappy)
 
-	compressed := snappy.Encode(resultBuf[len(codecHeaderSnappy):], buf.Bytes())
+	compressed := snappy.Encode(resultBuf[len(codecHeaderSnappy):], buf.B)
 
 	// Slice result buffer based on compressed size.
 	resultBuf = resultBuf[:len(codecHeaderSnappy)+len(compressed)]
@@ -87,18 +87,17 @@ func diffVarintDecode(input []byte) (index.Postings, error) {
 		var err error
 		raw, err = snappy.Decode(nil, raw)
 		if err != nil {
-			return nil, fmt.Errorf("snappy decode: %w", err)
+			return nil, errors.Errorf("snappy decode: %w", err)
 		}
 	}
 
-	return &diffVarintPostings{data: raw}, nil
+	return &diffVarintPostings{buf: &encoding.Decbuf{B: raw}}, nil
 }
 
 // Implementation of index.Postings based on diff+varint encoded data.
 type diffVarintPostings struct {
-	data []byte
-	cur  uint64
-	err  error
+	buf *encoding.Decbuf
+	cur uint64
 }
 
 func (it *diffVarintPostings) At() uint64 {
@@ -106,19 +105,16 @@ func (it *diffVarintPostings) At() uint64 {
 }
 
 func (it *diffVarintPostings) Next() bool {
-	if len(it.data) == 0 {
+	if it.buf.Err() != nil || it.buf.Len() == 0 {
 		return false
 	}
 
-	val, n := encoding_binary.Uvarint(it.data)
-	if n == 0 {
-		it.err = errors.New("not enough data")
+	val := it.buf.Uvarint64()
+	if it.buf.Err() != nil {
 		return false
 	}
 
-	it.data = it.data[n:]
 	it.cur = it.cur + val
-	it.err = nil
 	return true
 }
 
@@ -139,5 +135,5 @@ func (it *diffVarintPostings) Seek(x uint64) bool {
 }
 
 func (it *diffVarintPostings) Err() error {
-	return it.err
+	return it.buf.Err()
 }
