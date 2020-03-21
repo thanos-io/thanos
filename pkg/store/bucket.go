@@ -1359,8 +1359,8 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		return nil, errors.Wrap(err, "get postings")
 	}
 
-	// get add/remove postings from groups. While we iterate over postingGroups and their keys
-	// again, this is exactly the same order as before, when building the groups, so we can simply
+	// Get "add" and "remove" postings from groups. We iterate over postingGroups and their keys
+	// again, and this is exactly the same order as before (when building the groups), so we can simply
 	// use one incrementing index to fetch postings from returned slice.
 	postingIndex := 0
 
