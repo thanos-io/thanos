@@ -14,25 +14,28 @@ import (
 )
 
 const (
-	// these headers should not be prefix of each other
+	// These headers should not be a prefix of each other.
 	codecHeaderRaw    = "diff+varint+raw"
 	codecHeaderSnappy = "diff+varint+snappy"
 )
 
+// isDiffVarintEncodedPostings returns true, if input looks like it has been encoded by diff+varint(+snappy) codec.
 func isDiffVarintEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderRaw)) || bytes.HasPrefix(input, []byte(codecHeaderSnappy))
 }
 
+// diffVarintSnappyEncode encodes postings using diff+varint+snappy codec.
 func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
 	return diffVarintEncode(p, true)
 }
 
+// diffVarintEncode encodes postings into diff+varint representation and optional snappy compression.
 func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	varintBuf := make([]byte, encoding_binary.MaxVarintLen64)
 
 	buf := bytes.Buffer{}
 
-	// if we're returning raw data, write the header to the buffer, and then return buffer directly
+	// If we're returning raw data, write the header to the buffer, and then return buffer directly.
 	if !useSnappy {
 		buf.WriteString(codecHeaderRaw)
 	}
@@ -51,17 +54,17 @@ func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	}
 
 	if !useSnappy {
-		// this already has the correct header
+		// This already has the correct header.
 		return buf.Bytes(), nil
 	}
 
-	// make result buffer large enough to hold our header and compressed block
+	// Make result buffer large enough to hold our header and compressed block.
 	resultBuf := make([]byte, len(codecHeaderSnappy)+snappy.MaxEncodedLen(buf.Len()))
 	copy(resultBuf, codecHeaderSnappy)
 
 	compressed := snappy.Encode(resultBuf[len(codecHeaderSnappy):], buf.Bytes())
 
-	// slice result buffer based on compressed size
+	// Slice result buffer based on compressed size.
 	resultBuf = resultBuf[:len(codecHeaderSnappy)+len(compressed)]
 	return resultBuf, nil
 }
@@ -91,6 +94,7 @@ func diffVarintDecode(input []byte) (index.Postings, error) {
 	return &diffVarintPostings{data: raw}, nil
 }
 
+// Implementation of index.Postings based on diff+varint encoded data.
 type diffVarintPostings struct {
 	data []byte
 	cur  uint64
