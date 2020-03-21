@@ -1346,10 +1346,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	allKeyIndex := -1
-	// we only need All postings if there are no other adds. If there are, we can skip fetching ALL postings completely.
+	// we only need special All postings if there are no other adds. If there are, we can skip fetching
+	// special All postings completely.
 	if allRequested && !hasAdds {
 		// Remember the index (will be used later as a flag, and also to access postings),
-		// and ask fetchPostings to fetch ALL postings too.
+		// and ask fetchPostings to fetch special All postings too.
 		allKeyIndex = len(keys)
 		keys = append(keys, getAllPostingsKeyLabel())
 	}
@@ -1384,7 +1385,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	if allKeyIndex >= 0 {
-		// If we have fetched "ALL" postings, add it.
+		// If we have fetched special All postings, add it.
 		groupAdds = append(groupAdds, checkNilPosting(getAllPostingsKeyLabel(), fetchedPostings[allKeyIndex]))
 	}
 
@@ -1412,7 +1413,7 @@ func getAllPostingsKeyLabel() labels.Label {
 }
 
 // Logical result of each individual group is:
-// If addAll is set: ALL postings minus postings for removeKeys labels. (No need to merge postings for addKeys in this case)
+// If addAll is set: special All postings minus postings for removeKeys labels. No need to merge postings for addKeys in this case.
 // If addAll is not set: Merge of postings for "addKeys" labels minus postings for removeKeys labels
 // This happens in ExpandedPostings.
 type postingGroup struct {
@@ -1444,7 +1445,7 @@ var (
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
-	// This matches all values, including no value. If it is the only matcher, it will return all postings.
+	// This matches any label value, and also series that don't have this label at all.
 	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
 		return allPostings, nil
 	}
