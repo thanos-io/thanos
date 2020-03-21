@@ -1326,7 +1326,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		// Intersection with empty postings would return no postings anyway.
-		if pg == emptyPostings {
+		if pg == emptyPostingsGroup {
 			return nil, nil
 		}
 
@@ -1335,8 +1335,8 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		hasAdds = hasAdds || len(pg.addKeys) > 0
 
 		// Postings returned by fetchPostings will be in the same order as keys
-		// so it's important that we iterate them in the same order later,
-		// since we don't build any label -> keys index map.
+		// so it's important that we iterate them in the same order later.
+		// We don't have any other way of pairing keys and fetched postings.
 		keys = append(keys, pg.addKeys...)
 		keys = append(keys, pg.removeKeys...)
 	}
@@ -1365,11 +1365,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	// use one incrementing index to fetch postings from returned slice.
 	postingIndex := 0
 
-	var groupAdds, removals []index.Postings
+	var groupAdds, groupRemovals []index.Postings
 	for _, g := range postingGroups {
 		// We cannot add empty set to groupAdds, since they are intersected.
 		if len(g.addKeys) > 0 {
-			var toMerge []index.Postings
+			toMerge := make([]index.Postings, 0, len(g.addKeys))
 			for _, l := range g.addKeys {
 				toMerge = append(toMerge, checkNilPosting(l, fetchedPostings[postingIndex]))
 				postingIndex++
@@ -1379,7 +1379,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 
 		for _, l := range g.removeKeys {
-			removals = append(removals, checkNilPosting(l, fetchedPostings[postingIndex]))
+			groupRemovals = append(groupRemovals, checkNilPosting(l, fetchedPostings[postingIndex]))
 			postingIndex++
 		}
 	}
@@ -1389,7 +1389,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		groupAdds = append(groupAdds, checkNilPosting(getAllPostingsKeyLabel(), fetchedPostings[allKeyIndex]))
 	}
 
-	result := index.Without(index.Intersect(groupAdds...), index.Merge(removals...))
+	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
 
 	ps, err := index.ExpandPostings(result)
 	if err != nil {
@@ -1439,20 +1439,20 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 }
 
 var (
-	allPostings   = newPostingGroup(true, nil, nil)
-	emptyPostings = newPostingGroup(false, nil, nil)
+	allPostingsGroup   = newPostingGroup(true, nil, nil)
+	emptyPostingsGroup = newPostingGroup(false, nil, nil)
 )
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	// This matches any label value, and also series that don't have this label at all.
 	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return allPostings, nil
+		return allPostingsGroup, nil
 	}
 
 	// NOT matching any value = match nothing. We can shortcut this easily.
 	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return emptyPostings, nil
+		return emptyPostingsGroup, nil
 	}
 
 	// If the matcher selects an empty value, it selects all the series which don't
