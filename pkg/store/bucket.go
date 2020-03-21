@@ -1325,8 +1325,9 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
 
-		// If this groups adds nothing, it's an empty group. Intersection with empty postings would return no postings anyway.
-		// E.g. label="non-existing-value" also returns empty group.
+		// If this groups adds nothing, it's an empty group. We can shortcut this, since intersection with empty
+		// postings would return no postings anyway.
+		// E.g. label="non-existing-value" returns empty group.
 		if !pg.addAll && len(pg.addKeys) == 0 {
 			return nil, nil
 		}
