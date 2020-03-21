@@ -192,6 +192,13 @@ func (h *Handler) Run() error {
 		TLSConfig: h.options.TLSConfig,
 	}
 
+	if h.options.TLSConfig != nil {
+		level.Info(h.logger).Log("msg", "Serving HTTPS", "address", h.options.ListenAddress)
+		// Cert & Key are already being passed in via TLSConfig.
+		return httpSrv.ServeTLS(h.listener, "", "")
+	}
+
+	level.Info(h.logger).Log("msg", "Serving plain HTTP", "address", h.options.ListenAddress)
 	return httpSrv.Serve(h.listener)
 }
 
