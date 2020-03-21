@@ -1310,11 +1310,12 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, error) {
-	var postingGroups []*postingGroup
-
-	allRequested := false
-	hasAdds := false
-	keys := []labels.Label(nil)
+	var (
+		postingGroups []*postingGroup
+		allRequested  = false
+		hasAdds       = false
+		keys          []labels.Label
+	)
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
