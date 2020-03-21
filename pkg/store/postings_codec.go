@@ -123,8 +123,8 @@ func (it *diffVarintPostings) Seek(x uint64) bool {
 		return true
 	}
 
-	// we cannot do any search due to how values are stored,
-	// so we simply advance until we find the right value
+	// We cannot do any search due to how values are stored,
+	// so we simply advance until we find the right value.
 	for it.Next() {
 		if it.At() >= x {
 			return true
