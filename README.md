@@ -1,5 +1,6 @@
 <p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
+[![Latest Release](https://img.shields.io/github/release/thanos-io/thanos.svg?style=flat-square)](https://github.com/thanos-io/thanos/releases/latest)
 [![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
 [![Cross Build](https://github.com/thanos-io/thanos/workflows/cross-build/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Across-build)
 [![End-to-End Tests](https://github.com/thanos-io/thanos/workflows/e2e/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ae2e)
