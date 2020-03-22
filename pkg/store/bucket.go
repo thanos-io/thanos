@@ -1610,7 +1610,7 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 					// Reencode postings before storing to cache. If that fails, we store original bytes.
 					// This can only fail, if postings data was somehow corrupted,
 					// and there is nothing we can do about it. It's not worth reporting here.
-					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
+					data, err := diffVarintEncode(newBigEndianPostings(pBytes[4:]), true)
 					if err == nil {
 						storeData = data
 					}

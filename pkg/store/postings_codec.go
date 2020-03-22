@@ -23,11 +23,6 @@ func isDiffVarintEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderRaw)) || bytes.HasPrefix(input, []byte(codecHeaderSnappy))
 }
 
-// diffVarintSnappyEncode encodes postings using diff+varint+snappy codec.
-func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
-	return diffVarintEncode(p, true)
-}
-
 // diffVarintEncode encodes postings into diff+varint representation and optional snappy compression.
 func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	buf := encoding.Encbuf{}
