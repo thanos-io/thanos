@@ -190,10 +190,6 @@ func runReceive(
 	if err != nil {
 		return err
 	}
-	rwTLSClientConfig, err := tls.NewClientConfig(logger, rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
-	if err != nil {
-		return err
-	}
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, rwServerCert != "", rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
 	if err != nil {
 		return err
@@ -208,7 +204,6 @@ func runReceive(
 		ReplicationFactor: replicationFactor,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
-		TLSClientConfig:   rwTLSClientConfig,
 		DialOpts:          dialOpts,
 	})
 

@@ -60,7 +60,6 @@ type Options struct {
 	ReplicationFactor uint64
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
-	TLSClientConfig   *tls.Config
 	DialOpts          []grpc.DialOption
 }
 
