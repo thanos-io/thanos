@@ -13,23 +13,38 @@ import (
 )
 
 const (
-	// These headers should not be a prefix of each other.
-	codecHeaderRaw    = "diff+varint+raw"
 	codecHeaderSnappy = "diff+varint+snappy"
 )
 
-// isDiffVarintEncodedPostings returns true, if input looks like it has been encoded by diff+varint(+snappy) codec.
-func isDiffVarintEncodedPostings(input []byte) bool {
-	return bytes.HasPrefix(input, []byte(codecHeaderRaw)) || bytes.HasPrefix(input, []byte(codecHeaderSnappy))
+// isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint(+snappy) codec.
+func isDiffVarintSnappyEncodedPostings(input []byte) bool {
+	return bytes.HasPrefix(input, []byte(codecHeaderSnappy))
 }
 
-// diffVarintEncode encodes postings into diff+varint representation and optional snappy compression.
-func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
-	buf := encoding.Encbuf{}
-
-	if !useSnappy {
-		buf.PutString(codecHeaderRaw)
+// diffVarintSnappyEncode encodes postings into diff+varint representation,
+// and applies snappy compression on the result.
+// Returned byte slice starts with codedHeaderSnappy header.
+func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
+	buf, err := diffVarintEncodeNoHeader(p)
+	if err != nil {
+		return nil, err
 	}
+
+	// Make result buffer large enough to hold our header and compressed block.
+	result := make([]byte, len(codecHeaderSnappy)+snappy.MaxEncodedLen(len(buf)))
+	copy(result, codecHeaderSnappy)
+
+	compressed := snappy.Encode(result[len(codecHeaderSnappy):], buf)
+
+	// Slice result buffer based on compressed size.
+	result = result[:len(codecHeaderSnappy)+len(compressed)]
+	return result, nil
+}
+
+// diffVarintEncodeNoHeader encodes postings into diff+varint representation.
+// It doesn't add any header to the output bytes.
+func diffVarintEncodeNoHeader(p index.Postings) ([]byte, error) {
+	buf := encoding.Encbuf{}
 
 	prev := uint64(0)
 	for p.Next() {
@@ -38,53 +53,32 @@ func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 			return nil, errors.Errorf("postings entries must be in increasing order, current: %d, previous: %d", v, prev)
 		}
 
+		// This is the 'diff' part -- compute difference from previous value.
 		buf.PutUvarint64(v - prev)
 		prev = v
 	}
-
 	if p.Err() != nil {
 		return nil, p.Err()
 	}
 
-	if !useSnappy {
-		// When not using Snappy, buffer already has the correct header.
-		return buf.B, nil
-	}
-
-	// Make result buffer large enough to hold our header and compressed block.
-	resultBuf := make([]byte, len(codecHeaderSnappy)+snappy.MaxEncodedLen(buf.Len()))
-	copy(resultBuf, codecHeaderSnappy)
-
-	compressed := snappy.Encode(resultBuf[len(codecHeaderSnappy):], buf.B)
-
-	// Slice result buffer based on compressed size.
-	resultBuf = resultBuf[:len(codecHeaderSnappy)+len(compressed)]
-	return resultBuf, nil
+	return buf.B, nil
 }
 
-func diffVarintDecode(input []byte) (index.Postings, error) {
-	compressed := false
-	headerLen := 0
-	switch {
-	case bytes.HasPrefix(input, []byte(codecHeaderRaw)):
-		headerLen = len(codecHeaderRaw)
-	case bytes.HasPrefix(input, []byte(codecHeaderSnappy)):
-		headerLen = len(codecHeaderSnappy)
-		compressed = true
-	default:
+func diffVarintSnappyDecode(input []byte) (index.Postings, error) {
+	if !isDiffVarintSnappyEncodedPostings(input) {
 		return nil, errors.New("header not found")
 	}
 
-	raw := input[headerLen:]
-	if compressed {
-		var err error
-		raw, err = snappy.Decode(nil, raw)
-		if err != nil {
-			return nil, errors.Errorf("snappy decode: %w", err)
-		}
+	raw, err := snappy.Decode(nil, input[len(codecHeaderSnappy):])
+	if err != nil {
+		return nil, errors.Errorf("snappy decode: %w", err)
 	}
 
-	return &diffVarintPostings{buf: &encoding.Decbuf{B: raw}}, nil
+	return newDiffVarintPostings(raw), nil
+}
+
+func newDiffVarintPostings(input []byte) *diffVarintPostings {
+	return &diffVarintPostings{buf: &encoding.Decbuf{B: input}}
 }
 
 // Implementation of index.Postings based on diff+varint encoded data.

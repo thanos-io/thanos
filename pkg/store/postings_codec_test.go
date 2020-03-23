@@ -42,30 +42,33 @@ func TestDiffVarintCodec(t *testing.T) {
 		`i!~"2.*"`: matchPostings(t, idx, labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")),
 	}
 
+	codecs := map[string]struct {
+		codingFunction   func(index.Postings) ([]byte, error)
+		decodingFunction func([]byte) (index.Postings, error)
+	}{
+		"raw":    {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (index.Postings, error) { return newDiffVarintPostings(bytes), nil }},
+		"snappy": {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
+	}
+
 	for postingName, postings := range postingsMap {
 		p, err := toUint64Postings(postings)
 		testutil.Ok(t, err)
 
-		for _, snappy := range []bool{false, true} {
-			name := postingName
-			if snappy {
-				name = "snappy/" + name
-			} else {
-				name = "raw/" + name
-			}
+		for cname, codec := range codecs {
+			name := cname + "/" + postingName
 
 			t.Run(name, func(t *testing.T) {
 				t.Log("postings entries:", p.len())
 				t.Log("original size (4*entries):", 4*p.len(), "bytes")
 				p.reset() // We reuse postings between runs, so we need to reset iterator.
 
-				data, err := diffVarintEncode(p, snappy)
+				data, err := codec.codingFunction(p)
 				testutil.Ok(t, err)
 
 				t.Log("encoded size", len(data), "bytes")
 				t.Logf("ratio: %0.3f", (float64(len(data)) / float64(4*p.len())))
 
-				decodedPostings, err := diffVarintDecode(data)
+				decodedPostings, err := codec.decodingFunction(data)
 				testutil.Ok(t, err)
 
 				p.reset()
