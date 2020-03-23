@@ -32,7 +32,7 @@ func isDiffVarintSnappyEncodedPostings(input []byte) bool {
 
 // diffVarintSnappyEncode encodes postings into diff+varint representation,
 // and applies snappy compression on the result.
-// Returned byte slice starts with codedHeaderSnappy header.
+// Returned byte slice starts with codecHeaderSnappy header.
 func diffVarintSnappyEncode(p index.Postings) ([]byte, error) {
 	buf, err := diffVarintEncodeNoHeader(p)
 	if err != nil {
