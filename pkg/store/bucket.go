@@ -98,11 +98,14 @@ type bucketStoreMetrics struct {
 	queriesLimit          prometheus.Gauge
 	seriesRefetches       prometheus.Counter
 
-	cachedPostingsOriginalSizeBytes      prometheus.Counter
-	cachedPostingsCompressedSizeBytes    prometheus.Counter
-	cachedPostingsCompressionTimeSeconds prometheus.Counter
-	cachedPostingsCompressions           prometheus.Counter
-	cachedPostingsCompressionErrors      prometheus.Counter
+	cachedPostingsOriginalSizeBytes        prometheus.Counter
+	cachedPostingsCompressedSizeBytes      prometheus.Counter
+	cachedPostingsCompressionTimeSeconds   prometheus.Counter
+	cachedPostingsCompressions             prometheus.Counter
+	cachedPostingsCompressionErrors        prometheus.Counter
+	cachedPostingsDecompressions           prometheus.Counter
+	cachedPostingsDecompressionErrors      prometheus.Counter
+	cachedPostingsDecompressionTimeSeconds prometheus.Counter
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -189,11 +192,11 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_compressions_total",
-		Help: "Number of postings compressions before storing to index cache",
+		Help: "Number of postings compressions before storing to index cache.",
 	})
 	m.cachedPostingsCompressionErrors = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_compression_errors_total",
-		Help: "Number of postings compression errors",
+		Help: "Number of postings compression errors.",
 	})
 	m.cachedPostingsOriginalSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_original_size_bytes_total",
@@ -205,7 +208,19 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 	m.cachedPostingsCompressionTimeSeconds = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_compression_time_seconds",
-		Help: "Time spent compressing postings before storing them into postings cache",
+		Help: "Time spent compressing postings before storing them into postings cache.",
+	})
+	m.cachedPostingsDecompressions = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_decompressions_total",
+		Help: "Number of postings decompressions after reading from index cache.",
+	})
+	m.cachedPostingsDecompressionErrors = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_decompression_errors_total",
+		Help: "Number of postings decompression errors.",
+	})
+	m.cachedPostingsDecompressionTimeSeconds = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_decompression_time_seconds",
+		Help: "Time spent decompressing postings. Decoding is not included.",
 	})
 
 	return &m
@@ -937,6 +952,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.cachedPostingsCompressionTimeSeconds.Add(stats.cachedPostingsCompressionTimeSum.Seconds())
 		s.metrics.cachedPostingsCompressions.Add(float64(stats.cachedPostingsCompressions))
 		s.metrics.cachedPostingsCompressionErrors.Add(float64(stats.cachedPostingsCompressionErrors))
+		s.metrics.cachedPostingsDecompressions.Add(float64(stats.cachedPostingsDecompressions))
+		s.metrics.cachedPostingsDecompressionErrors.Add(float64(stats.cachedPostingsDecompressionErrors))
+		s.metrics.cachedPostingsDecompressionTimeSeconds.Add(stats.cachedPostingsDecompressionTimeSum.Seconds())
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"stats", fmt.Sprintf("%+v", stats), "err", err)
@@ -1564,7 +1582,13 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 				err error
 			)
 			if isDiffVarintSnappyEncodedPostings(b) {
+				s := time.Now()
 				l, err = diffVarintSnappyDecode(b)
+				r.stats.cachedPostingsDecompressions += 1
+				r.stats.cachedPostingsDecompressionTimeSum += time.Since(s)
+				if err != nil {
+					r.stats.cachedPostingsDecompressionErrors += 1
+				}
 			} else {
 				_, l, err = r.dec.Postings(b)
 			}
@@ -2045,11 +2069,14 @@ type queryStats struct {
 	postingsFetchCount       int
 	postingsFetchDurationSum time.Duration
 
-	cachedPostingsCompressions       int
-	cachedPostingsCompressionErrors  int
-	cachedPostingsOriginalSizeSum    int
-	cachedPostingsCompressedSizeSum  int
-	cachedPostingsCompressionTimeSum time.Duration
+	cachedPostingsCompressions         int
+	cachedPostingsCompressionErrors    int
+	cachedPostingsOriginalSizeSum      int
+	cachedPostingsCompressedSizeSum    int
+	cachedPostingsCompressionTimeSum   time.Duration
+	cachedPostingsDecompressions       int
+	cachedPostingsDecompressionErrors  int
+	cachedPostingsDecompressionTimeSum time.Duration
 
 	seriesTouched          int
 	seriesTouchedSizeSum   int
@@ -2086,6 +2113,9 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.cachedPostingsOriginalSizeSum += o.cachedPostingsOriginalSizeSum
 	s.cachedPostingsCompressedSizeSum += o.cachedPostingsCompressedSizeSum
 	s.cachedPostingsCompressionTimeSum += o.cachedPostingsCompressionTimeSum
+	s.cachedPostingsDecompressions += o.cachedPostingsDecompressions
+	s.cachedPostingsDecompressionErrors += o.cachedPostingsDecompressionErrors
+	s.cachedPostingsDecompressionTimeSum += o.cachedPostingsDecompressionTimeSum
 
 	s.seriesTouched += o.seriesTouched
 	s.seriesTouchedSizeSum += o.seriesTouchedSizeSum
