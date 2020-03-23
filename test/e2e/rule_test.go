@@ -310,7 +310,7 @@ func TestRule(t *testing.T) {
 					{
 						// FileSD which will be used to register discover dynamically q.
 						Files:           []string{filepath.Join(e2e.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Hour),
+						RefreshInterval: model.Duration(time.Second),
 					},
 				},
 				Scheme: "http",
