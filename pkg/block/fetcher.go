@@ -59,7 +59,7 @@ const (
 	loadedMeta    = "loaded"
 	failedMeta    = "failed"
 
-	// Fetcher's synced label values.
+	// Synced label values.
 	labelExcludedMeta = "label-excluded"
 	timeExcludedMeta  = "time-excluded"
 	tooFreshMeta      = "too-fresh"
@@ -68,7 +68,7 @@ const (
 	// but don't have a replacement block yet.
 	markedForDeletionMeta = "marked-for-deletion"
 
-	// Fetcher's synced label values.
+	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 )
 
@@ -110,7 +110,7 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 	m.modified = extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
 		Subsystem: fetcherSubSys,
 		Name:      "modified",
-		Help:      "Number of block metadata that modified",
+		Help:      "Number of blocks that their metadata modified",
 	},
 		[]string{"modified"},
 		[]string{replicaRemovedMeta},
