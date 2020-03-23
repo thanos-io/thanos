@@ -48,9 +48,9 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 // BuildQueryConfig returns a query client configuration from a static address.
 func BuildQueryConfig(queryAddrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(queryAddrs))
-	for _, addr := range queryAddrs {
+	for i, addr := range queryAddrs {
 		if addr == "" {
-			return nil, errors.New("static querier address cannot be empty")
+			return nil, errors.Errorf("static querier address cannot be empty at index %d", i)
 		}
 		// If addr is missing schema, add http.
 		if !strings.Contains(addr, "://") {
@@ -59,6 +59,9 @@ func BuildQueryConfig(queryAddrs []string) ([]Config, error) {
 		u, err := url.Parse(addr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse addr %q", addr)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return nil, errors.Errorf("%q is not supported scheme for querier address", u.Scheme)
 		}
 		configs = append(configs, Config{
 			EndpointsConfig: http_util.EndpointsConfig{

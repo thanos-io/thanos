@@ -18,7 +18,7 @@ func TestBuildQueryConfig(t *testing.T) {
 		expected  []Config
 	}{
 		{
-			desc:      "signe addr without path",
+			desc:      "single addr without path",
 			addresses: []string{"localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: http.EndpointsConfig{
@@ -47,7 +47,7 @@ func TestBuildQueryConfig(t *testing.T) {
 			},
 		},
 		{
-			desc:      "signe addr with path and http scheme",
+			desc:      "single addr with path and http scheme",
 			addresses: []string{"http://localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: http.EndpointsConfig{
@@ -57,7 +57,7 @@ func TestBuildQueryConfig(t *testing.T) {
 			}},
 		},
 		{
-			desc:      "signe addr with path and https scheme",
+			desc:      "single addr with path and https scheme",
 			addresses: []string{"https://localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: http.EndpointsConfig{
@@ -67,8 +67,18 @@ func TestBuildQueryConfig(t *testing.T) {
 			}},
 		},
 		{
+			desc:      "not supported scheme",
+			addresses: []string{"ttp://localhost:9093"},
+			err:       true,
+		},
+		{
 			desc:      "invalid addr",
 			addresses: []string{"this is not a valid addr"},
+			err:       true,
+		},
+		{
+			desc:      "empty addr",
+			addresses: []string{""},
 			err:       true,
 		},
 	} {
