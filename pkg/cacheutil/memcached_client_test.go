@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -76,6 +77,7 @@ addresses:
 	testutil.Equals(t, defaultMemcachedClientConfig.DNSProviderUpdateInterval, cache.config.DNSProviderUpdateInterval)
 	testutil.Equals(t, defaultMemcachedClientConfig.MaxGetMultiConcurrency, cache.config.MaxGetMultiConcurrency)
 	testutil.Equals(t, defaultMemcachedClientConfig.MaxGetMultiBatchSize, cache.config.MaxGetMultiBatchSize)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxItemSize, cache.config.MaxItemSize)
 
 	// Should instance a memcached client with configured YAML config.
 	conf = []byte(`
@@ -87,6 +89,7 @@ max_idle_connections: 1
 max_async_concurrency: 1
 max_async_buffer_size: 1
 max_get_multi_concurrency: 1
+max_item_size: 1MiB
 max_get_multi_batch_size: 1
 dns_provider_update_interval: 1s
 `)
@@ -102,27 +105,62 @@ dns_provider_update_interval: 1s
 	testutil.Equals(t, 1*time.Second, cache.config.DNSProviderUpdateInterval)
 	testutil.Equals(t, 1, cache.config.MaxGetMultiConcurrency)
 	testutil.Equals(t, 1, cache.config.MaxGetMultiBatchSize)
+	testutil.Equals(t, model.Bytes(1024*1024), cache.config.MaxItemSize)
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	ctx := context.Background()
-	config := defaultMemcachedClientConfig
-	config.Addresses = []string{"127.0.0.1:11211"}
-	backendMock := newMemcachedClientBackendMock()
 
-	client, err := prepare(config, backendMock)
-	testutil.Ok(t, err)
-	defer client.Stop()
+	{
+		config := defaultMemcachedClientConfig
+		config.Addresses = []string{"127.0.0.1:11211"}
+		backendMock := newMemcachedClientBackendMock()
 
-	testutil.Ok(t, client.SetAsync(ctx, "key-1", []byte("value-1"), time.Second))
-	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2"), time.Second))
-	testutil.Ok(t, backendMock.waitItems(2))
+		client, err := prepare(config, backendMock)
+		testutil.Ok(t, err)
+		defer client.Stop()
 
-	testutil.Equals(t, 2.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
-	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
-	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
+		testutil.Ok(t, client.SetAsync(ctx, "key-1", []byte("value-1"), time.Second))
+		testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2"), time.Second))
+		testutil.Ok(t, backendMock.waitItems(2))
+
+		actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
+		testutil.Equals(t, []byte("value-2"), actual["key-2"].Value)
+
+		testutil.Equals(t, 2.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
+		testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
+		testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
+		testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.skipped.WithLabelValues(opSet, reasonMaxItemSize)))
+	}
+
+	{
+		config := defaultMemcachedClientConfig
+		config.Addresses = []string{"127.0.0.1:11211"}
+		config.MaxItemSize = model.Bytes(10)
+		backendMock := newMemcachedClientBackendMock()
+
+		client, err := prepare(config, backendMock)
+		testutil.Ok(t, err)
+		defer client.Stop()
+
+		testutil.Ok(t, client.SetAsync(ctx, "key-1", []byte("value-1"), time.Second))
+		testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2-too-long-to-be-stored"), time.Second))
+		testutil.Ok(t, backendMock.waitItems(1))
+
+		actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
+		testutil.Equals(t, (*memcache.Item)(nil), actual["key-2"])
+
+		testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
+		testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
+		testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
+		testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.skipped.WithLabelValues(opSet, reasonMaxItemSize)))
+	}
 }
 
 func TestMemcachedClient_GetMulti(t *testing.T) {

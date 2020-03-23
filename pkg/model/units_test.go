@@ -1,13 +1,14 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package storecache
+package model
 
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestBytes_Marshalling(t *testing.T) {
