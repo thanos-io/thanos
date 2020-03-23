@@ -1405,10 +1405,10 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	return ps, nil
 }
 
-// Logical result of each individual group is:
+// postingGroup keeps posting keys for single matcher. Logical result of the group is:
 // If addAll is set: special All postings minus postings for removeKeys labels. No need to merge postings for addKeys in this case.
 // If addAll is not set: Merge of postings for "addKeys" labels minus postings for removeKeys labels
-// This happens in ExpandedPostings.
+// This computation happens in ExpandedPostings.
 type postingGroup struct {
 	addAll     bool
 	addKeys    []labels.Label
