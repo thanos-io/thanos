@@ -121,7 +121,7 @@ func (s *tenantSeriesSetServer) Series(store *TSDBStore, r *storepb.SeriesReques
 	})
 
 	if err != nil {
-		if r.PartialResponseDisabled {
+		if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 			s.err = errors.Wrapf(err, "get series for tenant %s", s.tenant)
 		} else {
 			// Consistently prefix tenant specific warnings as done in various other places.
