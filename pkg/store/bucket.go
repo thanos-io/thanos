@@ -98,11 +98,11 @@ type bucketStoreMetrics struct {
 	queriesLimit          prometheus.Gauge
 	seriesRefetches       prometheus.Counter
 
+	cachedPostingsCompressions             prometheus.Counter
+	cachedPostingsCompressionErrors        prometheus.Counter
 	cachedPostingsOriginalSizeBytes        prometheus.Counter
 	cachedPostingsCompressedSizeBytes      prometheus.Counter
 	cachedPostingsCompressionTimeSeconds   prometheus.Counter
-	cachedPostingsCompressions             prometheus.Counter
-	cachedPostingsCompressionErrors        prometheus.Counter
 	cachedPostingsDecompressions           prometheus.Counter
 	cachedPostingsDecompressionErrors      prometheus.Counter
 	cachedPostingsDecompressionTimeSeconds prometheus.Counter
@@ -947,11 +947,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesDataSizeTouched.WithLabelValues("chunks").Observe(float64(stats.chunksTouchedSizeSum))
 		s.metrics.seriesDataSizeFetched.WithLabelValues("chunks").Observe(float64(stats.chunksFetchedSizeSum))
 		s.metrics.resultSeriesCount.Observe(float64(stats.mergedSeriesCount))
+		s.metrics.cachedPostingsCompressions.Add(float64(stats.cachedPostingsCompressions))
+		s.metrics.cachedPostingsCompressionErrors.Add(float64(stats.cachedPostingsCompressionErrors))
 		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.cachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.cachedPostingsCompressedSizeSum))
 		s.metrics.cachedPostingsCompressionTimeSeconds.Add(stats.cachedPostingsCompressionTimeSum.Seconds())
-		s.metrics.cachedPostingsCompressions.Add(float64(stats.cachedPostingsCompressions))
-		s.metrics.cachedPostingsCompressionErrors.Add(float64(stats.cachedPostingsCompressionErrors))
 		s.metrics.cachedPostingsDecompressions.Add(float64(stats.cachedPostingsDecompressions))
 		s.metrics.cachedPostingsDecompressionErrors.Add(float64(stats.cachedPostingsDecompressionErrors))
 		s.metrics.cachedPostingsDecompressionTimeSeconds.Add(stats.cachedPostingsDecompressionTimeSum.Seconds())
