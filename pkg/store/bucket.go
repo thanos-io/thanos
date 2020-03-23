@@ -1526,8 +1526,10 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 
 			// Even if this instance is not using compression, there may be compressed
 			// entries in the cache written by other stores.
-			var l index.Postings
-			var err error
+			var (
+				l   index.Postings
+				err error
+			)
 			if isDiffVarintEncodedPostings(b) {
 				l, err = diffVarintDecode(b)
 			} else {
