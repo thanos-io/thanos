@@ -29,7 +29,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	bkt := inmem.NewBucket()
 	logger := log.NewNopLogger()
 
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil)
 	testutil.Ok(t, err)
 
 	// 1. No meta, old block, should be removed.

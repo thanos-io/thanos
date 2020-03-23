@@ -128,7 +128,6 @@ func TestCompact(t *testing.T) {
 					samplesPerSeries: 12,
 				},
 			},
-			replicaLabels:       []string{},
 			downsamplingEnabled: true,
 			query:               "{a=\"1\"}",
 

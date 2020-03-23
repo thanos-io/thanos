@@ -41,6 +41,18 @@ func newTestFetcherMetrics() *fetcherMetrics {
 	}
 }
 
+type ulidFilter struct {
+	ulidToDelete *ulid.ULID
+}
+
+func (f *ulidFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, incompleteView bool) error {
+	if _, ok := metas[*f.ulidToDelete]; ok {
+		synced.WithLabelValues("filtered").Inc()
+		delete(metas, *f.ulidToDelete)
+	}
+	return nil
+}
+
 func ULID(i int) ulid.ULID { return ulid.MustNew(uint64(i), nil) }
 
 func ULIDs(is ...int) []ulid.ULID {
@@ -63,12 +75,8 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, func(_ context.Context, metas map[ulid.ULID]*metadata.Meta, metrics *fetcherMetrics, incompleteView bool) error {
-			if _, ok := metas[ulidToDelete]; ok {
-				metrics.synced.WithLabelValues("filtered").Inc()
-				delete(metas, ulidToDelete)
-			}
-			return nil
+		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, []MetadataFilter{
+			&ulidFilter{ulidToDelete: &ulidToDelete},
 		})
 		testutil.Ok(t, err)
 
@@ -344,7 +352,7 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 	}
 
 	m := newTestFetcherMetrics()
-	testutil.Ok(t, f.Filter(ctx, input, m, false))
+	testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 
 	testutil.Equals(t, 3.0, promtest.ToFloat64(m.synced.WithLabelValues(labelExcludedMeta)))
 	testutil.Equals(t, expected, input)
@@ -442,7 +450,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 			deleted := len(input) - len(expected)
 
 			m := newTestFetcherMetrics()
-			testutil.Ok(t, f.Filter(ctx, input, m, false))
+			testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 
 			testutil.Equals(t, expected, input)
 			testutil.Equals(t, float64(deleted), promtest.ToFloat64(m.synced.WithLabelValues(labelExcludedMeta)))
@@ -506,7 +514,7 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 	}
 
 	m := newTestFetcherMetrics()
-	testutil.Ok(t, f.Filter(ctx, input, m, false))
+	testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 
 	testutil.Equals(t, 2.0, promtest.ToFloat64(m.synced.WithLabelValues(timeExcludedMeta)))
 	testutil.Equals(t, expected, input)
@@ -857,7 +865,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 					},
 				}
 			}
-			testutil.Ok(t, f.Filter(ctx, metas, m, false))
+			testutil.Ok(t, f.Filter(ctx, metas, m.synced, false))
 			compareSliceWithMapKeys(t, metas, tcase.expected)
 			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(m.synced.WithLabelValues(duplicateMeta)))
 		}); !ok {
@@ -909,7 +917,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 		},
 	} {
 		m := newTestFetcherMetrics()
-		testutil.Ok(t, rm.Modify(ctx, tcase.input, m, false))
+		testutil.Ok(t, rm.Modify(ctx, tcase.input, m.modified, false))
 
 		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
 		testutil.Equals(t, tcase.expected, tcase.input)
@@ -1015,7 +1023,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
-		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
@@ -1040,7 +1048,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
 		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
-		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
@@ -1093,7 +1101,7 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 		}
 
 		m := newTestFetcherMetrics()
-		testutil.Ok(t, f.Filter(ctx, input, m, false))
+		testutil.Ok(t, f.Filter(ctx, input, m.synced, false))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
 		testutil.Equals(t, expected, input)
 	})

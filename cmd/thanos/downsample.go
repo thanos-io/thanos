@@ -72,7 +72,7 @@ func RunDownsample(
 		return err
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), nil)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}

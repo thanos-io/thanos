@@ -260,6 +260,7 @@ test-e2e-ci: docker
 	@echo ">> cleaning e2e test garbage."
 	@rm -rf ./test/e2e/e2e_integration_test*
 	@echo ">> running /test/e2e tests."
+	@go clean -testcache
 	@go test -failfast -parallel 1 -timeout 5m -v ./test/e2e/...
 
 .PHONY: install-deps

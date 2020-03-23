@@ -150,7 +150,7 @@ func RunReplicate(
 		Help: "The Duration of replication runs split by success and error.",
 	}, []string{"result"})
 
-	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg)
+	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg, nil)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
 	}

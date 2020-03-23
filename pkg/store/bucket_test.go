@@ -710,10 +710,10 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, yaml.Unmarshal([]byte(sc.relabel), &relabelConf))
 
 			rec := &recorder{Bucket: bkt}
-			metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, dir, nil,
-				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime).Filter,
-				block.NewLabelShardedMetaFilter(relabelConf).Filter,
-			)
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, dir, nil, []block.MetadataFilter{
+				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+				block.NewLabelShardedMetaFilter(relabelConf),
+			})
 			testutil.Ok(t, err)
 
 			bucketStore, err := NewBucketStore(

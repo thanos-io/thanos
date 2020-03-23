@@ -287,12 +287,13 @@ func runCompact(
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
 
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
-		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
-		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
-		ignoreDeletionMarkFilter.Filter,
-		duplicateBlocksFilter.Filter,
-		block.NewReplicaLabelRemover(logger, dedupReplicaLabels).Modify,
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer, []block.MetadataFilter{
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer),
+		ignoreDeletionMarkFilter,
+		duplicateBlocksFilter,
+	},
+		block.NewReplicaLabelRemover(logger, dedupReplicaLabels),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")

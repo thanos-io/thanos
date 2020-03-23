@@ -76,7 +76,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 		Name: metricIndexGenerateName,
 		Help: metricIndexGenerateHelp,
 	})
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, genMissingIndexCacheFiles(ctx, logger, reg, bkt, metaFetcher, dir))
@@ -116,7 +116,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.GroupKey(meta.Thanos))))
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dir))
