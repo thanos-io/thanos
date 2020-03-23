@@ -223,6 +223,7 @@ type BucketStore struct {
 
 	// Reencode postings using diff+varint+snappy when storing to cache.
 	// This makes them smaller, but takes extra CPU and memory.
+	// When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 	enablePostingsCompression bool
 }
 
