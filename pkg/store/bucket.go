@@ -97,6 +97,12 @@ type bucketStoreMetrics struct {
 	queriesDropped        prometheus.Counter
 	queriesLimit          prometheus.Gauge
 	seriesRefetches       prometheus.Counter
+
+	cachedPostingsOriginalSizeBytes      prometheus.Counter
+	cachedPostingsCompressedSizeBytes    prometheus.Counter
+	cachedPostingsCompressionTimeSeconds prometheus.Counter
+	cachedPostingsCompressions           prometheus.Counter
+	cachedPostingsCompressionErrors      prometheus.Counter
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -180,6 +186,28 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Name: "thanos_bucket_store_series_refetches_total",
 		Help: fmt.Sprintf("Total number of cases where %v bytes was not enough was to fetch series from index, resulting in refetch.", maxSeriesSize),
 	})
+
+	m.cachedPostingsCompressions = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_compressions_total",
+		Help: "Number of postings compressions before storing to index cache",
+	})
+	m.cachedPostingsCompressionErrors = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_compression_errors_total",
+		Help: "Number of postings compression errors",
+	})
+	m.cachedPostingsOriginalSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_original_size_bytes_total",
+		Help: "Original size of postings stored into cache.",
+	})
+	m.cachedPostingsCompressedSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_compressed_size_bytes_total",
+		Help: "Compressed size of postings stored into cache.",
+	})
+	m.cachedPostingsCompressionTimeSeconds = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_cached_postings_compression_time_seconds",
+		Help: "Time spent compressing postings before storing them into postings cache",
+	})
+
 	return &m
 }
 
@@ -904,6 +932,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesDataSizeTouched.WithLabelValues("chunks").Observe(float64(stats.chunksTouchedSizeSum))
 		s.metrics.seriesDataSizeFetched.WithLabelValues("chunks").Observe(float64(stats.chunksFetchedSizeSum))
 		s.metrics.resultSeriesCount.Observe(float64(stats.mergedSeriesCount))
+		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.cachedPostingsOriginalSizeSum))
+		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.cachedPostingsCompressedSizeSum))
+		s.metrics.cachedPostingsCompressionTimeSeconds.Add(stats.cachedPostingsCompressionTimeSum.Seconds())
+		s.metrics.cachedPostingsCompressions.Add(float64(stats.cachedPostingsCompressions))
+		s.metrics.cachedPostingsCompressionErrors.Add(float64(stats.cachedPostingsCompressionErrors))
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"stats", fmt.Sprintf("%+v", stats), "err", err)
@@ -1602,28 +1635,43 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 					return err
 				}
 
+				dataToCache := pBytes
+
+				compressionTime := time.Duration(0)
+				compressions, compressionErrors, compressedSize := 0, 0, 0
+
+				if r.block.enablePostingsCompression {
+					// Reencode postings before storing to cache. If that fails, we store original bytes.
+					// This can only fail, if postings data was somehow corrupted,
+					// and there is nothing we can do about it.
+					// Errors from corrupted postings will be reported when postings are used.
+					compressions++
+					s := time.Now()
+					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
+					compressionTime = time.Since(s)
+					if err == nil {
+						dataToCache = data
+						compressedSize = len(data)
+					} else {
+						compressionErrors = 1
+					}
+				}
+
 				r.mtx.Lock()
 				// Return postings and fill LRU cache.
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 
-				storeData := pBytes
-
-				if r.block.enablePostingsCompression {
-					// Reencode postings before storing to cache. If that fails, we store original bytes.
-					// This can only fail, if postings data was somehow corrupted,
-					// and there is nothing we can do about it. It's not worth reporting here.
-					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
-					if err == nil {
-						storeData = data
-					}
-				}
-
-				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], storeData)
+				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], dataToCache)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
 				r.stats.postingsTouchedSizeSum += len(pBytes)
+				r.stats.cachedPostingsCompressions += compressions
+				r.stats.cachedPostingsCompressionErrors += compressionErrors
+				r.stats.cachedPostingsOriginalSizeSum += len(pBytes)
+				r.stats.cachedPostingsCompressedSizeSum += compressedSize
+				r.stats.cachedPostingsCompressionTimeSum += compressionTime
 				r.mtx.Unlock()
 			}
 			return nil
@@ -1997,6 +2045,12 @@ type queryStats struct {
 	postingsFetchCount       int
 	postingsFetchDurationSum time.Duration
 
+	cachedPostingsCompressions       int
+	cachedPostingsCompressionErrors  int
+	cachedPostingsOriginalSizeSum    int
+	cachedPostingsCompressedSizeSum  int
+	cachedPostingsCompressionTimeSum time.Duration
+
 	seriesTouched          int
 	seriesTouchedSizeSum   int
 	seriesFetched          int
@@ -2026,6 +2080,12 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.postingsFetchedSizeSum += o.postingsFetchedSizeSum
 	s.postingsFetchCount += o.postingsFetchCount
 	s.postingsFetchDurationSum += o.postingsFetchDurationSum
+
+	s.cachedPostingsCompressions += o.cachedPostingsCompressions
+	s.cachedPostingsCompressionErrors += o.cachedPostingsCompressionErrors
+	s.cachedPostingsOriginalSizeSum += o.cachedPostingsOriginalSizeSum
+	s.cachedPostingsCompressedSizeSum += o.cachedPostingsCompressedSizeSum
+	s.cachedPostingsCompressionTimeSum += o.cachedPostingsCompressionTimeSum
 
 	s.seriesTouched += o.seriesTouched
 	s.seriesTouchedSizeSum += o.seriesTouchedSizeSum
