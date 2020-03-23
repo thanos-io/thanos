@@ -25,7 +25,7 @@ const (
 	codecHeaderSnappy = "dvs" // As in "diff+varint+snappy".
 )
 
-// isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint(+snappy) codec.
+// isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy codec.
 func isDiffVarintSnappyEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderSnappy))
 }
