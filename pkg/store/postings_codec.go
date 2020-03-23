@@ -22,7 +22,7 @@ import (
 // significantly (to about 20% of original), snappy then halves it to ~10% of the original.
 
 const (
-	codecHeaderSnappy = "dvs" // as in "diff+varint+snappy"
+	codecHeaderSnappy = "dvs" // As in "diff+varint+snappy".
 )
 
 // isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint(+snappy) codec.
