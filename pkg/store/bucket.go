@@ -1347,14 +1347,15 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		return nil, nil
 	}
 
-	allKeyIndex := -1
-	// we only need special All postings if there are no other adds. If there are, we can skip fetching
+	// We only need special All postings if there are no other adds. If there are, we can skip fetching
 	// special All postings completely.
 	if allRequested && !hasAdds {
-		// Remember the index (will be used later as a flag, and also to access postings),
-		// and ask fetchPostings to fetch special All postings too.
-		allKeyIndex = len(keys)
-		keys = append(keys, getAllPostingsKeyLabel())
+		// add group with label to fetch "special All postings".
+		name, value := index.AllPostingsKey()
+		allPostingsLabel := labels.Label{Name: name, Value: value}
+
+		postingGroups = append(postingGroups, newPostingGroup(true, []labels.Label{allPostingsLabel}, nil))
+		keys = append(keys, allPostingsLabel)
 	}
 
 	fetchedPostings, err := r.fetchPostings(keys)
@@ -1386,11 +1387,6 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 		}
 	}
 
-	if allKeyIndex >= 0 {
-		// If we have fetched special All postings, add it.
-		groupAdds = append(groupAdds, checkNilPosting(getAllPostingsKeyLabel(), fetchedPostings[allKeyIndex]))
-	}
-
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
 
 	ps, err := index.ExpandPostings(result)
@@ -1407,11 +1403,6 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	}
 
 	return ps, nil
-}
-
-func getAllPostingsKeyLabel() labels.Label {
-	name, value := index.AllPostingsKey()
-	return labels.Label{Name: name, Value: value}
 }
 
 // Logical result of each individual group is:
