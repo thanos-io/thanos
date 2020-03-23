@@ -35,8 +35,7 @@ func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	for p.Next() {
 		v := p.At()
 		if v < prev {
-			// Postings entries must be in increasing order.
-			return nil, errors.Errorf("decreasing entry, val: %d, prev: %d", v, prev)
+			return nil, errors.Errorf("postings entries must be in increasing order, current: %d, previous: %d", v, prev)
 		}
 
 		buf.PutUvarint64(v - prev)
