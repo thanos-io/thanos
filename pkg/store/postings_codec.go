@@ -12,6 +12,15 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 )
 
+// This file implements encoding and decoding of postings using diff (or delta) + varint
+// number encoding. On top of that, we apply Snappy compression.
+//
+// On its own, Snappy compressing raw postings doesn't really help, because there is no
+// repetition in raw data. Using diff (delta) between postings entries makes values small,
+// and Varint is very efficient at encoding small values (values < 128 are encoded as
+// single byte, values < 16384 are encoded as two bytes). Diff + varint reduces postings size
+// significantly (to about 20% of original), snappy then halves it to ~10% of the original.
+
 const (
 	codecHeaderSnappy = "diff+varint+snappy"
 )
@@ -81,7 +90,7 @@ func newDiffVarintPostings(input []byte) *diffVarintPostings {
 	return &diffVarintPostings{buf: &encoding.Decbuf{B: input}}
 }
 
-// Implementation of index.Postings based on diff+varint encoded data.
+// diffVarintPostings is an implementation of index.Postings based on diff+varint encoded data.
 type diffVarintPostings struct {
 	buf *encoding.Decbuf
 	cur uint64
