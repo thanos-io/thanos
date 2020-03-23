@@ -27,7 +27,6 @@ func isDiffVarintEncodedPostings(input []byte) bool {
 func diffVarintEncode(p index.Postings, useSnappy bool) ([]byte, error) {
 	buf := encoding.Encbuf{}
 
-	// If we're returning raw data, write the header to the buffer, and then return buffer directly.
 	if !useSnappy {
 		buf.PutString(codecHeaderRaw)
 	}
