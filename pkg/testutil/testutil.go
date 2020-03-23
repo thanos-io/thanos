@@ -5,9 +5,7 @@ package testutil
 
 import (
 	"fmt"
-	"path/filepath"
 	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -18,58 +16,62 @@ import (
 
 // Assert fails the test if the condition is false.
 func Assert(tb testing.TB, condition bool, v ...interface{}) {
+	tb.Helper()
+
 	if condition {
 		return
 	}
-	_, file, line, _ := runtime.Caller(1)
 
 	var msg string
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatalf("\033[31m%s:%d: "+msg+"\033[39m\n\n", append([]interface{}{filepath.Base(file), line}, v...)...)
+	tb.Fatalf("\033[31m" + msg + "\033[39m\n\n")
 }
 
 // Ok fails the test if an err is not nil.
 func Ok(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
+
 	if err == nil {
 		return
 	}
-	_, file, line, _ := runtime.Caller(1)
 
 	var msg string
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
+	tb.Fatalf("\033[31m"+msg+"\n\n unexpected error: %s\033[39m\n\n", err.Error())
 }
 
 // NotOk fails the test if an err is nil.
 func NotOk(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
+
 	if err != nil {
 		return
 	}
-	_, file, line, _ := runtime.Caller(1)
 
 	var msg string
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n expected error, got nothing \033[39m\n\n", filepath.Base(file), line)
+	tb.Fatalf("\033[31m" + msg + "\n\n expected error, got nothing \033[39m\n\n")
 }
 
 // Equals fails the test if exp is not equal to act.
 func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
+	tb.Helper()
+
 	if reflect.DeepEqual(exp, act) {
 		return
 	}
-	_, file, line, _ := runtime.Caller(1)
 
 	var msg string
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v%s\033[39m\n\n", filepath.Base(file), line, exp, act, diff(exp, act))
+	tb.Fatalf("\033[31m"+msg+"\n\n\texp: %#v\n\n\tgot: %#v%s\033[39m\n\n", exp, act, diff(exp, act))
 }
 
 func typeAndKind(v interface{}) (reflect.Type, reflect.Kind) {

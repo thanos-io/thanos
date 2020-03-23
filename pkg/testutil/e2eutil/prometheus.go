@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -32,42 +31,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultPrometheusVersion   = "v2.13.0"
-	defaultAlertmanagerVersion = "v0.20.0"
-	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
+	defaultPrometheusVersion = "v2.13.0"
 
 	// Space delimited list of versions.
-	promVersionsEnvVar    = "THANOS_TEST_PROMETHEUS_VERSIONS"
-	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
-	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
+	promVersionsEnvVar = "THANOS_TEST_PROMETHEUS_VERSIONS"
 )
-
-func PrometheusBinary() string {
-	return prometheusBin(defaultPrometheusVersion)
-}
 
 func prometheusBin(version string) string {
 	return fmt.Sprintf("prometheus-%s", version)
-}
-
-func AlertmanagerBinary() string {
-	b := os.Getenv(alertmanagerBinEnvVar)
-	if b == "" {
-		return fmt.Sprintf("alertmanager-%s", defaultAlertmanagerVersion)
-	}
-	return b
-}
-
-func MinioBinary() string {
-	b := os.Getenv(minioBinEnvVar)
-	if b == "" {
-		return fmt.Sprintf("minio-%s", defaultMinioVersion)
-	}
-	return b
 }
 
 // Prometheus represents a test instance for integration testing.
@@ -336,46 +310,43 @@ func CreateEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 }
 
 // CreateBlock writes a block with the given series and numSamples samples each.
-// Samples will be in the time range [mint, maxt).
+// Samples will be in the time range [offset * blockSize, (offset +1) * blockSize).
 func CreateBlock(
-	ctx context.Context,
 	dir string,
-	series []labels.Labels,
-	numSamples int,
-	mint, maxt int64,
+	s S,
+	offset int,
+	blockSize int64,
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	return createBlock(dir, s, offset, blockSize, extLset, resolution, false)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
 func CreateBlockWithTombstone(
-	ctx context.Context,
 	dir string,
-	series []labels.Labels,
-	numSamples int,
-	mint, maxt int64,
+	s S,
+	offset int,
+	blockSize int64,
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
+	return createBlock(dir, s, offset, blockSize, extLset, resolution, true)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
-// Samples will be in the time range [mint, maxt)
+// Samples will be in the time range  [offset * blockSize, (offset +1) * blockSize).
 // Block ID will be created with a delay of time duration blockDelay.
 func CreateBlockWithBlockDelay(
-	ctx context.Context,
 	dir string,
-	series []labels.Labels,
-	numSamples int,
-	mint, maxt int64,
+	s S,
+	offset int,
+	blockSize int64,
 	blockDelay time.Duration,
 	extLset labels.Labels,
 	resolution int64,
 ) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	blockID, err := createBlock(dir, s, offset, blockSize, extLset, resolution, false)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -401,61 +372,29 @@ func CreateBlockWithBlockDelay(
 }
 
 func createBlock(
-	ctx context.Context,
 	dir string,
-	series []labels.Labels,
-	numSamples int,
-	mint, maxt int64,
+	s S,
+	offset int,
+	blockSize int64,
 	extLset labels.Labels,
 	resolution int64,
 	tombstones bool,
 ) (id ulid.ULID, err error) {
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000)
+	mint := int64(offset) * blockSize
+	maxt := int64(offset+1) * blockSize
+
+	h, err := s.CreateHeadSeries(offset)
 	if err != nil {
-		return id, errors.Wrap(err, "create head block")
+		return id, errors.Wrap(err, "create head")
 	}
-	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
 
-	var g errgroup.Group
-	var timeStepSize = (maxt - mint) / int64(numSamples+1)
-	var batchSize = len(series) / runtime.GOMAXPROCS(0)
-
-	for len(series) > 0 {
-		l := batchSize
-		if len(series) < 1000 {
-			l = len(series)
-		}
-		batch := series[:l]
-		series = series[l:]
-
-		g.Go(func() error {
-			t := mint
-
-			for i := 0; i < numSamples; i++ {
-				app := h.Appender()
-
-				for _, lset := range batch {
-					_, err := app.Add(lset, t, rand.Float64())
-					if err != nil {
-						if rerr := app.Rollback(); rerr != nil {
-							err = errors.Wrapf(err, "rollback failed: %v", rerr)
-						}
-
-						return errors.Wrap(err, "add sample")
-					}
-				}
-				if err := app.Commit(); err != nil {
-					return errors.Wrap(err, "commit")
-				}
-				t += timeStepSize
-			}
-			return nil
-		})
+	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).
+	// Because of this block intervals are always +1 than the total samples it includes.
+	if h.MinTime() < mint || h.MaxTime()+1 > maxt {
+		return id, errors.Errorf("something went wrong, head have series outside of given mint: %d and maxt: %d. Head: [%d,%d]", mint, maxt, h.MinTime(), h.MaxTime())
 	}
-	if err := g.Wait(); err != nil {
-		return id, err
-	}
-	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+
+	c, err := tsdb.NewLeveledCompactor(context.TODO(), nil, log.NewNopLogger(), []int64{blockSize}, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -466,7 +405,7 @@ func createBlock(
 	}
 
 	if id.Compare(ulid.ULID{}) == 0 {
-		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
+		return id, errors.Errorf("nothing to write, asked for %d samples", s.SamplesNum)
 	}
 
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, id.String()), metadata.Thanos{

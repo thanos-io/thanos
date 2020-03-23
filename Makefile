@@ -73,12 +73,6 @@ ME                ?= $(shell whoami)
 PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
 PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
-ALERTMANAGER_VERSION    ?= v0.20.0
-ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
-
-MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
-MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
-
 FAILLINT_VERSION        ?= v1.2.0
 FAILLINT                ?=$(GOBIN)/faillint-$(FAILLINT_VERSION)
 
@@ -221,9 +215,7 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
-test: export THANOS_TEST_MINIO_PATH= $(MINIO_SERVER)
 test: export THANOS_TEST_PROMETHEUS_VERSIONS= $(PROM_VERSIONS)
-test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
@@ -255,8 +247,8 @@ test-e2e: docker
 	@go test -failfast -timeout 10m -v ./test/e2e/...
 
 .PHONY: install-deps
-install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-deps: $(ALERTMANAGER) $(MINIO_SERVER) $(PROMS)
+install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus to test against in integration tests.
+install-deps: $(PROMS)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: docker-ci
@@ -432,12 +424,6 @@ $(GOLANGCILINT):
 
 $(MISSPELL):
 	$(call fetch_go_bin_version,github.com/client9/misspell/cmd/misspell,$(MISSPELL_VERSION))
-
-$(ALERTMANAGER):
-	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
-
-$(MINIO_SERVER):
-	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
 
 $(FAILLINT):
 	$(call fetch_go_bin_version,github.com/fatih/faillint,$(FAILLINT_VERSION))

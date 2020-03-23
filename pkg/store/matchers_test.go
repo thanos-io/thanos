@@ -11,6 +11,7 @@ import (
 )
 
 func TestMatchersToString(t *testing.T) {
+	createBlockFromHead()
 	cases := []struct {
 		ms       []storepb.LabelMatcher
 		expected string

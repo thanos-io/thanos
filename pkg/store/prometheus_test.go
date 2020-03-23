@@ -166,11 +166,6 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	}
 }
 
-type sample struct {
-	t int64
-	v float64
-}
-
 func expandChunk(cit chunkenc.Iterator) (res []sample) {
 	for cit.Next() {
 		t, v := cit.At()

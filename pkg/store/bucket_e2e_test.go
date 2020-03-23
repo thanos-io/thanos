@@ -18,7 +18,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
@@ -42,13 +41,13 @@ var (
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+func (noopCache) StorePostings(context.Context, ulid.ULID, labels.Label, []byte) {}
+func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+func (noopCache) StoreSeries(context.Context, ulid.ULID, uint64, []byte) {}
+func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
 	return map[uint64][]byte{}, ids
 }
 
@@ -84,67 +83,30 @@ type storeSuite struct {
 	logger log.Logger
 }
 
-func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt objstore.Bucket,
-	series []labels.Labels, extLset labels.Labels) (minTime, maxTime int64) {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	for i := 0; i < count; i++ {
-		mint := timestamp.FromTime(now)
-		now = now.Add(2 * time.Hour)
-		maxt := timestamp.FromTime(now)
-
-		if minTime == 0 {
-			minTime = mint
-		}
-		maxTime = maxt
-
+	for i := 0; i < 3; i++ {
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
+		id1, err := e2eutil.CreateBlock(dir, e2eutil.NewS(4, 10), i, 10, labels.FromStrings("ext1", "value1"), 0)
 		testutil.Ok(t, err)
-		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
+		id2, err := e2eutil.CreateBlock(dir, e2eutil.NewS(4, 10), i, 10, labels.FromStrings("ext1", "value2"), 0)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
-
-		// Add labels to the meta of the second block.
-		meta, err := metadata.Read(dir2)
-		testutil.Ok(t, err)
-		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
-		testutil.Ok(t, metadata.Write(logger, dir2, meta))
-
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
-
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	return
-}
-
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
-	series := []labels.Labels{
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "2", "b", "1"),
-		labels.FromStrings("a", "2", "b", "2"),
-		labels.FromStrings("a", "1", "c", "1"),
-		labels.FromStrings("a", "1", "c", "2"),
-		labels.FromStrings("a", "2", "c", "1"),
-		labels.FromStrings("a", "2", "c", "2"),
-	}
-	extLset := labels.FromStrings("ext1", "value1")
-
-	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
-		series, extLset)
-
 	s := &storeSuite{
 		logger:  log.NewLogfmtLogger(os.Stderr),
 		cache:   &swappableCache{},
-		minTime: minTime,
-		maxTime: maxTime,
+		minTime: 0,
+		maxTime: 3 * 10,
 	}
 
 	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil, []block.MetadataFilter{
@@ -184,7 +146,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	return s
 }
 
-// TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
@@ -403,11 +364,12 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 			srv := newStoreSeriesServer(ctx)
 
 			testutil.Ok(t, s.store.Series(tcase.req, srv))
-			testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
+			testutil.Equals(t, len(tcase.expected), len(srv.Responses))
 
-			for i, s := range srv.SeriesSet {
-				testutil.Equals(t, tcase.expected[i], s.Labels)
-				testutil.Equals(t, tcase.expectedChunkLen, len(s.Chunks))
+			for i, s := range srv.Responses {
+				testutil.Assert(t, s.GetSeries() != nil)
+				testutil.Equals(t, tcase.expected[i], s.GetSeries().Labels)
+				testutil.Equals(t, tcase.expectedChunkLen, len(s.GetSeries().Chunks))
 			}
 		}); !ok {
 			return
@@ -535,13 +497,14 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	srv := newStoreSeriesServer(ctx)
 
 	testutil.Ok(t, s.store.Series(req, srv))
-	testutil.Equals(t, len(expectedLabels), len(srv.SeriesSet))
+	testutil.Equals(t, len(expectedLabels), len(srv.Responses))
 
-	for i, s := range srv.SeriesSet {
-		testutil.Equals(t, expectedLabels[i], s.Labels)
+	for i, s := range srv.Responses {
+		testutil.Assert(t, s.GetSeries() != nil)
+		testutil.Equals(t, expectedLabels[i], s.GetSeries().Labels)
 
-		// prepareTestBlocks makes 3 chunks containing 2 hour data,
+		// prepareTestBlocks makes 3 chunks containing 10 time units,
 		// we should only get 1, as we are filtering by time.
-		testutil.Equals(t, 1, len(s.Chunks))
+		testutil.Equals(t, 1, len(s.GetSeries().Chunks))
 	}
 }

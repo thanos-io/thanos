@@ -12,39 +12,65 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
-
-type sample struct {
-	t int64
-	v float64
-}
 
 type listSeriesSet struct {
 	series []Series
 	idx    int
 }
 
-func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
+type sample struct {
+	t int64
+	v float64
+}
+
+func (s sample) T() int64   { return s.t }
+func (s sample) V() float64 { return s.v }
+
+type samples []sample
+
+func (s samples) Len() int { return len(s) }
+func (s samples) Get(i int) tsdbutil.Sample {
+	return s[i]
+}
+
+type sampleChunks [][]sample
+
+func (c sampleChunks) Len() int { return len(c) }
+func (c sampleChunks) Get(i int) Samples {
+	return samples(c[i])
+}
+
+type Samples interface {
+	Len() int
+	Get(int) tsdbutil.Sample
+}
+
+type SampleChunks interface {
+	Len() int
+	Get(int) Samples
+}
+
+// newTestSeries is used for tests. The same one is in benchutil package but we need to copy it here to avoid
+// cyclic dependencies.
+func newTestSeries(t testing.TB, lset labels.Labels, smplChunks SampleChunks) Series {
 	var s Series
-
-	for _, l := range lset {
-		s.Labels = append(s.Labels, Label{Name: l.Name, Value: l.Value})
-	}
-
-	for _, smpls := range smplChunks {
+	s.Labels = PromLabelsToLabels(lset)
+	for i := 0; i < smplChunks.Len(); i++ {
 		c := chunkenc.NewXORChunk()
 		a, err := c.Appender()
-		testutil.Ok(tb, err)
+		testutil.Ok(t, err)
 
-		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+		for j := 0; j < smplChunks.Get(i).Len(); j++ {
+			a.Append(smplChunks.Get(i).Get(j).T(), smplChunks.Get(i).Get(j).V())
 		}
 
 		ch := AggrChunk{
-			MinTime: smpls[0].t,
-			MaxTime: smpls[len(smpls)-1].t,
+			MinTime: smplChunks.Get(i).Get(0).T(),
+			MaxTime: smplChunks.Get(i).Get(smplChunks.Get(i).Len() - 1).T(),
 			Raw:     &Chunk{Type: Chunk_XOR, Data: c.Bytes()},
 		}
 
@@ -56,7 +82,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series 
 func newListSeriesSet(tb testing.TB, raw []rawSeries) *listSeriesSet {
 	var series []Series
 	for _, s := range raw {
-		series = append(series, newSeries(tb, s.lset, s.chunks))
+		series = append(series, newTestSeries(tb, s.lset, sampleChunks(s.chunks)))
 	}
 	return &listSeriesSet{
 		series: series,

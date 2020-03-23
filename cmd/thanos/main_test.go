@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -42,10 +41,8 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	// We generate index cache files only for lvl > 1 blocks.
 	{
 		id, err := e2eutil.CreateBlock(
-			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			e2eutil.NewS(1, 1), 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0)
 		testutil.Ok(t, err)
@@ -60,10 +57,8 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	}
 	{
 		id, err := e2eutil.CreateBlock(
-			ctx,
 			dir,
-			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			e2eutil.NewS(1, 1), 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0)
 		testutil.Ok(t, err)
@@ -98,18 +93,13 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	defer cancel()
 
 	bkt := inmem.NewBucket()
-	var id ulid.ULID
-	{
-		id, err = e2eutil.CreateBlock(
-			ctx,
-			dir,
-			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
-			labels.Labels{{Name: "e1", Value: "1"}},
-			downsample.ResLevel0)
-		testutil.Ok(t, err)
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String())))
-	}
+	id, err := e2eutil.CreateBlock(
+		dir,
+		e2eutil.NewS(1, 1), 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+		labels.Labels{{Name: "e1", Value: "1"}},
+		downsample.ResLevel0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String())))
 
 	meta, err := block.DownloadMeta(ctx, logger, bkt, id)
 	testutil.Ok(t, err)
