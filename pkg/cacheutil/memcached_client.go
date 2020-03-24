@@ -265,7 +265,7 @@ func (c *memcachedClient) Stop() {
 
 func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) (err error) {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
-	if c.config.MaxItemSize > 0 && len(value) > int(c.config.MaxItemSize) {
+	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
 		return nil
 	}
