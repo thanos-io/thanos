@@ -6,9 +6,8 @@ package model
 import (
 	"testing"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"gopkg.in/yaml.v2"
 )
 
 func TestBytes_Marshalling(t *testing.T) {
