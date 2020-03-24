@@ -585,17 +585,17 @@ func NewReplicaLabelRemover(logger log.Logger, replicaLabels []string) *ReplicaL
 }
 
 // Modify modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
-func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*metadata.Meta, modified *extprom.TxGaugeVec, view bool) error {
+func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*metadata.Meta, modified *extprom.TxGaugeVec, _ bool) error {
 	for u, meta := range metas {
-		labels := meta.Thanos.Labels
+		l := meta.Thanos.Labels
 		for _, replicaLabel := range r.replicaLabels {
-			if _, exists := labels[replicaLabel]; exists {
+			if _, exists := l[replicaLabel]; exists {
 				level.Debug(r.logger).Log("msg", "replica label removed", "label", replicaLabel)
-				delete(labels, replicaLabel)
+				delete(l, replicaLabel)
 				modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
 		}
-		metas[u].Thanos.Labels = labels
+		metas[u].Thanos.Labels = l
 	}
 	return nil
 }

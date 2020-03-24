@@ -27,9 +27,11 @@ import (
 
 const logLevel = "info"
 
+// Same as default for now.
 var defaultBackoffConfig = util.BackoffConfig{
 	MinBackoff: 300 * time.Millisecond,
-	MaxBackoff: 15 * time.Second,
+	MaxBackoff: 600 * time.Millisecond,
+	MaxRetries: 50,
 }
 
 // TODO(bwplotka): Run against multiple?
@@ -344,7 +346,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 	return store, nil
 }
 
-func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, downsamplingEnabled bool, extArgs ...string) (*e2e.HTTPService, error) {
+func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) (*e2e.HTTPService, error) {
 	dir := filepath.Join(sharedDir, "data", "compact", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
 
@@ -362,10 +364,6 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 		return nil, errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig)
 	}
 
-	if !downsamplingEnabled {
-		extArgs = append(extArgs, "--downsampling.disable")
-	}
-
 	compactor := e2e.NewHTTPService(
 		fmt.Sprintf("compact-%s", name),
 		DefaultImage(),
@@ -376,7 +374,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--objstore.config":         string(bktConfigBytes),
 			"--http-address":            ":80",
 			"--delete-delay":            "0s",
-			"--block-sync-concurrency":  "1",
+			"--block-sync-concurrency":  "20",
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),

@@ -349,6 +349,11 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	}
 	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "read query instant response")
+	}
+
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
 	var m struct {
@@ -361,11 +366,6 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 		ErrorType string `json:"errorType,omitempty"`
 		// Extra field supported by Thanos Querier.
 		Warnings []string `json:"warnings"`
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query instant response")
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {

@@ -187,10 +187,11 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 		groupKey := GroupKey(m.Thanos)
 		g, ok := groups[groupKey]
 		if !ok {
+			lbls := labels.FromMap(m.Thanos.Labels)
 			g, err = newGroup(
-				log.With(s.logger, "compactionGroup", groupKey),
+				log.With(s.logger, "compactionGroup", fmt.Sprintf("%d@%v", m.Thanos.Downsample.Resolution, lbls.String()), "compactionGroupKey", groupKey),
 				s.bkt,
-				labels.FromMap(m.Thanos.Labels),
+				lbls,
 				m.Thanos.Downsample.Resolution,
 				s.acceptMalformedIndex,
 				s.enableVerticalCompaction,
@@ -435,7 +436,7 @@ func (e HaltError) Error() string {
 // IsHaltError returns true if the base error is a HaltError.
 // If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
-	if multiErr, ok := err.(terrors.MultiError); ok {
+	if multiErr, ok := errors.Cause(err).(terrors.MultiError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(HaltError); ok {
 				return true
@@ -581,6 +582,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Check for overlapped blocks.
 	overlappingBlocks := false
 	if err := cg.areBlocksOverlapping(nil); err != nil {
+		// TODO(bwplotka): It would really nice if we could still check for other overlaps than replica. In fact this should be checked
+		// in syncer itself. Otherwise with vertical compaction enabled we will sacrifice this important check.
 		if !cg.enableVerticalCompaction {
 			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
 		}
@@ -853,7 +856,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 							continue
 						}
 					}
-					errChan <- errors.Wrap(err, fmt.Sprintf("compaction failed for group %s", g.Key()))
+					errChan <- errors.Wrapf(err, "group %s", g.Key())
 					return
 				}
 			}()

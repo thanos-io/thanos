@@ -4,6 +4,7 @@
 package e2eutil
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -333,78 +335,6 @@ func CreateEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 	return uid, nil
 }
 
-// CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
-// Samples will be in the time range [mint, maxt)
-// Block ID will be created with a delay of time duration blockDelay.
-func CreateBlockWithBlockDelay(
-	ctx context.Context,
-	dir string,
-	series []labels.Labels,
-	numSamples int,
-	mint, maxt int64,
-	blockDelay time.Duration,
-	extLset labels.Labels,
-	resolution int64,
-) (id ulid.ULID, err error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
-	if err != nil {
-		return id, errors.Wrap(err, "block creation")
-	}
-
-	id, err = ulid.New(uint64(time.Unix(int64(blockID.Time()), 0).Add(-blockDelay*1000).Unix()), nil)
-	if err != nil {
-		return id, errors.Wrap(err, "create block id")
-	}
-
-	if blockID.Compare(id) == 0 {
-		return
-	}
-
-	metaFile := path.Join(dir, blockID.String(), "meta.json")
-	r, err := os.Open(metaFile)
-	if err != nil {
-		return id, errors.Wrap(err, "open meta file")
-	}
-
-	metaContent, err := ioutil.ReadAll(r)
-	if err != nil {
-		return id, errors.Wrap(err, "read meta file")
-	}
-
-	m := &metadata.Meta{}
-	if err := json.Unmarshal(metaContent, m); err != nil {
-		return id, errors.Wrap(err, "meta.json corrupted")
-	}
-	m.ULID = id
-	m.Compaction.Sources = []ulid.ULID{id}
-
-	if err := os.MkdirAll(path.Join(dir, id.String()), 0777); err != nil {
-		return id, errors.Wrap(err, "create directory")
-	}
-
-	err = copyRecursive(path.Join(dir, blockID.String()), path.Join(dir, id.String()))
-	if err != nil {
-		return id, errors.Wrap(err, "copy directory")
-	}
-
-	err = os.RemoveAll(path.Join(dir, blockID.String()))
-	if err != nil {
-		return id, errors.Wrap(err, "delete directory")
-	}
-
-	jsonMeta, err := json.MarshalIndent(m, "", "\t")
-	if err != nil {
-		return id, errors.Wrap(err, "meta marshal")
-	}
-
-	err = ioutil.WriteFile(path.Join(dir, id.String(), "meta.json"), jsonMeta, 0644)
-	if err != nil {
-		return id, errors.Wrap(err, "write meta.json file")
-	}
-
-	return
-}
-
 // CreateBlock writes a block with the given series and numSamples samples each.
 // Samples will be in the time range [mint, maxt).
 func CreateBlock(
@@ -430,6 +360,44 @@ func CreateBlockWithTombstone(
 	resolution int64,
 ) (id ulid.ULID, err error) {
 	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
+}
+
+// CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
+// Samples will be in the time range [mint, maxt)
+// Block ID will be created with a delay of time duration blockDelay.
+func CreateBlockWithBlockDelay(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	blockDelay time.Duration,
+	extLset labels.Labels,
+	resolution int64,
+) (ulid.ULID, error) {
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "block creation")
+	}
+
+	id, err := ulid.New(uint64(timestamp.FromTime(timestamp.Time(int64(blockID.Time())).Add(-blockDelay))), bytes.NewReader(blockID.Entropy()))
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "create block id")
+	}
+
+	m, err := metadata.Read(path.Join(dir, blockID.String()))
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "open meta file")
+	}
+
+	m.ULID = id
+	m.Compaction.Sources = []ulid.ULID{id}
+
+	if err := metadata.Write(log.NewNopLogger(), path.Join(dir, blockID.String()), m); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
+	}
+
+	return id, os.Rename(path.Join(dir, blockID.String()), path.Join(dir, id.String()))
 }
 
 func createBlock(
@@ -495,6 +463,10 @@ func createBlock(
 	id, err = c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "write block")
+	}
+
+	if id.Compare(ulid.ULID{}) == 0 {
+		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
 
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, id.String()), metadata.Thanos{
