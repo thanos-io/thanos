@@ -29,6 +29,7 @@ Since there are no consistency guarantees provided by some Object Storage provid
 
 - [#2090](https://github.com/thanos-io/thanos/issues/2090) *breaking* Downsample command: the `downsample` command has moved as the `thanos bucket` sub-command, and cannot be called via `thanos downsample` any more.
 - [#2294](https://github.com/thanos-io/thanos/pull/2294) store: optimizations for fetching postings. Queries using `=~".*"` matchers or negation matchers (`!=...` or `!~...`) benefit the most.
+- [#2301](https://github.com/thanos-io/thanos/pull/2301) Ruler: initlialization fails with filepath bad pattern error and rule manager update error.
 
 ## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0) - 2020.03.02
 
