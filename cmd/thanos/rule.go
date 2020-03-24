@@ -495,6 +495,7 @@ func runRule(
 			// Initialize rules.
 			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
+				return err
 			}
 			for {
 				select {
