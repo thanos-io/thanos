@@ -187,23 +187,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
 	// Listen for termination signals.
 	{
-		cancel := make(chan struct{})
+		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {
-			return interrupt(logger, cancel)
+			return interrupt(ctx, logger)
 		}, func(error) {
-			close(cancel)
+			cancel()
 		})
 	}
 
 	// Listen for reload signals.
 	{
-		cancel := make(chan struct{})
+		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {
-			return reload(logger, cancel, reloadCh)
+			return reload(ctx, logger, reloadCh)
 		}, func(error) {
-			close(cancel)
+			cancel()
 		})
 	}
 
@@ -215,19 +216,19 @@ func main() {
 	level.Info(logger).Log("msg", "exiting")
 }
 
-func interrupt(logger log.Logger, cancel <-chan struct{}) error {
+func interrupt(ctx context.Context, logger log.Logger) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	select {
 	case s := <-c:
 		level.Info(logger).Log("msg", "caught signal. Exiting.", "signal", s)
 		return nil
-	case <-cancel:
-		return errors.New("canceled")
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
-func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error {
+func reload(ctx context.Context, logger log.Logger, r chan<- struct{}) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP)
 	for {
@@ -239,8 +240,8 @@ func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error 
 				level.Info(logger).Log("msg", "relaod dispatched.")
 			default:
 			}
-		case <-cancel:
-			return errors.New("canceled")
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
