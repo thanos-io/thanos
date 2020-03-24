@@ -261,7 +261,7 @@ test-e2e-ci: docker
 	@rm -rf ./test/e2e/e2e_integration_test*
 	@echo ">> running /test/e2e tests."
 	@go clean -testcache
-	@go test -failfast -parallel 1 -timeout 5m -v ./test/e2e/...
+	@go test -failfast -parallel 1 -timeout 10m -v ./test/e2e/...
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
