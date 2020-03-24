@@ -30,3 +30,6 @@ examples/tmp/
 
 # Ignore the MacOS Trash (DS-Store)
 .DS_Store
+
+# Ignore cmd thanos
+cmd/thanos/thanos
