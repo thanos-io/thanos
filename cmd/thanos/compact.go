@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -29,11 +30,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -107,7 +110,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
-	waitInterval := cmd.Flag("wait-interval", "Wait interval between consecutive compaction runs. Only works when --wait flag specified.").
+	waitInterval := cmd.Flag("wait-interval", "Wait interval between consecutive compaction runs and bucket refreshes. Only works when --wait flag specified.").
 		Default("5m").Duration()
 
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
@@ -141,6 +144,15 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+	flagsMap := map[string]string{
+		"web.external-prefix": *webExternalPrefix,
+		"web.prefix-header":   *webPrefixHeaderName,
+	}
+
+	label := cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").String()
+
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -166,6 +178,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*dedupReplicaLabels,
 			selectorRelabelConf,
 			*waitInterval,
+			*label,
+			flagsMap,
 		)
 	}
 }
@@ -193,6 +207,8 @@ func runCompact(
 	dedupReplicaLabels []string,
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
+	label string,
+	flagsMap map[string]string,
 ) error {
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -441,6 +457,19 @@ func runCompact(
 	}, func(error) {
 		cancel()
 	})
+
+	if wait {
+		router := route.New()
+		bucketUI := ui.NewBucketUI(logger, label, flagsMap)
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		srv.Handle("/", router)
+
+		g.Add(func() error {
+			return refresh(ctx, logger, bucketUI, waitInterval, time.Minute, metaFetcher)
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
