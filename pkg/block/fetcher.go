@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"golang.org/x/sync/errgroup"
 )
 
 type fetcherMetrics struct {
@@ -272,7 +273,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	partial = make(map[ulid.ULID]error)
 
 	var (
-		wg  sync.WaitGroup
+		eg  errgroup.Group
 		ch  = make(chan ulid.ULID, s.concurrency)
 		mtx sync.Mutex
 
@@ -282,10 +283,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	s.metrics.resetTx()
 
 	for i := 0; i < s.concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		eg.Go(func() error {
 			for id := range ch {
 				meta, err := s.loadMeta(ctx, id)
 				if err == nil {
@@ -312,28 +310,31 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 				partial[id] = err
 				mtx.Unlock()
 			}
-		}()
+			return nil
+		})
 	}
 
 	// Workers scheduled, distribute blocks.
-	err = s.bkt.Iter(ctx, "", func(name string) error {
-		id, ok := IsBlockDir(name)
-		if !ok {
+	eg.Go(func() error {
+		err := s.bkt.Iter(ctx, "", func(name string) error {
+			id, ok := IsBlockDir(name)
+			if !ok {
+				return nil
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- id:
+			}
+
 			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ch <- id:
-		}
-
-		return nil
+		})
+		close(ch)
+		return err
 	})
-	close(ch)
 
-	wg.Wait()
-	if err != nil {
+	if err := eg.Wait(); err != nil {
 		return nil, nil, errors.Wrap(err, "MetaFetcher: iter bucket")
 	}
 
