@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"sort"
 	"testing"
@@ -69,7 +68,7 @@ func TestProxyStore_Info(t *testing.T) {
 	testutil.Equals(t, []storepb.LabelSet(nil), resp.LabelSets)
 	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
 	testutil.Equals(t, int64(0), resp.MinTime)
-	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
+	testutil.Equals(t, int64(0), resp.MaxTime)
 }
 
 func TestProxyStore_Series(t *testing.T) {
