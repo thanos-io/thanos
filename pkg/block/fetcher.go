@@ -316,7 +316,8 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
-		err := s.bkt.Iter(ctx, "", func(name string) error {
+		defer close(ch)
+		return s.bkt.Iter(ctx, "", func(name string) error {
 			id, ok := IsBlockDir(name)
 			if !ok {
 				return nil
@@ -330,8 +331,6 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 
 			return nil
 		})
-		close(ch)
-		return err
 	})
 
 	if err := eg.Wait(); err != nil {
