@@ -37,6 +37,7 @@ var (
 		MaxIdleConnections:        100,
 		MaxAsyncConcurrency:       20,
 		MaxAsyncBufferSize:        10000,
+		MaxItemSize:               model.Bytes(1024 * 1024),
 		MaxGetMultiConcurrency:    100,
 		MaxGetMultiBatchSize:      0,
 		DNSProviderUpdateInterval: 10 * time.Second,

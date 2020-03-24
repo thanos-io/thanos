@@ -135,7 +135,7 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.skipped.WithLabelValues(opSet, reasonMaxItemSize)))
 }
 
-func TestMemcachedClient_SetAsyncWithMaxItemSize(t *testing.T) {
+func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	ctx := context.Background()
