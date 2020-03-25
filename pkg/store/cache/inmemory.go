@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/model"
 	"gopkg.in/yaml.v2"
 )
 
@@ -52,9 +53,9 @@ type InMemoryIndexCache struct {
 // InMemoryIndexCacheConfig holds the in-memory index cache config.
 type InMemoryIndexCacheConfig struct {
 	// MaxSize represents overall maximum number of bytes cache can contain.
-	MaxSize Bytes `yaml:"max_size"`
+	MaxSize model.Bytes `yaml:"max_size"`
 	// MaxItemSize represents maximum size of single item.
-	MaxItemSize Bytes `yaml:"max_item_size"`
+	MaxItemSize model.Bytes `yaml:"max_item_size"`
 }
 
 // parseInMemoryIndexCacheConfig unmarshals a buffer into a InMemoryIndexCacheConfig with default values.
