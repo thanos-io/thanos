@@ -334,7 +334,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		httpProbe := prober.NewHTTP()
 		statusProber := prober.Combine(
 			httpProbe,
-			prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+			prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 		)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
