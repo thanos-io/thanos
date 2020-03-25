@@ -7,7 +7,7 @@
     compactionErrorThreshold: 5,
     seriesGateErrorThreshold: 2,
     bucketOpsErrorThreshold: 5,
-    bucketOpsTailLatencyThreshold: 15,
+    bucketOpsP99LatencyThreshold: 15,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -74,7 +74,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.9, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{%(selector)s}[5m]))) > %(bucketOpsTailLatencyThreshold)s
+                histogram_quantile(0.9, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{%(selector)s}[5m]))) > %(bucketOpsP99LatencyThreshold)s
               and
                 sum by (job) (rate(thanos_objstore_bucket_operation_duration_seconds_count{%(selector)s}[5m])) > 0
               )

@@ -6,7 +6,7 @@
     httpErrorThreshold: 5,
     forwardErrorThreshold: 5,
     refreshErrorThreshold: 0,
-    tailLatencyThreshold: 10,
+    p99LatencyThreshold: 10,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -37,7 +37,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(tailLatencyThreshold)s
+                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(p99LatencyThreshold)s
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
