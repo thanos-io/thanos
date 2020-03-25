@@ -3,6 +3,10 @@
   receive+:: {
     jobPrefix: error 'must provide job prefix for Thanos Receive alerts',
     selector: error 'must provide selector for Thanos Receive alerts',
+    httpErrorThreshold: 5,
+    forwardErrorThreshold: 5,
+    refreshErrorThreshold: 0,
+    tailLatencyThreshold: 10,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -19,7 +23,7 @@
                 sum(rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
               /
                 sum(rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
-              ) * 100 > 5
+              ) * 100 > %(httpErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
             labels: {
@@ -33,7 +37,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > 10
+                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(tailLatencyThreshold)s
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
@@ -53,7 +57,7 @@
                 sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
-              * 100 > 5
+              * 100 > %(forwardErrorThreshold)s
               )
             ||| % thanos.receive,
             'for': '5m',
@@ -71,7 +75,7 @@
                 sum by (job) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
-              > 0
+              > %(refreshErrorThreshold)s
               )
             ||| % thanos.receive,
             'for': '15m',

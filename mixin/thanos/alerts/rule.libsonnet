@@ -3,6 +3,10 @@
   rule+:: {
     jobPrefix: error 'must provide job prefix for Thanos Rule alerts',
     selector: error 'must provide selector for Thanos Rule alerts',
+    grpcErrorThreshold: 5,
+    rulerDnsErrorThreshold: 1,
+    alertManagerDnsErrorThreshold: 1,
+    evalErrorThreshold: 5,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -45,7 +49,7 @@
                 sum by (job) (rate(prometheus_rule_evaluation_failures_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(prometheus_rule_evaluations_total{%(selector)s}[5m]))
-              * 100 > 5
+              * 100 > %(evalErrorThreshold)s
               )
             ||| % thanos.rule,
 
@@ -95,7 +99,7 @@
                 sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
               /
                 sum by (job) (rate(grpc_server_started_total{%(selector)s}[5m]))
-              * 100 > 5
+              * 100 > %(grpcErrorThreshold)s
               )
             ||| % thanos.rule,
             'for': '5m',
@@ -124,7 +128,7 @@
                 sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{%(selector)s}[5m]))
-              * 100 > 1
+              * 100 > %(rulerDnsErrorThreshold)s
               )
             ||| % thanos.rule,
             'for': '15m',
@@ -142,7 +146,7 @@
                 sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{%(selector)s}[5m]))
-              * 100 > 1
+              * 100 > %(alertManagerDnsErrorThreshold)s
               )
             ||| % thanos.rule,
             'for': '15m',
