@@ -109,7 +109,7 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -134,7 +134,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(6), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: true,
 			},
@@ -164,7 +164,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -193,7 +193,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -226,7 +226,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},

@@ -250,18 +250,9 @@ test-e2e: docker
 	@echo ">> cleaning e2e test garbage."
 	@rm -rf ./test/e2e/e2e_integration_test*
 	@echo ">> running /test/e2e tests."
-	@go test -failfast -timeout 5m -v ./test/e2e/...
-
-.PHONY: test-e2e-ci
-test-e2e-ci: ## Runs all Thanos e2e docker-based e2e tests from test/e2e, using limited resources. Required access to docker daemon.
-test-e2e-ci: docker
-	@echo ">> cleaning docker environment."
-	@docker system prune -f --volumes
-	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_integration_test*
-	@echo ">> running /test/e2e tests."
-	@go clean -testcache
-	@go test -failfast -parallel 1 -timeout 5m -v ./test/e2e/...
+	# NOTE(bwplotka):
+	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
+	@go test -failfast -timeout 10m -v ./test/e2e/...
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.

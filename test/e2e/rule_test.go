@@ -436,7 +436,7 @@ func TestRule(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	queryAndAssert(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{

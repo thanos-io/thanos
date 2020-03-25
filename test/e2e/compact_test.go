@@ -5,10 +5,10 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -19,8 +19,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -30,530 +28,428 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
-func TestCompact(t *testing.T) {
+func TestCompactWithStoreGateway(t *testing.T) {
 	t.Parallel()
 
 	l := log.NewLogfmtLogger(os.Stdout)
-
-	// blockDesc describes a recipe to generate blocks from the given series and external labels.
 	type blockDesc struct {
-		series           []labels.Labels
-		extLset          labels.Labels
-		mint             int64
-		maxt             int64
-		samplesPerSeries int
-	}
-
-	type retention struct {
-		resRaw string
-		res5m  string
-		res1h  string
+		series  []labels.Labels
+		extLset labels.Labels
+		mint    int64
+		maxt    int64
 	}
 
 	delay := 30 * time.Minute
-	now := time.Now()
+	// Make sure to take realistic timestamp for start. This is to align blocks as if they would be aligned on Prometheus.
+	// To have deterministic compaction, let's have fixed date:
+	now, err := time.Parse(time.RFC3339, "2020-03-25T08:00:00Z")
+	testutil.Ok(t, err)
 
-	for i, tcase := range []struct {
-		name                string
-		blocks              []blockDesc
-		replicaLabels       []string
-		downsamplingEnabled bool
-		retention           *retention
-		query               string
-
-		expected           []model.Metric
-		expectNumModBlocks float64
-		expectNumBlocks    uint64
-		expectedStats      tsdb.BlockStats
-	}{
+	// Simulate real scenario, including more complex cases like overlaps if needed.
+	// TODO(bwplotka): Add blocks to downsample and test delayed delete.
+	blocks := []blockDesc{
+		// Non overlapping blocks, not ready for compaction.
 		{
-			name: "(full) vertically overlapping blocks with replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-			},
-			replicaLabels:       []string{"replica", "rule_replica"},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-				},
-			},
-			expectNumModBlocks: 3,
-			expectNumBlocks:    1,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  1,
-				NumSamples: 120,
-			},
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "no-compaction", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
 		},
 		{
-			name: "(full) vertically overlapping blocks without replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 12,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 12,
-				},
-			},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":       "1",
-					"b":       "2",
-					"ext1":    "value1",
-					"replica": "1",
-				},
-				{
-					"a":       "1",
-					"b":       "2",
-					"ext1":    "value1",
-					"replica": "2",
-				},
-			},
-			expectNumModBlocks: 0,
-			expectNumBlocks:    2,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  2,
-				NumSamples: 24,
-			},
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "no-compaction", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
 		},
 		{
-			name: "(full) vertically overlapping blocks with replica labels downsampling disabled",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1", "ext2", "value2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-			},
-			replicaLabels:       []string{"replica", "rule_replica"},
-			downsamplingEnabled: false,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-					"ext2": "value2",
-				},
-			},
-			expectNumModBlocks: 3,
-			expectNumBlocks:    1,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  1,
-				NumSamples: 120,
-			},
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "no-compaction", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
 		},
-		{
-			name: "(full) vertically overlapping blocks with replica labels, downsampling disabled and extra blocks",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1", "ext2", "value2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("c", "1", "d", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("c", "1", "d", "2")},
-					extLset:          labels.FromStrings("ext3", "value3"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-			},
-			replicaLabels:       []string{"replica", "rule_replica"},
-			downsamplingEnabled: false,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-					"ext2": "value2",
-				},
-			},
-			expectNumModBlocks: 3,
-			expectNumBlocks:    2,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  6,
-				NumSeries:  3,
-				NumSamples: 360,
-			},
-		},
-		{
-			name: "(partial) vertically overlapping blocks with replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "ext2", "value2", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 119,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext2", "value2", "ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(1 * time.Hour)),
-					samplesPerSeries: 59,
-				},
-			},
-			replicaLabels:       []string{"replica"},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-					"ext2": "value2",
-				},
-			},
-			expectNumModBlocks: 2,
-			expectNumBlocks:    1,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  1,
-				NumSamples: 119,
-			},
-		},
-		{
-			name: "(shifted) vertically overlapping blocks with replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
-					mint:             timestamp.FromTime(now.Add(30 * time.Minute)),
-					maxt:             timestamp.FromTime(now.Add(150 * time.Minute)),
-					samplesPerSeries: 119,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(120 * time.Minute)),
-					samplesPerSeries: 119,
-				},
-			},
-			replicaLabels:       []string{"replica"},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-				},
-			},
-			expectNumModBlocks: 2,
-			expectNumBlocks:    1,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  1,
-				NumSamples: 149,
-			},
-		},
-		{
-			name: "(full) vertically overlapping blocks with replica labels retention specified",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "replica", "2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1", "rule_replica", "1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 120,
-				},
-			},
-			replicaLabels:       []string{"replica", "rule_replica"},
-			downsamplingEnabled: true,
-			retention: &retention{
-				resRaw: "0d",
-				res5m:  "5m",
-				res1h:  "5m",
-			},
-			query: "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-				},
-			},
-			expectNumModBlocks: 3,
-			expectNumBlocks:    1,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  1,
-				NumSamples: 120,
-			},
-		},
-		{
-			name: "(full) vertically overlapping blocks without replica labels",
-			blocks: []blockDesc{
-				{
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value1"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 2,
-				}, {
-					series:           []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-					extLset:          labels.FromStrings("ext1", "value2"),
-					mint:             timestamp.FromTime(now),
-					maxt:             timestamp.FromTime(now.Add(2 * time.Hour)),
-					samplesPerSeries: 2,
-				},
-			},
-			replicaLabels:       []string{"replica"},
-			downsamplingEnabled: true,
-			query:               "{a=\"1\"}",
-
-			expected: []model.Metric{
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value1",
-				},
-				{
-					"a":    "1",
-					"b":    "2",
-					"ext1": "value2",
-				},
-			},
-			expectNumModBlocks: 0,
-			expectNumBlocks:    2,
-			expectedStats: tsdb.BlockStats{
-				NumChunks:  2,
-				NumSeries:  2,
-				NumSamples: 4,
-			},
-		},
-	} {
-		i := i
-		tcase := tcase
-		t.Run(tcase.name, func(t *testing.T) {
-			s, err := e2e.NewScenario("e2e_test_compact_" + strconv.Itoa(i))
-			testutil.Ok(t, err)
-			defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
-
-			dir := filepath.Join(s.SharedDir(), "tmp_"+strconv.Itoa(i))
-			testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), dir), os.ModePerm))
-
-			bucket := "thanos_" + strconv.Itoa(i)
-
-			// TODO(kakkoyun): Move to shared minio to improve test speed.
-			m := e2edb.NewMinio(8080+i, bucket)
-			testutil.Ok(t, s.StartAndWaitReady(m))
-
-			bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.HTTPEndpoint(), // We need separate client config, when connecting to minio from outside.
-				Insecure:  true,
-			}, "test-feed")
-			testutil.Ok(t, err)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-			defer cancel() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
-
-			var rawBlockIds []ulid.ULID
-			for _, b := range tcase.blocks {
-				id, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, b.samplesPerSeries, b.mint, b.maxt, delay, b.extLset, 0)
-				testutil.Ok(t, err)
-				testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
-				rawBlockIds = append(rawBlockIds, id)
-			}
-
-			dedupFlags := make([]string, 0, len(tcase.replicaLabels))
-			for _, l := range tcase.replicaLabels {
-				dedupFlags = append(dedupFlags, "--deduplication.replica-label="+l)
-			}
-
-			retenFlags := make([]string, 0, 3)
-			if tcase.retention != nil {
-				retenFlags = append(retenFlags, "--retention.resolution-raw="+tcase.retention.resRaw)
-				retenFlags = append(retenFlags, "--retention.resolution-5m="+tcase.retention.res5m)
-				retenFlags = append(retenFlags, "--retention.resolution-1h="+tcase.retention.res1h)
-			}
-
-			cmpt, err := e2ethanos.NewCompactor(s.SharedDir(), strconv.Itoa(i), client.BucketConfig{
-				Type: client.S3,
-				Config: s3.Config{
-					Bucket:    bucket,
-					AccessKey: e2edb.MinioAccessKey,
-					SecretKey: e2edb.MinioSecretKey,
-					Endpoint:  m.NetworkHTTPEndpoint(),
-					Insecure:  true,
-				},
-			},
-				nil, // relabel configs.
-				tcase.downsamplingEnabled,
-				append(dedupFlags, retenFlags...)...,
-			)
-			testutil.Ok(t, err)
-			testutil.Ok(t, s.StartAndWaitReady(cmpt))
-			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIds))), "thanos_blocks_meta_synced"))
-			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
-			testutil.Ok(t, cmpt.WaitSumMetrics(e2e.Equals(tcase.expectNumModBlocks), "thanos_blocks_meta_modified"))
-
-			str, err := e2ethanos.NewStoreGW(s.SharedDir(), "compact_"+strconv.Itoa(i), client.BucketConfig{
-				Type: client.S3,
-				Config: s3.Config{
-					Bucket:    bucket,
-					AccessKey: e2edb.MinioAccessKey,
-					SecretKey: e2edb.MinioSecretKey,
-					Endpoint:  m.NetworkHTTPEndpoint(),
-					Insecure:  true,
-				},
-			})
-			testutil.Ok(t, err)
-			testutil.Ok(t, s.StartAndWaitReady(str))
-			testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(tcase.expectNumBlocks)), "thanos_blocks_meta_synced"))
-			testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
-
-			q, err := e2ethanos.NewQuerier(s.SharedDir(), "compact_"+strconv.Itoa(i), []string{str.GRPCNetworkEndpoint()}, nil)
-			testutil.Ok(t, err)
-			testutil.Ok(t, s.StartAndWaitReady(q))
-
-			ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-			defer cancel()
-
-			queryAndAssert(t, ctx, q.HTTPEndpoint(),
-				tcase.query,
-				promclient.QueryOptions{
-					Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
-				},
-				tcase.expected,
-			)
-
-			var (
-				actualNumBlocks uint64
-				actual          tsdb.BlockStats
-				sources         []ulid.ULID
-			)
-			testutil.Ok(t, bkt.Iter(ctx, "", func(n string) error {
-				id, ok := block.IsBlockDir(n)
-				if !ok {
-					return nil
-				}
-
-				actualNumBlocks += 1
-
-				meta, err := block.DownloadMeta(ctx, l, bkt, id)
-				if err != nil {
-					return err
-				}
-
-				actual.NumChunks += meta.Stats.NumChunks
-				actual.NumSeries += meta.Stats.NumSeries
-				actual.NumSamples += meta.Stats.NumSamples
-				sources = append(sources, meta.Compaction.Sources...)
-				return nil
-			}))
-
-			// Make sure only necessary amount of blocks fetched from store, to observe affects of offline deduplication.
-			testutil.Equals(t, tcase.expectNumBlocks, actualNumBlocks)
-			if len(rawBlockIds) < int(tcase.expectNumBlocks) { // check sources only if compacted.
-				testutil.Equals(t, rawBlockIds, sources)
-			}
-			testutil.Equals(t, tcase.expectedStats.NumChunks, actual.NumChunks)
-			testutil.Equals(t, tcase.expectedStats.NumSeries, actual.NumSeries)
-			testutil.Equals(t, tcase.expectedStats.NumSamples, actual.NumSamples)
-		})
 	}
+	blocks = append(blocks,
+		// Non overlapping blocks, ready for compaction.
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
+			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "4")},
+			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "5")},
+			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(6 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(8 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
+			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
+		},
+
+		// Non overlapping blocks, ready for compaction, only after deduplication.
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "compaction-ready-after-dedup", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
+			extLset: labels.FromStrings("case", "compaction-ready-after-dedup", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "4")},
+			extLset: labels.FromStrings("case", "compaction-ready-after-dedup", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "5")},
+			extLset: labels.FromStrings("case", "compaction-ready-after-dedup", "replica", "2"),
+			mint:    timestamp.FromTime(now.Add(6 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(8 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
+			extLset: labels.FromStrings("case", "compaction-ready-after-dedup", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
+		},
+
+		// Replica partial overlapping blocks, not ready for compaction, among no-overlapping blocks.
+		// NOTE: We put a- in front to make sure this will be compacted as first one (:
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "1"),
+				labels.FromStrings("a", "1", "b", "2"),
+			},
+			extLset: labels.FromStrings("case", "a-partial-overlap-dedup-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "3"),
+			},
+			extLset: labels.FromStrings("case", "a-partial-overlap-dedup-ready", "replica", "2"),
+			mint:    timestamp.FromTime(now.Add(1 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "4"),
+			},
+			extLset: labels.FromStrings("case", "a-partial-overlap-dedup-ready", "replica", "3"),
+			mint:    timestamp.FromTime(now.Add(3 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		// Extra.
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "5"),
+			},
+			extLset: labels.FromStrings("case", "a-partial-overlap-dedup-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+
+		// Multi-Replica partial overlapping blocks, not ready for compaction, among no-overlapping blocks.
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "1"),
+				labels.FromStrings("a", "1", "b", "2"),
+			},
+			extLset: labels.FromStrings("case", "partial-multi-replica-overlap-dedup-ready", "rule_replica", "1", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "3"),
+			},
+			extLset: labels.FromStrings("case", "partial-multi-replica-overlap-dedup-ready", "rule_replica", "2", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(1 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "4"),
+			},
+			// TODO(bwplotka): This is wrong, but let's fix in next PR. We should error out in this case as we should
+			// never support overlaps before we modify dedup labels. This probably means another check in fetcher.
+			extLset: labels.FromStrings("case", "partial-multi-replica-overlap-dedup-ready", "rule_replica", "1", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(1 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		// Extra.
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "5"),
+			},
+			extLset: labels.FromStrings("case", "partial-multi-replica-overlap-dedup-ready", "rule_replica", "1", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+
+		// Replica full overlapping blocks, not ready for compaction, among no-overlapping blocks.
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "1"),
+				labels.FromStrings("a", "1", "b", "2"),
+			},
+			extLset: labels.FromStrings("case", "full-replica-overlap-dedup-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "3"),
+			},
+			extLset: labels.FromStrings("case", "full-replica-overlap-dedup-ready", "replica", "2"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		// Extra.
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "4"),
+			},
+			extLset: labels.FromStrings("case", "full-replica-overlap-dedup-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "b", "2"),
+				labels.FromStrings("a", "1", "b", "5"),
+			},
+			extLset: labels.FromStrings("case", "full-replica-overlap-dedup-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+	)
+
+	s, err := e2e.NewScenario("e2e_test_compact")
+	testutil.Ok(t, err)
+	defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+
+	dir := filepath.Join(s.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	const bucket = "compact_test"
+	m := e2edb.NewMinio(8080, bucket)
+	testutil.Ok(t, s.StartAndWaitReady(m))
+
+	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
+		Bucket:    bucket,
+		AccessKey: e2edb.MinioAccessKey,
+		SecretKey: e2edb.MinioSecretKey,
+		Endpoint:  m.HTTPEndpoint(), // We need separate client config, when connecting to minio from outside.
+		Insecure:  true,
+	}, "test-feed")
+	testutil.Ok(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+
+	rawBlockIDs := map[ulid.ULID]struct{}{}
+	for _, b := range blocks {
+		id, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0)
+		testutil.Ok(t, err)
+		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
+		rawBlockIDs[id] = struct{}{}
+	}
+
+	svcConfig := client.BucketConfig{
+		Type: client.S3,
+		Config: s3.Config{
+			Bucket:    bucket,
+			AccessKey: e2edb.MinioAccessKey,
+			SecretKey: e2edb.MinioSecretKey,
+			Endpoint:  m.NetworkHTTPEndpoint(),
+			Insecure:  true,
+		},
+	}
+	str, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", svcConfig)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(str))
+	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs))), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
+
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	// Check if query detects current series, even if overlapped.
+	queryAndAssert(t, ctx, q.HTTPEndpoint(),
+		fmt.Sprintf(`count_over_time({a="1"}[12h] offset %ds)`, int64(-1*time.Since(now.Add(12*time.Hour)).Seconds())),
+		promclient.QueryOptions{
+			Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
+		},
+		model.Vector{
+			{Value: 360, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "no-compaction", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-after-dedup", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-after-dedup", "replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-after-dedup", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+			{Value: 240, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready", "replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "a-partial-overlap-dedup-ready", "replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready", "replica": "3"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "a-partial-overlap-dedup-ready", "replica": "3"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			{Value: 320, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			{Value: 360, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready", "replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "full-replica-overlap-dedup-ready", "replica": "2"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+		},
+	)
+
+	t.Run("no replica label with overlaps should halt compactor", func(t *testing.T) {
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(c))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs))), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
+
+		// Expect compactor halted.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compactor_halted"))
+
+		// We expect no ops.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_marked_for_deletion_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_group_compactions_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_group_compaction_runs_completed_total"))
+
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
+		testutil.Ok(t, s.Stop(c))
+	})
+	t.Run("native vertical deduplication should kick in", func(t *testing.T) {
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(c))
+
+		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
+		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compactor_iterations_total"))
+
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(16), "thanos_compactor_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(16), "thanos_compactor_blocks_marked_for_deletion_total"))
+
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(5), "thanos_compact_group_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_vertical_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(12), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(12), "thanos_compact_group_compaction_runs_completed_total"))
+
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
+
+		// We had 8 deletions based on 3 compactios, so 3 new blocks.
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)-16+5)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_halted"))
+		// Make sure compactor does not modify anything else over time.
+		testutil.Ok(t, s.Stop(c))
+
+		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		// Check if query detects new blocks.
+		queryAndAssert(t, ctx, q.HTTPEndpoint(),
+			fmt.Sprintf(`count_over_time({a="1"}[12h] offset %ds)`, int64(-1*time.Since(now.Add(12*time.Hour)).Seconds())),
+			promclient.QueryOptions{
+				Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
+			},
+			model.Vector{
+				// NOTE(bwplotka): Even after deduplication some series has still replica labels. This is because those blocks did not overlap yet with anything.
+				// This is fine as querier deduplication will remove it if needed.
+				{Value: 360, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "no-compaction", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-after-dedup"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-after-dedup"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-after-dedup", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "a-partial-overlap-dedup-ready"}},
+				{Value: 360, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "a-partial-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "a-partial-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "partial-multi-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+				{Value: 240, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "partial-multi-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "partial-multi-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "full-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready"}},
+				{Value: 240, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "full-replica-overlap-dedup-ready"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+				{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			},
+		)
+
+		// Store view:
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)-16+5)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
+	})
 }

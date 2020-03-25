@@ -25,4 +25,4 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Run e2e docker-based tests.
-        run: make test-e2e-ci
+        run: make test-e2e
