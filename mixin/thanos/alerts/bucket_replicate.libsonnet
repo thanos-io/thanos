@@ -3,6 +3,8 @@
   bucket_replicate+:: {
     jobPrefix: error 'must provide job prefix for Thanos Bucket Replicate dashboard',
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
+    errorThreshold: 10,
+    p99LatencyThreshold: 20,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -32,7 +34,7 @@
                 sum(rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
               / on (namespace) group_left
                 sum(rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
-              ) * 100 >= 10
+              ) * 100 >= %(errorThreshold)s
             ||| % thanos.bucket_replicate,
             'for': '5m',
             labels: {
@@ -46,7 +48,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > 120
+                histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
               and
                 sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
