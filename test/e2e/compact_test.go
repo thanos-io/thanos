@@ -42,7 +42,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	delay := 30 * time.Minute
 	// Make sure to take realistic timestamp for start. This is to align blocks as if they would be aligned on Prometheus.
 	// To have deterministic compaction, let's have fixed date:
-	now, err := time.Parse(time.RFC3339, "2020-03-25T08:00:00Z")
+	now, err := time.Parse(time.RFC3339, "2020-03-24T08:00:00Z")
 	testutil.Ok(t, err)
 
 	// Simulate real scenario, including more complex cases like overlaps if needed.
@@ -311,7 +311,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	// Check if query detects current series, even if overlapped.
 	queryAndAssert(t, ctx, q.HTTPEndpoint(),
-		fmt.Sprintf(`count_over_time({a="1"}[12h] offset %ds)`, int64(-1*time.Since(now.Add(12*time.Hour)).Seconds())),
+		fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds())),
 		promclient.QueryOptions{
 			Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
 		},
@@ -408,7 +408,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, ctx, q.HTTPEndpoint(),
-			fmt.Sprintf(`count_over_time({a="1"}[12h] offset %ds)`, int64(-1*time.Since(now.Add(12*time.Hour)).Seconds())),
+			fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds())),
 			promclient.QueryOptions{
 				Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
 			},
