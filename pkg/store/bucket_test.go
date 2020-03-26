@@ -480,6 +480,7 @@ func TestBucketStore_Info(t *testing.T) {
 		allowAllFilterConf,
 		true,
 		true,
+		true,
 	)
 	testutil.Ok(t, err)
 
@@ -731,6 +732,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				allowAllFilterConf,
 				true,
 				true,
+				true,
 			)
 			testutil.Ok(t, err)
 
@@ -932,7 +934,23 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 
 	logger := log.NewNopLogger()
 
-	app := h.Appender()
+	appendTestData(t, h.Appender(), series)
+
+	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "tmp"), os.ModePerm))
+	id := createBlockFromHead(t, filepath.Join(tmpDir, "tmp"), h)
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, "tmp", id.String()), metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String())))
+
+	return id
+}
+
+func appendTestData(t testing.TB, app tsdb.Appender, series int) {
 	addSeries := func(l labels.Labels) {
 		_, err := app.Add(l, 0, 0)
 		testutil.Ok(t, err)
@@ -950,19 +968,6 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 		}
 	}
 	testutil.Ok(t, app.Commit())
-
-	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "tmp"), os.ModePerm))
-	id := createBlockFromHead(t, filepath.Join(tmpDir, "tmp"), h)
-
-	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(tmpDir, "tmp", id.String()), metadata.Thanos{
-		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
-		Downsample: metadata.ThanosDownsample{Resolution: 0},
-		Source:     metadata.TestSource,
-	}, nil)
-	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String())))
-
-	return id
 }
 
 func createBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
