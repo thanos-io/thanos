@@ -7,7 +7,7 @@
     compactionErrorThreshold: 5,
     seriesGateErrorThreshold: 2,
     bucketOpsErrorThreshold: 5,
-    bucketOpsP99LatencyThreshold: 15,
+    bucketOpsP99LatencyThreshold: 2,
   },
   prometheusAlerts+:: {
     groups+: [

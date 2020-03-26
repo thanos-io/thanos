@@ -6,7 +6,8 @@
     httpErrorThreshold: 5,
     grpcErrorThreshold: 5,
     dnsErrorThreshold: 1,
-    p99LatencyThreshold: 90,
+    p99QueryLatencyThreshold: 40,
+    p99QueryRangeLatencyThreshold: 90,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -106,7 +107,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m]))) > %(p99QueryLatencyThreshold)s
               and
                 sum by (job) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
               )
@@ -123,7 +124,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query_range"}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query_range"}[5m]))) > %(p99QueryRangeLatencyThreshold)s
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
               )
