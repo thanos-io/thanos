@@ -352,7 +352,7 @@ examples-in-container:
 		examples
 
 .PHONY: examples
-examples: jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
 	$(EMBEDMD) -w ${THANOS_MIXIN}/README.md
 
@@ -394,6 +394,10 @@ jsonnet-format-in-container:
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) test rules examples/alerts/tests.yaml
+
+.PHONY: check-examples
+check-examples: examples example-rules-lint
+	$(call require_clean_work_tree,'all generated files should be committed,check examples')
 
 .PHONY: examples-clean
 examples-clean:
