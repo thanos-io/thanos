@@ -406,7 +406,7 @@ example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rule
 
 .PHONY: check-examples
 check-examples: examples example-rules-lint
-	git diff --exit-code
+	$(call require_clean_work_tree,'all generated files should be committed,check examples')
 
 .PHONY: examples-clean
 examples-clean:
