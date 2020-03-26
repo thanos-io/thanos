@@ -46,7 +46,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.9, sum by (job, le) (thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s})) > 120
+                histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > 120
               and
                 sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )

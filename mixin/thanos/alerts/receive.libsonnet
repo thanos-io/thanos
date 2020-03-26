@@ -33,7 +33,7 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="receive"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > 10
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
