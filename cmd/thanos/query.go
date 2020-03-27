@@ -228,6 +228,10 @@ func runQuery(
 	)
 
 	staticStores, dynamicStores := dns.FilterNodes(storeAddrs...)
+	evictionPolicy := query.NormalMode
+	if strictMode {
+		evictionPolicy = query.StrictMode
+	}
 
 	var (
 		stores = query.NewStoreSet(
@@ -268,7 +272,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.Update(ctx, strictMode)
+				stores.Update(ctx, evictionPolicy)
 				return nil
 			})
 		}, func(error) {
@@ -300,7 +304,7 @@ func runQuery(
 						continue
 					}
 					fileSDCache.Update(update)
-					stores.Update(ctxUpdate, strictMode)
+					stores.Update(ctxUpdate, evictionPolicy)
 					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), dynamicStores...))
 				case <-ctxUpdate.Done():
 					return nil

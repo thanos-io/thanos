@@ -40,6 +40,21 @@ type StoreSpec interface {
 	Static() bool
 }
 
+// QuerierEvictionPolicy defines what logic should we use when trying to determine
+// which queriers we should remove if they do not pass the health check anymore.
+type QuerierEvictionPolicy int
+
+const (
+	// NormalMode is a querier eviction policy when we immediately
+	// remove a querier if it doesn't pass the health check.
+	NormalMode QuerierEvictionPolicy = iota
+	// StrictMode is a querier eviction policy when we do not remove
+	// queriers which were statically defined even if they have not passed
+	// the health check i.e. no service discovery mechanism was used (file
+	// or DNS sd).
+	StrictMode
+)
+
 type StoreStatus struct {
 	Name      string
 	LastCheck time.Time
@@ -328,8 +343,8 @@ func newStoreAPIStats() map[component.StoreAPI]map[string]int {
 }
 
 // Update updates the store set. It fetches current list of store specs from function and updates the fresh metadata
-// from all stores. If strictMode is true then it keeps around statically defined nodes.
-func (s *StoreSet) Update(ctx context.Context, strictMode bool) {
+// from all stores. The policy defines how we treat nodes which do not pass the health check.
+func (s *StoreSet) Update(ctx context.Context, policy QuerierEvictionPolicy) {
 	s.updateMtx.Lock()
 	defer s.updateMtx.Unlock()
 
@@ -342,7 +357,7 @@ func (s *StoreSet) Update(ctx context.Context, strictMode bool) {
 
 	level.Debug(s.logger).Log("msg", "starting updating storeAPIs", "cachedStores", len(stores))
 
-	activeStores := s.getActiveStores(ctx, stores, strictMode)
+	activeStores := s.getActiveStores(ctx, stores, policy)
 	level.Debug(s.logger).Log("msg", "checked requested storeAPIs", "activeStores", len(activeStores), "cachedStores", len(stores))
 
 	stats := newStoreAPIStats()
@@ -392,7 +407,7 @@ func (s *StoreSet) Update(ctx context.Context, strictMode bool) {
 	s.cleanUpStoreStatuses(stores)
 }
 
-func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*storeRef, strictMode bool) map[string]*storeRef {
+func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*storeRef, policy QuerierEvictionPolicy) map[string]*storeRef {
 	var (
 		unique       = make(map[string]struct{})
 		activeStores = make(map[string]*storeRef, len(stores))
@@ -439,7 +454,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				s.updateStoreStatus(st, err)
 				level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr)
 
-				if !(strictMode && spec.Static()) {
+				if !(policy == StrictMode && spec.Static()) {
 					return
 				}
 

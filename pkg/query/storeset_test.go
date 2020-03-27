@@ -192,8 +192,8 @@ func TestStoreSet_Update(t *testing.T) {
 	defer storeSet.Close()
 
 	// Should not matter how many of these we run.
-	storeSet.Update(context.Background(), false)
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Equals(t, 2, len(storeSet.stores))
 	testutil.Equals(t, 3, len(storeSet.storeStatuses))
 
@@ -219,14 +219,14 @@ func TestStoreSet_Update(t *testing.T) {
 	// Remove address from discovered and reset last check, which should ensure cleanup of status on next update.
 	storeSet.storeStatuses[discoveredStoreAddr[2]].LastCheck = time.Now().Add(-4 * time.Minute)
 	discoveredStoreAddr = discoveredStoreAddr[:len(discoveredStoreAddr)-2]
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Equals(t, 2, len(storeSet.storeStatuses))
 
 	stores.CloseOne(discoveredStoreAddr[0])
 	delete(expected[component.Sidecar], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[0]))
 
 	// We expect Update to tear down store client for closed store server.
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Equals(t, 1, len(storeSet.stores), "only one service should respond just fine, so we expect one client to be ready.")
 	testutil.Equals(t, 2, len(storeSet.storeStatuses))
 
@@ -453,7 +453,7 @@ func TestStoreSet_Update(t *testing.T) {
 	discoveredStoreAddr = append(discoveredStoreAddr, stores2.StoreAddresses()...)
 
 	// New stores should be loaded.
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Equals(t, 1+len(stores2.srvs), len(storeSet.stores))
 
 	// Check stats.
@@ -533,8 +533,8 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
-	storeSet.Update(context.Background(), false)
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Assert(t, len(storeSet.stores) == 0, "none of services should respond just fine, so we expect no client to be ready.")
 
 	// Leak test will ensure that we don't keep client connection around.
@@ -598,7 +598,7 @@ func TestQuerierStrict(t *testing.T) {
 	storeSet.gRPCInfoCallTimeout = 1 * time.Second
 
 	// Initial update.
-	storeSet.Update(context.Background(), true)
+	storeSet.Update(context.Background(), StrictMode)
 	testutil.Equals(t, 2, len(storeSet.stores), "one client must be available for a running store node")
 
 	// The store is statically defined + strict mode is enabled
@@ -611,9 +611,9 @@ func TestQuerierStrict(t *testing.T) {
 	st.Close()
 
 	// Update again many times. Should not matter WRT the static one.
-	storeSet.Update(context.Background(), true)
-	storeSet.Update(context.Background(), true)
-	storeSet.Update(context.Background(), true)
+	storeSet.Update(context.Background(), StrictMode)
+	storeSet.Update(context.Background(), StrictMode)
+	storeSet.Update(context.Background(), StrictMode)
 
 	// Check that the information is the same.
 	testutil.Equals(t, 1, len(storeSet.stores), "one client must remain available for a store node that is down")
@@ -622,6 +622,6 @@ func TestQuerierStrict(t *testing.T) {
 	testutil.NotOk(t, storeSet.storeStatuses[staticStoreAddr].LastError)
 
 	// Now let's turn off strict mode. The node should disappear.
-	storeSet.Update(context.Background(), false)
+	storeSet.Update(context.Background(), NormalMode)
 	testutil.Equals(t, 0, len(storeSet.stores), "there are still some stores even though strict mode is off")
 }
