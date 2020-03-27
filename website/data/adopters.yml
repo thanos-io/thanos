@@ -3,8 +3,8 @@ adopters:
 - name: Monzo
   url: https://www.monzo.com
   logo: monzo.png
-- name: Utility Warehouse
-  url: https://www.utilitywarehouse.co.uk
+- name: UW
+  url: https://uw.co.uk/
   logo: utilitywarehouse.png
 - name: Adform
   url: https://site.adform.com
