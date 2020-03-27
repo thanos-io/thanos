@@ -105,7 +105,7 @@ func (d *mockResolver) Resolve(_ context.Context, name string, _ QType) ([]strin
 
 // TestFilterStaticNodes tests if the provided nodes are separated correctly
 // into static nodes and dynamic ones.
-func TestFilterStaticNodes(t *testing.T) {
+func TestFilterNodes(t *testing.T) {
 	for _, tcase := range []struct {
 		nodes           []string
 		expectedStatic  []string
@@ -130,7 +130,7 @@ func TestFilterStaticNodes(t *testing.T) {
 			expectedDynamic: []string{},
 		},
 	} {
-		gotStatic, gotDynamic := FilterStaticNodes(tcase.nodes...)
+		gotStatic, gotDynamic := FilterNodes(tcase.nodes...)
 		testutil.Equals(t, tcase.expectedStatic, gotStatic, "mismatch between static nodes")
 		testutil.Equals(t, tcase.expectedDynamic, gotDynamic, "mismatch between dynamic nodes")
 	}

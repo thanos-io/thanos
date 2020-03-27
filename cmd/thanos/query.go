@@ -226,7 +226,7 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
-	staticStores, dynamicStores := dns.FilterStaticNodes(storeAddrs...)
+	staticStores, dynamicStores := dns.FilterNodes(storeAddrs...)
 
 	var (
 		stores = query.NewStoreSet(

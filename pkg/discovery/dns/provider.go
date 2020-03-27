@@ -87,9 +87,9 @@ func (p *Provider) Clone() *Provider {
 	}
 }
 
-// FilterStaticNodes walks through the whole list of addresses and returns
+// FilterNodes walks through the whole list of addresses and returns
 // two lists of statically and dynamically defined nodes.
-func FilterStaticNodes(addrs ...string) (static []string, dynamic []string) {
+func FilterNodes(addrs ...string) (static []string, dynamic []string) {
 	static, dynamic = []string{}, []string{}
 
 	for _, addr := range addrs {
