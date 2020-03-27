@@ -79,7 +79,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	// TODO(bwplotka): Remove in v0.13.0 if no issues.
-	disableIndexHeader := cmd.Flag("store.disable-index-header", "If specified, Store Gateway will user index-cache.json for each block instead of recreating binary index-header").
+	disableIndexHeader := cmd.Flag("store.disable-index-header", "If specified, Store Gateway will use index-cache.json for each block instead of recreating binary index-header").
 		Hidden().Default("false").Bool()
 
 	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
