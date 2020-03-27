@@ -34,6 +34,7 @@ Since there are no consistency guarantees provided by some Object Storage provid
 - [#2294](https://github.com/thanos-io/thanos/pull/2294) store: optimizations for fetching postings. Queries using `=~".*"` matchers or negation matchers (`!=...` or `!~...`) benefit the most.
 - [#2301](https://github.com/thanos-io/thanos/pull/2301) Ruler: initlialization fails with filepath bad pattern error and rule manager update error.
 - [#2310](https://github.com/thanos-io/thanos/pull/2310) query: Report timespan 0 to 0 when discovering no stores.
+- [#2330](https://github.com/thanos-io/thanos/pull/2330) store: index-header is no longer experimental. It is enabled by default for store Gateway. You can disable it with new hidden flag: `--store.disable-index-header`. `--experimental.enable-index-header` flag was removed.
 
 ## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0) - 2020.03.02
 

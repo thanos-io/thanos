@@ -322,7 +322,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 	store := NewService(
 		fmt.Sprintf("store-gw-%v", name),
 		DefaultImage(),
-		e2e.NewCommand("store", append(e2e.BuildArgs(map[string]string{
+		e2e.NewCommand("store", e2e.BuildArgs(map[string]string{
 			"--debug.name":        fmt.Sprintf("store-gw-%v", name),
 			"--grpc-address":      ":9091",
 			"--grpc-grace-period": "0s",
@@ -336,7 +336,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--store.grpc.series-max-concurrency": "1",
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
-		}), "--experimental.enable-index-header")...),
+		})...),
 		e2e.NewReadinessProbe(80, "/-/ready", 200),
 		80,
 		9091,

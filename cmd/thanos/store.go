@@ -78,7 +78,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
-	enableIndexHeader := cmd.Flag("experimental.enable-index-header", "If true, Store Gateway will recreate index-header instead of index-cache.json for each block. This will replace index-cache.json permanently once it will be out of experimental stage.").
+	// TODO(bwplotka): Remove in v0.13.0 if no issues.
+	disableIndexHeader := cmd.Flag("store.disable-index-header", "If specified, Store Gateway will use index-cache.json for each block instead of recreating binary index-header").
 		Hidden().Default("false").Bool()
 
 	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
@@ -117,7 +118,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
-			int(*maxConcurrent),
+			*maxConcurrent,
 			component.Store,
 			debugLogging,
 			*syncInterval,
@@ -128,7 +129,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			},
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
-			*enableIndexHeader,
+			*disableIndexHeader,
 			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
 			time.Duration(*ignoreDeletionMarksDelay),
@@ -163,7 +164,7 @@ func runStore(
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
-	enableIndexHeader bool,
+	disableIndexHeader bool,
 	enablePostingsCompression bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
@@ -252,7 +253,7 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
-	if enableIndexHeader {
+	if !disableIndexHeader {
 		level.Info(logger).Log("msg", "index-header instead of index-cache.json enabled")
 	}
 	bs, err := store.NewBucketStore(
@@ -269,7 +270,7 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		advertiseCompatibilityLabel,
-		enableIndexHeader,
+		!disableIndexHeader,
 		enablePostingsCompression,
 	)
 	if err != nil {
