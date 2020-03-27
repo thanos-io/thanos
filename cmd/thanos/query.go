@@ -70,7 +70,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	replicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		Strings()
 
-	strictMode := cmd.Flag("store.strict-mode", "Enable strict mode which makes Thanos Query always keep statically specified StoreAPIs around.").Default("false").Bool()
+	strictMode := cmd.Flag("store.strict-mode", "Enable strict mode which makes Thanos Query always keep statically specified StoreAPIs even if we had failed to check their health. "+
+		"This is useful when you have a caching layer on top and want to get partial responses if one of your nodes goes down that you know for sure that it needs to be up.").Default("false").Bool()
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 

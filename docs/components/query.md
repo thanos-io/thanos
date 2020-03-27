@@ -320,8 +320,12 @@ Flags:
                                  able to query without deduplication using
                                  'dedup=false' parameter.
       --store.strict-mode        Enable strict mode which makes Thanos Query
-                                 always keep statically specified StoreAPIs
-                                 around.
+                                 always keep statically specified StoreAPIs even
+                                 if we had failed to check their health. This is
+                                 useful when you have a caching layer on top and
+                                 want to get partial responses if one of your
+                                 nodes goes down that you know for sure that it
+                                 needs to be up.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
