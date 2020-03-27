@@ -198,7 +198,7 @@ rules:
       }} seconds for store series gate requests.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"})) > 2
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_bucket_store_series_gate_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -225,7 +225,7 @@ rules:
       {{ $value }} seconds for the bucket operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"})) > 15
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_objstore_bucket_operation_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -336,7 +336,7 @@ rules:
       }} seconds for instant queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 90
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m]))) > 40
     and
       sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) > 0
     )
@@ -349,7 +349,7 @@ rules:
       }} seconds for range queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 90
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"}[5m]))) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-query.*", handler="query_range"}[5m])) > 0
     )
@@ -383,7 +383,7 @@ rules:
       }} seconds for requests.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-receive.*", handler="receive"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-receive.*", handler="receive"}[5m]))) > 10
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-receive.*", handler="receive"}[5m])) > 0
     )
@@ -461,7 +461,7 @@ rules:
       $value }} seconds for the replicate operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"})) > 120
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m]))) > 20
     and
       sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m])) > 0
     )

@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -29,11 +30,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -103,8 +106,12 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	retention5m := modelDuration(cmd.Flag("retention.resolution-5m", "How long to retain samples of resolution 1 (5 minutes) in bucket. Setting this to 0d will retain samples of this resolution forever").Default("0d"))
 	retention1h := modelDuration(cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. Setting this to 0d will retain samples of this resolution forever").Default("0d"))
 
+	// TODO(kakkoyun): https://github.com/thanos-io/thanos/issues/2266.
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
+
+	waitInterval := cmd.Flag("wait-interval", "Wait interval between consecutive compaction runs and bucket refreshes. Only works when --wait flag specified.").
+		Default("5m").Duration()
 
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
@@ -122,7 +129,29 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
+		"If delete-delay is 0, blocks will be deleted straight away. "+
+		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
+		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
+		Default("48h"))
+
+	dedupReplicaLabels := cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
+		"Experimental. When it is set true, this will given labels from blocks so that vertical compaction could merge blocks."+
+		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
+		Hidden().Strings()
+
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
+
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+	flagsMap := map[string]string{
+		"web.external-prefix": *webExternalPrefix,
+		"web.prefix-header":   *webPrefixHeaderName,
+	}
+
+	label := cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").String()
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runCompact(g, logger, reg,
@@ -131,6 +160,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*dataDir,
 			objStoreConfig,
 			time.Duration(*consistencyDelay),
+			time.Duration(*deleteDelay),
 			*haltOnError,
 			*acceptMalformedIndex,
 			*wait,
@@ -145,7 +175,11 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			*dedupReplicaLabels,
 			selectorRelabelConf,
+			*waitInterval,
+			*label,
+			flagsMap,
 		)
 	}
 }
@@ -159,6 +193,7 @@ func runCompact(
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
+	deleteDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
 	wait bool,
@@ -169,7 +204,11 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	dedupReplicaLabels []string,
 	selectorRelabelConf *extflag.PathOrContent,
+	waitInterval time.Duration,
+	label string,
+	flagsMap map[string]string,
 ) error {
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -188,12 +227,31 @@ func runCompact(
 		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
 	})
+	blocksCleaned := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_cleaned_total",
+		Help: "Total number of blocks deleted in compactor.",
+	})
+	blockCleanupFailures := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_block_cleanup_failures_total",
+		Help: "Failures encountered while deleting blocks in compactor.",
+	})
+	blocksMarkedForDeletion := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_marked_for_deletion_total",
+		Help: "Total number of blocks marked for deletion in compactor.",
+	})
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_delete_delay_seconds",
+		Help: "Configured delete delay in seconds.",
+	}, func() float64 {
+		return deleteDelay.Seconds()
+	})
+
 	downsampleMetrics := newDownsampleMetrics(reg)
 
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
 		httpProbe,
-		prober.NewInstrumentation(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	srv := httpserver.New(logger, reg, component, httpProbe,
@@ -239,18 +297,31 @@ func runCompact(
 		}
 	}()
 
+	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+	// The delay of  deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(deleteDelay.Seconds()/2)*time.Second)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer,
-		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
-		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
-		duplicateBlocksFilter.Filter,
+
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", prometheusRegisterer, []block.MetadataFilter{
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer),
+		ignoreDeletionMarkFilter,
+		duplicateBlocksFilter,
+	},
+		block.NewReplicaLabelRemover(logger, dedupReplicaLabels),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, blockSyncConcurrency, acceptMalformedIndex, false)
+	enableVerticalCompaction := false
+	if len(dedupReplicaLabels) > 0 {
+		enableVerticalCompaction = true
+		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
+	}
+
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, enableVerticalCompaction)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -284,6 +355,7 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
+	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
 	if err != nil {
 		cancel()
@@ -302,7 +374,7 @@ func runCompact(
 
 	compactMainFn := func() error {
 		if err := compactor.Compact(ctx); err != nil {
-			return errors.Wrap(err, "compaction failed")
+			return errors.Wrap(err, "compaction")
 		}
 
 		if !disableDownsampling {
@@ -325,11 +397,15 @@ func runCompact(
 			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, retentionByResolution); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, retentionByResolution, blocksMarkedForDeletion); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, partialUploadDeleteAttempts)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "error cleaning blocks")
+		}
+
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, partialUploadDeleteAttempts, blocksMarkedForDeletion)
 		return nil
 	}
 
@@ -348,7 +424,7 @@ func runCompact(
 		}
 
 		// --wait=true is specified.
-		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+		return runutil.Repeat(waitInterval, ctx.Done(), func() error {
 			err := compactMainFn()
 			if err == nil {
 				iterations.Inc()
@@ -381,6 +457,19 @@ func runCompact(
 	}, func(error) {
 		cancel()
 	})
+
+	if wait {
+		router := route.New()
+		bucketUI := ui.NewBucketUI(logger, label, flagsMap)
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		srv.Handle("/", router)
+
+		g.Add(func() error {
+			return refresh(ctx, logger, bucketUI, waitInterval, time.Minute, metaFetcher)
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
@@ -454,7 +543,7 @@ func generateIndexCacheFile(
 	cachePath := filepath.Join(bdir, block.IndexCacheFilename)
 	cache := path.Join(meta.ULID.String(), block.IndexCacheFilename)
 
-	ok, err := objstore.Exists(ctx, bkt, cache)
+	ok, err := bkt.Exists(ctx, cache)
 	if ok {
 		return nil
 	}

@@ -151,7 +151,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if len(name) == 0 {
-		return nil, errors.Errorf("given object name should not empty")
+		return nil, errors.New("given object name should not empty")
 	}
 
 	opts := &cos.ObjectGetOptions{}

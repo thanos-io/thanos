@@ -179,8 +179,6 @@ func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request
 func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 
-	t.Parallel()
-
 	s, err := e2e.NewScenario("e2e_test_rule_am_http_client")
 	testutil.Ok(t, err)
 	defer s.Close()
@@ -312,7 +310,7 @@ func TestRule(t *testing.T) {
 					{
 						// FileSD which will be used to register discover dynamically q.
 						Files:           []string{filepath.Join(e2e.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Hour),
+						RefreshInterval: model.Duration(time.Second),
 					},
 				},
 				Scheme: "http",
@@ -435,10 +433,10 @@ func TestRule(t *testing.T) {
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	queryAndAssert(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{

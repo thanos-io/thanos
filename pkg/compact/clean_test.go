@@ -29,7 +29,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	bkt := inmem.NewBucket()
 	logger := log.NewNopLogger()
 
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil)
 	testutil.Ok(t, err)
 
 	// 1. No meta, old block, should be removed.
@@ -59,12 +59,18 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnoreID2.String(), "chunks", "000001"), &fakeChunk))
 
 	deleteAttempts := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts)
+	blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts, blocksMarkedForDeletion)
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
 
 	exists, err := bkt.Exists(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"))
 	testutil.Ok(t, err)
-	testutil.Equals(t, false, exists)
+	testutil.Equals(t, true, exists)
+
+	exists, err = bkt.Exists(ctx, path.Join(shouldDeleteID.String(), metadata.DeletionMarkFilename))
+	testutil.Ok(t, err)
+	testutil.Equals(t, true, exists)
+	testutil.Equals(t, 1.0, promtest.ToFloat64(blocksMarkedForDeletion))
 
 	exists, err = bkt.Exists(ctx, path.Join(shouldIgnoreID1.String(), "chunks", "000001"))
 	testutil.Ok(t, err)

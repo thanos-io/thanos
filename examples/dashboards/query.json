@@ -2147,7 +2147,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Memory Used",
+               "title": "Memory Used (Bytes)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,

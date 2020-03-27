@@ -20,9 +20,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -80,7 +82,7 @@ func RunReplicate(
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
 		httpProbe,
-		prober.NewInstrumentation(component.Replicate, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(component.Replicate, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	s := http.New(logger, reg, component.Replicate, httpProbe,
@@ -149,6 +151,11 @@ func RunReplicate(
 		Help: "The Duration of replication runs split by success and error.",
 	}, []string{"result"})
 
+	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg, nil)
+	if err != nil {
+		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
+	}
+
 	blockFilter := NewBlockFilter(
 		logger,
 		labelSelector,
@@ -170,8 +177,8 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", ulid.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fromBkt, toBkt, reg).execute(ctx); err != nil {
-			return errors.Errorf("replication execute: %w", err)
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
+			return errors.Wrap(err, "replication execute")
 		}
 
 		return nil

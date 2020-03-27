@@ -24,9 +24,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -60,7 +60,6 @@ type Options struct {
 	ReplicationFactor uint64
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
-	TLSClientConfig   *tls.Config
 	DialOpts          []grpc.DialOption
 }
 
@@ -192,6 +191,13 @@ func (h *Handler) Run() error {
 		TLSConfig: h.options.TLSConfig,
 	}
 
+	if h.options.TLSConfig != nil {
+		level.Info(h.logger).Log("msg", "Serving HTTPS", "address", h.options.ListenAddress)
+		// Cert & Key are already being passed in via TLSConfig.
+		return httpSrv.ServeTLS(h.listener, "", "")
+	}
+
+	level.Info(h.logger).Log("msg", "Serving plain HTTP", "address", h.options.ListenAddress)
 	return httpSrv.Serve(h.listener)
 }
 

@@ -81,8 +81,18 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	enableIndexHeader := cmd.Flag("experimental.enable-index-header", "If true, Store Gateway will recreate index-header instead of index-cache.json for each block. This will replace index-cache.json permanently once it will be out of experimental stage.").
 		Hidden().Default("false").Bool()
 
+	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
+		Hidden().Default("false").Bool()
+
 	consistencyDelay := modelDuration(cmd.Flag("consistency-delay", "Minimum age of all blocks before they are being read. Set it to safe value (e.g 30m) if your object storage is eventually consistent. GCS and S3 are (roughly) strongly consistent.").
 		Default("0s"))
+
+	ignoreDeletionMarksDelay := modelDuration(cmd.Flag("ignore-deletion-marks-delay", "Duration after which the blocks marked for deletion will be filtered out while fetching blocks. "+
+		"The idea of ignore-deletion-marks-delay is to ignore blocks that are marked for deletion with some delay. This ensures store can still serve blocks that are meant to be deleted but do not have a replacement yet. "+
+		"If delete-delay duration is provided to compactor or bucket verify component, it will upload deletion-mark.json file to mark after what duration the block should be deleted rather than deleting the block straight away. "+
+		"If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. "+
+		"Default is 24h, half of the default value for --delete-delay on compactor.").
+		Default("24h"))
 
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
@@ -119,7 +129,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
 			*enableIndexHeader,
+			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
+			time.Duration(*ignoreDeletionMarksDelay),
 		)
 	}
 }
@@ -152,14 +164,16 @@ func runStore(
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
 	enableIndexHeader bool,
+	enablePostingsCompression bool,
 	consistencyDelay time.Duration,
+	ignoreDeletionMarksDelay time.Duration,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
 		httpProbe,
 		grpcProbe,
-		prober.NewInstrumentation(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	srv := httpserver.New(logger, reg, component, httpProbe,
@@ -217,7 +231,7 @@ func runStore(
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
 		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
-			MaxSize:     storecache.Bytes(indexCacheSizeBytes),
+			MaxSize:     model.Bytes(indexCacheSizeBytes),
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
 	}
@@ -225,13 +239,15 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay)
 	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
-	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, prometheusRegisterer,
-		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
-		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
-		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer).Filter,
-		block.NewDeduplicateFilter().Filter,
-	)
+	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, prometheusRegisterer, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer),
+		ignoreDeletionMarkFilter,
+		block.NewDeduplicateFilter(),
+	})
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
@@ -254,6 +270,7 @@ func runStore(
 		filterConf,
 		advertiseCompatibilityLabel,
 		enableIndexHeader,
+		enablePostingsCompression,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

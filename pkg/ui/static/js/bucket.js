@@ -7,6 +7,9 @@ function draw() {
     if (thanos.refreshedAt == "0001-01-01T00:00:00Z") {
         thanos.err = "Synchronizing blocks from remote storage";
     }
+    else if (!thanos.err && thanos.blocks.length == 0) {
+        thanos.err = "No blocks are currently loaded";
+    }
 
     if (thanos.err != null) {
         $("#err").show().find('.alert').text(JSON.stringify(thanos.err, null, 4));
@@ -29,6 +32,7 @@ function draw() {
         dataTable.addColumn({type: 'date', id: 'End'});
 
         dataTable.addRows(thanos.blocks
+            .sort((a, b) => a.thanos.downsample.resolution - b.thanos.downsample.resolution)
             .map(function(d) {
                 // Title is the first column of the timeline.
                 //
@@ -38,7 +42,7 @@ function draw() {
                 title = function() {
                     var key = thanos.label != "" && d.thanos.labels[thanos.label];
 
-                    if (key != undefined) {
+                    if (key) {
                         return key;
                     } else {
                         title = titles[stringify(d.thanos.labels)];

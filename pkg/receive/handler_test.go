@@ -19,12 +19,11 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
-	"google.golang.org/grpc"
-
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"google.golang.org/grpc"
 )
 
 func TestCountCause(t *testing.T) {

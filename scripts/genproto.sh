@@ -24,18 +24,22 @@ GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="pkg/store/storepb"
+DIRS="pkg/store/storepb pkg/store/storepb/prompb"
 
 echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
-		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \
+		${PROTOC_BIN} --gogofast_out=plugins=grpc:. \
+		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
-			-I="../../../vendor" \
+      -I="${GOGOPROTO_PATH}" \
 			*.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
 		sed -i.bak -E 's/import _ \"google\/protobuf\"//g' *.pb.go
+		# Hacky hack.
+		sed -i.bak -E 's/prompb \"prompb\"/prompb \"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
+
 		rm -f *.bak
 		${GOIMPORTS_BIN} -w *.pb.go
 	popd

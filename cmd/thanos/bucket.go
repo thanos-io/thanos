@@ -73,6 +73,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketInspect(m, cmd, name, objStoreConfig)
 	registerBucketWeb(m, cmd, name, objStoreConfig)
 	registerBucketReplicate(m, cmd, name, objStoreConfig)
+	registerBucketDownsample(m, cmd, name, objStoreConfig)
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
@@ -84,6 +85,12 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	idWhitelist := cmd.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
+	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket. "+
+		"If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately. "+
+		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
+		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
+		Default("0s"))
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -133,15 +140,15 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 			issues = append(issues, issueFn)
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
 
 		if *repair {
-			v = verifier.NewWithRepair(logger, bkt, backupBkt, fetcher, issues)
+			v = verifier.NewWithRepair(logger, reg, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), issues)
 		} else {
-			v = verifier.New(logger, bkt, fetcher, issues)
+			v = verifier.New(logger, reg, bkt, fetcher, time.Duration(*deleteDelay), issues)
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
@@ -182,7 +189,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -269,7 +276,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		// Parse selector.
 		selectorLabels, err := parseFlagLabels(*selector)
 		if err != nil {
-			return errors.Errorf("error parsing selector flag: %v", err)
+			return errors.Wrap(err, "error parsing selector flag")
 		}
 
 		confContentYaml, err := objStoreConfig.Content()
@@ -282,7 +289,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -321,13 +328,11 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		ctx, cancel := context.WithCancel(context.Background())
-
 		comp := component.Bucket
 		httpProbe := prober.NewHTTP()
 		statusProber := prober.Combine(
 			httpProbe,
-			prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+			prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 		)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
@@ -358,10 +363,26 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
 		}
 
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		if err != nil {
+			return errors.Wrap(err, "bucket client")
+		}
+
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			statusProber.Ready()
-
-			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			return refresh(ctx, logger, bucketUI, *interval, *timeout, fetcher)
 		}, func(error) {
 			cancel()
 		})
@@ -424,30 +445,28 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 
 }
 
-// refresh metadata from remote storage periodically and update UI.
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *extflag.PathOrContent) error {
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
+func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
+	comp := component.Downsample
+	cmd := root.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
-	if err != nil {
-		return errors.Wrap(err, "bucket client")
-	}
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
-	fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
-	if err != nil {
-		return err
-	}
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
+		Default("./data").String()
 
-	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
+	}
+}
+
+// refresh metadata from remote storage periodically and update the UI.
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, fetcher *block.MetaFetcher) error {
 	return runutil.Repeat(duration, ctx.Done(), func() error {
 		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
 			defer iterCancel()
 
-			blocks, err := download(iterCtx, logger, bkt, fetcher)
+			blocks, err := download(iterCtx, logger, fetcher)
 			if err != nil {
 				bucketUI.Set("[]", err)
 				return err
@@ -464,13 +483,15 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	})
 }
 
-func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket, fetcher *block.MetaFetcher) (blocks []metadata.Meta, err error) {
+func download(ctx context.Context, logger log.Logger, fetcher *block.MetaFetcher) ([]metadata.Meta, error) {
 	level.Info(logger).Log("msg", "synchronizing block metadata")
 
 	metas, _, err := fetcher.Fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	blocks := []metadata.Meta{}
 
 	for _, meta := range metas {
 		blocks = append(blocks, *meta)

@@ -6,6 +6,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -87,7 +89,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
-		return errors.Errorf("empty external labels are not allowed for Thanos block.")
+		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
@@ -124,6 +126,34 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 		return errors.Wrapf(err, "failed to clean block after upload issue. Partial block in system. Err: %s", err.Error())
 	}
 	return err
+}
+
+// MarkForDeletion creates a file which stores information about when the block was marked for deletion.
+func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) error {
+	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
+	if err != nil {
+		return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
+	}
+	if deletionMarkExists {
+		return errors.Errorf("file %s already exists in bucket", deletionMarkFile)
+	}
+
+	deletionMark, err := json.Marshal(metadata.DeletionMark{
+		ID:           id,
+		DeletionTime: time.Now().Unix(),
+		Version:      metadata.DeletionMarkVersion1,
+	})
+	if err != nil {
+		return errors.Wrap(err, "json encode deletion mark")
+	}
+
+	if err := bkt.Upload(ctx, deletionMarkFile, bytes.NewReader(deletionMark)); err != nil {
+		return errors.Wrapf(err, "upload file %s to bucket", deletionMarkFile)
+	}
+
+	level.Info(logger).Log("msg", "block has been marked for deletion", "block", id)
+	return nil
 }
 
 // Delete removes directory that is meant to be block directory.

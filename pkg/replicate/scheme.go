@@ -105,6 +105,7 @@ type replicationScheme struct {
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
+	fetcher     thanosblock.MetadataFetcher
 
 	logger  log.Logger
 	metrics *replicationMetrics
@@ -152,7 +153,15 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, from objstore.BucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
+func newReplicationScheme(
+	logger log.Logger,
+	metrics *replicationMetrics,
+	blockFilter blockFilterFunc,
+	fetcher thanosblock.MetadataFetcher,
+	from objstore.BucketReader,
+	to objstore.Bucket,
+	reg prometheus.Registerer,
+) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -160,6 +169,7 @@ func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockF
 	return &replicationScheme{
 		logger:      logger,
 		blockFilter: blockFilter,
+		fetcher:     fetcher,
 		fromBkt:     from,
 		toBkt:       to,
 		metrics:     metrics,
@@ -192,7 +202,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 			return nil
 		}
 		if err != nil {
-			return errors.Errorf("load meta for block %v from origin bucket: %w", id.String(), err)
+			return errors.Wrapf(err, "load meta for block %v from origin bucket", id.String())
 		}
 
 		if len(meta.Thanos.Labels) == 0 {
@@ -207,7 +217,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 		return nil
 	}); err != nil {
-		return errors.Errorf("iterate over origin bucket: %w", err)
+		return errors.Wrap(err, "iterate over origin bucket")
 	}
 
 	candidateBlocks := []*metadata.Meta{}
@@ -227,7 +237,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	for _, b := range candidateBlocks {
 		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return errors.Errorf("ensure block %v is replicated: %w", b.BlockMeta.ULID.String(), err)
+			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 		}
 	}
 
@@ -246,7 +256,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	originMetaFile, err := rs.fromBkt.Get(ctx, metaFile)
 	if err != nil {
-		return errors.Errorf("get meta file from origin bucket: %w", err)
+		return errors.Wrap(err, "get meta file from origin bucket")
 	}
 
 	defer runutil.CloseWithLogOnErr(rs.logger, originMetaFile, "close original meta file")
@@ -258,18 +268,18 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err != nil && !rs.toBkt.IsObjNotFoundErr(err) && err != io.EOF {
-		return errors.Errorf("get meta file from target bucket: %w", err)
+		return errors.Wrap(err, "get meta file from target bucket")
 	}
 
 	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
 	if err != nil {
-		return errors.Errorf("read origin meta file: %w", err)
+		return errors.Wrap(err, "read origin meta file")
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
 		targetMetaFileContent, err := ioutil.ReadAll(targetMetaFile)
 		if err != nil {
-			return errors.Errorf("read target meta file: %w", err)
+			return errors.Wrap(err, "read target meta file")
 		}
 
 		if bytes.Equal(originMetaFileContent, targetMetaFileContent) {
@@ -286,7 +296,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	if err := rs.fromBkt.Iter(ctx, chunksDir, func(objectName string) error {
 		err := rs.ensureObjectReplicated(ctx, objectName)
 		if err != nil {
-			return errors.Errorf("replicate object %v: %w", objectName, err)
+			return errors.Wrapf(err, "replicate object %v", objectName)
 		}
 
 		return nil
@@ -295,13 +305,13 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err := rs.ensureObjectReplicated(ctx, indexFile); err != nil {
-		return errors.Errorf("replicate index file: %w", err)
+		return errors.Wrap(err, "replicate index file")
 	}
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
 	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewReader(originMetaFileContent)); err != nil {
-		return errors.Errorf("upload meta file: %w", err)
+		return errors.Wrap(err, "upload meta file")
 	}
 
 	rs.metrics.blocksReplicated.Inc()
@@ -316,7 +326,7 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 
 	exists, err := rs.toBkt.Exists(ctx, objectName)
 	if err != nil {
-		return errors.Errorf("check if %v exists in target bucket: %w", objectName, err)
+		return errors.Wrapf(err, "check if %v exists in target bucket", objectName)
 	}
 
 	// skip if already exists.
@@ -329,13 +339,13 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 
 	r, err := rs.fromBkt.Get(ctx, objectName)
 	if err != nil {
-		return errors.Errorf("get %v from origin bucket: %w", objectName, err)
+		return errors.Wrapf(err, "get %v from origin bucket", objectName)
 	}
 
 	defer r.Close()
 
 	if err = rs.toBkt.Upload(ctx, objectName, r); err != nil {
-		return errors.Errorf("upload %v to target bucket: %w", objectName, err)
+		return errors.Wrapf(err, "upload %v to target bucket", objectName)
 	}
 
 	level.Info(rs.logger).Log("msg", "object replicated", "object", objectName)
@@ -350,24 +360,19 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 // partial, this is just a temporary failure, as the block is still being
 // uploaded to the origin bucket.
 func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metadata.Meta, bool, error) {
-	fetcher, err := thanosblock.NewMetaFetcher(rs.logger, 32, rs.fromBkt, "", rs.reg)
-	if err != nil {
-		return nil, false, errors.Errorf("create meta fetcher with buecket %v: %w", rs.fromBkt, err)
-	}
-
-	metas, _, err := fetcher.Fetch(ctx)
+	metas, _, err := rs.fetcher.Fetch(ctx)
 	if err != nil {
 		switch errors.Cause(err) {
 		default:
-			return nil, false, errors.Errorf("fetch meta: %w", err)
+			return nil, false, errors.Wrap(err, "fetch meta")
 		case thanosblock.ErrorSyncMetaNotFound:
-			return nil, true, errors.Errorf("fetch meta: %w", err)
+			return nil, true, errors.Wrap(err, "fetch meta")
 		}
 	}
 
 	m, ok := metas[id]
 	if !ok {
-		return nil, true, errors.Errorf("fetch meta: %w", err)
+		return nil, true, errors.Wrap(err, "fetch meta")
 	}
 
 	return m, false, nil

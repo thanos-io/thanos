@@ -139,7 +139,10 @@ Flags:
                                  details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --consistency-delay=30m    Minimum age of all blocks before they are being read.
-
+      --ignore-deletion-marks-delay=24h
+                                 Duration after which the blocks marked for deletion will be filtered out while fetching blocks.
+                                 The idea of ignore-deletion-marks-delay is to ignore blocks that are marked for deletion with some delay. This ensures store can still serve blocks that are meant to be deleted but do not have a replacement yet. If delete-delay duration is provided to compactor or bucket verify component, it will upload deletion-mark.json file to mark after what duration the block should be deleted rather than deleting the block straight away.
+		                             If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. Default is 24h, half of the default value for --delete-delay on compactor.
 ```
 
 ## Time based partitioning
@@ -209,6 +212,7 @@ config:
   max_idle_connections: 0
   max_async_concurrency: 0
   max_async_buffer_size: 0
+  max_item_size: 1MiB
   max_get_multi_concurrency: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
@@ -226,6 +230,7 @@ While the remaining settings are **optional**:
 - `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
 - `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
 - `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 
 ## Index Header

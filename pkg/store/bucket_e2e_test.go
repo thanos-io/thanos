@@ -147,10 +147,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil,
-		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
-		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
-	)
+	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+	})
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
@@ -166,6 +166,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		false,
 		20,
 		filterConf,
+		true,
 		true,
 		true,
 	)

@@ -3,6 +3,8 @@
   compact+:: {
     jobPrefix: error 'must provide job prefix for Thanos Compact alerts',
     selector: error 'must provide selector for Thanos Compact alerts',
+    compactionErrorThreshold: 5,
+    bucketOpsErrorThreshold: 5,
   },
   prometheusAlerts+:: {
     groups+: [
@@ -41,7 +43,7 @@
                 sum by (job) (rate(thanos_compact_group_compactions_failures_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_compact_group_compactions_total{%(selector)s}[5m]))
-              * 100 > 5
+              * 100 > %(compactionErrorThreshold)s
               )
             ||| % thanos.compact,
             'for': '15m',
@@ -59,7 +61,7 @@
                 sum by (job) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[5m]))
-              * 100 > 5
+              * 100 > %(bucketOpsErrorThreshold)s
               )
             ||| % thanos.compact,
             'for': '15m',

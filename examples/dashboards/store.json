@@ -2056,7 +2056,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Chunk Size",
+               "title": "Chunk Size (bytes)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -2217,6 +2217,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
+               "description": "Show the size of data fetched, in bytes",
                "fill": 1,
                "id": 26,
                "legend": {
@@ -2270,7 +2271,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Data Fetched",
+               "title": "Data Fetched (bytes)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -2781,7 +2782,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Memory Used",
+               "title": "Memory Used (Bytes)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,

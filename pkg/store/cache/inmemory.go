@@ -5,7 +5,6 @@ package storecache
 
 import (
 	"context"
-	"math"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -18,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/model"
 	"gopkg.in/yaml.v2"
 )
 
@@ -27,6 +27,8 @@ var (
 		MaxItemSize: 125 * 1024 * 1024,
 	}
 )
+
+const maxInt = int(^uint(0) >> 1)
 
 type InMemoryIndexCache struct {
 	mtx sync.Mutex
@@ -51,9 +53,9 @@ type InMemoryIndexCache struct {
 // InMemoryIndexCacheConfig holds the in-memory index cache config.
 type InMemoryIndexCacheConfig struct {
 	// MaxSize represents overall maximum number of bytes cache can contain.
-	MaxSize Bytes `yaml:"max_size"`
+	MaxSize model.Bytes `yaml:"max_size"`
 	// MaxItemSize represents maximum size of single item.
-	MaxItemSize Bytes `yaml:"max_item_size"`
+	MaxItemSize model.Bytes `yaml:"max_item_size"`
 }
 
 // parseInMemoryIndexCacheConfig unmarshals a buffer into a InMemoryIndexCacheConfig with default values.
@@ -161,7 +163,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(math.MaxInt64, c.onEvict)
+	l, err := lru.NewLRU(maxInt, c.onEvict)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registere
 		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
 		"maxSizeBytes", c.maxSizeBytes,
-		"maxItems", "math.MaxInt64",
+		"maxItems", "maxInt",
 	)
 	return c, nil
 }

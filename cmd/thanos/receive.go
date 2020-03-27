@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -190,10 +191,6 @@ func runReceive(
 	if err != nil {
 		return err
 	}
-	rwTLSClientConfig, err := tls.NewClientConfig(logger, rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
-	if err != nil {
-		return err
-	}
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, rwServerCert != "", rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
 	if err != nil {
 		return err
@@ -208,7 +205,6 @@ func runReceive(
 		ReplicationFactor: replicationFactor,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
-		TLSClientConfig:   rwTLSClientConfig,
 		DialOpts:          dialOpts,
 	})
 
@@ -217,7 +213,7 @@ func runReceive(
 	statusProber := prober.Combine(
 		httpProbe,
 		grpcProbe,
-		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	confContentYaml, err := objStoreConfig.Content()

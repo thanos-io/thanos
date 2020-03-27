@@ -109,9 +109,9 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 	maxTime := int64(0)
 	stores := s.stores()
 
-	// Edge case: we have all of the data if there are no stores.
+	// Edge case: we have no data if there are no stores.
 	if len(stores) == 0 {
-		res.MaxTime = math.MaxInt64
+		res.MaxTime = 0
 		res.MinTime = 0
 
 		return res, nil

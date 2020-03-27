@@ -17,13 +17,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	yaml "gopkg.in/yaml.v2"
 )
 
 const (
-	opSet      = "set"
-	opGetMulti = "getmulti"
+	opSet             = "set"
+	opGetMulti        = "getmulti"
+	reasonMaxItemSize = "max-item-size"
 )
 
 var (
@@ -35,6 +37,7 @@ var (
 		MaxIdleConnections:        100,
 		MaxAsyncConcurrency:       20,
 		MaxAsyncBufferSize:        10000,
+		MaxItemSize:               model.Bytes(1024 * 1024),
 		MaxGetMultiConcurrency:    100,
 		MaxGetMultiBatchSize:      0,
 		DNSProviderUpdateInterval: 10 * time.Second,
@@ -88,6 +91,11 @@ type MemcachedClientConfig struct {
 	// running GetMulti() operations. If set to 0, concurrency is unlimited.
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
 
+	// MaxItemSize specifies the maximum size of an item stored in memcached. Bigger
+	// items are skipped to be stored by the client. If set to 0, no maximum size is
+	// enforced.
+	MaxItemSize model.Bytes `yaml:"max_item_size"`
+
 	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
 	// GetMulti() should run. If more keys are specified, internally keys are splitted
 	// into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency
@@ -140,6 +148,7 @@ type memcachedClient struct {
 	// Tracked metrics.
 	operations *prometheus.CounterVec
 	failures   *prometheus.CounterVec
+	skipped    *prometheus.CounterVec
 	duration   *prometheus.HistogramVec
 }
 
@@ -215,6 +224,12 @@ func newMemcachedClient(
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
 
+	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name:        "thanos_memcached_operation_skipped_total",
+		Help:        "Total number of operations against memcached that have been skipped.",
+		ConstLabels: prometheus.Labels{"name": name},
+	}, []string{"operation", "reason"})
+
 	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:        "thanos_memcached_operation_duration_seconds",
 		Help:        "Duration of operations against memcached.",
@@ -250,6 +265,12 @@ func (c *memcachedClient) Stop() {
 }
 
 func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) (err error) {
+	// Skip hitting memcached at all if the item is bigger than the max allowed size.
+	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
+		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
+		return nil
+	}
+
 	return c.enqueueAsync(func() {
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
@@ -263,7 +284,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
 			return
 		}
 
@@ -272,9 +293,13 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 }
 
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	if len(keys) == 0 {
+		return nil
+	}
+
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "err", err)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,

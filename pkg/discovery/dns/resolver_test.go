@@ -76,7 +76,7 @@ var (
 			addr:           "test.mycompany.com",
 			qtype:          A,
 			expectedResult: nil,
-			expectedErr:    errors.Errorf("missing port in address given for dns lookup: test.mycompany.com"),
+			expectedErr:    errors.New("missing port in address given for dns lookup: test.mycompany.com"),
 			resolver:       &mockHostnameResolver{},
 		},
 		{
@@ -168,7 +168,7 @@ var (
 			addr:           "test.mycompany.com",
 			qtype:          "invalid",
 			expectedResult: nil,
-			expectedErr:    errors.Errorf("invalid lookup scheme \"invalid\""),
+			expectedErr:    errors.New("invalid lookup scheme \"invalid\""),
 			resolver:       &mockHostnameResolver{},
 		},
 	}

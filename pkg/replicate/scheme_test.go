@@ -19,6 +19,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -302,9 +303,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		c.prepare(ctx, t, originBucket, targetBucket)
 
 		matcher, err := labels.NewMatcher(labels.MatchEqual, "test-labelname", "test-labelvalue")
-		if err != nil {
-			t.Fatal("Failed to create a matcher.")
-		}
+		testutil.Ok(t, err)
 
 		selector := labels.Selector{
 			matcher,
@@ -314,11 +313,14 @@ func TestReplicationSchemeAll(t *testing.T) {
 		}
 
 		filter := NewBlockFilter(logger, selector, compact.ResolutionLevelRaw, 1).Filter
+		fetcher, err := block.NewMetaFetcher(logger, 32, originBucket, "", nil, nil)
+		testutil.Ok(t, err)
 
 		r := newReplicationScheme(
 			logger,
 			newReplicationMetrics(nil),
 			filter,
+			fetcher,
 			originBucket,
 			targetBucket,
 			nil,

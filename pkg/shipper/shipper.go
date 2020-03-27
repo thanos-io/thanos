@@ -342,6 +342,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 }
 
 // sync uploads the block if not exists in remote storage.
+// TODO(khyatisoneji): Double check if block does not have deletion-mark.json for some reason, otherwise log it or return error.
 func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	level.Info(s.logger).Log("msg", "upload new block", "id", meta.ULID)
 

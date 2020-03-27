@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -31,24 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
-
-func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Downsample
-	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
-
-	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
-
-	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
-		Default("./data").String()
-
-	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
-	}
-}
 
 type DownsampleMetrics struct {
 	downsamples        *prometheus.CounterVec
@@ -70,7 +52,7 @@ func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	return m
 }
 
-func runDownsample(
+func RunDownsample(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -90,7 +72,7 @@ func runDownsample(
 		return err
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), nil)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
@@ -105,7 +87,7 @@ func runDownsample(
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
 		httpProbe,
-		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	metrics := newDownsampleMetrics(reg)

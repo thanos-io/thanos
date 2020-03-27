@@ -73,7 +73,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(3), "thanos_store_nodes_grpc_connections"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -145,7 +145,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(3), "thanos_store_nodes_grpc_connections"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -214,7 +214,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(2), "thanos_store_nodes_grpc_connections"))
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{

@@ -495,6 +495,7 @@ func runRule(
 			// Initialize rules.
 			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics); err != nil {
 				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
+				return err
 			}
 			for {
 				select {
@@ -522,7 +523,7 @@ func runRule(
 	statusProber := prober.Combine(
 		httpProbe,
 		grpcProbe,
-		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	// Start gRPC server.
@@ -740,7 +741,7 @@ func queryFunc(
 				return v, nil
 			}
 		}
-		return nil, errors.Errorf("no query API server reachable")
+		return nil, errors.New("no query API server reachable")
 	}
 }
 

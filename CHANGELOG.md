@@ -14,12 +14,29 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 - [#2238](https://github.com/thanos-io/thanos/pull/2238) Ruler: Fixed Issue #2204 bug in alert queue signalling filled up queue and alerts were dropped
+- [#2231](https://github.com/thanos-io/thanos/pull/2231) Bucket Web - Sort chunks by thanos.downsample.resolution for better grouping
+- [#2254](https://github.com/thanos-io/thanos/pull/2254) Bucket: Fix metrics registered multiple times in bucket replicate
+- [#2271](https://github.com/thanos-io/thanos/pull/2271) Bucket Web: Fixed Issue #2260 bucket passes null when storage is empty
 
 ### Added
 
 - [#2252](https://github.com/thanos-io/thanos/pull/2252) Query: add new `--store.strict-mode` flag. More information available [here](/docs/proposals/202001_thanos_query_health_handling.md).
+- [#2265](https://github.com/thanos-io/thanos/pull/2265) Compactor: Add `--wait-interval` to specify compaction wait interval between consecutive compact runs when `--wait` enabled.
+- [#2250](https://github.com/thanos-io/thanos/pull/2250) Compactor: Enable vertical compaction for offline deduplication (Experimental). Uses `--deduplication.replica-label` flag to specify the replica label to deduplicate on (Hidden). Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together). This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication. We plan to add a smarter algorithm in the following weeks.
+- [#1714](https://github.com/thanos-io/thanos/pull/1714) Run the bucket web UI in the compact component when it is run as a long-lived process.
+- [#2304](https://github.com/thanos-io/thanos/pull/2304) Store: Added `max_item_size` config option to memcached-based index cache. This should be set to the max item size configured in memcached (`-I` flag) in order to not waste network round-trips to cache items larger than the limit configured in memcached.
+- [#2297](https://github.com/thanos-io/thanos/pull/2297) Store Gateway: Add `--experimental.enable-index-cache-postings-compression` flag to enable reencoding and compressing postings before storing them into cache. Compressed postings take about 10% of the original size.
 
-## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0-rc.1) - 2020.03.02
+### Changed
+
+- [#2136](https://github.com/thanos-io/thanos/pull/2136) *breaking* store, compact, bucket: schedule block deletion by adding deletion-mark.json. This adds a consistent way for multiple readers and writers to access object storage.
+Since there are no consistency guarantees provided by some Object Storage providers, this PR adds a consistent lock-free way of dealing with Object Storage irrespective of the choice of object storage. In order to achieve this co-ordination, blocks are not deleted directly. Instead, blocks are marked for deletion by uploading `deletion-mark.json` file for the block that was chosen to be deleted. This file contains unix time of when the block was marked for deletion. If you want to keep existing behavior, you should add `--delete-delay=0s` as a flag.
+- [#2090](https://github.com/thanos-io/thanos/issues/2090) *breaking* Downsample command: the `downsample` command has moved as the `thanos bucket` sub-command, and cannot be called via `thanos downsample` any more.
+- [#2294](https://github.com/thanos-io/thanos/pull/2294) store: optimizations for fetching postings. Queries using `=~".*"` matchers or negation matchers (`!=...` or `!~...`) benefit the most.
+- [#2301](https://github.com/thanos-io/thanos/pull/2301) Ruler: initlialization fails with filepath bad pattern error and rule manager update error.
+- [#2310](https://github.com/thanos-io/thanos/pull/2310) query: Report timespan 0 to 0 when discovering no stores.
+
+## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0) - 2020.03.02
 
 ### Fixed
 

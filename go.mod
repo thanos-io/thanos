@@ -11,6 +11,7 @@ require (
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/cortexproject/cortex v0.6.1-0.20200228110116-92ab6cbe0995
+	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
 	github.com/fortytw2/leaktest v1.3.0
@@ -37,6 +38,7 @@ require (
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.1.1-0.20200124165624-2876d2018785
 	github.com/pkg/errors v0.9.1
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/alertmanager v0.20.0
 	github.com/prometheus/client_golang v1.5.0
 	github.com/prometheus/client_model v0.2.0
@@ -51,7 +53,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/text v0.3.2
-	golang.org/x/tools v0.0.0-20200221224223-e1da425f72fd // indirect
+	golang.org/x/tools v0.0.0-20200306191617-51e69f71924f // indirect
 	google.golang.org/api v0.14.0
 	google.golang.org/genproto v0.0.0-20191115194625-c23dd37a84c9
 	google.golang.org/grpc v1.25.1
