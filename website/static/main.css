@@ -79,6 +79,19 @@ h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
 
 .menulabel-thanos {
     cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.caret-expand {
+    width: 16px;
+    margin-left: 8px;
+    margin-bottom: 0.2rem;
+    transition: transform 0.2s ease-out;
+}
+
+.menuinput:checked + label .caret-expand {
+    transform: rotateX(180deg);
 }
 
 .sidemenu-thanos .list-group {
