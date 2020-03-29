@@ -457,10 +457,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	}
 
 	status.LastError = err
-	status.LastCheck = time.Now()
 
 	if err == nil {
-
+		status.LastCheck = time.Now()
 		mint, maxt := store.TimeRange()
 		status.LabelSets = store.LabelSets()
 		status.StoreType = store.StoreType()
