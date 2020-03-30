@@ -134,11 +134,11 @@ func (t *MultiTSDB) openTSDBs() error {
 	return g.Wait()
 }
 
-func (t *MultiTSDB) TSDBStores() []*store.TSDBStore {
+func (t *MultiTSDB) TSDBStores() map[string]*store.TSDBStore {
 	t.mtx.RLock()
-	res := make([]*store.TSDBStore, 0, len(t.stores))
-	for _, s := range t.stores {
-		res = append(res, s)
+	res := make(map[string]*store.TSDBStore, len(t.stores))
+	for k, v := range t.stores {
+		res[k] = v
 	}
 	defer t.mtx.RUnlock()
 	return res
