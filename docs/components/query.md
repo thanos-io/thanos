@@ -327,6 +327,11 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  store API servers through respective DNS
                                  lookups.
+      --store-strict=<staticstore> ...
+                                 Addresses of only statically configured store
+                                 API servers that are always used, even if the
+                                 health check fails. Useful if you have a
+                                 caching layer on top.
       --store.sd-files=<path> ...
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern

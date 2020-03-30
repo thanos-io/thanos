@@ -102,3 +102,35 @@ func (d *mockResolver) Resolve(_ context.Context, name string, _ QType) ([]strin
 	}
 	return d.res[name], nil
 }
+
+// TestIsDynamicNode tests whether we properly catch dynamically defined nodes.
+func TestIsDynamicNode(t *testing.T) {
+	for _, tcase := range []struct {
+		node      string
+		isDynamic bool
+	}{
+		{
+			node:      "1.2.3.4",
+			isDynamic: false,
+		},
+		{
+			node:      "gibberish+1.1.1.1+noa",
+			isDynamic: true,
+		},
+		{
+			node:      "",
+			isDynamic: false,
+		},
+		{
+			node:      "dns+aaa",
+			isDynamic: true,
+		},
+		{
+			node:      "dnssrv+asdasdsa",
+			isDynamic: true,
+		},
+	} {
+		isDynamic := IsDynamicNode(tcase.node)
+		testutil.Equals(t, tcase.isDynamic, isDynamic, "mismatch between results")
+	}
+}

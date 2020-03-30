@@ -2,7 +2,7 @@
 title: Thanos Query store nodes healthiness handling
 type: proposal
 menu: proposals
-status: accepted
+status: complete
 owner: GiedriusS
 ---
 
@@ -35,6 +35,7 @@ Thus, this logic needs to be changed somehow. There are a few possible options:
 2. Another option could be introduced such as `--store.hold-timeout` which would be `--store.unhealthy-timeout`'s brother and we would hold the StoreAPI nodes for `max(hold_timeout, unhealthy_timeout)`.
 3. Another option such as `--store.strict-mode` could be introduced which means that we would always retain the last information of the StoreAPI nodes of the last successful check.
 4. The StoreAPI node specification format that is used in `--store` could be extended to include another flag which would let specify the previous option per-specific node.
+5. Instead of extending the specification format, we could move the same inforamtion to the command line options themselves. This would increase the explicitness of this new mode i.e. that it only applies to statically defined nodes.
 
 Lets look through their pros and cons:
 
@@ -47,10 +48,10 @@ If we were to graph these choices in terms of their incisiveness and complexity 
 ```text
 Most incisive / Least Complex ------------ Least incisive / Most Complex
 #1           #2                                      #4
-           #3
+           #3    #5
 ```
 
-After careful consideration and with the rationale in this proposal, we have decided to go with the third option. It should provide a sweet spot between being too invasive and providing our users the ability to fall-back to the old behavior.
+After careful consideration and with the rationale in this proposal, we have decided to go with the fifth option. It should provide a sweet spot between being too invasive and providing our users the ability to fall-back to the old behavior.
 
 ## Goals
 
@@ -77,7 +78,7 @@ The way this will need to be done should be as generic as possible so the design
 
 ## Proposal
 
-* Add a new flag to Thanos Query `--store.strict-mode` which will make it always retain the last successfully retrieved information via the `Info()` gRPC method of **statically** defined nodes and thus always consider them part of the active store set.
+* Add a new flag to Thanos Query `--store-strict` which will only accept statically specified nodes and Thanos Query will always retain the last successfully retrieved information of them via the `Info()` gRPC method. Thus, they will always be considered as part of the active store set.
 
 ## Risk
 
@@ -85,7 +86,7 @@ The way this will need to be done should be as generic as possible so the design
 
 ## Work Plan
 
-* Implement the new flag `--store.strict-mode` in Thanos Query which will make it keep around statically defined nodes. It will be disabled by default to reduce surprises when upgrading.
+* Implement the new flag `--store-strict` in Thanos Query which will only accept statically defined nodes that will be permanently kept around. It is optional to use so there will be no surprises when upgrading.
 * Implement tests with dummy store nodes.
 * Document the new behavior.
 
