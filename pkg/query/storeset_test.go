@@ -174,9 +174,6 @@ func TestStoreSet_Update(t *testing.T) {
 
 	discoveredStoreAddr := stores.StoreAddresses()
 
-	// Start with one not available.
-	stores.CloseOne(discoveredStoreAddr[2])
-
 	// Testing if duplicates can cause weird results.
 	discoveredStoreAddr = append(discoveredStoreAddr, discoveredStoreAddr[0])
 	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
@@ -187,6 +184,12 @@ func TestStoreSet_Update(t *testing.T) {
 	}, testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
+
+	// Initial update.
+	storeSet.Update(context.Background())
+
+	// Start with one not available.
+	stores.CloseOne(discoveredStoreAddr[2])
 
 	// Should not matter how many of these we run.
 	storeSet.Update(context.Background())
