@@ -287,7 +287,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 }
 
 // Exists checks if the given object exists.
-func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
 	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -299,24 +299,14 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	return true, nil
 }
 
-func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
-	if f, ok := r.(*os.File); ok {
-		fileInfo, err := f.Stat()
-		if err == nil {
-			return fileInfo.Size()
-		}
-		level.Warn(b.logger).Log("msg", "could not stat file for multipart upload", "name", name, "err", err)
-		return -1
-	}
-
-	level.Warn(b.logger).Log("msg", "could not guess file size for multipart upload", "name", name)
-	return -1
-}
-
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
-	size := b.guessFileSize(name, r)
+	size, err := objstore.TryToGetSize(r)
+	if err != nil {
+		level.Warn(b.logger).Log("msg", "could not guess file size for multipart upload; upload might be not optimized", "name", name, "err", err)
+		size = -1
+	}
 
 	// partSize cannot be larger than object size.
 	partSize := b.partSize
@@ -342,7 +332,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 }
 
 // ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
+func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
 	objInfo, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return 0, err
@@ -351,7 +341,7 @@ func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 }
 
 // Delete removes the object with the given name.
-func (b *Bucket) Delete(ctx context.Context, name string) error {
+func (b *Bucket) Delete(_ context.Context, name string) error {
 	return b.client.RemoveObject(b.name, name)
 }
 

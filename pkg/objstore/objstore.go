@@ -4,6 +4,7 @@
 package objstore
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -40,6 +41,24 @@ type Bucket interface {
 	Name() string
 }
 
+// TryToGetSize tries to get upfront size from reader.
+// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+func TryToGetSize(r io.Reader) (int64, error) {
+	switch f := r.(type) {
+	case *os.File:
+		fileInfo, err := f.Stat()
+		if err != nil {
+			return 0, errors.Wrap(err, "os.File.Stat()")
+		}
+		return fileInfo.Size(), nil
+	case *bytes.Buffer:
+		return int64(f.Len()), nil
+	case *strings.Reader:
+		return f.Size(), nil
+	}
+	return 0, errors.New("unsupported type of io.Reader")
+}
+
 // BucketReader provides read access to an object storage bucket.
 type BucketReader interface {
 	// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
@@ -53,7 +72,6 @@ type BucketReader interface {
 	GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error)
 
 	// Exists checks if the given object exists in the bucket.
-	// TODO(bplotka): Consider removing Exists in favor of helper that do Get & IsObjNotFoundErr (less code to maintain).
 	Exists(ctx context.Context, name string) (bool, error)
 
 	// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.

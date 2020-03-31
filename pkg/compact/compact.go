@@ -189,7 +189,7 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 		if !ok {
 			lbls := labels.FromMap(m.Thanos.Labels)
 			g, err = newGroup(
-				log.With(s.logger, "compactionGroup", fmt.Sprintf("%d@%v", m.Thanos.Downsample.Resolution, lbls.String()), "compactionGroupKey", groupKey),
+				log.With(s.logger, "group", fmt.Sprintf("%d@%v", m.Thanos.Downsample.Resolution, lbls.String()), "groupKey", groupKey),
 				s.bkt,
 				lbls,
 				m.Thanos.Downsample.Resolution,
@@ -613,6 +613,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return false, ulid.ULID{}, nil
 	}
 
+	level.Info(cg.logger).Log("msg", "compaction available and planned; downloading blocks", "plan", fmt.Sprintf("%v", plan))
+
 	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
 	// This is one potential source of how we could end up with duplicated chunks.
 	uniqueSources := map[ulid.ULID]struct{}{}
@@ -670,8 +672,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				"block id %s, try running with --debug.accept-malformed-index", id)
 		}
 	}
-	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
-		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
+	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	begin = time.Now()
 
