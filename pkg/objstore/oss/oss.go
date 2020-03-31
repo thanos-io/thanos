@@ -65,25 +65,15 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	return NewTestBucketFromConfig(t, c, false)
 }
 
-func calculateChunks(name string, r io.Reader) (int, int64, error) {
-	switch f := r.(type) {
-	case *os.File:
-		if fileInfo, err := f.Stat(); err == nil {
-			s := fileInfo.Size()
-			return int(math.Floor(float64(s) / PartSize)), s % PartSize, nil
-		}
-	case *strings.Reader:
-		return int(math.Floor(float64(f.Size()) / PartSize)), f.Size() % PartSize, nil
-	}
-	return -1, 0, errors.New("unsupported implement of io.Reader")
-}
-
 // Upload the contents of the reader as an object into the bucket.
-func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	chunksnum, lastslice, err := calculateChunks(name, r)
+func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
+	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+	size, err := objstore.TryToGetSize(r)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to get size apriori to upload %s", name)
 	}
+
+	chunksnum, lastslice := int(math.Floor(float64(size)/PartSize)), size%PartSize
 
 	ncloser := ioutil.NopCloser(r)
 	switch chunksnum {
