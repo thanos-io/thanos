@@ -96,3 +96,6 @@ adopters:
 - name: leboncoin
   url: https://www.leboncoin.fr/
   logo: leboncoin.png
+- name: Workfront
+  url: https://www.workfront.com/
+  logo: workfront.png
