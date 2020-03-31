@@ -83,6 +83,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
+	reg.MustRegister(met)
 
 	grpc_health.RegisterHealthServer(s, probe.HealthServer())
 
