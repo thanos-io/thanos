@@ -166,7 +166,9 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
 	var result model.Vector
-	testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), time.Second, ctx.Done(), func() error {
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+addr), q, time.Now(), opts)
 		if err != nil {
 			return err
