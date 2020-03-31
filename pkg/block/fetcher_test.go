@@ -75,10 +75,12 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		f, err := NewMetaFetcher(log.NewNopLogger(), 20, bkt, dir, r, []MetadataFilter{
-			&ulidFilter{ulidToDelete: &ulidToDelete},
-		})
+		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, bkt, dir, r)
 		testutil.Ok(t, err)
+
+		fetcher := baseFetcher.WithFilters(r, []MetadataFilter{
+			&ulidFilter{ulidToDelete: &ulidToDelete},
+		}, nil)
 
 		for i, tcase := range []struct {
 			name                  string
@@ -133,7 +135,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "fresh cache",
 				do: func() {
-					f.cached = map[ulid.ULID]*metadata.Meta{}
+					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -143,7 +145,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "fresh cache: meta 2 and 3 have corrupted data on disk ",
 				do: func() {
-					f.cached = map[ulid.ULID]*metadata.Meta{}
+					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
 
 					testutil.Ok(t, os.Remove(filepath.Join(dir, "meta-syncer", ULID(2).String(), MetaFilename)))
 
@@ -238,7 +240,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				tcase.do()
 
 				ulidToDelete = tcase.filterULID
-				metas, partial, err := f.Fetch(ctx)
+				metas, partial, err := fetcher.Fetch(ctx)
 				if tcase.expectedMetaErr != nil {
 					testutil.NotOk(t, err)
 					testutil.Equals(t, tcase.expectedMetaErr.Error(), err.Error())
@@ -279,14 +281,15 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				if tcase.expectedMetaErr != nil {
 					expectedFailures = 1
 				}
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(f.metrics.syncs))
-				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(f.metrics.synced.WithLabelValues(loadedMeta)))
-				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(f.metrics.synced.WithLabelValues(noMeta)))
-				testutil.Equals(t, float64(tcase.expectedFiltered), promtest.ToFloat64(f.metrics.synced.WithLabelValues("filtered")))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(labelExcludedMeta)))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(timeExcludedMeta)))
-				testutil.Equals(t, float64(expectedFailures), promtest.ToFloat64(f.metrics.synced.WithLabelValues(failedMeta)))
-				testutil.Equals(t, 0.0, promtest.ToFloat64(f.metrics.synced.WithLabelValues(tooFreshMeta)))
+				testutil.Equals(t, float64(i+1), promtest.ToFloat64(baseFetcher.syncs))
+				testutil.Equals(t, float64(i+1), promtest.ToFloat64(fetcher.metrics.syncs))
+				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(loadedMeta)))
+				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(noMeta)))
+				testutil.Equals(t, float64(tcase.expectedFiltered), promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues("filtered")))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(labelExcludedMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(timeExcludedMeta)))
+				testutil.Equals(t, float64(expectedFailures), promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(failedMeta)))
+				testutil.Equals(t, 0.0, promtest.ToFloat64(fetcher.metrics.synced.WithLabelValues(tooFreshMeta)))
 			}); !ok {
 				return
 			}
