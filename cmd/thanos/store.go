@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -13,11 +14,13 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -27,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -95,6 +99,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		"Default is 24h, half of the default value for --delete-delay on compactor.").
 		Default("24h"))
 
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
@@ -133,6 +140,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
 			time.Duration(*ignoreDeletionMarksDelay),
+			*webExternalPrefix,
+			*webPrefixHeaderName,
 		)
 	}
 }
@@ -148,14 +157,9 @@ func runStore(
 	dataDir string,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
-	grpcCert string,
-	grpcKey string,
-	grpcClientCA string,
-	httpBindAddr string,
+	grpcCert, grpcKey, grpcClientCA, httpBindAddr string,
 	httpGracePeriod time.Duration,
-	indexCacheSizeBytes uint64,
-	chunkPoolSizeBytes uint64,
-	maxSampleCount uint64,
+	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount uint64,
 	maxConcurrency int,
 	component component.Component,
 	verbose bool,
@@ -163,11 +167,10 @@ func runStore(
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
-	advertiseCompatibilityLabel bool,
-	disableIndexHeader bool,
-	enablePostingsCompression bool,
+	advertiseCompatibilityLabel, disableIndexHeader, enablePostingsCompression bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
+	externalPrefix, prefixHeader string,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -327,6 +330,14 @@ func runStore(
 			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
+	}
+	// Add bucket UI for loaded blocks.
+	{
+		r := route.New()
+		compactorView := ui.NewBucketUI(logger, "", path.Join(externalPrefix, "/loaded"), prefixHeader)
+		compactorView.Register(r, extpromhttp.NewInstrumentationMiddleware(reg))
+		metaFetcher.UpdateOnChange(compactorView.Set)
+		srv.Handle("/", r)
 	}
 
 	level.Info(logger).Log("msg", "starting store node")

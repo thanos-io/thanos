@@ -340,15 +340,10 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)
 
-		flagsMap := map[string]string{
-			"web.external-prefix": *webExternalPrefix,
-			"web.prefix-header":   *webPrefixHeaderName,
-		}
-
 		router := route.New()
 
-		bucketUI := ui.NewBucketUI(logger, *label, flagsMap)
-		bucketUI.Register(router.WithPrefix(*webExternalPrefix), extpromhttp.NewInstrumentationMiddleware(reg))
+		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
 		srv.Handle("/", router)
 
 		if *interval < 5*time.Minute {
@@ -373,17 +368,29 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			return errors.Wrap(err, "bucket client")
 		}
 
-		// TODO(bwplotka): Allow Bucket UI to visualisate the state of block as well.
+		// TODO(bwplotka): Allow Bucket UI to visualize the state of block as well.
 		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
+		fetcher.UpdateOnChange(bucketUI.Set)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			statusProber.Ready()
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			return bucketUI.RunRefreshLoop(ctx, fetcher, *interval, *timeout)
+			return runutil.Repeat(*interval, ctx.Done(), func() error {
+				return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+					iterCtx, iterCancel := context.WithTimeout(ctx, *timeout)
+					defer iterCancel()
+
+					_, _, err := fetcher.Fetch(iterCtx)
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+			})
 		}, func(error) {
 			cancel()
 		})
