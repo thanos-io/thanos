@@ -572,15 +572,10 @@ func runRule(
 			}
 		})
 
-		flagsMap := map[string]string{
-			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-			"web.external-prefix": webExternalPrefix,
-			"web.prefix-header":   webPrefixHeaderName,
-		}
-
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), flagsMap).Register(router, ins)
+		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewAPI(logger, reg, ruleMgr)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)

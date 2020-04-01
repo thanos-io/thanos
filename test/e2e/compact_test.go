@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -372,6 +373,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
+
+		// Ensure bucket UI.
+		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "global"))
+		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "loaded"))
+
 		testutil.Ok(t, s.Stop(c))
 	})
 	t.Run("native vertical deduplication should kick in", func(t *testing.T) {
@@ -452,4 +458,12 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	})
+}
+
+func ensureGETStatusCode(t testing.TB, code int, url string) {
+	t.Helper()
+
+	r, err := http.Get(url)
+	testutil.Ok(t, err)
+	testutil.Equals(t, code, r.StatusCode)
 }

@@ -146,11 +146,6 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
-	flagsMap := map[string]string{
-		"web.external-prefix": *webExternalPrefix,
-		"web.prefix-header":   *webPrefixHeaderName,
-	}
-
 	label := cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").String()
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -179,7 +174,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			selectorRelabelConf,
 			*waitInterval,
 			*label,
-			flagsMap,
+			*webExternalPrefix,
+			*webPrefixHeaderName,
 		)
 	}
 }
@@ -194,21 +190,17 @@ func runCompact(
 	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
 	deleteDelay time.Duration,
-	haltOnError bool,
-	acceptMalformedIndex bool,
-	wait bool,
-	generateMissingIndexCacheFiles bool,
+	haltOnError, acceptMalformedIndex, wait, generateMissingIndexCacheFiles bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component component.Component,
 	disableDownsampling bool,
-	maxCompactionLevel int,
-	blockSyncConcurrency int,
+	maxCompactionLevel, blockSyncConcurrency int,
 	concurrency int,
 	dedupReplicaLabels []string,
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
 	label string,
-	flagsMap map[string]string,
+	externalPrefix, prefixHeader string,
 ) error {
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -306,13 +298,12 @@ func runCompact(
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
-	metaFetcherFilters := []block.MetadataFilter{
+	compactFetcher := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 		block.NewLabelShardedMetaFilter(relabelConfig),
 		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 		ignoreDeletionMarkFilter,
 		duplicateBlocksFilter,
-	}
-	compactFetcher := baseMetaFetcher.WithFilters(extprom.WrapRegistererWithPrefix("thanos_", reg), metaFetcherFilters, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)})
+	}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)})
 	enableVerticalCompaction := false
 	if len(dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
@@ -457,14 +448,41 @@ func runCompact(
 	})
 
 	if wait {
-		router := route.New()
-		bucketUI := ui.NewBucketUI(logger, label, flagsMap)
-		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
-		srv.Handle("/", router)
+		r := route.New()
+
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		compactorView := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/loaded"), prefixHeader)
+		compactorView.Register(r, ins)
+		compactFetcher.UpdateOnChange(compactorView.Set)
+
+		global := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/global"), prefixHeader)
+		global.Register(r, ins)
+
+		// Separate fetcher for global view.
+		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
+		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil)
+		f.UpdateOnChange(global.Set)
+
+		srv.Handle("/", r)
 
 		g.Add(func() error {
-			// TODO(bwplotka): Allow Bucket UI to visualisate the state of the block as well.
-			return bucketUI.RunRefreshLoop(ctx, baseMetaFetcher.WithFilters(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), metaFetcherFilters, nil), waitInterval, time.Minute)
+			iterCtx, iterCancel := context.WithTimeout(ctx, waitInterval)
+			_, _, _ = f.Fetch(iterCtx)
+			iterCancel()
+
+			// For /global state make sure to fetch periodically.
+			return runutil.Repeat(time.Minute, ctx.Done(), func() error {
+				return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+					iterCtx, iterCancel := context.WithTimeout(ctx, waitInterval)
+					defer iterCancel()
+
+					_, _, err := f.Fetch(iterCtx)
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+			})
 		}, func(error) {
 			cancel()
 		})

@@ -116,7 +116,7 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 		prometheus.GaugeOpts{
 			Subsystem: fetcherSubSys,
 			Name:      "modified",
-			Help:      "Number of blocks that their metadata modified",
+			Help:      "Number of blocks whose metadata changed",
 		},
 		[]string{"modified"},
 		[]string{replicaRemovedMeta},
@@ -126,6 +126,7 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 
 type MetadataFetcher interface {
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
+	UpdateOnChange(func([]metadata.Meta, error))
 }
 
 type MetadataFilter interface {
@@ -184,11 +185,11 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReade
 	if err != nil {
 		return nil, err
 	}
-	return b.WithFilters(reg, filters, modifiers), nil
+	return b.NewMetaFetcher(reg, filters, modifiers), nil
 }
 
-// WithFilters transforms BaseFetcher into actually usable MetadataFetcher.
-func (f *BaseFetcher) WithFilters(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) *MetaFetcher {
+// NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
+func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) *MetaFetcher {
 	return &MetaFetcher{metrics: newFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers}
 }
 
@@ -457,6 +458,8 @@ type MetaFetcher struct {
 
 	filters   []MetadataFilter
 	modifiers []MetadataModifier
+
+	listener func([]metadata.Meta, error)
 }
 
 // Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
@@ -464,7 +467,20 @@ type MetaFetcher struct {
 //
 // Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
 func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
-	return f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
+	metas, partial, err = f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
+	if f.listener != nil {
+		blocks := make([]metadata.Meta, 0, len(metas))
+		for _, meta := range metas {
+			blocks = append(blocks, *meta)
+		}
+		f.listener(blocks, err)
+	}
+	return metas, partial, err
+}
+
+// UpdateOnChange allows to add listener that will be update on every change.
+func (f *MetaFetcher) UpdateOnChange(listener func([]metadata.Meta, error)) {
+	f.listener = listener
 }
 
 var _ MetadataFilter = &TimePartitionMetaFilter{}
@@ -558,7 +574,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 				BlockMeta: tsdb.BlockMeta{
 					ULID: ulid.MustNew(uint64(0), nil),
 				},
-			}), metasByResolution[res], metas, res, synced)
+			}), metasByResolution[res], metas, synced)
 		}(res)
 	}
 
@@ -567,7 +583,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	return nil
 }
 
-func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced *extprom.TxGaugeVec) {
+func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)

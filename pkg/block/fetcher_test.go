@@ -78,7 +78,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, bkt, dir, r)
 		testutil.Ok(t, err)
 
-		fetcher := baseFetcher.WithFilters(r, []MetadataFilter{
+		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{
 			&ulidFilter{ulidToDelete: &ulidToDelete},
 		}, nil)
 

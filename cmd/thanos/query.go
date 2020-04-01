@@ -351,14 +351,9 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
-		flagsMap := map[string]string{
-			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-			"web.external-prefix": webExternalPrefix,
-			"web.prefix-header":   webPrefixHeaderName,
-		}
-
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router, ins)
+		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
 

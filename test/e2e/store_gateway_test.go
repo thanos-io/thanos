@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -56,6 +57,8 @@ func TestStoreGateway(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(s1))
+	// Ensure bucket UI.
+	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.HTTPEndpoint(), "loaded"))
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
