@@ -241,14 +241,14 @@ func runStore(
 	}
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay)
-	prometheusRegisterer := extprom.WrapRegistererWithPrefix("thanos_", reg)
-	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, prometheusRegisterer, []block.MetadataFilter{
-		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
-		block.NewLabelShardedMetaFilter(relabelConfig),
-		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, prometheusRegisterer),
-		ignoreDeletionMarkFilter,
-		block.NewDeduplicateFilter(),
-	})
+	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+		[]block.MetadataFilter{
+			block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
+			block.NewLabelShardedMetaFilter(relabelConfig),
+			block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+			ignoreDeletionMarkFilter,
+			block.NewDeduplicateFilter(),
+		}, nil)
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}

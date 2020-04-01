@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -92,11 +93,13 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 		Help:      "Duration of the blocks metadata synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 1000},
 	})
-	m.synced = extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
-		Subsystem: fetcherSubSys,
-		Name:      "synced",
-		Help:      "Number of block metadata synced",
-	},
+	m.synced = extprom.NewTxGaugeVec(
+		reg,
+		prometheus.GaugeOpts{
+			Subsystem: fetcherSubSys,
+			Name:      "synced",
+			Help:      "Number of block metadata synced",
+		},
 		[]string{"state"},
 		[]string{corruptedMeta},
 		[]string{noMeta},
@@ -108,11 +111,13 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 		[]string{duplicateMeta},
 		[]string{markedForDeletionMeta},
 	)
-	m.modified = extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
-		Subsystem: fetcherSubSys,
-		Name:      "modified",
-		Help:      "Number of blocks that their metadata modified",
-	},
+	m.modified = extprom.NewTxGaugeVec(
+		reg,
+		prometheus.GaugeOpts{
+			Subsystem: fetcherSubSys,
+			Name:      "modified",
+			Help:      "Number of blocks that their metadata modified",
+		},
 		[]string{"modified"},
 		[]string{replicaRemovedMeta},
 	)
@@ -131,25 +136,22 @@ type MetadataModifier interface {
 	Modify(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, modified *extprom.TxGaugeVec, incompleteView bool) error
 }
 
-// MetaFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
-// Not go-routine safe.
-type MetaFetcher struct {
+// BaseFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
+// Go-routine safe.
+type BaseFetcher struct {
 	logger      log.Logger
 	concurrency int
 	bkt         objstore.BucketReader
 
 	// Optional local directory to cache meta.json files.
 	cacheDir string
-	metrics  *fetcherMetrics
-
-	filters   []MetadataFilter
-	modifiers []MetadataModifier
-
-	cached map[ulid.ULID]*metadata.Meta
+	cached   map[ulid.ULID]*metadata.Meta
+	syncs    prometheus.Counter
+	g        singleflight.Group
 }
 
-// NewMetaFetcher constructs MetaFetcher.
-func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReader, dir string, r prometheus.Registerer, filters []MetadataFilter, modifiers ...MetadataModifier) (*MetaFetcher, error) {
+// NewBaseFetcher constructs BaseFetcher.
+func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReader, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -162,16 +164,32 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReade
 		}
 	}
 
-	return &MetaFetcher{
-		logger:      log.With(logger, "component", "block.MetaFetcher"),
+	return &BaseFetcher{
+		logger:      log.With(logger, "component", "block.BaseFetcher"),
 		concurrency: concurrency,
 		bkt:         bkt,
 		cacheDir:    cacheDir,
-		metrics:     newFetcherMetrics(r),
-		filters:     filters,
-		modifiers:   modifiers,
 		cached:      map[ulid.ULID]*metadata.Meta{},
+		syncs: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Subsystem: fetcherSubSys,
+			Name:      "base_syncs_total",
+			Help:      "Total blocks metadata synchronization attempts by base Fetcher",
+		}),
 	}, nil
+}
+
+// NewMetaFetcher returns meta fetcher.
+func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReader, dir string, reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) (*MetaFetcher, error) {
+	b, err := NewBaseFetcher(logger, concurrency, bkt, dir, reg)
+	if err != nil {
+		return nil, err
+	}
+	return b.WithFilters(reg, filters, modifiers), nil
+}
+
+// WithFilters transforms BaseFetcher into actually usable MetadataFetcher.
+func (f *BaseFetcher) WithFilters(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) *MetaFetcher {
+	return &MetaFetcher{metrics: newFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers}
 }
 
 var (
@@ -181,16 +199,16 @@ var (
 
 // loadMeta returns metadata from object storage or error.
 // It returns `ErrorSyncMetaNotFound` and `ErrorSyncMetaCorrupted` sentinel errors in those cases.
-func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
+func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
 	var (
 		metaFile       = path.Join(id.String(), MetaFilename)
-		cachedBlockDir = filepath.Join(s.cacheDir, id.String())
+		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
 
 	// TODO(bwplotka): If that causes problems (obj store rate limits), add longer ttl to cached items.
 	// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
 	// TODO(bwplotka): Consider filtering by consistency delay here (can't do until compactor healthyOverride work).
-	ok, err := s.bkt.Exists(ctx, metaFile)
+	ok, err := f.bkt.Exists(ctx, metaFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "meta.json file exists: %v", metaFile)
 	}
@@ -198,27 +216,27 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, ErrorSyncMetaNotFound
 	}
 
-	if m, seen := s.cached[id]; seen {
+	if m, seen := f.cached[id]; seen {
 		return m, nil
 	}
 
 	// Best effort load from local dir.
-	if s.cacheDir != "" {
+	if f.cacheDir != "" {
 		m, err := metadata.Read(cachedBlockDir)
 		if err == nil {
 			return m, nil
 		}
 
 		if !errors.Is(err, os.ErrNotExist) {
-			level.Warn(s.logger).Log("msg", "best effort read of the local meta.json failed; removing cached block dir", "dir", cachedBlockDir, "err", err)
+			level.Warn(f.logger).Log("msg", "best effort read of the local meta.json failed; removing cached block dir", "dir", cachedBlockDir, "err", err)
 			if err := os.RemoveAll(cachedBlockDir); err != nil {
-				level.Warn(s.logger).Log("msg", "best effort remove of cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+				level.Warn(f.logger).Log("msg", "best effort remove of cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 			}
 		}
 	}
 
-	r, err := s.bkt.Get(ctx, metaFile)
-	if s.bkt.IsObjNotFoundErr(err) {
+	r, err := f.bkt.Get(ctx, metaFile)
+	if f.bkt.IsObjNotFoundErr(err) {
 		// Meta.json was deleted between bkt.Exists and here.
 		return nil, errors.Wrapf(ErrorSyncMetaNotFound, "%v", err)
 	}
@@ -226,7 +244,7 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(err, "get meta file: %v", metaFile)
 	}
 
-	defer runutil.CloseWithLogOnErr(s.logger, r, "close bkt meta get")
+	defer runutil.CloseWithLogOnErr(f.logger, r, "close bkt meta get")
 
 	metaContent, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -243,71 +261,71 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	}
 
 	// Best effort cache in local dir.
-	if s.cacheDir != "" {
+	if f.cacheDir != "" {
 		if err := os.MkdirAll(cachedBlockDir, os.ModePerm); err != nil {
-			level.Warn(s.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+			level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 
-		if err := metadata.Write(s.logger, cachedBlockDir, m); err != nil {
-			level.Warn(s.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+		if err := metadata.Write(f.logger, cachedBlockDir, m); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 	}
 	return m, nil
 }
 
-// Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
-// It's caller responsibility to not change the returned metadata files. Maps can be modified.
-//
-// Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
-func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
-	start := time.Now()
-	defer func() {
-		s.metrics.syncDuration.Observe(time.Since(start).Seconds())
-		if err != nil {
-			s.metrics.syncFailures.Inc()
-		}
-	}()
-	s.metrics.syncs.Inc()
+type response struct {
+	metas   map[ulid.ULID]*metadata.Meta
+	partial map[ulid.ULID]error
+	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
+	metaErrs tsdberrors.MultiError
 
-	metas = make(map[ulid.ULID]*metadata.Meta)
-	partial = make(map[ulid.ULID]error)
+	noMetas        float64
+	corruptedMetas float64
+
+	incompleteView bool
+}
+
+func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
+	f.syncs.Inc()
 
 	var (
+		resp = response{
+			metas:   make(map[ulid.ULID]*metadata.Meta),
+			partial: make(map[ulid.ULID]error),
+		}
 		eg  errgroup.Group
-		ch  = make(chan ulid.ULID, s.concurrency)
+		ch  = make(chan ulid.ULID, f.concurrency)
 		mtx sync.Mutex
-
-		metaErrs tsdberrors.MultiError
 	)
-
-	s.metrics.resetTx()
-
-	for i := 0; i < s.concurrency; i++ {
+	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
 			for id := range ch {
-				meta, err := s.loadMeta(ctx, id)
+				meta, err := f.loadMeta(ctx, id)
 				if err == nil {
 					mtx.Lock()
-					metas[id] = meta
+					resp.metas[id] = meta
 					mtx.Unlock()
 					continue
 				}
 
 				switch errors.Cause(err) {
 				default:
-					s.metrics.synced.WithLabelValues(failedMeta).Inc()
 					mtx.Lock()
-					metaErrs.Add(err)
+					resp.metaErrs.Add(err)
 					mtx.Unlock()
 					continue
 				case ErrorSyncMetaNotFound:
-					s.metrics.synced.WithLabelValues(noMeta).Inc()
+					mtx.Lock()
+					resp.noMetas++
+					mtx.Unlock()
 				case ErrorSyncMetaCorrupted:
-					s.metrics.synced.WithLabelValues(corruptedMeta).Inc()
+					mtx.Lock()
+					resp.corruptedMetas++
+					mtx.Unlock()
 				}
 
 				mtx.Lock()
-				partial[id] = err
+				resp.partial[id] = err
 				mtx.Unlock()
 			}
 			return nil
@@ -317,7 +335,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	// Workers scheduled, distribute blocks.
 	eg.Go(func() error {
 		defer close(ch)
-		return s.bkt.Iter(ctx, "", func(name string) error {
+		return f.bkt.Iter(ctx, "", func(name string) error {
 			id, ok := IsBlockDir(name)
 			if !ok {
 				return nil
@@ -334,74 +352,124 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 	})
 
 	if err := eg.Wait(); err != nil {
-		return nil, nil, errors.Wrap(err, "MetaFetcher: iter bucket")
+		return nil, errors.Wrap(err, "BaseFetcher: iter bucket")
 	}
 
-	incompleteView := len(metaErrs) > 0
+	if len(resp.metaErrs) > 0 {
+		return resp, nil
+	}
 
 	// Only for complete view of blocks update the cache.
-	if !incompleteView {
-		cached := make(map[ulid.ULID]*metadata.Meta, len(metas))
-		for id, m := range metas {
-			cached[id] = m
-		}
-		s.cached = cached
+	cached := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
+	for id, m := range resp.metas {
+		cached[id] = m
+	}
+	f.cached = cached
 
-		// Best effort cleanup of disk-cached metas.
-		if s.cacheDir != "" {
-			names, err := fileutil.ReadDir(s.cacheDir)
-			if err != nil {
-				level.Warn(s.logger).Log("msg", "best effort remove of not needed cached dirs failed; ignoring", "err", err)
-			} else {
-				for _, n := range names {
-					id, ok := IsBlockDir(n)
-					if !ok {
-						continue
-					}
+	// Best effort cleanup of disk-cached metas.
+	if f.cacheDir != "" {
+		names, err := fileutil.ReadDir(f.cacheDir)
+		if err != nil {
+			level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dirs failed; ignoring", "err", err)
+		} else {
+			for _, n := range names {
+				id, ok := IsBlockDir(n)
+				if !ok {
+					continue
+				}
 
-					if _, ok := metas[id]; ok {
-						continue
-					}
+				if _, ok := resp.metas[id]; ok {
+					continue
+				}
 
-					cachedBlockDir := filepath.Join(s.cacheDir, id.String())
+				cachedBlockDir := filepath.Join(f.cacheDir, id.String())
 
-					// No such block loaded, remove the local dir.
-					if err := os.RemoveAll(cachedBlockDir); err != nil {
-						level.Warn(s.logger).Log("msg", "best effort remove of not needed cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-					}
+				// No such block loaded, remove the local dir.
+				if err := os.RemoveAll(cachedBlockDir); err != nil {
+					level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 				}
 			}
 		}
 	}
+	return resp, nil
+}
 
-	for _, f := range s.filters {
+func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filters []MetadataFilter, modifiers []MetadataModifier) (_ map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]error, err error) {
+	start := time.Now()
+	defer func() {
+		metrics.syncDuration.Observe(time.Since(start).Seconds())
+		if err != nil {
+			metrics.syncFailures.Inc()
+		}
+	}()
+	metrics.syncs.Inc()
+	metrics.resetTx()
+
+	// Run this in thread safe run group.
+	// TODO(bwplotka): Consider custom singleflight with ttl.
+	v, err := f.g.Do("", func() (i interface{}, err error) {
+		// NOTE: First go routine context will go through.
+		return f.fetchMetadata(ctx)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	resp := v.(response)
+
+	// Copy as same response might be reused by different goroutines.
+	metas := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
+	for id, m := range resp.metas {
+		metas[id] = m
+	}
+
+	metrics.synced.WithLabelValues(failedMeta).Set(float64(len(resp.metaErrs)))
+	metrics.synced.WithLabelValues(noMeta).Set(resp.noMetas)
+	metrics.synced.WithLabelValues(corruptedMeta).Set(resp.corruptedMetas)
+
+	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
-		if err := f.Filter(ctx, metas, s.metrics.synced, incompleteView); err != nil {
+		if err := filter.Filter(ctx, metas, metrics.synced, resp.incompleteView); err != nil {
 			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
 
-	for _, m := range s.modifiers {
+	for _, m := range modifiers {
 		// NOTE: modifier can update modified metric accordingly to the reason of the modification.
-		if err := m.Modify(ctx, metas, s.metrics.modified, incompleteView); err != nil {
+		if err := m.Modify(ctx, metas, metrics.modified, resp.incompleteView); err != nil {
 			return nil, nil, errors.Wrap(err, "modify metas")
 		}
 	}
 
-	s.metrics.synced.WithLabelValues(loadedMeta).Set(float64(len(metas)))
-	s.metrics.submit()
+	metrics.synced.WithLabelValues(loadedMeta).Set(float64(len(metas)))
+	metrics.submit()
 
-	if incompleteView {
-		return metas, partial, errors.Wrap(metaErrs, "incomplete view")
+	if len(resp.metaErrs) > 0 {
+		return metas, resp.partial, errors.Wrap(resp.metaErrs, "incomplete view")
 	}
 
-	level.Debug(s.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(s.cached), "returned", len(metas), "partial", len(partial))
-	return metas, partial, nil
+	level.Debug(f.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
+	return metas, resp.partial, nil
+}
+
+type MetaFetcher struct {
+	wrapped *BaseFetcher
+	metrics *fetcherMetrics
+
+	filters   []MetadataFilter
+	modifiers []MetadataModifier
+}
+
+// Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
+// It's caller responsibility to not change the returned metadata files. Maps can be modified.
+//
+// Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
+func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
+	return f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
 }
 
 var _ MetadataFilter = &TimePartitionMetaFilter{}
 
-// TimePartitionMetaFilter is a MetaFetcher filter that filters out blocks that are outside of specified time range.
+// TimePartitionMetaFilter is a BaseFetcher filter that filters out blocks that are outside of specified time range.
 // Not go-routine safe.
 type TimePartitionMetaFilter struct {
 	minTime, maxTime model.TimeOrDurationValue
@@ -458,7 +526,9 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 	return nil
 }
 
-// DeduplicateFilter is a MetaFetcher filter that filters out older blocks that have exactly the same data.
+var _ MetadataFilter = &DeduplicateFilter{}
+
+// DeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
 // Not go-routine safe.
 type DeduplicateFilter struct {
 	duplicateIDs []ulid.ULID
@@ -572,7 +642,9 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 	return true
 }
 
-// ReplicaLabelRemover is a MetaFetcher modifier modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
+var _ MetadataModifier = &ReplicaLabelRemover{}
+
+// ReplicaLabelRemover is a BaseFetcher modifier modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
 type ReplicaLabelRemover struct {
 	logger log.Logger
 
@@ -600,7 +672,7 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 	return nil
 }
 
-// ConsistencyDelayMetaFilter is a MetaFetcher filter that filters out blocks that are created before a specified consistency delay.
+// ConsistencyDelayMetaFilter is a BaseFetcher filter that filters out blocks that are created before a specified consistency delay.
 // Not go-routine safe.
 type ConsistencyDelayMetaFilter struct {
 	logger           log.Logger

@@ -313,7 +313,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		}
 
 		filter := NewBlockFilter(logger, selector, compact.ResolutionLevelRaw, 1).Filter
-		fetcher, err := block.NewMetaFetcher(logger, 32, originBucket, "", nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, 32, originBucket, "", nil, nil, nil)
 		testutil.Ok(t, err)
 
 		r := newReplicationScheme(

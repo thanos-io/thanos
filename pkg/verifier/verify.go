@@ -35,7 +35,7 @@ func newVerifierMetrics(reg prometheus.Registerer) *verifierMetrics {
 
 // Issue is an function that does verification and repair only if repair arg is true.
 // It should log affected blocks using warn level logs. It should be safe for issue to run on healthy bucket.
-type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error
+type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error
 
 // Verifier runs given issues to verify if bucket is healthy.
 type Verifier struct {
@@ -44,13 +44,13 @@ type Verifier struct {
 	backupBkt   objstore.Bucket
 	issues      []Issue
 	repair      bool
-	fetcher     *block.MetaFetcher
+	fetcher     block.MetadataFetcher
 	deleteDelay time.Duration
 	metrics     *verifierMetrics
 }
 
 // New returns verifier that only logs affected blocks.
-func New(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher *block.MetaFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
+func New(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
 	return &Verifier{
 		logger:      logger,
 		bkt:         bkt,
@@ -63,7 +63,7 @@ func New(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetc
 }
 
 // NewWithRepair returns verifier that logs affected blocks and attempts to repair them.
-func NewWithRepair(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher *block.MetaFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
+func NewWithRepair(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
 	return &Verifier{
 		logger:      logger,
 		bkt:         bkt,

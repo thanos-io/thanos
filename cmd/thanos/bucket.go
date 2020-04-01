@@ -140,7 +140,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 			issues = append(issues, issueFn)
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
@@ -289,7 +289,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
@@ -373,7 +373,8 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			return errors.Wrap(err, "bucket client")
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
+		// TODO(bwplotka): Allow Bucket UI to visualisate the state of block as well.
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
@@ -382,7 +383,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		g.Add(func() error {
 			statusProber.Ready()
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			return refresh(ctx, logger, bucketUI, *interval, *timeout, fetcher)
+			return bucketUI.RunRefreshLoop(ctx, fetcher, *interval, *timeout)
 		}, func(error) {
 			cancel()
 		})
@@ -457,48 +458,6 @@ func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, n
 	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
 	}
-}
-
-// refresh metadata from remote storage periodically and update the UI.
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, fetcher *block.MetaFetcher) error {
-	return runutil.Repeat(duration, ctx.Done(), func() error {
-		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
-			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
-			defer iterCancel()
-
-			blocks, err := download(iterCtx, logger, fetcher)
-			if err != nil {
-				bucketUI.Set("[]", err)
-				return err
-			}
-
-			data, err := json.Marshal(blocks)
-			if err != nil {
-				bucketUI.Set("[]", err)
-				return err
-			}
-			bucketUI.Set(string(data), nil)
-			return nil
-		})
-	})
-}
-
-func download(ctx context.Context, logger log.Logger, fetcher *block.MetaFetcher) ([]metadata.Meta, error) {
-	level.Info(logger).Log("msg", "synchronizing block metadata")
-
-	metas, _, err := fetcher.Fetch(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	blocks := []metadata.Meta{}
-
-	for _, meta := range metas {
-		blocks = append(blocks, *meta)
-	}
-
-	level.Info(logger).Log("msg", "downloaded blocks meta.json", "num", len(blocks))
-	return blocks, nil
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {

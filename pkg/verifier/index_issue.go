@@ -29,7 +29,7 @@ const IndexIssueID = "index_issue"
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
 // NOTE: This also verifies all indexes against chunks mismatches and duplicates.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
 	metas, _, err := fetcher.Fetch(ctx)
