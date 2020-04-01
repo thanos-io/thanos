@@ -4,8 +4,13 @@
 package query
 
 import (
+	"fmt"
+	"net/url"
+	"strings"
+
 	"gopkg.in/yaml.v2"
 
+	"github.com/pkg/errors"
 	http_util "github.com/thanos-io/thanos/pkg/http"
 )
 
@@ -38,4 +43,33 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 		return nil, err
 	}
 	return queryCfg, nil
+}
+
+// BuildQueryConfig returns a query client configuration from a static address.
+func BuildQueryConfig(queryAddrs []string) ([]Config, error) {
+	configs := make([]Config, 0, len(queryAddrs))
+	for i, addr := range queryAddrs {
+		if addr == "" {
+			return nil, errors.Errorf("static querier address cannot be empty at index %d", i)
+		}
+		// If addr is missing schema, add http.
+		if !strings.Contains(addr, "://") {
+			addr = fmt.Sprintf("http://%s", addr)
+		}
+		u, err := url.Parse(addr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse addr %q", addr)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return nil, errors.Errorf("%q is not supported scheme for querier address", u.Scheme)
+		}
+		configs = append(configs, Config{
+			EndpointsConfig: http_util.EndpointsConfig{
+				Scheme:          u.Scheme,
+				StaticAddresses: []string{u.Host},
+				PathPrefix:      u.Path,
+			},
+		})
+	}
+	return configs, nil
 }

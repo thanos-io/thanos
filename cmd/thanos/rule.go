@@ -288,17 +288,16 @@ func runRule(
 	metrics := newRuleMetrics(reg)
 
 	var queryCfg []query.Config
+	var err error
 	if len(queryConfigYAML) > 0 {
-		var err error
 		queryCfg, err = query.LoadConfigs(queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		for _, addr := range queryAddrs {
-			if addr == "" {
-				return errors.New("static querier address cannot be empty")
-			}
+		queryCfg, err = query.BuildQueryConfig(queryAddrs)
+		if err != nil {
+			return err
 		}
 
 		// Build the query configuration from the legacy query flags.
@@ -308,16 +307,15 @@ func runRule(
 				Files:           querySDFiles,
 				RefreshInterval: model.Duration(querySDInterval),
 			})
-		}
-		queryCfg = append(queryCfg,
-			query.Config{
-				EndpointsConfig: http_util.EndpointsConfig{
-					Scheme:          "http",
-					StaticAddresses: queryAddrs,
-					FileSDConfigs:   fileSDConfigs,
+			queryCfg = append(queryCfg,
+				query.Config{
+					EndpointsConfig: http_util.EndpointsConfig{
+						Scheme:        "http",
+						FileSDConfigs: fileSDConfigs,
+					},
 				},
-			},
-		)
+			)
+		}
 	}
 
 	queryProvider := dns.NewProvider(
