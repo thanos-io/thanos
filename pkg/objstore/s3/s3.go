@@ -149,6 +149,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			DualStack: true,
 		}).DialContext,
 		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
 		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
