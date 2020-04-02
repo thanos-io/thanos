@@ -1,7 +1,6 @@
 {
   local thanos = self,
   receive+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Receive alerts',
     selector: error 'must provide selector for Thanos Receive alerts',
     httpErrorThreshold: 5,
     forwardErrorThreshold: 5,
