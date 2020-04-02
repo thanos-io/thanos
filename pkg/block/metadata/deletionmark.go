@@ -48,6 +48,17 @@ type DeletionMark struct {
 func ReadDeletionMark(ctx context.Context, bkt objstore.BucketReader, logger log.Logger, dir string) (*DeletionMark, error) {
 	deletionMarkFile := path.Join(dir, DeletionMarkFilename)
 
+	// BucketReader.Get reports missing file as a failure (via metrics),
+	// but since most blocks don't have this marker file, it skews metrics unnecessarily.
+	// By using exists first, we avoid that.
+	exists, err := bkt.Exists(ctx, deletionMarkFile)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrorDeletionMarkNotFound
+	}
+
 	r, err := bkt.Get(ctx, deletionMarkFile)
 	if err != nil {
 		if bkt.IsObjNotFoundErr(err) {
