@@ -1,7 +1,6 @@
 {
   local thanos = self,
   bucket_replicate+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Bucket Replicate dashboard',
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     errorThreshold: 10,
     p99LatencyThreshold: 20,

@@ -1,7 +1,6 @@
 {
   local thanos = self,
   query+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Query alerts',
     selector: error 'must provide selector for Thanos Query alerts',
     httpErrorThreshold: 5,
     grpcErrorThreshold: 5,

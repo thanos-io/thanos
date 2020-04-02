@@ -1,7 +1,6 @@
 {
   local thanos = self,
   sidecar+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Sidecar alerts',
     selector: error 'must provide selector for Thanos Sidecar alerts',
   },
   prometheusAlerts+:: {

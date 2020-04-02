@@ -1,7 +1,6 @@
 {
   local thanos = self,
   store+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Store alerts',
     selector: error 'must provide selector for Thanos Store alerts',
     grpcErrorThreshold: 5,
     compactionErrorThreshold: 5,

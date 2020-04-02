@@ -1,7 +1,6 @@
 {
   local thanos = self,
   rule+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Rule alerts',
     selector: error 'must provide selector for Thanos Rule alerts',
     grpcErrorThreshold: 5,
     rulerDnsErrorThreshold: 1,

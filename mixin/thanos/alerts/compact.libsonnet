@@ -1,7 +1,6 @@
 {
   local thanos = self,
   compact+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Compact alerts',
     selector: error 'must provide selector for Thanos Compact alerts',
     compactionErrorThreshold: 5,
     bucketOpsErrorThreshold: 5,
