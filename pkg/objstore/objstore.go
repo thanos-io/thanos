@@ -276,7 +276,9 @@ func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, err
 
 	rc, err := b.bkt.Get(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues(getOp).Inc()
+		if !b.bkt.IsObjNotFoundErr(err) {
+			b.opsFailures.WithLabelValues(getOp).Inc()
+		}
 		return nil, err
 	}
 	return newTimingReadCloser(
@@ -292,7 +294,9 @@ func (b *metricBucket) GetRange(ctx context.Context, name string, off, length in
 
 	rc, err := b.bkt.GetRange(ctx, name, off, length)
 	if err != nil {
-		b.opsFailures.WithLabelValues(getRangeOp).Inc()
+		if !b.bkt.IsObjNotFoundErr(err) {
+			b.opsFailures.WithLabelValues(getRangeOp).Inc()
+		}
 		return nil, err
 	}
 	return newTimingReadCloser(
