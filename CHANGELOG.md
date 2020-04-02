@@ -19,6 +19,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2254](https://github.com/thanos-io/thanos/pull/2254) Bucket: Fix metrics registered multiple times in bucket replicate
 - [#2271](https://github.com/thanos-io/thanos/pull/2271) Bucket Web: Fixed Issue #2260 bucket passes null when storage is empty
 - [#2339](https://github.com/thanos-io/thanos/pull/2339) Query: fix a bug where `--store.unhealthy-timeout` was never respected
+- [#2369](https://github.com/thanos-io/thanos/pull/2369) .*: verify that deletion marker file exists before reading it. This helps to keep "thanos_objstore_bucket_operation_failures_total" metric low, since missing deletion marker file is not really a failure.
 
 ### Added
 
