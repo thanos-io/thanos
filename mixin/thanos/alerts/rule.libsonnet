@@ -120,7 +120,7 @@
           {
             alert: 'ThanosRuleQueryHighDNSFailures',
             annotations: {
-              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for query endpoints.',
+              message: 'Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS queries for query endpoints.',
             },
             expr: |||
               (
@@ -138,7 +138,7 @@
           {
             alert: 'ThanosRuleAlertmanagerHighDNSFailures',
             annotations: {
-              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for Alertmanager endpoints.',
+              message: 'Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS queries for Alertmanager endpoints.',
             },
             expr: |||
               (
@@ -154,13 +154,15 @@
             },
           },
           {
-            alert: 'ThanosRuleNoEvaluationForLast10Intervals',
+            // NOTE: This alert will give false positive if no rules are configured.
+            alert: 'ThanosRuleNoEvaluationFor10Intervals',
             annotations: {
-              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% rule groups that did not evaluate for at least 10x of their expected interval.',
+              message: 'Thanos Rule {{$labels.job}} has {{ $value | humanize }}% rule groups that did not evaluate for at least 10x of their expected interval.',
             },
             expr: |||
               time() - prometheus_rule_group_last_evaluation_timestamp_seconds{%(selector)s}
-                  >  10 * prometheus_rule_group_interval_seconds{%(selector)s}
+              >
+              10 * prometheus_rule_group_interval_seconds{%(selector)s}
             ||| % thanos.rule,
             'for': '5m',
             labels: {
@@ -168,9 +170,10 @@
             },
           },
           {
+            // NOTE: This alert will give false positive if no rules are configured.
             alert: 'ThanosRuleTSDBNotIngestingSamples',
             annotations: {
-              message: 'Thanos Rule {{$labels.job}} did not ingested any samples for last 15 minutes.',
+              message: 'Thanos Rule {{$labels.job}} did not ingest any samples for the last 15 minutes.',
             },
             expr: |||
               rate(prometheus_tsdb_head_samples_appended_total{%(selector)s}[5m]) <= 0

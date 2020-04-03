@@ -144,8 +144,8 @@ rules:
     severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
-    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
-      DNS queries for query endpoints.
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS
+      queries for query endpoints.
   expr: |
     (
       sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
@@ -158,8 +158,8 @@ rules:
     severity: warning
 - alert: ThanosRuleAlertmanagerHighDNSFailures
   annotations:
-    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
-      DNS queries for Alertmanager endpoints.
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS
+      queries for Alertmanager endpoints.
   expr: |
     (
       sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
@@ -170,19 +170,20 @@ rules:
   for: 15m
   labels:
     severity: warning
-- alert: ThanosRuleNoEvaluationFor10Internvals
+- alert: ThanosRuleNoEvaluationFor10Intervals
   annotations:
-    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% rule groups
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% rule groups
       that did not evaluate for at least 10x of their expected interval.
   expr: |
     time() - prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"}
-        >  10 * prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"}
+    >
+    10 * prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"}
   for: 5m
   labels:
     severity: critical
 - alert: ThanosRuleTSDBNotIngestingSamples
   annotations:
-    message: Thanos Rule {{$labels.job}} did not ingested any samples for last 15
+    message: Thanos Rule {{$labels.job}} did not ingest any samples for the last 15
       minutes.
   expr: |
     rate(prometheus_tsdb_head_samples_appended_total{job=~"thanos-rule.*"}[5m]) <= 0
