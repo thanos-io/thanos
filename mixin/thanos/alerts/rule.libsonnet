@@ -54,7 +54,7 @@
 
             'for': '5m',
             labels: {
-              severity: 'warning',
+              severity: 'critical',
             },
           },
           {
@@ -151,6 +151,33 @@
             'for': '15m',
             labels: {
               severity: 'warning',
+            },
+          },
+          {
+            alert: 'ThanosRuleNoEvaluationForLast10Intervals',
+            annotations: {
+              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% rule groups that did not evaluate for at least 10x of their expected interval.',
+            },
+            expr: |||
+              time() - prometheus_rule_group_last_evaluation_timestamp_seconds{%(selector)s}
+                  >  10 * prometheus_rule_group_interval_seconds{%(selector)s}
+            ||| % thanos.rule,
+            'for': '5m',
+            labels: {
+              severity: 'critical',
+            },
+          },
+          {
+            alert: 'ThanosRuleTSDBNotIngestingSamples',
+            annotations: {
+              message: 'Thanos Rule {{$labels.job}} did not ingested any samples for last 15 minutes.',
+            },
+            expr: |||
+              rate(prometheus_tsdb_head_samples_appended_total{%(selector)s}[5m]) <= 0
+            ||| % thanos.rule,
+            'for': '10m',
+            labels: {
+              severity: 'critical',
             },
           },
         ],

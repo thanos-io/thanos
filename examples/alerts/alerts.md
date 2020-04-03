@@ -97,7 +97,7 @@ rules:
     )
   for: 5m
   labels:
-    severity: warning
+    severity: critical
 - alert: ThanosRuleHighRuleEvaluationWarnings
   annotations:
     message: Thanos Rule {{$labels.job}} {{$labels.pod}} has high number of evaluation
@@ -170,6 +170,25 @@ rules:
   for: 15m
   labels:
     severity: warning
+- alert: ThanosRuleNoEvaluationFor10Internvals
+  annotations:
+    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% rule groups
+      that did not evaluate for at least 10x of their expected interval.
+  expr: |
+    time() - prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"}
+        >  10 * prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"}
+  for: 5m
+  labels:
+    severity: critical
+- alert: ThanosRuleTSDBNotIngestingSamples
+  annotations:
+    message: Thanos Rule {{$labels.job}} did not ingested any samples for last 15
+      minutes.
+  expr: |
+    rate(prometheus_tsdb_head_samples_appended_total{job=~"thanos-rule.*"}[5m]) <= 0
+  for: 10m
+  labels:
+    severity: critical
 ```
 
 ## Store Gateway
