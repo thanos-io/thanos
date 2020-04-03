@@ -231,7 +231,7 @@ test: check-git install-deps
 
 .PHONY: test-ci
 test-ci: ## Runs test for CI, so excluding object storage integrations that we don't have configured yet.
-test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS,GCS
+test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
 test-ci:
 	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
 	$(MAKE) test
