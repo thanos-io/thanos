@@ -101,7 +101,7 @@ type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
-	fromBkt objstore.BucketReader
+	fromBkt objstore.InstrumentedBucketReader
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
@@ -158,7 +158,7 @@ func newReplicationScheme(
 	metrics *replicationMetrics,
 	blockFilter blockFilterFunc,
 	fetcher thanosblock.MetadataFetcher,
-	from objstore.BucketReader,
+	from objstore.InstrumentedBucketReader,
 	to objstore.Bucket,
 	reg prometheus.Registerer,
 ) *replicationScheme {
@@ -254,7 +254,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	level.Debug(rs.logger).Log("msg", "ensuring block is replicated", "block_uuid", blockID)
 
-	originMetaFile, err := rs.fromBkt.Get(ctx, metaFile)
+	originMetaFile, err := rs.fromBkt.ReaderWithExpectedErrs(rs.fromBkt.IsObjNotFoundErr).Get(ctx, metaFile)
 	if err != nil {
 		return errors.Wrap(err, "get meta file from origin bucket")
 	}

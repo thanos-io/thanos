@@ -6,13 +6,10 @@ package objstore
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -41,22 +38,18 @@ type Bucket interface {
 	Name() string
 }
 
-// TryToGetSize tries to get upfront size from reader.
-// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
-func TryToGetSize(r io.Reader) (int64, error) {
-	switch f := r.(type) {
-	case *os.File:
-		fileInfo, err := f.Stat()
-		if err != nil {
-			return 0, errors.Wrap(err, "os.File.Stat()")
-		}
-		return fileInfo.Size(), nil
-	case *bytes.Buffer:
-		return int64(f.Len()), nil
-	case *strings.Reader:
-		return f.Size(), nil
-	}
-	return 0, errors.New("unsupported type of io.Reader")
+// InstrumentedBucket is a Bucket with optional instrumentation control on reader.
+type InstrumentedBucket interface {
+	Bucket
+
+	// WithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
+	// thanos_objstore_bucket_operation_failures_total metric.
+	WithExpectedErrs(IsOpFailureExpectedFunc) Bucket
+
+	// ReaderWithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
+	// thanos_objstore_bucket_operation_failures_total metric.
+	// TODO(bwplotka): Remove this when moved to Go 1.14 and replace with InstrumentedBucketReader.
+	ReaderWithExpectedErrs(IsOpFailureExpectedFunc) BucketReader
 }
 
 // BucketReader provides read access to an object storage bucket.
@@ -79,6 +72,33 @@ type BucketReader interface {
 
 	// ObjectSize returns the size of the specified object.
 	ObjectSize(ctx context.Context, name string) (uint64, error)
+}
+
+// InstrumentedBucket is a BucketReader with optional instrumentation control.
+type InstrumentedBucketReader interface {
+	BucketReader
+
+	// ReaderWithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
+	// thanos_objstore_bucket_operation_failures_total metric.
+	ReaderWithExpectedErrs(IsOpFailureExpectedFunc) BucketReader
+}
+
+// TryToGetSize tries to get upfront size from reader.
+// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+func TryToGetSize(r io.Reader) (int64, error) {
+	switch f := r.(type) {
+	case *os.File:
+		fileInfo, err := f.Stat()
+		if err != nil {
+			return 0, errors.Wrap(err, "os.File.Stat()")
+		}
+		return fileInfo.Size(), nil
+	case *bytes.Buffer:
+		return int64(f.Len()), nil
+	case *strings.Reader:
+		return f.Size(), nil
+	}
+	return 0, errors.New("unsupported type of io.Reader")
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
@@ -200,27 +220,32 @@ const (
 	deleteOp   = "delete"
 )
 
+// IsOpFailureExpectedFunc allows to mark certain errors as expected, so they will not increment thanos_objstore_bucket_operation_failures_total metric.
+type IsOpFailureExpectedFunc func(error) bool
+
+var _ InstrumentedBucket = &metricBucket{}
+
 // BucketWithMetrics takes a bucket and registers metrics with the given registry for
 // operations run against the bucket.
-func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) Bucket {
+func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) *metricBucket {
 	bkt := &metricBucket{
-		bkt: b,
-
+		bkt:                 b,
+		isOpFailureExpected: func(err error) bool { return false },
 		ops: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_bucket_operations_total",
-			Help:        "Total number of operations against a bucket.",
+			Help:        "Total number of all attempted operations against a bucket.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
 		opsFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_bucket_operation_failures_total",
-			Help:        "Total number of operations against a bucket that failed.",
+			Help:        "Total number of operations against a bucket that failed, but were not expected to fail in certain way from caller perspective. Those errors have to be investigated.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
 		opsDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:        "thanos_objstore_bucket_operation_duration_seconds",
-			Help:        "Duration of operations against the bucket",
+			Help:        "Duration of successful operations against the bucket",
 			ConstLabels: prometheus.Labels{"bucket": name},
 			Buckets:     []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 		}, []string{"operation"}),
@@ -229,7 +254,15 @@ func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) Bucket 
 			Help: "Second timestamp of the last successful upload to the bucket.",
 		}, []string{"bucket"}),
 	}
-	for _, op := range []string{iterOp, sizeOp, getOp, getRangeOp, existsOp, uploadOp, deleteOp} {
+	for _, op := range []string{
+		iterOp,
+		sizeOp,
+		getOp,
+		getRangeOp,
+		existsOp,
+		uploadOp,
+		deleteOp,
+	} {
 		bkt.ops.WithLabelValues(op)
 		bkt.opsFailures.WithLabelValues(op)
 		bkt.opsDuration.WithLabelValues(op)
@@ -241,107 +274,142 @@ func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) Bucket 
 type metricBucket struct {
 	bkt Bucket
 
-	ops                      *prometheus.CounterVec
-	opsFailures              *prometheus.CounterVec
+	ops                 *prometheus.CounterVec
+	opsFailures         *prometheus.CounterVec
+	isOpFailureExpected IsOpFailureExpectedFunc
+
 	opsDuration              *prometheus.HistogramVec
 	lastSuccessfulUploadTime *prometheus.GaugeVec
 }
 
-func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
-	err := b.bkt.Iter(ctx, dir, f)
-	if err != nil {
-		b.opsFailures.WithLabelValues(iterOp).Inc()
+func (b *metricBucket) WithExpectedErrs(fn IsOpFailureExpectedFunc) Bucket {
+	return &metricBucket{
+		bkt:                      b.bkt,
+		ops:                      b.ops,
+		opsFailures:              b.opsFailures,
+		isOpFailureExpected:      fn,
+		opsDuration:              b.opsDuration,
+		lastSuccessfulUploadTime: b.lastSuccessfulUploadTime,
 	}
-	b.ops.WithLabelValues(iterOp).Inc()
+}
 
+func (b *metricBucket) ReaderWithExpectedErrs(fn IsOpFailureExpectedFunc) BucketReader {
+	return b.WithExpectedErrs(fn)
+}
+
+func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
+	const op = iterOp
+	b.ops.WithLabelValues(op).Inc()
+
+	err := b.bkt.Iter(ctx, dir, f)
+	if err != nil && !b.isOpFailureExpected(err) {
+		b.opsFailures.WithLabelValues(op).Inc()
+	}
 	return err
 }
 
-// ObjectSize returns the size of the specified object.
 func (b *metricBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	b.ops.WithLabelValues(sizeOp).Inc()
-	start := time.Now()
+	const op = sizeOp
+	b.ops.WithLabelValues(op).Inc()
 
+	start := time.Now()
 	rc, err := b.bkt.ObjectSize(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues(sizeOp).Inc()
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
 		return 0, err
 	}
-	b.opsDuration.WithLabelValues(sizeOp).Observe(time.Since(start).Seconds())
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 	return rc, nil
 }
 
 func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	b.ops.WithLabelValues(getOp).Inc()
+	const op = getOp
+	b.ops.WithLabelValues(op).Inc()
 
 	rc, err := b.bkt.Get(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues(getOp).Inc()
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
 		return nil, err
 	}
 	return newTimingReadCloser(
 		rc,
-		getOp,
+		op,
 		b.opsDuration,
 		b.opsFailures,
+		b.isOpFailureExpected,
 	), nil
 }
 
 func (b *metricBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.ops.WithLabelValues(getRangeOp).Inc()
+	const op = getRangeOp
+	b.ops.WithLabelValues(op).Inc()
 
 	rc, err := b.bkt.GetRange(ctx, name, off, length)
 	if err != nil {
-		b.opsFailures.WithLabelValues(getRangeOp).Inc()
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
 		return nil, err
 	}
 	return newTimingReadCloser(
 		rc,
-		getRangeOp,
+		op,
 		b.opsDuration,
 		b.opsFailures,
+		b.isOpFailureExpected,
 	), nil
 }
 
 func (b *metricBucket) Exists(ctx context.Context, name string) (bool, error) {
-	start := time.Now()
+	const op = existsOp
+	b.ops.WithLabelValues(op).Inc()
 
+	start := time.Now()
 	ok, err := b.bkt.Exists(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues(existsOp).Inc()
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
+		return false, err
 	}
-	b.ops.WithLabelValues(existsOp).Inc()
-	b.opsDuration.WithLabelValues(existsOp).Observe(time.Since(start).Seconds())
-
-	return ok, err
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+	return ok, nil
 }
 
 func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	const op = uploadOp
+	b.ops.WithLabelValues(op).Inc()
+
 	start := time.Now()
-
-	err := b.bkt.Upload(ctx, name, r)
-	if err != nil {
-		b.opsFailures.WithLabelValues(uploadOp).Inc()
-	} else {
-		b.lastSuccessfulUploadTime.WithLabelValues(b.bkt.Name()).SetToCurrentTime()
+	if err := b.bkt.Upload(ctx, name, r); err != nil {
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
+		return err
 	}
-	b.ops.WithLabelValues(uploadOp).Inc()
-	b.opsDuration.WithLabelValues(uploadOp).Observe(time.Since(start).Seconds())
-
-	return err
+	b.lastSuccessfulUploadTime.WithLabelValues(b.bkt.Name()).SetToCurrentTime()
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+	return nil
 }
 
 func (b *metricBucket) Delete(ctx context.Context, name string) error {
+	const op = deleteOp
+	b.ops.WithLabelValues(op).Inc()
+
 	start := time.Now()
-
-	err := b.bkt.Delete(ctx, name)
-	if err != nil {
-		b.opsFailures.WithLabelValues(deleteOp).Inc()
+	if err := b.bkt.Delete(ctx, name); err != nil {
+		if !b.isOpFailureExpected(err) {
+			b.opsFailures.WithLabelValues(op).Inc()
+		}
+		return err
 	}
-	b.ops.WithLabelValues(deleteOp).Inc()
-	b.opsDuration.WithLabelValues(deleteOp).Observe(time.Since(start).Seconds())
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 
-	return err
+	return nil
 }
 
 func (b *metricBucket) IsObjNotFoundErr(err error) bool {
@@ -359,53 +427,49 @@ func (b *metricBucket) Name() string {
 type timingReadCloser struct {
 	io.ReadCloser
 
-	ok       bool
-	start    time.Time
-	op       string
-	duration *prometheus.HistogramVec
-	failed   *prometheus.CounterVec
+	alreadyGotErr bool
+
+	start             time.Time
+	op                string
+	duration          *prometheus.HistogramVec
+	failed            *prometheus.CounterVec
+	isFailureExpected IsOpFailureExpectedFunc
 }
 
-func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramVec, failed *prometheus.CounterVec) *timingReadCloser {
+func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramVec, failed *prometheus.CounterVec, isFailureExpected IsOpFailureExpectedFunc) *timingReadCloser {
 	// Initialize the metrics with 0.
 	dur.WithLabelValues(op)
 	failed.WithLabelValues(op)
 	return &timingReadCloser{
-		ReadCloser: rc,
-		ok:         true,
-		start:      time.Now(),
-		op:         op,
-		duration:   dur,
-		failed:     failed,
+		ReadCloser:        rc,
+		start:             time.Now(),
+		op:                op,
+		duration:          dur,
+		failed:            failed,
+		isFailureExpected: isFailureExpected,
 	}
 }
 
 func (rc *timingReadCloser) Close() error {
 	err := rc.ReadCloser.Close()
-	rc.duration.WithLabelValues(rc.op).Observe(time.Since(rc.start).Seconds())
-	if rc.ok && err != nil {
+	if !rc.alreadyGotErr && err != nil {
 		rc.failed.WithLabelValues(rc.op).Inc()
-		rc.ok = false
+	}
+	if !rc.alreadyGotErr && err == nil {
+		rc.duration.WithLabelValues(rc.op).Observe(time.Since(rc.start).Seconds())
+		rc.alreadyGotErr = true
 	}
 	return err
 }
 
 func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 	n, err = rc.ReadCloser.Read(b)
-	if rc.ok && err != nil && err != io.EOF {
-		rc.failed.WithLabelValues(rc.op).Inc()
-		rc.ok = false
+	// Report metric just once.
+	if !rc.alreadyGotErr && err != nil && err != io.EOF {
+		if !rc.isFailureExpected(err) {
+			rc.failed.WithLabelValues(rc.op).Inc()
+		}
+		rc.alreadyGotErr = true
 	}
 	return n, err
-}
-
-func CreateTemporaryTestBucketName(t testing.TB) string {
-	src := rand.NewSource(time.Now().UnixNano())
-
-	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html.
-	name := strings.Replace(strings.Replace(fmt.Sprintf("test_%x_%s", src.Int63(), strings.ToLower(t.Name())), "_", "-", -1), "/", "-", -1)
-	if len(name) >= 63 {
-		name = name[:63]
-	}
-	return name
 }

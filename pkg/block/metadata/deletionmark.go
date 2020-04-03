@@ -45,10 +45,10 @@ type DeletionMark struct {
 }
 
 // ReadDeletionMark reads the given deletion mark file from <dir>/deletion-mark.json in bucket.
-func ReadDeletionMark(ctx context.Context, bkt objstore.BucketReader, logger log.Logger, dir string) (*DeletionMark, error) {
+func ReadDeletionMark(ctx context.Context, bkt objstore.InstrumentedBucketReader, logger log.Logger, dir string) (*DeletionMark, error) {
 	deletionMarkFile := path.Join(dir, DeletionMarkFilename)
 
-	r, err := bkt.Get(ctx, deletionMarkFile)
+	r, err := bkt.ReaderWithExpectedErrs(bkt.IsObjNotFoundErr).Get(ctx, deletionMarkFile)
 	if err != nil {
 		if bkt.IsObjNotFoundErr(err) {
 			return nil, ErrorDeletionMarkNotFound
