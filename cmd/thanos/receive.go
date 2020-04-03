@@ -20,18 +20,17 @@ import (
 	"github.com/prometheus/prometheus/storage/tsdb"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
-	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -203,7 +202,43 @@ func runReceive(
 		return err
 	}
 
-	dbs := receive.NewMultiTSDB(dataDir, logger, reg, tsdbOpts, lset, tenantLabelName)
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+	upload := true
+	if len(confContentYaml) == 0 {
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
+		upload = false
+	}
+
+	if upload && tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+		if !ignoreBlockSize {
+			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+		}
+		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+	}
+
+	var bkt objstore.Bucket
+	if upload {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
+		if err != nil {
+			return err
+		}
+	}
+
+	dbs := receive.NewMultiTSDB(
+		dataDir,
+		logger,
+		reg,
+		tsdbOpts,
+		lset,
+		tenantLabelName,
+		bkt,
+	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:            writer,
@@ -226,24 +261,6 @@ func runReceive(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
-	upload := true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		upload = false
-	}
-
-	if upload && tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
-		if !ignoreBlockSize {
-			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
-				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
-		}
-		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
-	}
 
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
@@ -438,18 +455,9 @@ func runReceive(
 	}
 
 	if upload {
-		// The background shipper continuously scans the data directory and uploads
-		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, comp.String())
-		if err != nil {
-			return err
-		}
-
-		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.ReceiveSource)
-
-		// Before starting, ensure any old blocks are uploaded.
-		if uploaded, err := s.Sync(context.Background()); err != nil {
-			level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+		level.Debug(logger).Log("msg", "upload enabled")
+		if err := dbs.Upload(context.Background()); err != nil {
+			level.Warn(logger).Log("err", err)
 		}
 
 		{
@@ -457,8 +465,8 @@ func runReceive(
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-					if uploaded, err := s.Sync(ctx); err != nil {
-						level.Warn(logger).Log("err", err, "uploaded", uploaded)
+					if err := dbs.Upload(ctx); err != nil {
+						level.Warn(logger).Log("err", err)
 					}
 
 					return nil
@@ -479,8 +487,8 @@ func runReceive(
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
 					<-uploadC
-					if uploaded, err := s.Sync(context.Background()); err != nil {
-						level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+					if err := dbs.Upload(context.Background()); err != nil {
+						level.Warn(logger).Log("err", err)
 					}
 				}()
 				defer close(uploadDone)
@@ -494,8 +502,8 @@ func runReceive(
 					case <-ctx.Done():
 						return nil
 					case <-uploadC:
-						if uploaded, err := s.Sync(ctx); err != nil {
-							level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+						if err := dbs.Upload(ctx); err != nil {
+							level.Warn(logger).Log("err", err)
 						}
 						uploadDone <- struct{}{}
 					}

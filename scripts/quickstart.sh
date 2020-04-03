@@ -182,7 +182,9 @@ for i in $(seq 0 1 2); do
     --grpc-grace-period 1s \
     --http-address 0.0.0.0:1${i}909 \
     --http-grace-period 1s \
-    --receive.replication-factor 3 \
+    --receive.replication-factor 1 \
+    --tsdb.min-block-duration 5m \
+    --tsdb.max-block-duration 5m \
     --label "receive_replica=\"${i}\"" \
     --receive.local-endpoint 127.0.0.1:1${i}907 \
     --receive.hashrings-file ./data/hashring.json \
