@@ -175,18 +175,18 @@ rules:
     message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% rule groups
       that did not evaluate for at least 10x of their expected interval.
   expr: |
-    time() - prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"}
+    time() -  max by (job, group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"})
     >
-    10 * prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"}
+    10 * max by (job, group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
   for: 5m
   labels:
-    severity: critical
+    severity: info
 - alert: ThanosRuleTSDBNotIngestingSamples
   annotations:
     message: Thanos Rule {{$labels.job}} did not ingest any samples for the last 15
       minutes.
   expr: |
-    rate(prometheus_tsdb_head_samples_appended_total{job=~"thanos-rule.*"}[5m]) <= 0
+    sum by (job) (rate(prometheus_tsdb_head_samples_appended_total{job=~"thanos-rule.*"}[5m])) <= 0
   for: 10m
   labels:
     severity: critical
