@@ -41,7 +41,7 @@ type Bucket struct {
 	closer io.Closer
 }
 
-// NewBucket returns a new Bucket against the given bucket handle.
+// NewInMemBucket returns a new Bucket against the given bucket handle.
 func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	var gc Config
 	if err := yaml.Unmarshal(conf, &gc); err != nil {

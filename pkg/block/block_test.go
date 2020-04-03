@@ -19,7 +19,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
@@ -81,7 +81,7 @@ func TestUpload(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
@@ -185,7 +185,7 @@ func TestDelete(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	{
 		b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
@@ -232,7 +232,7 @@ func TestMarkForDeletion(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	{
 		blockWithoutDeletionMark, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},

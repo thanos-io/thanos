@@ -43,7 +43,7 @@ func NewBucketFromConfig(conf []byte) (*Bucket, error) {
 	return NewBucket(c.Directory)
 }
 
-// NewBucket returns a new filesystem.Bucket.
+// NewInMemBucket returns a new filesystem.Bucket.
 func NewBucket(rootDir string) (*Bucket, error) {
 	absDir, err := filepath.Abs(rootDir)
 	if err != nil {

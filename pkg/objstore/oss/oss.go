@@ -150,7 +150,7 @@ func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	return 0, errors.New("content-length header not found")
 }
 
-// NewBucket returns a new Bucket using the provided oss config values.
+// NewInMemBucket returns a new Bucket using the provided oss config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	var config Config
 	if err := yaml.Unmarshal(conf, &config); err != nil {

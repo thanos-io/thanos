@@ -16,7 +16,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -29,7 +29,7 @@ func TestReadDeletionMark(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	{
 		blockWithoutDeletionMark := ulid.MustNew(uint64(1), nil)
 		_, err := ReadDeletionMark(ctx, bkt, nil, path.Join(tmpDir, blockWithoutDeletionMark.String()))
