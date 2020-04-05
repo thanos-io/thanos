@@ -12,7 +12,9 @@ onlyLabels: []
 
 # Issues or Pull Requests with these labels will never be considered stale. Set to `[]` to disable.
 # We want stale bot to notify us that something is stale so we can revisit it.
-exemptLabels: []
+# If one issue is marked as 'reminder' by the reminder bot, we don't mark it as 'stale' again.
+exemptLabels:
+  - reminder
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: false
