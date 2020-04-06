@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -17,6 +16,9 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -232,44 +234,50 @@ func TestMarkForDeletion(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := objstore.NewInMemBucket()
-	{
-		blockWithoutDeletionMark, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
-			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
-		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, blockWithoutDeletionMark.String())))
+	for _, tcase := range []struct {
+		name      string
+		preUpload func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
 
-		testutil.Ok(t, MarkForDeletion(ctx, log.NewNopLogger(), bkt, blockWithoutDeletionMark))
-		exists, err := bkt.Exists(ctx, path.Join(blockWithoutDeletionMark.String(), metadata.DeletionMarkFilename))
-		testutil.Ok(t, err)
-		testutil.Equals(t, true, exists)
-	}
-	{
-		blockWithDeletionMark, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
-			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
-		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, blockWithDeletionMark.String())))
+		blocksMarked int
+	}{
+		{
+			name:         "block marked for deletion",
+			preUpload:    func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksMarked: 1,
+		},
+		{
+			name: "block with deletion mark already, expected log and no metric increment",
+			preUpload: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				deletionMark, err := json.Marshal(metadata.DeletionMark{
+					ID:           id,
+					DeletionTime: time.Now().Unix(),
+					Version:      metadata.DeletionMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), bytes.NewReader(deletionMark)))
+			},
+			blocksMarked: 0,
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "a", Value: "1"}},
+				{{Name: "a", Value: "2"}},
+				{{Name: "a", Value: "3"}},
+				{{Name: "a", Value: "4"}},
+				{{Name: "b", Value: "1"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+			testutil.Ok(t, err)
 
-		deletionMark, err := json.Marshal(metadata.DeletionMark{
-			ID:           blockWithDeletionMark,
-			DeletionTime: time.Now().Unix(),
-			Version:      metadata.DeletionMarkVersion1,
+			tcase.preUpload(t, id, bkt)
+
+			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String())))
+
+			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, c)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
 		})
-		testutil.Ok(t, err)
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(blockWithDeletionMark.String(), metadata.DeletionMarkFilename), bytes.NewReader(deletionMark)))
-
-		err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, blockWithDeletionMark)
-		testutil.NotOk(t, err)
-		testutil.Equals(t, fmt.Sprintf("file %s already exists in bucket", path.Join(blockWithDeletionMark.String(), metadata.DeletionMarkFilename)), err.Error())
 	}
 }

@@ -80,11 +80,9 @@ func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objs
 	}
 
 	level.Info(logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, logger, bkt, id); err != nil {
+	if err := block.MarkForDeletion(ctx, logger, bkt, id, blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
-	blocksMarkedForDeletion.Inc()
-
 	return nil
 }
 
@@ -119,10 +117,9 @@ func BackupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir stri
 	}
 
 	level.Info(logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, logger, bkt, id); err != nil {
+	if err := block.MarkForDeletion(ctx, logger, bkt, id, blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
-	blocksMarkedForDeletion.Inc()
 	return nil
 }
 

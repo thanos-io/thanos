@@ -102,14 +102,20 @@ func RunDownsample(
 			statusProber.Ready()
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
+			metas, _, err := metaFetcher.Fetch(ctx)
+			if err != nil {
+				return errors.Wrap(err, "sync before first pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
+			metas, _, err = metaFetcher.Fetch(ctx)
+			if err != nil {
+				return errors.Wrap(err, "sync before second pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -144,7 +150,7 @@ func downsampleBucket(
 	logger log.Logger,
 	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
-	fetcher block.MetadataFetcher,
+	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
 ) error {
 	if err := os.RemoveAll(dir); err != nil {
@@ -159,11 +165,6 @@ func downsampleBucket(
 			level.Error(logger).Log("msg", "failed to remove downsample cache directory", "path", dir, "err", err)
 		}
 	}()
-
-	metas, _, err := fetcher.Fetch(ctx)
-	if err != nil {
-		return errors.Wrap(err, "downsampling meta fetch")
-	}
 
 	// mapping from a hash over all source IDs to blocks. We don't need to downsample a block
 	// if a downsampled version with the same hash already exists.

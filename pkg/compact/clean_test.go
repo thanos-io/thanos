@@ -60,7 +60,11 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 
 	deleteAttempts := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 	blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts, blocksMarkedForDeletion)
+
+	_, partial, err := metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+
+	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blocksMarkedForDeletion)
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
 
 	exists, err := bkt.Exists(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"))
