@@ -1323,6 +1323,18 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 	for _, block := range blocks {
 		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
 		testutil.Ok(t, err)
+
+		_, err = block.indexHeaderReader.PostingsOffset("foo", "not-existing-value")
+		testutil.NotOk(t, err)
+		testutil.Equals(t, indexheader.NotFoundRangeErr, err)
+
+		_, err = block.indexHeaderReader.PostingsOffset("i", "aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1")
+		testutil.NotOk(t, err)
+		testutil.Equals(t, indexheader.NotFoundRangeErr, err)
+
+		_, err = block.indexHeaderReader.PostingsOffset("not-existing-name", "bar")
+		testutil.NotOk(t, err)
+		testutil.Equals(t, indexheader.NotFoundRangeErr, err)
 	}
 
 	var bCases []*benchSeriesCase

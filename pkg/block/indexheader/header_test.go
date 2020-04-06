@@ -109,6 +109,14 @@ func TestReaders(t *testing.T) {
 				}
 
 				compareIndexToHeader(t, b, br)
+
+				_, err = br.PostingsOffset("foo", "not-existing-value")
+				testutil.NotOk(t, err)
+				testutil.Equals(t, NotFoundRangeErr, err)
+
+				_, err = br.PostingsOffset("not-existing-name", "bar")
+				testutil.NotOk(t, err)
+				testutil.Equals(t, NotFoundRangeErr, err)
 			})
 
 			t.Run("json", func(t *testing.T) {
@@ -127,6 +135,14 @@ func TestReaders(t *testing.T) {
 				}
 
 				compareIndexToHeader(t, b, jr)
+
+				_, err = jr.PostingsOffset("foo", "not-existing-value")
+				testutil.NotOk(t, err)
+				testutil.Equals(t, NotFoundRangeErr, err)
+
+				_, err = jr.PostingsOffset("not-existing-name", "bar")
+				testutil.NotOk(t, err)
+				testutil.Equals(t, NotFoundRangeErr, err)
 			})
 		})
 	}
