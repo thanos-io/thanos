@@ -22,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -240,7 +239,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			bkt := inmem.NewBucket()
+			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 			for _, b := range tt.blocks {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}

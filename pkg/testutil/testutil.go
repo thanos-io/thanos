@@ -18,6 +18,7 @@ import (
 
 // Assert fails the test if the condition is false.
 func Assert(tb testing.TB, condition bool, v ...interface{}) {
+	tb.Helper()
 	if condition {
 		return
 	}
@@ -27,11 +28,12 @@ func Assert(tb testing.TB, condition bool, v ...interface{}) {
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatalf("\033[31m%s:%d: "+msg+"\033[39m\n\n", append([]interface{}{filepath.Base(file), line}, v...)...)
+	tb.Fatalf("\033[31m%s:%d: "+msg+"\033[39m\n\n", filepath.Base(file), line)
 }
 
 // Ok fails the test if an err is not nil.
 func Ok(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
 	if err == nil {
 		return
 	}
@@ -46,6 +48,7 @@ func Ok(tb testing.TB, err error, v ...interface{}) {
 
 // NotOk fails the test if an err is nil.
 func NotOk(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
 	if err != nil {
 		return
 	}
@@ -60,6 +63,7 @@ func NotOk(tb testing.TB, err error, v ...interface{}) {
 
 // Equals fails the test if exp is not equal to act.
 func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
+	tb.Helper()
 	if reflect.DeepEqual(exp, act) {
 		return
 	}

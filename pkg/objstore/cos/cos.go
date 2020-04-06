@@ -52,6 +52,7 @@ func (conf *Config) validate() error {
 	return nil
 }
 
+// NewBucket returns a new Bucket using the provided cos configuration.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()

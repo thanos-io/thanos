@@ -221,7 +221,7 @@ type FilterConfig struct {
 type BucketStore struct {
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
-	bkt        objstore.BucketReader
+	bkt        objstore.InstrumentedBucketReader
 	fetcher    block.MetadataFetcher
 	dir        string
 	indexCache storecache.IndexCache
@@ -260,7 +260,7 @@ type BucketStore struct {
 func NewBucketStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	bucket objstore.BucketReader,
+	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
 	indexCache storecache.IndexCache,
@@ -290,7 +290,7 @@ func NewBucketStore(
 	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
 		logger:               logger,
-		bkt:                  bucket,
+		bkt:                  bkt,
 		fetcher:              fetcher,
 		dir:                  dir,
 		indexCache:           indexCache,

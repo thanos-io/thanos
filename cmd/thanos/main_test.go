@@ -22,7 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -36,7 +36,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 
 	// Upload one compaction lvl = 2 block, one compaction lvl = 1.
 	// We generate index cache files only for lvl > 1 blocks.
@@ -97,7 +97,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	var id ulid.ULID
 	{
 		id, err = e2eutil.CreateBlock(
