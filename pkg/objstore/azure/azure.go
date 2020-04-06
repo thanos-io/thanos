@@ -64,7 +64,7 @@ func (conf *Config) validate() error {
 	return nil
 }
 
-// NewInMemBucket returns a new Bucket using the provided Azure config.
+// NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket, error) {
 	level.Debug(logger).Log("msg", "creating new Azure bucket connection", "component", component)
 

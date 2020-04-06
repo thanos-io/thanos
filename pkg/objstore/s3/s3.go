@@ -93,7 +93,7 @@ func parseConfig(conf []byte) (Config, error) {
 	return config, nil
 }
 
-// NewInMemBucket returns a new Bucket using the provided s3 config values.
+// NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	config, err := parseConfig(conf)
 	if err != nil {

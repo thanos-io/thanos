@@ -17,7 +17,7 @@ import (
 
 var errNotFound = errors.New("inmem: object not found")
 
-// Bucket implements the objstore.Bucket interfaces against local memory.
+// InMemBucket implements the objstore.Bucket interfaces against local memory.
 // Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
 type InMemBucket struct {
 	mtx     sync.RWMutex
