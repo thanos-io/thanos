@@ -362,7 +362,11 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				if h.writer == nil {
 					err = errors.New("storage is not ready")
 				} else {
-					err = h.writer.Write(wreqs[endpoint])
+					// Create a span to track writing the request into TSDB.
+					tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
+
+						err = h.writer.Write(wreqs[endpoint])
+					})
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					if errs, ok := err.(terrors.MultiError); ok {
@@ -402,7 +406,7 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				return
 			}
 			// Create a span to track the request made to another receive node.
-			tracing.DoInSpan(ctx, "thanos_receive_forward", func(ctx context.Context) {
+			tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
 				// Actually make the request against the endpoint
 				// we determined should handle these time series.
 				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
