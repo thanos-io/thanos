@@ -111,6 +111,14 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 		return errors.Wrap(err, "write index header TOC")
 	}
 
+	if err := bw.f.Flush(); err != nil {
+		return errors.Wrap(err, "flush")
+	}
+
+	if err := bw.f.f.Sync(); err != nil {
+		return errors.Wrap(err, "sync")
+	}
+
 	// Create index-header in atomic way, to avoid partial writes (e.g during restart or crash of store GW).
 	return os.Rename(tmpFilename, filename)
 }
