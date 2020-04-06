@@ -685,14 +685,10 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 		value := values[valueIndex]
 
 		i := sort.Search(len(e.offsets), func(i int) bool { return e.offsets[i].value >= value })
-		if i == len(e.offsets) {
-			// We're past the end.
+		if i == len(e.offsets) || e.offsets[i].value != value {
 			break
 		}
-		if i > 0 && e.offsets[i].value != value {
-			// Need to look from previous entry.
-			i--
-		}
+
 		// Don't Crc32 the entire postings offset table, this is very slow
 		// so hope any issues were caught at startup.
 		d := encoding.NewDecbufAt(r.b, int(r.toc.PostingsOffsetTable), nil)
