@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
