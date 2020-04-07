@@ -480,6 +480,7 @@ func TestBucketStore_Info(t *testing.T) {
 		true,
 		true,
 		true,
+		DefaultPostingOffsetInMemorySampling,
 	)
 	testutil.Ok(t, err)
 
@@ -732,6 +733,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				true,
 				true,
 				true,
+				DefaultPostingOffsetInMemorySampling,
 			)
 			testutil.Ok(t, err)
 
