@@ -426,12 +426,12 @@ type BinaryReader struct {
 	c io.Closer
 
 	// Map of LabelName to a list of some LabelValues's position in the offset table.
-	// The first and last values for each name are always present, we keep only `symbolsFactor` part of for rest.
+	// The first and last values for each name are always present, we keep only 1/postingOffsetsInMemSampling of the rest.
 	postings map[string]*postingValueOffsets
 	// For the v1 format, labelname -> labelvalue -> offset.
 	postingsV1 map[string]map[string]index.Range
 
-	// Symbols struct that keeps only `symbolsFactor` part in the memory, looks up via mmap rest.
+	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
 	symbols     *index.Symbols
 	nameSymbols map[uint32]string // Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
