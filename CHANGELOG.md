@@ -24,6 +24,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2208](https://github.com/thanos-io/thanos/pull/2208) Query and Rule: fix handling of `web.route-prefix` to correctly handle `/` and prefixes that do not begin with a `/`.
 - [#2311](https://github.com/thanos-io/thanos/pull/2311) Receive: ensure receive component serves TLS when TLS configuration is provided.
 - [#2319](https://github.com/thanos-io/thanos/pull/2319) Query: fixed inconsistent naming of metrics.
+- [#2390](https://github.com/thanos-io/thanos/pull/2390) Store: Fixed bug which was causing all posting offsets to be used instead of 1/32 as it was meant.
+Added hidden flag to control this behavior.
 
 ### Added
 
