@@ -65,7 +65,7 @@ groups:
 		},
 		Appendable: nopAppendable{},
 	}
-	thanosRuleMgr := NewManager(dir)
+	thanosRuleMgr := NewManager(nil, dir)
 	ruleMgr := rules.NewManager(&opts)
 	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgr)
 	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgr)
@@ -151,7 +151,7 @@ groups:
 	opts := rules.ManagerOptions{
 		Logger: log.NewLogfmtLogger(os.Stderr),
 	}
-	m := NewManager(dir)
+	m := NewManager(nil, dir)
 	m.SetRuleManager(storepb.PartialResponseStrategy_ABORT, rules.NewManager(&opts))
 	m.SetRuleManager(storepb.PartialResponseStrategy_WARN, rules.NewManager(&opts))
 

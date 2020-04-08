@@ -401,7 +401,7 @@ func runRule(
 	// Run rule evaluation and alert notifications.
 	var (
 		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgr = thanosrule.NewManager(dataDir)
+		ruleMgr = thanosrule.NewManager(reg, dataDir)
 	)
 	{
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {

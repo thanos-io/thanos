@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -55,12 +57,33 @@ type Manager struct {
 	ruleFiles map[string]string
 }
 
-func NewManager(dataDir string) *Manager {
-	return &Manager{
+func NewManager(reg prometheus.Registerer, dataDir string) *Manager {
+	m := &Manager{
 		workDir:   filepath.Join(dataDir, tmpRuleDir),
 		mgrs:      make(map[storepb.PartialResponseStrategy]*rules.Manager),
 		ruleFiles: make(map[string]string),
 	}
+
+	if reg != nil {
+		promauto.With(reg).NewGaugeFunc(
+			prometheus.GaugeOpts{
+				Name: "thanos_rule_rules_loaded",
+				Help: "The amount of rules loaded by the Thanos rule manager.",
+			},
+			func() float64 {
+				res := 0
+				rg := m.RuleGroups()
+
+				for _, g := range rg {
+					res += len(g.Rules())
+				}
+
+				return float64(res)
+			},
+		)
+	}
+
+	return m
 }
 
 func (m *Manager) SetRuleManager(s storepb.PartialResponseStrategy, mgr *rules.Manager) {

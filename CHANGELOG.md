@@ -29,6 +29,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2304](https://github.com/thanos-io/thanos/pull/2304) Store: Added `max_item_size` config option to memcached-based index cache. This should be set to the max item size configured in memcached (`-I` flag) in order to not waste network round-trips to cache items larger than the limit configured in memcached.
 - [#2297](https://github.com/thanos-io/thanos/pull/2297) Store Gateway: Add `--experimental.enable-index-cache-postings-compression` flag to enable reencoding and compressing postings before storing them into cache. Compressed postings take about 10% of the original size.
 - [#2357](https://github.com/thanos-io/thanos/pull/2357) Compactor and Store Gateway now have serve BucketUI on `:<http-port>/loaded` and shows exactly the blocks that are currently seen by compactor and store gateway. Compactor also serves different BucketUI on `:<http-port>/global` that shows the status of object storage without any filters.
+- [#2394](https://github.com/thanos-io/thanos/pull/2394) Rule: Add `thanos_rule_rules_loaded` metric exposing the amount of rules loaded.
 
 ### Changed
 
