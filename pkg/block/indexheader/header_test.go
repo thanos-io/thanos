@@ -55,6 +55,7 @@ func TestReaders(t *testing.T) {
 		{{Name: "a", Value: "12"}},
 		{{Name: "a", Value: "13"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
+		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124)
 	testutil.Ok(t, err)
 
@@ -110,12 +111,14 @@ func TestReaders(t *testing.T) {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
 					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 69}, br.toc)
-					testutil.Equals(t, int64(666), br.indexLastPostingEnd)
+					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
+					testutil.Equals(t, 0, len(br.postingsV1))
+					testutil.Equals(t, 2, len(br.nameSymbols))
 					testutil.Equals(t, map[string]*postingValueOffsets{
 						"": {
 							offsets:       []postingOffset{{value: "", tableOff: 4}},
-							lastValOffset: 416,
+							lastValOffset: 440,
 						},
 						"a": {
 							offsets: []postingOffset{
@@ -125,15 +128,44 @@ func TestReaders(t *testing.T) {
 								{value: "7", tableOff: 75},
 								{value: "9", tableOff: 89},
 							},
-							lastValOffset: 612,
+							lastValOffset: 640,
 						},
 						"longer-string": {
-							offsets:       []postingOffset{{value: "1", tableOff: 96}},
-							lastValOffset: 662,
+							offsets: []postingOffset{
+								{value: "1", tableOff: 96},
+								{value: "2", tableOff: 115},
+							},
+							lastValOffset: 706,
 						},
 					}, br.postings)
-					testutil.Equals(t, 0, len(br.postingsV1))
-					testutil.Equals(t, 2, len(br.nameSymbols))
+
+					vals, err := br.LabelValues("not-existing")
+					testutil.Ok(t, err)
+					testutil.Equals(t, []string(nil), vals)
+
+					// Regression tests for https://github.com/thanos-io/thanos/issues/2213.
+					// Most of not existing value was working despite bug, except in certain unlucky cases
+					// it was causing "invalid size" errors.
+					_, err = br.PostingsOffset("not-existing", "1")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("a", "0")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					// Unlucky case, because the bug was causing unnecessary read & decode requiring more bytes than
+					// available. For rest cases read was noop wrong, but at least not failing.
+					_, err = br.PostingsOffset("a", "10")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("a", "121")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("a", "131")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("a", "91")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("longer-string", "0")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("longer-string", "11")
+					testutil.Equals(t, NotFoundRangeErr, err)
+					_, err = br.PostingsOffset("longer-string", "21")
+					testutil.Equals(t, NotFoundRangeErr, err)
 				}
 
 				compareIndexToHeader(t, b, br)
@@ -151,7 +183,7 @@ func TestReaders(t *testing.T) {
 				if id == id1 {
 					testutil.Equals(t, 14, len(jr.symbols))
 					testutil.Equals(t, 2, len(jr.lvals))
-					testutil.Equals(t, 14, len(jr.postings))
+					testutil.Equals(t, 15, len(jr.postings))
 				}
 
 				compareIndexToHeader(t, b, jr)
@@ -251,15 +283,6 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	testutil.Ok(t, err)
 	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].Start, ptr.Start)
 	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].End, ptr.End)
-
-	// Check not existing.
-	vals, err := indexReader.LabelValues("not-existing")
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), vals)
-	_, err = headerReader.PostingsOffset("not-existing", "1")
-	testutil.NotOk(t, err)
-	_, err = headerReader.PostingsOffset("a", "10")
-	testutil.NotOk(t, err)
 }
 
 func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *metadata.Meta {

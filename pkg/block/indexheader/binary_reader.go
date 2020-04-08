@@ -653,6 +653,18 @@ func (r BinaryReader) PostingsOffset(name string, value string) (index.Range, er
 	return rngs[0], nil
 }
 
+func skipNAndName(d *encoding.Decbuf, buf *int) {
+	if *buf == 0 {
+		// Keycount+LabelName are always the same number of bytes,
+		// and it's faster to skip than parse.
+		*buf = d.Len()
+		d.Uvarint()      // Keycount.
+		d.UvarintBytes() // Label name.
+		*buf -= d.Len()
+		return
+	}
+	d.Skip(*buf)
+}
 func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Range, error) {
 	rngs := make([]index.Range, 0, len(values))
 	if r.indexVersion == index.FormatV1 {
@@ -679,76 +691,107 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 		return nil, nil
 	}
 
-	skip := 0
+	buf := 0
 	valueIndex := 0
 	for valueIndex < len(values) && values[valueIndex] < e.offsets[0].value {
 		// Discard values before the start.
 		valueIndex++
 	}
 
-	var tmpRngs []index.Range // The start, end offsets in the postings table in the original index file.
+	var newSameRngs []index.Range // The start, end offsets in the postings table in the original index file.
 	for valueIndex < len(values) {
-		value := values[valueIndex]
+		wantedValue := values[valueIndex]
 
-		i := sort.Search(len(e.offsets), func(i int) bool { return e.offsets[i].value >= value })
+		i := sort.Search(len(e.offsets), func(i int) bool { return e.offsets[i].value >= wantedValue })
 		if i == len(e.offsets) {
 			// We're past the end.
 			break
 		}
-		if i > 0 && e.offsets[i].value != value {
+		if i > 0 && e.offsets[i].value != wantedValue {
 			// Need to look from previous entry.
 			i--
 		}
+
 		// Don't Crc32 the entire postings offset table, this is very slow
 		// so hope any issues were caught at startup.
 		d := encoding.NewDecbufAt(r.b, int(r.toc.PostingsOffsetTable), nil)
 		d.Skip(e.offsets[i].tableOff)
 
-		tmpRngs = tmpRngs[:0]
 		// Iterate on the offset table.
+		newSameRngs = newSameRngs[:0]
 		for d.Err() == nil {
-			if skip == 0 {
-				// These are always the same number of bytes,
-				// and it's faster to skip than parse.
-				skip = d.Len()
-				d.Uvarint()      // Keycount.
-				d.UvarintBytes() // Label name.
-				skip -= d.Len()
-			} else {
-				d.Skip(skip)
+			// Posting format entry is as follows:
+			// │ ┌────────────────────────────────────────┐ │
+			// │ │  n = 2 <1b>                            │ │
+			// │ ├──────────────────────┬─────────────────┤ │
+			// │ │ len(name) <uvarint>  │ name <bytes>    │ │
+			// │ ├──────────────────────┼─────────────────┤ │
+			// │ │ len(value) <uvarint> │ value <bytes>   │ │
+			// │ ├──────────────────────┴─────────────────┤ │
+			// │ │  offset <uvarint64>                    │ │
+			// │ └────────────────────────────────────────┘ │
+			// First, let's skip n and name.
+			skipNAndName(&d, &buf)
+			value := d.UvarintBytes() // Label value.
+			postingOffset := int64(d.Uvarint64())
+
+			if len(newSameRngs) > 0 {
+				// We added some ranges in previous iteration. Use next posting offset as end of all our new ranges.
+				for j := range newSameRngs {
+					newSameRngs[j].End = postingOffset - crc32.Size
+				}
+				rngs = append(rngs, newSameRngs...)
+				newSameRngs = newSameRngs[:0]
 			}
-			v := d.UvarintBytes()                 // Label value.
-			postingOffset := int64(d.Uvarint64()) // Offset.
-			for string(v) >= value {
-				if string(v) == value {
-					tmpRngs = append(tmpRngs, index.Range{Start: postingOffset + postingLengthFieldSize})
+
+			for string(value) >= wantedValue {
+				// If wantedValue is equals of greater than current value, loop over all given wanted values in the values until
+				// this is no longer true or there are no more values wanted.
+				// This ensures we cover case when someone asks for postingsOffset(name, value1, value1, value1).
+
+				// Record on the way if wanted value is equal to the current value.
+				if string(value) == wantedValue {
+					newSameRngs = append(newSameRngs, index.Range{Start: postingOffset + postingLengthFieldSize})
 				}
 				valueIndex++
 				if valueIndex == len(values) {
 					break
 				}
-				value = values[valueIndex]
+				wantedValue = values[valueIndex]
 			}
+
 			if i+1 == len(e.offsets) {
-				for i := range tmpRngs {
-					tmpRngs[i].End = e.lastValOffset
+				// No more offsets for this name.
+				// Break this loop and record lastOffset on the way for ranges we just added if any.
+				for j := range newSameRngs {
+					newSameRngs[j].End = e.lastValOffset
 				}
-				rngs = append(rngs, tmpRngs...)
-				// Need to go to a later postings offset entry, if there is one.
+				rngs = append(rngs, newSameRngs...)
 				break
 			}
 
-			if value >= e.offsets[i+1].value || valueIndex == len(values) {
-				d.Skip(skip)
-				d.UvarintBytes()                      // Label value.
-				postingOffset := int64(d.Uvarint64()) // Offset.
-				for j := range tmpRngs {
-					tmpRngs[j].End = postingOffset - crc32.Size
-				}
-				rngs = append(rngs, tmpRngs...)
-				// Need to go to a later postings offset entry, if there is one.
-				break
+			if valueIndex != len(values) && wantedValue <= e.offsets[i+1].value {
+				// wantedValue is smaller or same as the next offset we know about, let's iterate further to add those.
+				continue
 			}
+
+			// Nothing wanted or wantedValue is larger than next offset we know about.
+			// Let's exit and do binary search again / exit if nothing wanted.
+
+			if len(newSameRngs) > 0 {
+				// We added some ranges in this iteration. Use next posting offset as the end of our ranges.
+				// We know it exists as we never go further in this loop than e.offsets[i, i+1].
+
+				skipNAndName(&d, &buf)
+				d.UvarintBytes() // Label value.
+				postingOffset := int64(d.Uvarint64())
+
+				for j := range newSameRngs {
+					newSameRngs[j].End = postingOffset - crc32.Size
+				}
+				rngs = append(rngs, newSameRngs...)
+			}
+			break
 		}
 		if d.Err() != nil {
 			return nil, errors.Wrap(d.Err(), "get postings offset entry")
