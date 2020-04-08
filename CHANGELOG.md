@@ -26,6 +26,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2319](https://github.com/thanos-io/thanos/pull/2319) Query: fixed inconsistent naming of metrics.
 - [#2390](https://github.com/thanos-io/thanos/pull/2390) Store: Fixed bug which was causing all posting offsets to be used instead of 1/32 as it was meant.
 Added hidden flag to control this behavior.
+- [#2393](https://github.com/thanos-io/thanos/pull/2393) Store: Fixed bug causing certain not-existing label values queried to fail with "invalid-size" error from binary header.
 
 ### Added
 
