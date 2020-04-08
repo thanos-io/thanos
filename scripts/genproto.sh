@@ -32,7 +32,6 @@ for dir in ${DIRS}; do
 		${PROTOC_BIN} --gogofast_out=plugins=grpc:. \
 		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
-      -I="${GOGOPROTO_PATH}" \
 			*.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
