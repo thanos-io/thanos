@@ -295,6 +295,7 @@ func TestProxyStore_Series(t *testing.T) {
 					lset:   []storepb.Label{{Name: "a", Value: "a"}},
 					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{4, 3}}},
 				},
+				// Chunks can be not ordered.
 				{
 					lset:   []storepb.Label{{Name: "a", Value: "a"}},
 					chunks: [][]sample{{{5, 4}}},

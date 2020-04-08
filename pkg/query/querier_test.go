@@ -170,8 +170,8 @@ func TestQuerier_Series(t *testing.T) {
 			// This should be handled here.
 			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 			storepb.NewWarnSeriesResponse(errors.New("partial error")),
-			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason.
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {7, 7}, {9, 7}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}, {8, 2}}), // Overlap samples for some reason.
 			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
 			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
@@ -191,7 +191,7 @@ func TestQuerier_Series(t *testing.T) {
 	}{
 		{
 			lset:    labels.FromStrings("a", "a"),
-			samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+			samples: []sample{{2, 1}, {3, 2}, {5, 5}, {7, 7}, {9, 7}}, // Where is our {6, 66} and {7, 7} gone???
 		},
 		{
 			lset:    labels.FromStrings("a", "b"),
