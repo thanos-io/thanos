@@ -181,13 +181,14 @@ rules:
   for: 5m
   labels:
     severity: info
-- alert: ThanosRuleTSDBNotIngestingSamples
+- alert: ThanosNoRuleEvaluations
   annotations:
-    message: Thanos Rule {{$labels.job}} did not ingest any samples for the last 15
-      minutes.
+    message: Thanos Rule {{$labels.job}} did not perform any rule evaluations in the
+      past 2 minutes.
   expr: |
-    sum by (job) (rate(prometheus_tsdb_head_samples_appended_total{job=~"thanos-rule.*"}[5m])) <= 0
-  for: 10m
+    sum(rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[2m])) <= 0
+      and
+    sum(thanos_rule_loaded_rules{job=~"thanos-rule.*"}) > 0
   labels:
     severity: critical
 ```

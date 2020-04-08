@@ -171,15 +171,15 @@
             },
           },
           {
-            // NOTE: This alert will give false positive if no rules are configured.
-            alert: 'ThanosRuleTSDBNotIngestingSamples',
+            alert: 'ThanosNoRuleEvaluations',
             annotations: {
-              message: 'Thanos Rule {{$labels.job}} did not ingest any samples for the last 15 minutes.',
+              message: 'Thanos Rule {{$labels.job}} did not perform any rule evaluations in the past 2 minutes.',
             },
             expr: |||
-              sum by (job) (rate(prometheus_tsdb_head_samples_appended_total{%(selector)s}[5m])) <= 0
+              sum(rate(prometheus_rule_evaluations_total{%(selector)s}[2m])) <= 0
+                and
+              sum(thanos_rule_loaded_rules{%(selector)s}) > 0
             ||| % thanos.rule,
-            'for': '10m',
             labels: {
               severity: 'critical',
             },
