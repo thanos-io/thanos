@@ -45,6 +45,15 @@ func TestReaders(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
+		{{Name: "a", Value: "5"}},
+		{{Name: "a", Value: "6"}},
+		{{Name: "a", Value: "7"}},
+		{{Name: "a", Value: "8"}},
+		{{Name: "a", Value: "9"}},
+		// Missing 10 on purpose.
+		{{Name: "a", Value: "11"}},
+		{{Name: "a", Value: "12"}},
+		{{Name: "a", Value: "13"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124)
 	testutil.Ok(t, err)
@@ -92,7 +101,7 @@ func TestReaders(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
 				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
 
-				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id)
+				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
@@ -100,10 +109,29 @@ func TestReaders(t *testing.T) {
 				if id == id1 {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
-					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 50}, br.toc)
-					testutil.Equals(t, int64(330), br.indexLastPostingEnd)
+					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 69}, br.toc)
+					testutil.Equals(t, int64(666), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
-					testutil.Equals(t, 3, len(br.postings))
+					testutil.Equals(t, map[string]*postingValueOffsets{
+						"": {
+							offsets:       []postingOffset{{value: "", tableOff: 4}},
+							lastValOffset: 416,
+						},
+						"a": {
+							offsets: []postingOffset{
+								{value: "1", tableOff: 9},
+								{value: "13", tableOff: 32},
+								{value: "4", tableOff: 54},
+								{value: "7", tableOff: 75},
+								{value: "9", tableOff: 89},
+							},
+							lastValOffset: 612,
+						},
+						"longer-string": {
+							offsets:       []postingOffset{{value: "1", tableOff: 96}},
+							lastValOffset: 662,
+						},
+					}, br.postings)
 					testutil.Equals(t, 0, len(br.postingsV1))
 					testutil.Equals(t, 2, len(br.nameSymbols))
 				}
@@ -121,9 +149,9 @@ func TestReaders(t *testing.T) {
 				defer func() { testutil.Ok(t, jr.Close()) }()
 
 				if id == id1 {
-					testutil.Equals(t, 6, len(jr.symbols))
+					testutil.Equals(t, 14, len(jr.symbols))
 					testutil.Equals(t, 2, len(jr.lvals))
-					testutil.Equals(t, 6, len(jr.postings))
+					testutil.Equals(t, 14, len(jr.postings))
 				}
 
 				compareIndexToHeader(t, b, jr)
@@ -224,11 +252,13 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].Start, ptr.Start)
 	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].End, ptr.End)
 
+	// Check not existing.
 	vals, err := indexReader.LabelValues("not-existing")
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), vals)
-
 	_, err = headerReader.PostingsOffset("not-existing", "1")
+	testutil.NotOk(t, err)
+	_, err = headerReader.PostingsOffset("a", "10")
 	testutil.NotOk(t, err)
 }
 
@@ -392,7 +422,7 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		br, err := newFileBinaryReader(fn)
+		br, err := newFileBinaryReader(fn, 32)
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
 	}

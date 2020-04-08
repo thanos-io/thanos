@@ -42,8 +42,6 @@ const (
 	// MagicIndex are 4 bytes at the head of an index-header file.
 	MagicIndex = 0xBAAAD792
 
-	symbolFactor = 32
-
 	postingLengthFieldSize = 4
 )
 
@@ -428,11 +426,12 @@ type BinaryReader struct {
 	c io.Closer
 
 	// Map of LabelName to a list of some LabelValues's position in the offset table.
-	// The first and last values for each name are always present.
+	// The first and last values for each name are always present, we keep only 1/postingOffsetsInMemSampling of the rest.
 	postings map[string]*postingValueOffsets
 	// For the v1 format, labelname -> labelvalue -> offset.
 	postingsV1 map[string]map[string]index.Range
 
+	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
 	symbols     *index.Symbols
 	nameSymbols map[uint32]string // Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
@@ -442,12 +441,14 @@ type BinaryReader struct {
 	version             int
 	indexVersion        int
 	indexLastPostingEnd int64
+
+	postingOffsetsInMemSampling int
 }
 
 // NewBinaryReader loads or builds new index-header if not present on disk.
-func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (*BinaryReader, error) {
+func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID, postingOffsetsInMemSampling int) (*BinaryReader, error) {
 	binfn := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
-	br, err := newFileBinaryReader(binfn)
+	br, err := newFileBinaryReader(binfn, postingOffsetsInMemSampling)
 	if err == nil {
 		return br, nil
 	}
@@ -460,11 +461,10 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 	}
 
 	level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
-
-	return newFileBinaryReader(binfn)
+	return newFileBinaryReader(binfn, postingOffsetsInMemSampling)
 }
 
-func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
+func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *BinaryReader, err error) {
 	f, err := fileutil.OpenMmapFile(path)
 	if err != nil {
 		return nil, err
@@ -476,9 +476,10 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 	}()
 
 	r := &BinaryReader{
-		b:        realByteSlice(f.Bytes()),
-		c:        f,
-		postings: map[string]*postingValueOffsets{},
+		b:                           realByteSlice(f.Bytes()),
+		c:                           f,
+		postings:                    map[string]*postingValueOffsets{},
+		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 	}
 
 	// Verify header.
@@ -502,6 +503,7 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 		return nil, errors.Wrap(err, "read index header TOC")
 	}
 
+	// TODO(bwplotka): Consider contributing to Prometheus to allow specifying custom number for symbolsFactor.
 	r.symbols, err = index.NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
 	if err != nil {
 		return nil, errors.Wrap(err, "read symbols")
@@ -551,11 +553,12 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			}
 
 			if _, ok := r.postings[key[0]]; !ok {
-				// Next label name.
+				// Not seen before label name.
 				r.postings[key[0]] = &postingValueOffsets{}
 				if lastKey != nil {
-					if valueCount%symbolFactor != 0 {
-						// Always include last value for each label name.
+					// Always include last value for each label name, unless it was just added in previous iteration based
+					// on valueCount.
+					if (valueCount-1)%postingOffsetsInMemSampling != 0 {
 						r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
 					}
 					r.postings[lastKey[0]].lastValOffset = int64(off - crc32.Size)
@@ -565,21 +568,24 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			}
 
 			lastKey = key
-			if valueCount%symbolFactor == 0 {
-				r.postings[key[0]].offsets = append(r.postings[key[0]].offsets, postingOffset{value: key[1], tableOff: tableOff})
-				return nil
-			}
-
 			lastTableOff = tableOff
 			valueCount++
+
+			if (valueCount-1)%postingOffsetsInMemSampling == 0 {
+				r.postings[key[0]].offsets = append(r.postings[key[0]].offsets, postingOffset{value: key[1], tableOff: tableOff})
+			}
+
 			return nil
 		}); err != nil {
 			return nil, errors.Wrap(err, "read postings table")
 		}
 		if lastKey != nil {
-			if valueCount%symbolFactor != 0 {
+			if (valueCount-1)%postingOffsetsInMemSampling != 0 {
+				// Always include last value for each label name if not included already based on valueCount.
 				r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
 			}
+			// In any case lastValOffset is unknown as don't have next posting anymore. Guess from TOC table.
+			// In worst case we will overfetch a few bytes.
 			r.postings[lastKey[0]].lastValOffset = r.indexLastPostingEnd - crc32.Size
 		}
 		// Trim any extra space in the slices.
@@ -787,7 +793,7 @@ func (r BinaryReader) LabelValues(name string) ([]string, error) {
 	if len(e.offsets) == 0 {
 		return nil, nil
 	}
-	values := make([]string, 0, len(e.offsets)*symbolFactor)
+	values := make([]string, 0, len(e.offsets)*r.postingOffsetsInMemSampling)
 
 	d := encoding.NewDecbufAt(r.b, int(r.toc.PostingsOffsetTable), nil)
 	d.Skip(e.offsets[0].tableOff)
