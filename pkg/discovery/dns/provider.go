@@ -150,3 +150,19 @@ func (p *Provider) Addresses() []string {
 	}
 	return result
 }
+
+// ServerName returns the server name for an address
+func (p *Provider) ServerName(addr string) string {
+	p.Lock()
+	defer p.Unlock()
+
+	for name, addrs := range p.resolved {
+		for _, a := range addrs {
+			if addr == a {
+				_, n := GetQTypeName(name)
+				return strings.SplitN(n, ":", 2)[0]
+			}
+		}
+	}
+	return ""
+}

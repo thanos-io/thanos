@@ -56,6 +56,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
+	dnsServerName := cmd.Flag("grpc-client-dns-server-name", "For stores that are DNS, use the dns name as the server name for connection.  Needed when proxying through nginx").Default("false").Bool()
 
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
@@ -147,6 +148,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*key,
 			*caCert,
 			*serverName,
+			*dnsServerName,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
@@ -188,6 +190,7 @@ func runQuery(
 	key string,
 	caCert string,
 	serverName string,
+	dnsServerName bool,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	webRoutePrefix string,
@@ -240,7 +243,11 @@ func runQuery(
 			func() (specs []query.StoreSpec) {
 				// Add DNS resolved addresses.
 				for _, addr := range dnsProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					if dnsServerName {
+						specs = append(specs, query.NewGRPCStoreSpecServerName(addr, false, dnsProvider.ServerName(addr)))
+					} else {
+						specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					}
 				}
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
@@ -253,6 +260,9 @@ func runQuery(
 			},
 			dialOpts,
 			unhealthyStoreTimeout,
+			cert,
+			key,
+			caCert,
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy)

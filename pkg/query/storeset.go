@@ -20,7 +20,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -38,6 +40,9 @@ type StoreSpec interface {
 	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
 	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
 	StrictStatic() bool
+	// ServerName returns StoreAPI ServerName for the store spec.
+	// It is needed to get to a StoreAPI behind an nginx proxy
+	ServerName() string
 }
 
 type StoreStatus struct {
@@ -53,12 +58,19 @@ type StoreStatus struct {
 type grpcStoreSpec struct {
 	addr         string
 	strictstatic bool
+	serverName   string
+}
+
+// NewGRPCStoreSpecServerName creates store pure gRPC spec with a Server Name.
+// It uses Info gRPC call to get Metadata.
+func NewGRPCStoreSpecServerName(addr string, strictstatic bool, serverName string) StoreSpec {
+	return &grpcStoreSpec{addr: addr, strictstatic: strictstatic, serverName: serverName}
 }
 
 // NewGRPCStoreSpec creates store pure gRPC spec.
 // It uses Info gRPC call to get Metadata.
 func NewGRPCStoreSpec(addr string, strictstatic bool) StoreSpec {
-	return &grpcStoreSpec{addr: addr, strictstatic: strictstatic}
+	return &grpcStoreSpec{addr: addr, strictstatic: strictstatic, serverName: ""}
 }
 
 // StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
@@ -69,6 +81,10 @@ func (s *grpcStoreSpec) StrictStatic() bool {
 func (s *grpcStoreSpec) Addr() string {
 	// API addr should not change between state changes.
 	return s.addr
+}
+
+func (s *grpcStoreSpec) ServerName() string {
+	return s.serverName
 }
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
@@ -165,6 +181,9 @@ type StoreSet struct {
 	storeSpecs          func() []StoreSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
+	cert                string
+	key                 string
+	caCert              string
 
 	updateMtx         sync.Mutex
 	storesMtx         sync.RWMutex
@@ -186,6 +205,9 @@ func NewStoreSet(
 	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
+	cert string,
+	key string,
+	caCert string,
 ) *StoreSet {
 	storesMetric := newStoreSetNodeCollector()
 	if reg != nil {
@@ -208,6 +230,9 @@ func NewStoreSet(
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,
+		cert:                  cert,
+		key:                   key,
+		caCert:                caCert,
 	}
 	return ss
 }
@@ -420,7 +445,13 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			st, seenAlready := stores[addr]
 			if !seenAlready {
 				// New store or was unactive and was removed in the past - create new one.
-				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
+				tlsCfg, err := tls.NewClientConfig(s.logger, s.cert, s.key, s.caCert, spec.ServerName())
+				if err != nil {
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "setting TLS"), "address", addr)
+					return
+				}
+				dialOpts := append(s.dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+				conn, err := grpc.DialContext(ctx, addr, dialOpts...)
 				if err != nil {
 					s.updateStoreStatus(&storeRef{addr: addr}, err)
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)

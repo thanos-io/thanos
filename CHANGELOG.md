@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+- [#2407](https://github.com/thanos-io/thanos/pull/2407) Query: Add servername to grpc dial options for DNS stores (Fixes #1507)
+
 ### Fixed
 
 - [#2288](https://github.com/thanos-io/thanos/pull/2288) Ruler: Fixes issue #2281 bug in ruler with parsing query addr with path prefix
