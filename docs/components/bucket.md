@@ -403,12 +403,13 @@ Flags:
 
 ```
 
-### Downsample
+### downsample
 
-The downsample component of Thanos implements the downsample API on top of historical data in an object storage bucket. It continuously downsamples blocks in an object store bucket as a service.
+`bucket downsample` is used to continuously downsample blocks in an object store bucket as a service.
+It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
-$ thanos downsample \
+$ thanos bucket downsample \
     --data-dir        "/local/state/data/dir" \
     --objstore.config-file "bucket.yml"
 ```
@@ -420,8 +421,6 @@ type: GCS
 config:
   bucket: example-bucket
 ```
-
-#### Flags
 
 [embedmd]:# (flags/bucket_downsample.txt $)
 ```$
@@ -465,7 +464,7 @@ Flags:
 
 #### Probes
 
-- Thanos downsample exposes two endpoints for probing.
+- The downsample service exposes two endpoints for probing:
   - `/-/healthy` starts as soon as initial setup completed.
   - `/-/ready` starts after all the bootstrapping completed (e.g object store bucket connection) and ready to serve traffic.
 
