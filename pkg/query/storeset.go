@@ -181,6 +181,7 @@ type StoreSet struct {
 	storeSpecs          func() []StoreSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
+	dnsServerName       bool
 	cert                string
 	key                 string
 	caCert              string
@@ -205,6 +206,7 @@ func NewStoreSet(
 	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
+	dnsServerName bool,
 	cert string,
 	key string,
 	caCert string,
@@ -230,6 +232,7 @@ func NewStoreSet(
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,
+		dnsServerName:         dnsServerName,
 		cert:                  cert,
 		key:                   key,
 		caCert:                caCert,
@@ -445,12 +448,16 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			st, seenAlready := stores[addr]
 			if !seenAlready {
 				// New store or was unactive and was removed in the past - create new one.
-				tlsCfg, err := tls.NewClientConfig(s.logger, s.cert, s.key, s.caCert, spec.ServerName())
-				if err != nil {
-					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "setting TLS"), "address", addr)
-					return
+				dialOpts := s.dialOpts
+				// Update the dialOpts if we are asked to add dnsServerName
+				if s.dnsServerName {
+					tlsCfg, err := tls.NewClientConfig(s.logger, s.cert, s.key, s.caCert, spec.ServerName())
+					if err != nil {
+						level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "setting TLS"), "address", addr)
+						return
+					}
+					dialOpts = append(s.dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 				}
-				dialOpts := append(s.dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 				conn, err := grpc.DialContext(ctx, addr, dialOpts...)
 				if err != nil {
 					s.updateStoreStatus(&storeRef{addr: addr}, err)

@@ -56,7 +56,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
-	dnsServerName := cmd.Flag("grpc-client-dns-server-name", "For stores that are DNS, use the dns name as the server name for connection.  Needed when proxying through nginx").Default("false").Bool()
+	dnsServerName := cmd.Flag("grpc-client-dns-server-name", "For stores that are DNS, use the dns name as the server name for connection.  Needed when proxying through nginx, and only applicable if using the secure flag").Default("false").Bool()
 
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
@@ -108,6 +108,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		if *dnsServerName && !*secure {
+			return errors.New("grpc-client-dns-server-name specified without grpc-client-tls-secure")
+		}
+
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -260,6 +264,7 @@ func runQuery(
 			},
 			dialOpts,
 			unhealthyStoreTimeout,
+			dnsServerName,
 			cert,
 			key,
 			caCert,

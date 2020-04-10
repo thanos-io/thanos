@@ -184,7 +184,7 @@ func TestStoreSet_Update(t *testing.T) {
 			specs = append(specs, NewGRPCStoreSpec(addr, false))
 		}
 		return specs
-	}, testGRPCOpts, time.Minute)
+	}, testGRPCOpts, time.Minute, false, "", "", "")
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -532,7 +532,7 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 			specs = append(specs, NewGRPCStoreSpec(addr, false))
 		}
 		return specs
-	}, testGRPCOpts, time.Minute)
+	}, testGRPCOpts, time.Minute, false, "", "", "")
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
@@ -596,7 +596,7 @@ func TestQuerierStrict(t *testing.T) {
 			NewGRPCStoreSpec(st.StoreAddresses()[0], true),
 			NewGRPCStoreSpec(st.StoreAddresses()[1], false),
 		}
-	}, testGRPCOpts, time.Minute)
+	}, testGRPCOpts, time.Minute, false, "", "", "")
 	defer storeSet.Close()
 	storeSet.gRPCInfoCallTimeout = 1 * time.Second
 
