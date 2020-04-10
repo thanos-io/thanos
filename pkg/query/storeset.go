@@ -41,7 +41,7 @@ type StoreSpec interface {
 	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
 	StrictStatic() bool
 	// ServerName returns StoreAPI ServerName for the store spec.
-	// It is needed to get to a StoreAPI behind an nginx proxy
+	// It is needed to get to a StoreAPI behind an nginx proxy.
 	ServerName() string
 }
 
@@ -449,7 +449,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			if !seenAlready {
 				// New store or was unactive and was removed in the past - create new one.
 				dialOpts := s.dialOpts
-				// Update the dialOpts if we are asked to add dnsServerName
+				// Update the dialOpts if we are asked to add dnsServerName.
 				if s.dnsServerName {
 					tlsCfg, err := tls.NewClientConfig(s.logger, s.cert, s.key, s.caCert, spec.ServerName())
 					if err != nil {

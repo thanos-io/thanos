@@ -151,7 +151,7 @@ func (p *Provider) Addresses() []string {
 	return result
 }
 
-// ServerName returns the server name for an address
+// ServerName returns the server name for an address.
 func (p *Provider) ServerName(addr string) string {
 	p.Lock()
 	defer p.Unlock()
