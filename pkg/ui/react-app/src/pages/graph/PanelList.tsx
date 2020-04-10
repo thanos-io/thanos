@@ -125,7 +125,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       setDelta(Math.abs(browserTime - serverTime));
     }
     /**
-     * React wants to include browserTime to useEffect dependencie list which will cause a delta change on every re-render
+     * React wants to include browserTime to useEffect dependencies list which will cause a delta change on every re-render
      * Basically it's not recommended to disable this rule, but this is the only way to take control over the useEffect
      * dependencies and to not include the browserTime variable.
      **/
@@ -156,7 +156,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         onChange={({ target }) => setUseDeduplication(target.checked)}
         defaultChecked={useDeduplication}
       >
-        Use local time
+        Use Deduplication
       </Checkbox>
       <Checkbox
         wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
@@ -164,7 +164,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         onChange={({ target }) => setUsePartialResponse(target.checked)}
         defaultChecked={usePartialResponse}
       >
-        Use local time
+        Use Partial Response
       </Checkbox>
       {(delta > 30 || timeErr) && (
         <Alert color="danger">

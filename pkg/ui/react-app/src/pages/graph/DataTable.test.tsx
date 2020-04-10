@@ -103,8 +103,42 @@ describe('DataTable', () => {
     });
 
     it('renders a warning', () => {
-      const alert = dataTable.find(Alert);
-      expect(alert.render().text()).toEqual('Warning: Fetched 10001 metrics, only displaying first 10000.');
+      const alerts = dataTable.find(Alert);
+      expect(
+        alerts
+          .first()
+          .render()
+          .text()
+      ).toEqual('Warning: Fetched 10001 metrics, only displaying first 10000.');
+    });
+  });
+
+  describe('when resultType is vector and size is more than maximum limit of formatting', () => {
+    const dataTableProps: QueryResult = {
+      data: {
+        resultType: 'vector',
+        result: Array.from(Array(1001).keys()).map(i => {
+          return {
+            metric: {
+              __name__: `metric_name_${i}`,
+              label1: 'value_1',
+              labeln: 'value_n',
+            },
+            value: [1572098246.599, `${i}`],
+          };
+        }),
+      },
+    };
+    const dataTable = shallow(<DataTable {...dataTableProps} />);
+
+    it('renders a warning', () => {
+      const alerts = dataTable.find(Alert);
+      expect(
+        alerts
+          .first()
+          .render()
+          .text()
+      ).toEqual('Notice: Showing more than 1000 series, turning off label formatting for performance reasons.');
     });
   });
 
@@ -212,26 +246,26 @@ describe('DataTable', () => {
       const rows = table.find('tr');
       expect(table.find('tr')).toHaveLength(3);
       const row = rows.at(0);
-      expect(row.text()).toEqual(`<SeriesName />1 @1572097950.93
-1 @1572097965.931
-1 @1572097980.929
-1 @1572097995.931
-1 @1572098010.932
-1 @1572098025.933
-1 @1572098040.93
-1 @1572098055.93
-1 @1572098070.93
-1 @1572098085.936
-1 @1572098100.936
-1 @1572098115.933
-1 @1572098130.932
-1 @1572098145.932
-1 @1572098160.933
-1 @1572098175.934
-1 @1572098190.937
-1 @1572098205.934
-1 @1572098220.933
-1 @1572098235.934`);
+      expect(row.text()).toEqual(`<SeriesName />9 @1572097950.93
+10 @1572097965.931
+11 @1572097980.929
+12 @1572097995.931
+13 @1572098010.932
+14 @1572098025.933
+15 @1572098040.93
+16 @1572098055.93
+17 @1572098070.93
+18 @1572098085.936
+19 @1572098100.936
+20 @1572098115.933
+21 @1572098130.932
+22 @1572098145.932
+23 @1572098160.933
+24 @1572098175.934
+25 @1572098190.937
+26 @1572098205.934
+27 @1572098220.933
+28 @1572098235.934`);
     });
   });
 

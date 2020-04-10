@@ -7,7 +7,7 @@ import { Router } from '@reach/router';
 import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList } from './pages';
 
 describe('App', () => {
-  const app = shallow(<App pathPrefix="/path/prefix" />);
+  const app = shallow(<App pathPrefix="/path/prefix" thanosComponent="query" />);
 
   it('navigates', () => {
     expect(app.find(Navigation)).toHaveLength(1);

@@ -17,16 +17,22 @@ const defaultProps = {
     resolution: 28,
     stacked: false,
   },
-  onOptionsChanged: (): void => {},
+  onOptionsChanged: (): void => {
+    // Do nothing.
+  },
   pastQueries: [],
   metricNames: [
     'prometheus_engine_queries',
     'prometheus_engine_queries_concurrent_max',
     'prometheus_engine_query_duration_seconds',
   ],
-  removePanel: (): void => {},
-  onExecuteQuery: (): void => {},
-  useLocalTime: true,
+  removePanel: (): void => {
+    // Do nothing.
+  },
+  onExecuteQuery: (): void => {
+    // Do nothing.
+  },
+  useLocalTime: false,
   useDeduplication: true,
   usePartialResponse: false,
 };
