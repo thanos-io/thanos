@@ -6,18 +6,25 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"sort"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -152,6 +159,22 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-ha",
 		},
 	})
+
+	callRemoteReadAndAssertSeries(t, ctx, q.HTTPEndpoint(), &prompb.Query{
+		StartTimestampMs: 0,
+		EndTimestampMs:   math.MaxInt64,
+		Matchers: []*prompb.LabelMatcher{
+			{
+				Type:  prompb.LabelMatcher_EQ,
+				Name:  "__name__",
+				Value: "up",
+			},
+		},
+	}, []*prompb.ChunkedSeries{
+		{
+			Labels: []prompb.Label{{Name: "job", Value: "myself"}},
+		},
+	})
 }
 
 func urlParse(t *testing.T, addr string) *url.URL {
@@ -206,4 +229,47 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, op
 		r.Timestamp = 0 // Does not matter for us.
 	}
 	testutil.Equals(t, expected, result)
+}
+
+func callRemoteReadAndAssertSeries(t *testing.T, ctx context.Context, addr string, q *prompb.Query, expected []*prompb.ChunkedSeries) {
+	t.Helper()
+
+	fmt.Println("callRemoteReadAndAssertSeries: Waiting for", len(expected), "results for remote read", q)
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	var series []*prompb.ChunkedSeries
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		resp, err := store.StartPromSeries(ctx, logger, q, http.DefaultClient, urlParse(t, "http://"+addr), []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES})
+		if err != nil {
+			return err
+		}
+
+		series = series[:0]
+		// TODO(bwplotka): Put read limit as a flag.
+		stream := remote.NewChunkedReader(resp.Body, remote.DefaultChunkedReadLimit, nil)
+		for {
+			res := &prompb.ChunkedReadResponse{}
+			err := stream.NextProto(res)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return errors.Wrap(err, "next proto")
+			}
+
+			if res.QueryIndex != 0 {
+				return errors.Errorf("unexpected query index %d", res.QueryIndex)
+			}
+			series = append(series, *(*[]*prompb.ChunkedSeries)(unsafe.Pointer(&res.ChunkedSeries))...)
+		}
+
+		if len(expected) != len(series) {
+			return errors.Errorf("unexpected result size, expected %d; result %d: %v", len(expected), len(series), series)
+		}
+		return nil
+	}))
+
+	for i, exp := range expected {
+		testutil.Equals(t, exp.Labels, series[i].Labels)
+	}
 }

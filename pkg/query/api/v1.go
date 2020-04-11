@@ -33,12 +33,15 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -106,10 +109,11 @@ type API struct {
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
 	replicaLabels                          []string
-	reg                                    prometheus.Registerer
 	defaultInstantQueryMaxSourceResolution time.Duration
 
-	now func() time.Time
+	remoteReadQueries         prometheus.Gauge
+	remoteReadMaxBytesInFrame int
+	now                       func() time.Time
 }
 
 // NewAPI returns an initialized API type.
@@ -130,10 +134,15 @@ func NewAPI(
 		enableAutodownsampling:                 enableAutodownsampling,
 		enablePartialResponse:                  enablePartialResponse,
 		replicaLabels:                          replicaLabels,
-		reg:                                    reg,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
-
-		now: time.Now,
+		remoteReadQueries: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Namespace: "thanos",
+			Subsystem: "http_api",
+			Name:      "remote_read_queries",
+			Help:      "The current number of remote read queries being executed.",
+		}),
+		remoteReadMaxBytesInFrame: 1024 * 1024, // 1MB as suggested per gRPC team maximum.
+		now:                       time.Now,
 	}
 }
 
@@ -168,6 +177,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
+
+	r.Post("/read", ins.NewHandler("read", tracing.HTTPMiddleware(tracer, "read", logger, http.HandlerFunc(api.remoteRead))))
 }
 
 type queryData struct {
@@ -625,4 +636,85 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	return names, warnings, nil
+}
+
+func (api *API) remoteRead(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	api.remoteReadQueries.Inc()
+	defer api.remoteReadQueries.Dec()
+
+	req, err := remote.DecodeReadRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	responseType, err := remote.NegotiateResponseType(req.AcceptedResponseTypes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	switch responseType {
+	case prompb.ReadRequest_STREAMED_XOR_CHUNKS:
+		api.remoteReadStreamedXORChunks(ctx, w, req)
+	default:
+		http.Error(w, fmt.Sprintf("response type %v is not supported in Thanos, use more efficient ReadRequest_STREAMED_XOR_CHUNKS instead", responseType), http.StatusBadRequest)
+	}
+}
+
+func (api *API) remoteReadStreamedXORChunks(ctx context.Context, w http.ResponseWriter, req *prompb.ReadRequest) {
+	w.Header().Set("Content-Type", "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse")
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "internal http.ResponseWriter does not implement http.Flusher interface", http.StatusInternalServerError)
+		return
+	}
+
+	for i, query := range req.Queries {
+		if err := func() error {
+			matchers, err := remote.FromLabelMatchers(query.Matchers)
+			if err != nil {
+				return err
+			}
+
+			// TODO(bwplotka): Add support for extra Thanos parameters like `enable deduplication, replica label partialResponse etc)
+			q, err := api.queryableCreate(true, api.replicaLabels, math.MaxInt64, false, false).
+				Querier(ctx, query.StartTimestampMs, query.EndTimestampMs)
+			if err != nil {
+				return err
+			}
+			defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
+
+			var hints *storage.SelectParams
+			if query.Hints != nil {
+				hints = &storage.SelectParams{
+					Start:    query.Hints.StartMs,
+					End:      query.Hints.EndMs,
+					Step:     query.Hints.StepMs,
+					Func:     query.Hints.Func,
+					Grouping: query.Hints.Grouping,
+					Range:    query.Hints.RangeMs,
+					By:       query.Hints.By,
+				}
+			}
+			// Ignore warnings as partial response is false.
+			set, _, err := q.Select(hints, matchers...)
+			return remote.StreamChunkedReadResponses(
+				remote.NewChunkedWriter(w, f),
+				int64(i),
+				set,
+				nil,
+				api.remoteReadMaxBytesInFrame,
+			)
+		}(); err != nil {
+			if httpErr, ok := err.(remote.HTTPError); ok {
+				http.Error(w, httpErr.Error(), httpErr.Status())
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }

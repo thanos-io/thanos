@@ -211,7 +211,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
 
-	httpResp, err := p.startPromSeries(ctx, q)
+	httpResp, err := StartPromSeries(ctx, p.logger, q, p.client, p.base, p.remoteReadAcceptableResponses)
 	if err != nil {
 		queryPrometheusSpan.Finish()
 		return errors.Wrap(err, "query Prometheus")
@@ -421,10 +421,10 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 	return chks, nil
 }
 
-func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) (presp *http.Response, err error) {
+func StartPromSeries(ctx context.Context, logger log.Logger, q *prompb.Query, client *http.Client, base *url.URL, acceptedResponses []prompb.ReadRequest_ResponseType) (presp *http.Response, err error) {
 	reqb, err := proto.Marshal(&prompb.ReadRequest{
 		Queries:               []*prompb.Query{q},
-		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
+		AcceptedResponseTypes: acceptedResponses,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal read request")
@@ -435,7 +435,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 		return nil, errors.Wrap(err, "json encode query for tracing")
 	}
 
-	u := *p.base
+	u := *base
 	u.Path = path.Join(u.Path, "api/v1/read")
 
 	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
@@ -447,7 +447,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 	preq.Header.Set("User-Agent", userAgent)
 	tracing.DoInSpan(ctx, "query_prometheus_request", func(ctx context.Context) {
 		preq = preq.WithContext(ctx)
-		presp, err = p.client.Do(preq)
+		presp, err = client.Do(preq)
 	}, opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
@@ -456,7 +456,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 		// Best effort read.
 		b, err := ioutil.ReadAll(presp.Body)
 		if err != nil {
-			level.Error(p.logger).Log("msg", "failed to read response from non 2XX remote read request", "err", err)
+			level.Error(logger).Log("msg", "failed to read response from non 2XX remote read request", "err", err)
 		}
 		_ = presp.Body.Close()
 		return nil, errors.Errorf("request failed with code %s; msg %s", presp.Status, string(b))
