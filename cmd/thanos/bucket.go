@@ -582,10 +582,21 @@ func (t Table) Less(i, j int) bool {
 }
 
 func compare(s1, s2 string) bool {
+	// Values can be either Time, Duration, comma-delimited integers or strings.
 	s1Time, s1Err := time.Parse("02-01-2006 15:04:05", s1)
 	s2Time, s2Err := time.Parse("02-01-2006 15:04:05", s2)
 	if s1Err != nil || s2Err != nil {
-		return s1 < s2
+		s1Duration, s1Err := time.ParseDuration(s1)
+		s2Duration, s2Err := time.ParseDuration(s2)
+		if s1Err != nil || s2Err != nil {
+			s1Int, s1Err := strconv.ParseUint(strings.Replace(s1, ",", "", -1), 10, 64)
+			s2Int, s2Err := strconv.ParseUint(strings.Replace(s2, ",", "", -1), 10, 64)
+			if s1Err != nil || s2Err != nil {
+				return s1 < s2
+			}
+			return s1Int < s2Int
+		}
+		return s1Duration < s2Duration
 	}
 	return s1Time.Before(s2Time)
 }
