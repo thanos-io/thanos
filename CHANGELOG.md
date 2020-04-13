@@ -12,7 +12,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ### Fixed
-
+- [#2416](https://github.com/thanos-io/thanos/pull/2416) Bucket: Fixes issue #2416 bug in `inspect --sort-by` doesn't work correctly in all cases
 - [#2288](https://github.com/thanos-io/thanos/pull/2288) Ruler: Fixes issue #2281 bug in ruler with parsing query addr with path prefix
 - [#2238](https://github.com/thanos-io/thanos/pull/2238) Ruler: Fixed Issue #2204 bug in alert queue signalling filled up queue and alerts were dropped
 - [#2231](https://github.com/thanos-io/thanos/pull/2231) Bucket Web - Sort chunks by thanos.downsample.resolution for better grouping
