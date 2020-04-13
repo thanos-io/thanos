@@ -4,6 +4,25 @@ type: docs
 menu: contributing
 ---
 
+<style>
+table {
+    border: 1px solid;
+    max-width: 100%;
+    overflow: auto;
+    word-wrap: break-word;
+}
+
+th {
+ text-align: center;
+}
+
+th, td {
+    max-width: 100%;
+    overflow: auto;
+    word-wrap: break-word;
+}
+</style>
+
 # Thanos Coding Style Guide
 
 This document details the official style guides for the various languages we use in the Thanos project.
@@ -122,9 +141,9 @@ defer runutil.CloseWithErrCapture(&err, f, "close file")
 defer runutil.CloseWithLogOnErr(logger, f, "close file")
 ```
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -141,10 +160,7 @@ func writeToFile(...) error {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -174,9 +190,9 @@ helper as well:
 defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "close response")
 ```
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -194,10 +210,7 @@ for scanner.Scan() {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -236,9 +249,9 @@ Variable shadowing is when you use the same variable name in a smaller scope tha
 dangerous as it leads to many surprises. It's extremely hard to debug such problems as they might appear in unrelated parts of the code.
 And what's broken is tiny `:` or lack of it.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -261,10 +274,7 @@ And what's broken is tiny `:` or lack of it.
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -316,9 +326,9 @@ code paths with big arrays.
 NOTE: This is because, in very simple view, the Go runtime allocates 2 times the current size. So if you expect million of elements, Go will do many allocations
 on `append` in between instead of just one if you preallocate.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -333,10 +343,7 @@ func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{})
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -366,9 +373,9 @@ NOTE: Why you cannot just allocate slice and release and in new iteration alloca
 available space and just reuses that no? (: Well, it's not that easy. TL;DR is that Go Garbage Collection runs periodically or on certain cases
 (big heap), but definitely not on every iteration of your loop (that would be super slow). Read more in details [here](https://about.sourcegraph.com/go/gophercon-2018-allocator-wrestling).
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table style="width: 100%; max-width: 100%;">
 <tbody>
+<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
 <tr><td>
 
 ```go
@@ -388,10 +395,7 @@ for _, msg := range recv {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -429,9 +433,9 @@ or methods. There are two general rules:
 * Simpler (usually it means smaller) interfaces are better. This might mean a smaller, simpler function signature as well as fewer methods
 in the interfaces. Try to group interfaces based on functionality to expose at max 1-3 methods if possible.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -451,10 +455,7 @@ type Compactor interface {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -496,9 +497,9 @@ type Cleaner interface {
 more cognitive load to understand the function name or navigate to implementation to understand it better. It might be much
 more readable to inline those few lines directly on the caller side.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -516,10 +517,7 @@ func (s *myStruct) doSomethingAndHandleError() {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 
@@ -540,9 +538,9 @@ This is a little bit connected to `There should be one-- and preferably only one
 rules. If you have more ways of doing something than one, it means you have a wider interface, allowing more opportunities for
 errors, ambiguity and maintenance burden.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -569,10 +567,7 @@ func (b *Block) IDNoLock() ulid.ULID {  return b.ID }
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -606,9 +601,9 @@ implicit and thus more prone to surprises.
 There is a way to sacrifice defer in order to properly close all on each error. Repetitions makes it easier to make error
 and forget something when changing the code, so on-error deferring is doable:
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -635,10 +630,7 @@ func OpenSomeFileAndDoSomeStuff() (*os.File, error) {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -673,9 +665,9 @@ func OpenSomeFileAndDoSomeStuff() (f *os.File, err error) {
 Always handle returned errors. It does not mean you cannot "ignore" the error for some reason, e.g. if we know implementation
 will not return anything meaningful. You can ignore the error, but do so explicitly:
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -683,10 +675,7 @@ someMethodThatReturnsError(...)
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 
@@ -705,9 +694,9 @@ It's tempting to define a variable as an intermittent step to create something b
 such a variable if it's used only once. When you create a variable *the reader* expects some other usage of this variable than
 one, so it can be annoying to every time double check that and realize that it's only used once.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -720,10 +709,7 @@ one, so it can be annoying to every time double check that and realize that it's
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -742,9 +728,9 @@ one, so it can be annoying to every time double check that and realize that it's
 
 Prefer function/method definitions with arguments in a single line. If it's too wide, put each argument on a new line.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -755,10 +741,7 @@ func function(argument1 int, argument2 string,
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -780,9 +763,9 @@ func function(
 In most of the cases, you don't need `else`. You can usually use `continue`, `break` or `return` to end an `if` block.
 This enables having one less indent and netter consistency so code is more readable.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -796,10 +779,7 @@ for _, elem := range elems {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -827,9 +807,9 @@ NOTE: never prefix wrap messages with wording like `failed ... ` or `error occur
 wanted to do when the failure occurred. Those prefixes are just noise. We are wrapping error, so it's obvious that some error
 occurred, right? (: Improve readability and consider avoiding those.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -839,10 +819,7 @@ if err != nil {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -887,9 +864,9 @@ separate fields. Keep in mind that all log lines in Thanos should be `lowercase`
 all struct keys are using `camelCase`. It's suggested to keep key names short and consistent. For example, if
 we always use `block` for block ID, let's not use in the other single log message `id`.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -898,10 +875,7 @@ level.Info(logger).Log("msg", fmt.Sprintf("Found something epic during compactio
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -936,9 +910,9 @@ was done temporarily add `TODO(<github name>): <something, with GitHub issue lin
 Use table-driven tests that use [t.Run](https://blog.golang.org/subtests) for readability. They are easy to read
 and allows to add a clean description of each test case. Adding or adapting test cases is also easier.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -962,10 +936,7 @@ testutil.NotOk(t, err)
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
@@ -1028,9 +999,9 @@ for _, tcase := range []struct{
 Avoid unit testing based on real-time. Always try to mock time that is used within struct by using for example `timeNow func() time.Time` field.
 For production code, you can initialize the field with `time.Now`. For test code, you can set a custom time that will be used by the struct.
 
-<table style="width:100%;" >
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<table>
 <tbody>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -1041,10 +1012,7 @@ func (s *SomeType) IsExpired(created time.Time) bool {
 ```
 
 </td></tr>
-</tbody></table>
-<table style="width:100%;" >
-<thead align="center"><tr><th>Better 🤓</th></tr></thead>
-<tbody>
+<tr><th>Better 🤓</th></tr>
 <tr><td>
 
 ```go
