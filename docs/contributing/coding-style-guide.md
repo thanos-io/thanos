@@ -4,25 +4,6 @@ type: docs
 menu: contributing
 ---
 
-<style>
-table {
-    border: 1px solid;
-    max-width: 100%;
-    overflow: auto;
-    word-wrap: break-word;
-}
-
-th {
- text-align: center;
-}
-
-th, td {
-    max-width: 100%;
-    overflow: auto;
-    word-wrap: break-word;
-}
-</style>
-
 # Thanos Coding Style Guide
 
 This document details the official style guides for the various languages we use in the Thanos project.
@@ -373,9 +354,9 @@ NOTE: Why you cannot just allocate slice and release and in new iteration alloca
 available space and just reuses that no? (: Well, it's not that easy. TL;DR is that Go Garbage Collection runs periodically or on certain cases
 (big heap), but definitely not on every iteration of your loop (that would be super slow). Read more in details [here](https://about.sourcegraph.com/go/gophercon-2018-allocator-wrestling).
 
-<table style="width: 100%; max-width: 100%;">
+<table>
 <tbody>
-<thead align="center"><tr><th>Avoid 🔥</th></tr></thead>
+<tr><th>Avoid 🔥</th></tr>
 <tr><td>
 
 ```go
@@ -757,6 +738,19 @@ func function(
 
 </td></tr>
 </tbody></table>
+
+This applies for both calling and defining method / function.
+
+NOTE: One exception would be when you expect the variadic (e.g. `...string`) arguments to be filled in pairs, e.g:
+
+```go
+level.Info(logger).Log(
+    "msg", "found something epic during compaction; this looks amazing",
+    "compNumber", compNumber,
+    "block", id,
+    "elapsed", timeElapsed,
+)
+```
 
 #### Control Structure: Prefer early returns and avoid `else`
 
