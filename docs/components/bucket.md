@@ -172,6 +172,8 @@ Example:
 $ thanos bucket verify --objstore.config-file="..."
 ```
 
+When using the `--repair` option, make sure that the compactor job is disabled first.
+
 [embedmd]: # "flags/bucket_verify.txt"
 
 ```txt
