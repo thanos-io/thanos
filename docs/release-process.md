@@ -89,9 +89,9 @@ Release is happening on separate `release-<major>.<minor>` branch.
 1. After review, merge the PR and immediately after this tag a version:
 
     ```bash
-    $ tag=$(cat VERSION)
-    $ git tag -s "v${tag}" -m "v${tag}"
-    $ git push origin "v${tag}"
+    tag=$(cat VERSION)
+    git tag -s "v${tag}" -m "v${tag}"
+    git push origin "v${tag}"
     ```
 
     Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
