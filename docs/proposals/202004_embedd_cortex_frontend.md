@@ -95,6 +95,8 @@ Furthermore, eventually frontend will be responsible for more than just caching.
 advanced query paralization (query sharding). This might mean future improvements in terms of query scheduling, queuing and retrying.
 This means that at some point we would need an ability to scale query part and caching/query planner totally separately.
 
+Last but not least splitting queries allows to perform request in parallel. Only if used in single binary we can achieve load balancing of those requests.
+
 NOTE: We can still consider just simple response caching inside Querier if user will request so.
 
 #### Write response caching from scratch.
