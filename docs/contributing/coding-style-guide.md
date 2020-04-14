@@ -827,7 +827,7 @@ if err != nil {
 
 #### Use the Blank Identifier `_`
 
-Black identifiers are very useful to mark variables that are not used. Consider the following cases:
+Blank identifiers are very useful to mark variables that are not used. Consider the following cases:
 
 ```go
 // We don't need the second return parameter.
