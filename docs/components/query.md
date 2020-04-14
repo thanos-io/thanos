@@ -290,9 +290,8 @@ Flags:
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-client-dns-server-name
                                  For stores that are DNS, use the dns name as
-                                 the server name for connection. Needed when
-                                 proxying through nginx, and only applicable if
-                                 using the secure flag
+                                 the server name for connection. Only applicable
+                                 if using the secure flag
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path. This
                                  option is analogous to --web.route-prefix of

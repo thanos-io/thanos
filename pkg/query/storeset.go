@@ -40,8 +40,7 @@ type StoreSpec interface {
 	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
 	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
 	StrictStatic() bool
-	// ServerName returns StoreAPI ServerName for the store spec.
-	// It is needed to get to a StoreAPI behind an nginx proxy.
+	// ServerName returns the StoreAPI's server name for the store spec.
 	ServerName() string
 }
 
@@ -61,7 +60,7 @@ type grpcStoreSpec struct {
 	serverName   string
 }
 
-// NewGRPCStoreSpecServerName creates store pure gRPC spec with a Server Name.
+// NewGRPCStoreSpecServerName creates store pure gRPC spec with a server name.
 // It uses Info gRPC call to get Metadata.
 func NewGRPCStoreSpecServerName(addr string, strictstatic bool, serverName string) StoreSpec {
 	return &grpcStoreSpec{addr: addr, strictstatic: strictstatic, serverName: serverName}
