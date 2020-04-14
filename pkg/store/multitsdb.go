@@ -90,8 +90,7 @@ type seriesSetServer struct {
 	recv   chan *storepb.Series
 	cur    *storepb.Series
 
-	errMtx *sync.Mutex
-	err    error
+	err error
 }
 
 func newSeriesSetServer(
