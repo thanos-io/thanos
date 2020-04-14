@@ -165,7 +165,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.row('Store Sent')
         .addPanel(
-          g.panel('Chunk Size (bytes)', 'Shows size of chunks that have sent to the bucket, in bytes.') +
+          g.panel('Chunk Size', 'Shows size of chunks that have sent to the bucket.') +
           g.queryPanel(
             [
               'histogram_quantile(0.99, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (job, le))',
@@ -177,9 +177,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
               'mean',
               'P50',
             ],
-          )
-        ) +
-        { yaxes: g.yaxes('decbytes') },
+          ) +
+          { yaxes: g.yaxes('bytes') }
+        ),
       )
       .addRow(
         g.row('Series Operations')
@@ -198,7 +198,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Data Fetched (bytes)', 'Show the size of data fetched, in bytes') +
+          g.panel('Data Fetched', 'Show the size of data fetched') +
           g.queryPanel(
             [
               'thanos_bucket_store_series_data_fetched{namespace="$namespace",job=~"$job",quantile="0.99"}',
@@ -209,7 +209,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
               'mean {{job}}',
               'P50',
             ],
-          )
+          ) +
+          { yaxes: g.yaxes('bytes') }
         )
         .addPanel(
           g.panel('Result series') +

@@ -2147,7 +2147,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Memory Used (Bytes)",
+               "title": "Memory Used",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -2163,7 +2163,7 @@
                },
                "yaxes": [
                   {
-                     "format": "short",
+                     "format": "bytes",
                      "label": null,
                      "logBase": 1,
                      "max": null,
