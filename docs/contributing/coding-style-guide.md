@@ -1070,4 +1070,6 @@ Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246
 
 Overall try to NOT use bash. For scripts longer than 30 lines, consider writing it in Go as we did [here](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/scripts/copyright/copyright.go).
 
-If you have to, we follow the Google Shell style guide: https://google.github.io/styleguide/shellguide.html
+A useful library for writing shell-like scripts in Go is [script](https://github.com/bitfield/script).
+
+If you must use bash, follow the Google Shell style guide: https://google.github.io/styleguide/shellguide.html
