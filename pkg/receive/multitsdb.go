@@ -142,34 +142,6 @@ func (t *MultiTSDB) Open() error {
 	return g.Wait()
 }
 
-func (t *MultiTSDB) Close() error {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-
-	errmtx := &sync.Mutex{}
-	merr := terrors.MultiError{}
-	wg := &sync.WaitGroup{}
-	for _, tenant := range t.tenants {
-		s := tenant.flushableStorage()
-		if s == nil {
-			continue
-		}
-
-		wg.Add(1)
-		go func() {
-			if err := s.Close(); err != nil {
-				errmtx.Lock()
-				merr.Add(err)
-				errmtx.Unlock()
-			}
-			wg.Done()
-		}()
-	}
-
-	wg.Wait()
-	return merr.Err()
-}
-
 func (t *MultiTSDB) Flush() error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
