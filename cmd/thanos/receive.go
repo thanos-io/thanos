@@ -202,32 +202,28 @@ func runReceive(
 		return err
 	}
 
+	var bkt objstore.Bucket
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
-	upload := true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		upload = false
-	}
-
-	if upload && tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
-		if !ignoreBlockSize {
-			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
-				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
-		}
-		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
-	}
-
-	var bkt objstore.Bucket
+	upload := len(confContentYaml) > 0
 	if upload {
+		if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+			if !ignoreBlockSize {
+				return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+					"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+			}
+			level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+		}
 		// The background shipper continuously scans the data directory and uploads
-		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		// new blocks to object storage service.
 		bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
 		if err != nil {
 			return err
 		}
+	} else {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 	}
 
 	dbs := receive.NewMultiTSDB(
@@ -310,9 +306,8 @@ func runReceive(
 						uploadC <- struct{}{}
 						<-uploadDone
 					}
-					level.Info(logger).Log("msg", "tsdb started")
 					statusProber.Ready()
-					level.Info(logger).Log("msg", "server is ready to receive web requests")
+					level.Info(logger).Log("msg", "tsdb started, and server is ready to receive web requests")
 					dbReady <- struct{}{}
 				}
 			}
@@ -411,9 +406,13 @@ func runReceive(
 					s.Shutdown(errors.New("reload hashrings"))
 				}
 
-				multiStore := store.NewMultiTSDBStore(logger, reg, comp, dbs.TSDBStores)
 				rw := store.ReadWriteTSDBStore{
-					StoreServer:          multiStore,
+					StoreServer: store.NewMultiTSDBStore(
+						logger,
+						reg,
+						comp,
+						dbs.TSDBStores,
+					),
 					WriteableStoreServer: webHandler,
 				}
 
@@ -456,8 +455,8 @@ func runReceive(
 
 	if upload {
 		level.Debug(logger).Log("msg", "upload enabled")
-		if err := dbs.Upload(context.Background()); err != nil {
-			level.Warn(logger).Log("err", err)
+		if err := dbs.Sync(context.Background()); err != nil {
+			level.Warn(logger).Log("msg", "initial upload failed", "err", err)
 		}
 
 		{
@@ -465,8 +464,8 @@ func runReceive(
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-					if err := dbs.Upload(ctx); err != nil {
-						level.Warn(logger).Log("err", err)
+					if err := dbs.Sync(ctx); err != nil {
+						level.Warn(logger).Log("msg", "interval upload failed", "err", err)
 					}
 
 					return nil
@@ -487,8 +486,8 @@ func runReceive(
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
 					<-uploadC
-					if err := dbs.Upload(context.Background()); err != nil {
-						level.Warn(logger).Log("err", err)
+					if err := dbs.Sync(context.Background()); err != nil {
+						level.Warn(logger).Log("msg", "on demnad upload failed", "err", err)
 					}
 				}()
 				defer close(uploadDone)
@@ -502,7 +501,7 @@ func runReceive(
 					case <-ctx.Done():
 						return nil
 					case <-uploadC:
-						if err := dbs.Upload(ctx); err != nil {
+						if err := dbs.Sync(ctx); err != nil {
 							level.Warn(logger).Log("err", err)
 						}
 						uploadDone <- struct{}{}

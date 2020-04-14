@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -102,7 +101,6 @@ func newSeriesSetServer(
 		ctx:    ctx,
 		warnCh: warnCh,
 		recv:   make(chan *storepb.Series),
-		errMtx: &sync.Mutex{},
 	}
 }
 
@@ -110,13 +108,11 @@ func (s *seriesSetServer) Context() context.Context {
 	return s.ctx
 }
 
-func (s *seriesSetServer) Run(store *TSDBStore, r *storepb.SeriesRequest) {
+func (s *seriesSetServer) Series(store *TSDBStore, r *storepb.SeriesRequest) {
 	err := store.Series(r, s)
 	if err != nil {
 		if r.PartialResponseDisabled {
-			s.errMtx.Lock()
 			s.err = err
-			s.errMtx.Unlock()
 		} else {
 			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
 		}
@@ -149,8 +145,6 @@ func (s *seriesSetServer) At() ([]storepb.Label, []storepb.AggrChunk) {
 }
 
 func (s *seriesSetServer) Err() error {
-	s.errMtx.Lock()
-	defer s.errMtx.Unlock()
 	return s.err
 }
 
@@ -192,7 +186,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ss.Run(store, r)
+				ss.Series(store, r)
 			}()
 
 			seriesSet = append(seriesSet, ss)
@@ -213,11 +207,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 		}
 	}
 
-	if err := g.Wait(); err != nil {
-		level.Error(s.logger).Log("err", err)
-		return err
-	}
-	return nil
+	return g.Wait()
 }
 
 // LabelNames returns all known label names.

@@ -5,7 +5,6 @@ package receive
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"golang.org/x/sync/errgroup"
@@ -34,16 +35,70 @@ type MultiTSDB struct {
 	tenantLabelName string
 	labels          labels.Labels
 	bucket          objstore.Bucket
-	upload          bool
 
-	mtx         *sync.RWMutex
-	dbs         map[string]*FlushableStorage
-	appendables map[string]*tsdb.ReadyStorage
-	stores      map[string]*store.TSDBStore
-	shippers    map[string]*shipper.Shipper
+	mtx     *sync.RWMutex
+	tenants map[string]*tenant
 }
 
-func NewMultiTSDB(dataDir string, l log.Logger, reg prometheus.Registerer, tsdbCfg *tsdb.Options, labels labels.Labels, tenantLabelName string, bucket objstore.Bucket) *MultiTSDB {
+type tenant struct {
+	tsdbCfg *tsdb.Options
+
+	readyS *tsdb.ReadyStorage
+	fs     *FlushableStorage
+	s      *store.TSDBStore
+	ship   *shipper.Shipper
+
+	mtx *sync.RWMutex
+}
+
+func newTenant(tsdbCfg *tsdb.Options) *tenant {
+	return &tenant{
+		tsdbCfg: tsdbCfg,
+		readyS:  &tsdb.ReadyStorage{},
+		mtx:     &sync.RWMutex{},
+	}
+}
+
+func (t *tenant) readyStorage() *tsdb.ReadyStorage {
+	return t.readyS
+}
+
+func (t *tenant) store() *store.TSDBStore {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.s
+}
+
+func (t *tenant) shipper() *shipper.Shipper {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.ship
+}
+
+func (t *tenant) flushableStorage() *FlushableStorage {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.fs
+}
+
+func (t *tenant) set(tstore *store.TSDBStore, fs *FlushableStorage, ship *shipper.Shipper) {
+	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbCfg.MinBlockDuration).Seconds()*1000))
+	t.mtx.Lock()
+	t.fs = fs
+	t.s = tstore
+	t.ship = ship
+	t.mtx.Unlock()
+}
+
+func NewMultiTSDB(
+	dataDir string,
+	l log.Logger,
+	reg prometheus.Registerer,
+	tsdbCfg *tsdb.Options,
+	labels labels.Labels,
+	tenantLabelName string,
+	bucket objstore.Bucket,
+) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
@@ -54,14 +109,10 @@ func NewMultiTSDB(dataDir string, l log.Logger, reg prometheus.Registerer, tsdbC
 		reg:             reg,
 		tsdbCfg:         tsdbCfg,
 		mtx:             &sync.RWMutex{},
-		dbs:             map[string]*FlushableStorage{},
-		stores:          map[string]*store.TSDBStore{},
-		appendables:     map[string]*tsdb.ReadyStorage{},
-		shippers:        map[string]*shipper.Shipper{},
+		tenants:         map[string]*tenant{},
 		labels:          labels,
 		tenantLabelName: tenantLabelName,
 		bucket:          bucket,
-		upload:          bucket != nil,
 	}
 }
 
@@ -70,7 +121,25 @@ func (t *MultiTSDB) Open() error {
 		return err
 	}
 
-	return t.openTSDBs()
+	files, err := ioutil.ReadDir(t.dataDir)
+	if err != nil {
+		return err
+	}
+
+	var g errgroup.Group
+	for _, f := range files {
+		f := f
+		if !f.IsDir() {
+			continue
+		}
+
+		g.Go(func() error {
+			_, err := t.getOrLoadTenant(f.Name())
+			return err
+		})
+	}
+
+	return g.Wait()
 }
 
 func (t *MultiTSDB) Close() error {
@@ -80,11 +149,15 @@ func (t *MultiTSDB) Close() error {
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
-	for _, tsdb := range t.dbs {
-		tsdb := tsdb
+	for _, tenant := range t.tenants {
+		s := tenant.flushableStorage()
+		if s == nil {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
-			if err := tsdb.Close(); err != nil {
+			if err := s.Close(); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -104,11 +177,15 @@ func (t *MultiTSDB) Flush() error {
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
-	for _, tsdb := range t.dbs {
-		tsdb := tsdb
+	for _, tenant := range t.tenants {
+		s := tenant.flushableStorage()
+		if s == nil {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
-			if err := tsdb.Flush(); err != nil {
+			if err := s.Flush(); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -121,25 +198,25 @@ func (t *MultiTSDB) Flush() error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) Upload(ctx context.Context) error {
-	if !t.upload {
-		return nil
-	}
-
+func (t *MultiTSDB) Sync(ctx context.Context) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
-	for tenant, s := range t.shippers {
-		level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenant)
-		s := s
+	for tenantID, tenant := range t.tenants {
+		level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID)
+		s := tenant.shipper()
+		if s == nil {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
 			if uploaded, err := s.Sync(ctx); err != nil {
 				errmtx.Lock()
-				merr.Add(fmt.Errorf("failed to upload %d: %w", uploaded, err))
+				merr.Add(errors.Wrapf(err, "upload %d", uploaded))
 				errmtx.Unlock()
 			}
 			wg.Done()
@@ -150,60 +227,41 @@ func (t *MultiTSDB) Upload(ctx context.Context) error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) openTSDBs() error {
-	files, err := ioutil.ReadDir(t.dataDir)
-	if err != nil {
-		return err
-	}
-
-	var g errgroup.Group
-	for _, f := range files {
-		f := f
-		if !f.IsDir() {
-			continue
-		}
-
-		g.Go(func() error {
-			tenantId := f.Name()
-			_, err := t.getOrLoadTenant(tenantId)
-			return err
-		})
-	}
-
-	return g.Wait()
-}
-
 func (t *MultiTSDB) TSDBStores() map[string]*store.TSDBStore {
 	t.mtx.RLock()
-	res := make(map[string]*store.TSDBStore, len(t.stores))
-	for k, v := range t.stores {
-		res[k] = v
-	}
 	defer t.mtx.RUnlock()
+
+	res := make(map[string]*store.TSDBStore, len(t.tenants))
+	for k, tenant := range t.tenants {
+		s := tenant.store()
+		if s != nil {
+			res[k] = s
+		}
+	}
 	return res
 }
 
-func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tsdb.ReadyStorage, error) {
+func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
 	// Fast path, as creating tenants is a very rare operation.
 	t.mtx.RLock()
-	db, exist := t.appendables[tenantID]
+	tenant, exist := t.tenants[tenantID]
 	t.mtx.RUnlock()
 	if exist {
-		return db, nil
+		return tenant, nil
 	}
 
 	// Slow path needs to lock fully and attempt to read again to prevent race
 	// conditions, where since the fast path was tried, there may have actually
 	// been the same tenant inserted in the map.
 	t.mtx.Lock()
-	db, exist = t.appendables[tenantID]
+	tenant, exist = t.tenants[tenantID]
 	if exist {
 		t.mtx.Unlock()
-		return db, nil
+		return tenant, nil
 	}
 
-	rs := &tsdb.ReadyStorage{}
-	t.appendables[tenantID] = rs
+	tenant = newTenant(t.tsdbCfg)
+	t.tenants[tenantID] = tenant
 	t.mtx.Unlock()
 
 	go func() {
@@ -215,7 +273,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tsdb.ReadyStorage, error)
 		dataDir := path.Join(t.dataDir, tenantID)
 
 		var ship *shipper.Shipper
-		if t.upload {
+		if t.bucket != nil {
 			ship = shipper.New(
 				logger,
 				reg,
@@ -236,34 +294,32 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tsdb.ReadyStorage, error)
 		if err := s.Open(); err != nil {
 			level.Error(logger).Log("msg", "failed to open tsdb", "err", err)
 			t.mtx.Lock()
-			delete(t.appendables, tenantID)
-			delete(t.stores, tenantID)
+			delete(t.tenants, tenantID)
 			t.mtx.Unlock()
-			if err := s.Close(); err != nil {
-				level.Error(logger).Log("msg", "failed to close tsdb", "err", err)
-			}
+			runutil.CloseWithLogOnErr(logger, s, "failed to close tsdb")
 			return
 		}
 
-		tstore := store.NewTSDBStore(
-			logger,
-			reg,
-			s.Get(),
-			component.Receive,
-			lbls,
+		tenant.set(
+			store.NewTSDBStore(
+				logger,
+				reg,
+				s.Get(),
+				component.Receive,
+				lbls,
+			),
+			s,
+			ship,
 		)
-
-		t.mtx.Lock()
-		rs.Set(s.Get(), int64(2*time.Duration(t.tsdbCfg.MinBlockDuration).Seconds()*1000))
-		t.stores[tenantID] = tstore
-		t.dbs[tenantID] = s
-		t.shippers[tenantID] = ship
-		t.mtx.Unlock()
 	}()
 
-	return rs, nil
+	return tenant, nil
 }
 
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
-	return t.getOrLoadTenant(tenantID)
+	tenant, err := t.getOrLoadTenant(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return tenant.readyStorage(), nil
 }

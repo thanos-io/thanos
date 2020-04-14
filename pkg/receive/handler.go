@@ -531,7 +531,6 @@ func isConflict(err error) bool {
 // isNotReady returns whether or not the given error represents a not ready error.
 func isNotReady(err error) bool {
 	return err == tsdb.ErrNotReady ||
-		err.Error() == strconv.Itoa(http.StatusConflict) ||
 		status.Code(err) == codes.Unavailable
 }
 

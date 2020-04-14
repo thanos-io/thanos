@@ -28,13 +28,13 @@ type TenantStorage interface {
 
 type Writer struct {
 	logger    log.Logger
-	multitsdb TenantStorage
+	multiTSDB TenantStorage
 }
 
-func NewWriter(logger log.Logger, multitsdb TenantStorage) *Writer {
+func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 	return &Writer{
 		logger:    logger,
-		multitsdb: multitsdb,
+		multiTSDB: multiTSDB,
 	}
 }
 
@@ -45,7 +45,7 @@ func (r *Writer) Write(tenantID string, wreq *prompb.WriteRequest) error {
 		numOutOfBounds = 0
 	)
 
-	s, err := r.multitsdb.TenantAppendable(tenantID)
+	s, err := r.multiTSDB.TenantAppendable(tenantID)
 	if err != nil {
 		return errors.Wrap(err, "get tenant appendable")
 	}
@@ -56,9 +56,6 @@ func (r *Writer) Write(tenantID string, wreq *prompb.WriteRequest) error {
 	}
 	if err != nil {
 		return errors.Wrap(err, "get appender")
-	}
-	if app == nil {
-		return errors.New("tsdb not ready yet to be appended to")
 	}
 
 	var errs terrors.MultiError
