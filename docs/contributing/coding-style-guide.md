@@ -53,13 +53,13 @@ development. Some of those are currently impossible to detect with linters. Idea
         + [Testing](coding-style-guide.md#testing)
           - [Table Tests](coding-style-guide.md#table-tests)
           - [Tests for Packages / Structs That Involve `time` package.](coding-style-guide.md#tests-for-packages-structs-that-involve-time-package)
-  * [Ensured by linters](coding-style-guide.md#ensured-by-linters)
-      - [Avoid Prints.](coding-style-guide.md#avoid-prints)
+  * [Enforced by Linters](coding-style-guide.md#enforced-by-linters)
+      - [Avoid Prints](coding-style-guide.md#avoid-prints)
       - [Ensure Prometheus Metric Registration](coding-style-guide.md#ensure-prometheus-metric-registration)
       - [go vet](coding-style-guide.md#go-vet)
       - [golangci-lint](coding-style-guide.md#golangci-lint)
       - [misspell](coding-style-guide.md#misspell)
-      - [Commentaries Should we a Full Sentence.](coding-style-guide.md#commentaries-should-we-a-full-sentence)
+      - [Comments Should be Full Sentences](coding-style-guide.md#comments-should-be-full-sentences)
 - [Bash](coding-style-guide.md#bash)
 
 <small><i>Table of contents generated with <a href='http://ecotrust-canada.github.io/markdown-toc/'>markdown-toc</a></i></small>
@@ -1019,12 +1019,12 @@ func (s *SomeType) IsExpired(created time.Time) bool {
 </td></tr>
 </tbody></table>
 
-## Ensured by linters
+## Enforced by Linters
 
 This is the list of rules we ensure automatically. This section is for those who are curious why such linting rules
 were added or want similar ones in their Go project. 🤗
 
-#### Avoid Prints.
+#### Avoid Prints
 
 Never use `print`. Always use a passed `go-kit/log.Logger`.
 
@@ -1032,8 +1032,8 @@ Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246
 
 #### Ensure Prometheus Metric Registration
 
-It's very easy to forget to add Prometheus metric (e.g `prometheus.Counter`) into `registry.MustRegister` function.
-To avoid this we ensure all metrics are created via `promtest.With(r).New*` and old type of registration is not allowed.
+It's very easy to forget to add Prometheus metrics (e.g a `prometheus.Counter`) into a `registry.MustRegister` function.
+To avoid this, we ensure all metrics are created via `promtest.With(r).New*` and we disallow the old type of registration.
 Read more about the problem [here](https://github.com/thanos-io/thanos/issues/2102).
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L308).
@@ -1046,23 +1046,23 @@ Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246
 
 #### golangci-lint
 
-[golangci-lint](https://github.com/golangci/golangci-lint) is an amazing tool that allows running set of different custom
-linters across Go community against your code. Give it a Star and use it. (:
+[golangci-lint](https://github.com/golangci/golangci-lint) is an amazing tool that allows running a set of different custom
+linters from the Go community against your code. Give it a star and use it. (:
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L315) with
 [those linters](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/.golangci.yml#L31) enabled.
 
 #### misspell
 
-Misspell is amazing, it catches some typos in comments or docs.
+Misspell is amazing, it catches typos in comments and docs.
 
 No Grammarly plugin for this yet ): (We wish).
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L317).
 
-#### Commentaries Should be a Full Sentence.
+#### Comments Should be Full Sentences
 
-All comments should be a full sentence. Should start with Uppercase letter and end with a period.
+All comments should be full sentences. They should start with an uppercase letter and end with a period.
 
 Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L194).
 
