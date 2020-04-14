@@ -20,13 +20,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// MultiTSDBStore implements the Store interface backed by multiple TSDBStore instances.
 type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
 	tsdbStores func() map[string]*TSDBStore
 }
 
-// NewMultiTSDBStore creates a new TSDBStore.
+// NewMultiTSDBStore creates a new MultiTSDBStore.
 func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]*TSDBStore) *MultiTSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -38,7 +39,7 @@ func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component com
 	}
 }
 
-// Info returns store information about the Prometheus instance.
+// Info returns store merged information about the underlying TSDBStore instances.
 func (s *MultiTSDBStore) Info(ctx context.Context, req *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	stores := s.tsdbStores()
 
@@ -148,8 +149,9 @@ func (s *seriesSetServer) Err() error {
 	return s.err
 }
 
-// Series returns all series for a requested time range and label matcher. The returned data may
-// exceed the requested time bounds.
+// Series returns all series for a requested time range and label matcher. The
+// returned data may exceed the requested time bounds. The data returned may
+// have been read and merged from multiple underlying TSDBStore instances.
 func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	stores := s.tsdbStores()
 	if len(stores) == 0 {
