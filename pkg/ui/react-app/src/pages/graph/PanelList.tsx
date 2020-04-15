@@ -171,7 +171,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           <strong>Warning: </strong>
           {timeErr && `Unexpected response status when fetching server time: ${timeErr.message}`}
           {delta >= 30 &&
-            `Error fetching server time: Detected ${delta} seconds time difference between your browser and the server. Prometheus relies on accurate time and time drift might cause unexpected query results.`}
+            `Error fetching server time: Detected ${delta} seconds time difference between your browser and the server. Thanos relies on accurate time and time drift might cause unexpected query results.`}
         </Alert>
       )}
       {metricsErr && (

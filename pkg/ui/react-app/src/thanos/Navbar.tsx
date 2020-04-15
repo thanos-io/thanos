@@ -1,17 +1,6 @@
 import React, { FC, useState } from 'react';
 import { Link } from '@reach/router';
-import {
-  Collapse,
-  Navbar,
-  NavbarToggler,
-  Nav,
-  NavItem,
-  NavLink,
-  UncontrolledDropdown,
-  DropdownToggle,
-  DropdownMenu,
-  DropdownItem,
-} from 'reactstrap';
+import { Collapse, Navbar, NavbarToggler, Nav, NavItem, NavLink } from 'reactstrap';
 import PathPrefixProps from '../types/PathPrefixProps';
 import ThanosComponentProps from './types/ThanosComponentProps';
 

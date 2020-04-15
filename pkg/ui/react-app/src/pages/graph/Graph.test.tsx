@@ -226,10 +226,7 @@ describe('Graph', () => {
               resolution: 28,
             },
             data: {
-              result: [
-                { values: [], metric: {} },
-                { values: [], metric: {} },
-              ],
+              result: [{ values: [], metric: {} }, { values: [], metric: {} }],
             },
           } as any)}
         />
@@ -257,10 +254,7 @@ describe('Graph', () => {
               resolution: 28,
             },
             data: {
-              result: [
-                { values: [], metric: {} },
-                { values: [], metric: {} },
-              ],
+              result: [{ values: [], metric: {} }, { values: [], metric: {} }],
             },
           } as any)}
         />

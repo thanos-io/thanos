@@ -107,7 +107,7 @@ type API struct {
 	enablePartialResponse                  bool
 	replicaLabels                          []string
 	reg                                    prometheus.Registerer
-	storeSet *query.StoreSet
+	storeSet                               *query.StoreSet
 	defaultInstantQueryMaxSourceResolution time.Duration
 
 	now func() time.Time
@@ -133,7 +133,7 @@ func NewAPI(
 		enablePartialResponse:                  enablePartialResponse,
 		replicaLabels:                          replicaLabels,
 		reg:                                    reg,
-		storeSet: storeSet,
+		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
 		now: time.Now,
@@ -182,8 +182,6 @@ type queryData struct {
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
-
-type storesData map[string][]query.StoreStatus
 
 func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *ApiError) {
 	const dedupParam = "dedup"
@@ -635,7 +633,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 }
 
 func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
-	statuses := make(storesData)
+	statuses := make(map[string][]query.StoreStatus)
 	for _, status := range api.storeSet.GetStoreStatus() {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
 	}

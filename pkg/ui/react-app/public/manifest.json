@@ -1,6 +1,6 @@
 {
-  "short_name": "Prometheus UI",
-  "name": "Prometheus Server Web Interface",
+  "short_name": "Thanos",
+  "name": "Thanos web interface",
   "icons": [
     {
       "src": "favicon.ico",

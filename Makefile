@@ -88,7 +88,6 @@ REACT_APP_PATH = pkg/ui/react-app
 REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
-REACT_APP_NPM_LICENSES_TARBALL = "npm_licenses.tar.bz2"
 
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
@@ -155,7 +154,7 @@ assets: $(GOBINDATA) $(REACT_APP_OUTPUT_DIR)
 	@go fmt ./pkg/ui
 
 .PHONY: react-app-lint
-react-app-lint:
+react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
 	   cd $(REACT_APP_PATH) && yarn lint:ci
 
@@ -167,7 +166,7 @@ react-app-lint-fix:
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 	@echo ">> running React app tests"
-	cd $(REACT_APP_PATH) && yarn test --no-watch --coverage
+	cd $(REACT_APP_PATH) && export CI=true && yarn test --no-watch --coverage
 
 .PHONY: react-app-start
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
