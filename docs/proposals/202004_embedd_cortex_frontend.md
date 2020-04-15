@@ -33,14 +33,14 @@ Since the nature of Cortex backend is really similar to Thanos, with exactly the
 work done for Cortex fits to Thanos. Given also our good collaboration in the past, it feels natural to reuse Cortex's code.
 We even started discussion to move it to separate repo, but there was no motivation towards this, for a good reason.
 At the end we were advertising to use cortex query frontend on production on top of Thanos and this works considerably well, with some
-problems on edge cases and for downsampled data as mentioned [here]()
+problems on edge cases and for downsampled data as mentioned [here](https://github.com/thanos-io/thanos/issues/1651).
 
 However, we realized recently that asking users to install suddenly Cortex component on top of Thanos system is extremely confusing:
 
-* Cortex has totally different way of configuring services. It requires to decide what module you have in single YAML file. Thanos in opposite
+* Cortex has totally different way of configuring services. It requires deciding what module you have in single YAML file. Thanos in opposite
 have flags and different subcommand for each component.
-* Cortex has bit different way of configuring memcached, which is inconsistent with what we have in Thanos Stote Gateway.
-* There are many Cortex specific configuration items which can confuse Thanos user and increase complexity overall (e.g. )
+* Cortex has bit different way of configuring memcached, which is inconsistent with what we have in Thanos Store Gateway.
+* There are many Cortex specific configuration items which can confuse Thanos user and increase complexity overall.
 * We have many ideas how to improve Cortex Query Frontend on top of Thanos, but adding Thanos specific configuration options will increase
 complexity on Cortex side as well.
 * Cortex has no good example or tutorial on how to use frontend either. We have only [Observatorium example](https://github.com/observatorium/configuration/blob/master/environments/openshift/manifests/observatorium-template.yaml#L515).
@@ -72,14 +72,25 @@ The idea is to create `thanos frontend` component that allows specifying followi
 * `--query-range.split-interval`, `time.Duration`
 * `--query-range.max-retries-per-request`, `int`, default = `5`
 * `--query-range.disable-step-align`, `bool`
-* `--query-range.response-cache-ttl` `time.Duration` default = `1m`
+* `--query-range.response-cache-ttl` `time.Duration`
+* `--query-range.response-cache-max-freshness` `time.Duration` default = `1m`
 * `--query-range.response-cache-config(-file)` `pathorcontent` + [CacheConfig](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/pkg/store/cache/factory.go#L32)
 
 We plan to have in-mem, fifo and memcached support for now. Cache config will be exactly the same as the one used for Store Gateway.
 
+This command will be placeholder for any query planning or queueing logic that we might want to add at some point. It will be not part of any gRPC API.
+
+To make this happen we will propose a small refactor in Cortex code to avoid unnecessary package dependencies.
+
 ### Open Questions
 
 * Is `thanos frontend` a valid name? I feel it's short and verbose enough.
+
+Other, considered options:
+* `loadbalance`, `lb`
+* `ingress`
+* `edge`
+* `planner`
 
 ### Alternatives
 
@@ -92,12 +103,12 @@ Unfortunately we tried this path already without success. Reasons were mentioned
 This will definitely simplify deployment if Querier would allow caching directly. However, this way is not really scalable.
 
 Furthermore, eventually frontend will be responsible for more than just caching. It is meant to do query planning like splitting or even
-advanced query paralization (query sharding). This might mean future improvements in terms of query scheduling, queuing and retrying.
+advanced query parallelization (query sharding). This might mean future improvements in terms of query scheduling, queuing and retrying.
 This means that at some point we would need an ability to scale query part and caching/query planner totally separately.
 
 Last but not least splitting queries allows to perform request in parallel. Only if used in single binary we can achieve load balancing of those requests.
 
-NOTE: We can still consider just simple response caching inside Querier if user will request so.
+NOTE: We can still consider just simple response caching inside the Querier if user will request so.
 
 #### Write response caching from scratch.
 
@@ -109,12 +120,14 @@ Overall, [Reusing is caring](https://www.bwplotka.dev/2020/how-to-became-oss-mai
 ## Work Plan
 
 1. Refactor [IndexCacheConfig](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/pkg/store/cache/factory.go#L32) to generic cache config so we can reuse.
+Make it implement cortex cache.Cache interface.
 1. Add necessary changes to Cortex frontend
     * Metric generalization (they are globals now).
+    * Avoid unnecessary dependencies.
 1. Add `thanos frontend` subcommand.
 1. Add proper e2e test using cache.
 1. Document new subcommand
-1. Add to [kube-thanos](https://github.com/thanos-io/kube-thanos0)
+1. Add to [kube-thanos](https://github.com/thanos-io/kube-thanos)
 
 ## Future Work
 
