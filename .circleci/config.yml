@@ -1,10 +1,13 @@
 # NOTE: Current plan gives 1500 build minutes per month.
 version: 2
+# https://circleci.com/blog/circleci-hacks-reuse-yaml-in-your-circleci-config-with-yaml/
+defaults: &defaults
+  docker:
+    # Built by Thanos make docker-ci
+    - image: quay.io/thanos/thanos-ci:v0.3.0
 jobs:
   test:
-    docker:
-     # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.3.0
+    <<: *defaults
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
@@ -58,9 +61,7 @@ jobs:
         - .build
 
   publish_master:
-    docker:
-      # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.2.0
+    <<: *defaults
     working_directory: /go/src/github.com/thanos-io/thanos
     steps:
       - checkout
@@ -78,9 +79,7 @@ jobs:
       - run: make docker-push
 
   publish_release:
-    docker:
-      # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.2.0
+    <<: *defaults
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GOBIN: "/go/bin"
