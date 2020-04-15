@@ -39,14 +39,14 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 	for _, tt := range []struct {
 		name                  string
 		blocks                []testBlock
-		retentionByResolution map[compact.ResolutionLevel]time.Duration
+		retentionByResolution compact.RetentionPolicy
 		want                  []string
 		wantErr               bool
 	}{
 		{
 			"empty bucket",
 			[]testBlock{},
-			map[compact.ResolutionLevel]time.Duration{
+			compact.RetentionPolicy{
 				compact.ResolutionLevelRaw: 24 * time.Hour,
 				compact.ResolutionLevel5m:  7 * 24 * time.Hour,
 				compact.ResolutionLevel1h:  14 * 24 * time.Hour,
@@ -82,7 +82,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 					compact.ResolutionLevelRaw,
 				},
 			},
-			map[compact.ResolutionLevel]time.Duration{
+			compact.RetentionPolicy{
 				compact.ResolutionLevelRaw: 24 * time.Hour,
 				compact.ResolutionLevel5m:  0,
 				compact.ResolutionLevel1h:  0,
@@ -122,7 +122,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 					compact.ResolutionLevelRaw,
 				},
 			},
-			map[compact.ResolutionLevel]time.Duration{
+			compact.RetentionPolicy{
 				compact.ResolutionLevelRaw: 0,
 				compact.ResolutionLevel5m:  0,
 				compact.ResolutionLevel1h:  0,
@@ -157,7 +157,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 					compact.ResolutionLevel1h,
 				},
 			},
-			map[compact.ResolutionLevel]time.Duration{
+			compact.RetentionPolicy{
 				compact.ResolutionLevelRaw: 0,
 				compact.ResolutionLevel5m:  0,
 				compact.ResolutionLevel1h:  0,
@@ -179,7 +179,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 					compact.ResolutionLevel(1),
 				},
 			},
-			map[compact.ResolutionLevel]time.Duration{},
+			compact.RetentionPolicy{},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW48/",
 			},
@@ -225,7 +225,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 					compact.ResolutionLevel1h,
 				},
 			},
-			map[compact.ResolutionLevel]time.Duration{
+			compact.RetentionPolicy{
 				compact.ResolutionLevelRaw: 24 * time.Hour,
 				compact.ResolutionLevel5m:  7 * 24 * time.Hour,
 				compact.ResolutionLevel1h:  14 * 24 * time.Hour,
@@ -300,4 +300,57 @@ func uploadMockBlock(t *testing.T, bkt objstore.Bucket, id string, minTime, maxT
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000001", strings.NewReader("@test-data@")))
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000002", strings.NewReader("@test-data@")))
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000003", strings.NewReader("@test-data@")))
+}
+
+func TestInitialRetentionPolicy(t *testing.T) {
+	for _, tt := range []struct {
+		name                  string
+		retentionByResolution compact.RetentionPolicy
+		want                  compact.RetentionPolicy
+	}{
+		{
+			"increasing",
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(1000),
+				compact.ResolutionLevel5m:  time.Duration(5000),
+				compact.ResolutionLevel1h:  time.Duration(10000),
+			},
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(10000),
+				compact.ResolutionLevel5m:  time.Duration(10000),
+				compact.ResolutionLevel1h:  time.Duration(10000),
+			},
+		},
+		{
+			"non-increasing",
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(10000),
+				compact.ResolutionLevel5m:  time.Duration(5000),
+				compact.ResolutionLevel1h:  time.Duration(1000),
+			},
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(10000),
+				compact.ResolutionLevel5m:  time.Duration(10000),
+				compact.ResolutionLevel1h:  time.Duration(10000),
+			},
+		},
+		{
+			"disabled",
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(1000),
+				compact.ResolutionLevel5m:  time.Duration(0),
+				compact.ResolutionLevel1h:  time.Duration(10000),
+			},
+			compact.RetentionPolicy{
+				compact.ResolutionLevelRaw: time.Duration(0),
+				compact.ResolutionLevel5m:  time.Duration(0),
+				compact.ResolutionLevel1h:  time.Duration(0),
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			testutil.Equals(t, tt.retentionByResolution.InitialRetentionPolicy(), tt.want)
+		})
+	}
+
 }

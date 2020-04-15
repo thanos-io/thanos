@@ -274,7 +274,7 @@ func runCompact(
 		return errors.Wrap(err, "create bucket compactor")
 	}
 
-	retentionByResolution := map[compact.ResolutionLevel]time.Duration{
+	retentionByResolution := compact.RetentionPolicy{
 		compact.ResolutionLevelRaw: time.Duration(conf.retentionRaw),
 		compact.ResolutionLevel5m:  time.Duration(conf.retentionFiveMin),
 		compact.ResolutionLevel1h:  time.Duration(conf.retentionOneHr),
@@ -297,8 +297,8 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		// Remove blocks that are older than the retention policy and won't be needed in downsampling
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution.InitialRetentionPolicy()); err != nil {
+		// Remove blocks that are older than the retention policy and won't be needed in downsampling.
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution.InitialRetentionPolicy(), blocksMarkedForDeletion); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("initial retention failed"))
 		}
 
