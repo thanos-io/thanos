@@ -11,7 +11,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## [v0.12.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.12.0-rc.1) - 2020.04.08
+## [v0.12.0](https://github.com/thanos-io/thanos/releases/tag/v0.12.0) - 2020.04.15
 
 ### Fixed
 
@@ -26,7 +26,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2319](https://github.com/thanos-io/thanos/pull/2319) Query: fixed inconsistent naming of metrics.
 - [#2390](https://github.com/thanos-io/thanos/pull/2390) Store: fixed bug that was causing all posting offsets to be used instead of only 1/32 as intended; added hidden flag to control this behavior.
 - [#2393](https://github.com/thanos-io/thanos/pull/2393) Store: fixed bug causing certain not-existing label values queried to fail with "invalid-size" error from binary header.
-- [#2382](https://github.com/thanos-io/thanos/pull/2382) Store: fixex bug causing partial writes of index-header.
+- [#2382](https://github.com/thanos-io/thanos/pull/2382) Store: fixed bug causing partial writes of index-header.
 - [#2383](https://github.com/thanos-io/thanos/pull/2383) Store: handle expected errors correctly, e.g. do not increment failure counters.
 
 ### Added
