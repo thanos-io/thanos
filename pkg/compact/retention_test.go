@@ -22,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -240,7 +239,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			bkt := inmem.NewBucket()
+			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 			for _, b := range tt.blocks {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}
@@ -249,7 +248,11 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 			testutil.Ok(t, err)
 
 			blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, tt.retentionByResolution, blocksMarkedForDeletion); (err != nil) != tt.wantErr {
+
+			metas, _, err := metaFetcher.Fetch(ctx)
+			testutil.Ok(t, err)
+
+			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metas, tt.retentionByResolution, blocksMarkedForDeletion); (err != nil) != tt.wantErr {
 				t.Errorf("ApplyRetentionPolicyByResolution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

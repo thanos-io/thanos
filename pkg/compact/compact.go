@@ -46,6 +46,7 @@ type Syncer struct {
 	fetcher                  block.MetadataFetcher
 	mtx                      sync.Mutex
 	blocks                   map[ulid.ULID]*metadata.Meta
+	partial                  map[ulid.ULID]error
 	blockSyncConcurrency     int
 	metrics                  *syncerMetrics
 	acceptMalformedIndex     bool
@@ -153,17 +154,34 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	}
 }
 
+// SyncMetas synchronises local state of block metas with what we have in the bucket.
 func (s *Syncer) SyncMetas(ctx context.Context) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	metas, _, err := s.fetcher.Fetch(ctx)
+	metas, partial, err := s.fetcher.Fetch(ctx)
 	if err != nil {
 		return retry(err)
 	}
 	s.blocks = metas
-
+	s.partial = partial
 	return nil
+}
+
+// Partial returns partial blocks since last sync.
+func (s *Syncer) Partial() map[ulid.ULID]error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.partial
+}
+
+// Metas returns loaded metadata blocks since last sync.
+func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.blocks
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
@@ -228,16 +246,18 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 
 	begin := time.Now()
 
-	duplicateIDs := s.duplicateBlocksFilter.DuplicateIDs()
+	// Ignore filter exists before deduplicate filter.
 	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
+	duplicateIDs := s.duplicateBlocksFilter.DuplicateIDs()
 
 	// GarbageIDs contains the duplicateIDs, since these blocks can be replaced with other blocks.
 	// We also remove ids present in deletionMarkMap since these blocks are already marked for deletion.
 	garbageIDs := []ulid.ULID{}
 	for _, id := range duplicateIDs {
-		if _, exists := deletionMarkMap[id]; !exists {
-			garbageIDs = append(garbageIDs, id)
+		if _, exists := deletionMarkMap[id]; exists {
+			continue
 		}
+		garbageIDs = append(garbageIDs, id)
 	}
 
 	for _, id := range garbageIDs {
@@ -249,14 +269,12 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
 		level.Info(s.logger).Log("msg", "marking outdated block for deletion", "block", id)
-
-		err := block.MarkForDeletion(delCtx, s.logger, s.bkt, id)
+		err := block.MarkForDeletion(delCtx, s.logger, s.bkt, id, s.metrics.blocksMarkedForDeletion)
 		cancel()
 		if err != nil {
 			s.metrics.garbageCollectionFailures.Inc()
-			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
+			return retry(errors.Wrapf(err, "mark block %s for deletion", id))
 		}
-		s.metrics.blocksMarkedForDeletion.Inc()
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
 		// after running garbage collection.
@@ -568,10 +586,9 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	defer cancel()
 
 	// TODO(bplotka): Issue with this will introduce overlap that will halt compactor. Automate that (fix duplicate overlaps caused by this).
-	if err := block.MarkForDeletion(delCtx, logger, bkt, ie.id); err != nil {
+	if err := block.MarkForDeletion(delCtx, logger, bkt, ie.id, blocksMarkedForDeletion); err != nil {
 		return errors.Wrapf(err, "deleting old block %s failed. You need to delete this block manually", ie.id)
 	}
-	blocksMarkedForDeletion.Inc()
 	return nil
 }
 
@@ -702,7 +719,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if overlappingBlocks {
 		cg.verticalCompactions.Inc()
 	}
-	level.Info(cg.logger).Log("msg", "compacted blocks",
+	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
@@ -773,10 +790,9 @@ func (cg *Group) deleteBlock(b string) error {
 	delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	level.Info(cg.logger).Log("msg", "marking compacted block for deletion", "old_block", id)
-	if err := block.MarkForDeletion(delCtx, cg.logger, cg.bkt, id); err != nil {
+	if err := block.MarkForDeletion(delCtx, cg.logger, cg.bkt, id, cg.blocksMarkedForDeletion); err != nil {
 		return errors.Wrapf(err, "delete block %s from bucket", id)
 	}
-	cg.blocksMarkedForDeletion.Inc()
 	return nil
 }
 
@@ -869,29 +885,26 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
-
 		if err := c.sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
-
 		// Blocks that were compacted are garbage collected after each Compaction.
 		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
 		}
 
-		level.Info(c.logger).Log("msg", "start of compaction")
-
 		groups, err := c.sy.Groups()
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
 
+		level.Info(c.logger).Log("msg", "start of compactions")
+
 		// Send all groups found during this pass to the compaction workers.
 		var groupErrs terrors.MultiError
-
 	groupLoop:
 		for _, g := range groups {
 			select {

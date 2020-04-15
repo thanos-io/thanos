@@ -59,10 +59,8 @@ const (
 	// because you barely get any improvements in compression when the number of samples is beyond this.
 	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 	maxSamplesPerChunk = 120
-
-	maxChunkSize = 16000
-
-	maxSeriesSize = 64 * 1024
+	maxChunkSize       = 16000
+	maxSeriesSize      = 64 * 1024
 
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
@@ -75,6 +73,11 @@ const (
 	// This label name is intentionally against Prometheus label style.
 	// TODO(bwplotka): Remove it at some point.
 	CompatibilityTypeLabelName = "@thanos_compatibility_store_type"
+
+	// DefaultPostingOffsetInMemorySampling represents default value for --store.index-header-posting-offsets-in-mem-sampling.
+	// 32 value is chosen as it's a good balance for common setups. Sampling that is not too large (too many CPU cycles) and
+	// not too small (too much memory).
+	DefaultPostingOffsetInMemorySampling = 32
 
 	partitionerMaxGapSize = 512 * 1024
 )
@@ -221,7 +224,7 @@ type FilterConfig struct {
 type BucketStore struct {
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
-	bkt        objstore.BucketReader
+	bkt        objstore.InstrumentedBucketReader
 	fetcher    block.MetadataFetcher
 	dir        string
 	indexCache storecache.IndexCache
@@ -252,7 +255,8 @@ type BucketStore struct {
 	// Reencode postings using diff+varint+snappy when storing to cache.
 	// This makes them smaller, but takes extra CPU and memory.
 	// When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
-	enablePostingsCompression bool
+	enablePostingsCompression   bool
+	postingOffsetsInMemSampling int
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -260,7 +264,7 @@ type BucketStore struct {
 func NewBucketStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	bucket objstore.BucketReader,
+	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
 	indexCache storecache.IndexCache,
@@ -273,6 +277,7 @@ func NewBucketStore(
 	enableCompatibilityLabel bool,
 	enableIndexHeader bool,
 	enablePostingsCompression bool,
+	postingOffsetsInMemSampling int,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -290,7 +295,7 @@ func NewBucketStore(
 	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
 		logger:               logger,
-		bkt:                  bucket,
+		bkt:                  bkt,
 		fetcher:              fetcher,
 		dir:                  dir,
 		indexCache:           indexCache,
@@ -304,11 +309,12 @@ func NewBucketStore(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
-		samplesLimiter:            NewLimiter(maxSampleCount, metrics.queriesDropped),
-		partitioner:               gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
-		enableCompatibilityLabel:  enableCompatibilityLabel,
-		enableIndexHeader:         enableIndexHeader,
-		enablePostingsCompression: enablePostingsCompression,
+		samplesLimiter:              NewLimiter(maxSampleCount, metrics.queriesDropped),
+		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+		enableCompatibilityLabel:    enableCompatibilityLabel,
+		enableIndexHeader:           enableIndexHeader,
+		enablePostingsCompression:   enablePostingsCompression,
+		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 	}
 	s.metrics = metrics
 
@@ -463,7 +469,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 
 	var indexHeaderReader indexheader.Reader
 	if s.enableIndexHeader {
-		indexHeaderReader, err = indexheader.NewBinaryReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+		indexHeaderReader, err = indexheader.NewBinaryReader(ctx, s.logger, s.bkt, s.dir, meta.ULID, s.postingOffsetsInMemSampling)
 		if err != nil {
 			return errors.Wrap(err, "create index header reader")
 		}

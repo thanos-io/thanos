@@ -199,7 +199,7 @@ type JSONReader struct {
 }
 
 // NewJSONReader loads or builds new index-cache.json if not present on disk or object storage.
-func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (*JSONReader, error) {
+func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.InstrumentedBucketReader, dir string, id ulid.ULID) (*JSONReader, error) {
 	cachefn := filepath.Join(dir, id.String(), block.IndexCacheFilename)
 	jr, err := newFileJSONReader(logger, cachefn)
 	if err == nil {
@@ -216,7 +216,7 @@ func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketRe
 	}
 
 	// Try to download index cache file from object store.
-	if err = objstore.DownloadFile(ctx, logger, bkt, filepath.Join(id.String(), block.IndexCacheFilename), cachefn); err == nil {
+	if err = objstore.DownloadFile(ctx, logger, bkt.ReaderWithExpectedErrs(bkt.IsObjNotFoundErr), filepath.Join(id.String(), block.IndexCacheFilename), cachefn); err == nil {
 		return newFileJSONReader(logger, cachefn)
 	}
 

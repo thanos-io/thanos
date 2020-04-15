@@ -18,7 +18,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -26,7 +26,7 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	logger := log.NewNopLogger()
 
 	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil, nil)
@@ -60,7 +60,11 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 
 	deleteAttempts := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 	blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts, blocksMarkedForDeletion)
+
+	_, partial, err := metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+
+	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blocksMarkedForDeletion)
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
 
 	exists, err := bkt.Exists(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"))

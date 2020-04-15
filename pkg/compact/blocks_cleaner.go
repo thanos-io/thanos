@@ -37,7 +37,8 @@ func NewBlocksCleaner(logger log.Logger, bkt objstore.Bucket, ignoreDeletionMark
 	}
 }
 
-// DeleteMarkedBlocks uses ignoreDeletionMarkFilter to delete the blocks that are marked for deletion.
+// DeleteMarkedBlocks uses ignoreDeletionMarkFilter to gather the blocks that are marked for deletion and deletes those
+// if older than given deleteDelay.
 func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 	level.Info(s.logger).Log("msg", "started cleaning of blocks marked for deletion")
 

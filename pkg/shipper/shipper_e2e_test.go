@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/go-kit/kit/log"
@@ -180,7 +179,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Ok(t, os.RemoveAll(dir))
 		}()
 
-		bkt := inmem.NewBucket()
+		bkt := objstore.NewInMemBucket()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

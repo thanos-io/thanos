@@ -21,6 +21,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -129,14 +130,15 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 }
 
 // MarkForDeletion creates a file which stores information about when the block was marked for deletion.
-func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) error {
+func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, markedForDeletion prometheus.Counter) error {
 	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
 	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
 	if err != nil {
 		return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
 	}
 	if deletionMarkExists {
-		return errors.Errorf("file %s already exists in bucket", deletionMarkFile)
+		level.Warn(logger).Log("msg", "requested to mark for deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", deletionMarkFile))
+		return nil
 	}
 
 	deletionMark, err := json.Marshal(metadata.DeletionMark{
@@ -151,7 +153,7 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 	if err := bkt.Upload(ctx, deletionMarkFile, bytes.NewBuffer(deletionMark)); err != nil {
 		return errors.Wrapf(err, "upload file %s to bucket", deletionMarkFile)
 	}
-
+	markedForDeletion.Inc()
 	level.Info(logger).Log("msg", "block has been marked for deletion", "block", id)
 	return nil
 }
@@ -168,6 +170,7 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 	if err != nil {
 		return errors.Wrapf(err, "stat %s", metaFile)
 	}
+
 	if ok {
 		if err := bkt.Delete(ctx, metaFile); err != nil {
 			return errors.Wrapf(err, "delete %s", metaFile)
