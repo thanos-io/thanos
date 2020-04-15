@@ -21,7 +21,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -147,7 +146,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil, []block.MetadataFilter{
+	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, objstore.WithNoopInstr(bkt), dir, nil, []block.MetadataFilter{
 		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 		block.NewLabelShardedMetaFilter(relabelConfig),
 	}, nil)
@@ -156,7 +155,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	store, err := NewBucketStore(
 		s.logger,
 		nil,
-		bkt,
+		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		dir,
 		s.cache,
@@ -169,6 +168,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		true,
 		true,
+		DefaultPostingOffsetInMemorySampling,
 	)
 	testutil.Ok(t, err)
 	s.store = store
@@ -497,7 +497,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 
 	dir, err := ioutil.TempDir("", "test_bucket_time_part_e2e")
 	testutil.Ok(t, err)

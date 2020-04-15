@@ -75,7 +75,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 
 		var ulidToDelete ulid.ULID
 		r := prometheus.NewRegistry()
-		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, bkt, dir, r)
+		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, objstore.WithNoopInstr(bkt), dir, r)
 		testutil.Ok(t, err)
 
 		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{
@@ -1065,7 +1065,7 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 		now := time.Now()
 		f := &IgnoreDeletionMarkFilter{
 			logger: log.NewNopLogger(),
-			bkt:    bkt,
+			bkt:    objstore.WithNoopInstr(bkt),
 			delay:  48 * time.Hour,
 		}
 

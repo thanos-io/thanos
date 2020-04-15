@@ -43,7 +43,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -481,6 +480,7 @@ func TestBucketStore_Info(t *testing.T) {
 		true,
 		true,
 		true,
+		DefaultPostingOffsetInMemorySampling,
 	)
 	testutil.Ok(t, err)
 
@@ -526,7 +526,7 @@ func TestBucketStore_Sharding(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
 
 	id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
@@ -711,7 +711,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, yaml.Unmarshal([]byte(sc.relabel), &relabelConf))
 
 			rec := &recorder{Bucket: bkt}
-			metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, dir, nil, []block.MetadataFilter{
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), dir, nil, []block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConf),
 			}, nil)
@@ -720,7 +720,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			bucketStore, err := NewBucketStore(
 				logger,
 				nil,
-				rec,
+				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
 				noopCache{},
@@ -733,6 +733,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				true,
 				true,
 				true,
+				DefaultPostingOffsetInMemorySampling,
 			)
 			testutil.Ok(t, err)
 
@@ -813,7 +814,7 @@ func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []uli
 
 // Regression tests against: https://github.com/thanos-io/thanos/issues/1983.
 func TestReadIndexCache_LoadSeries(t *testing.T) {
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 
 	s := newBucketStoreMetrics(nil)
 	b := &bucketBlock{
@@ -896,7 +897,7 @@ func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 
 	id := uploadTestBlock(tb, tmpDir, bkt, 500)
 
-	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling)
 	testutil.Ok(tb, err)
 
 	benchmarkExpandedPostings(tb, bkt, id, r, 500)
@@ -914,7 +915,7 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 	defer func() { testutil.Ok(tb, bkt.Close()) }()
 
 	id := uploadTestBlock(tb, tmpDir, bkt, 50e5)
-	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id)
+	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling)
 	testutil.Ok(tb, err)
 
 	benchmarkExpandedPostings(tb, bkt, id, r, 50e5)
@@ -1310,7 +1311,7 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 	}
 
 	store := &BucketStore{
-		bkt:        bkt,
+		bkt:        objstore.WithNoopInstr(bkt),
 		logger:     logger,
 		indexCache: noopCache{},
 		metrics:    newBucketStoreMetrics(nil),
@@ -1322,7 +1323,7 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 	}
 
 	for _, block := range blocks {
-		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID)
+		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
 	}
 
@@ -1508,7 +1509,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
 		}
-		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID)
+		b1.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b1.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
 	}
 
@@ -1546,12 +1547,12 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
 		}
-		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID)
+		b2.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, b2.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
 	}
 
 	store := &BucketStore{
-		bkt:        bkt,
+		bkt:        objstore.WithNoopInstr(bkt),
 		logger:     logger,
 		indexCache: indexCache,
 		metrics:    newBucketStoreMetrics(nil),

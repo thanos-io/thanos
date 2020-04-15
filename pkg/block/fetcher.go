@@ -142,7 +142,7 @@ type MetadataModifier interface {
 type BaseFetcher struct {
 	logger      log.Logger
 	concurrency int
-	bkt         objstore.BucketReader
+	bkt         objstore.InstrumentedBucketReader
 
 	// Optional local directory to cache meta.json files.
 	cacheDir string
@@ -152,7 +152,7 @@ type BaseFetcher struct {
 }
 
 // NewBaseFetcher constructs BaseFetcher.
-func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReader, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
+func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer) (*BaseFetcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -180,7 +180,7 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReade
 }
 
 // NewMetaFetcher returns meta fetcher.
-func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReader, dir string, reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) (*MetaFetcher, error) {
+func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) (*MetaFetcher, error) {
 	b, err := NewBaseFetcher(logger, concurrency, bkt, dir, reg)
 	if err != nil {
 		return nil, err
@@ -189,8 +189,8 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReade
 }
 
 // NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
-func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier) *MetaFetcher {
-	return &MetaFetcher{metrics: newFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers}
+func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier, logTags ...interface{}) *MetaFetcher {
+	return &MetaFetcher{metrics: newFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers, logger: log.With(f.logger, logTags...)}
 }
 
 var (
@@ -236,7 +236,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		}
 	}
 
-	r, err := f.bkt.Get(ctx, metaFile)
+	r, err := f.bkt.ReaderWithExpectedErrs(f.bkt.IsObjNotFoundErr).Get(ctx, metaFile)
 	if f.bkt.IsObjNotFoundErr(err) {
 		// Meta.json was deleted between bkt.Exists and here.
 		return nil, errors.Wrapf(ErrorSyncMetaNotFound, "%v", err)
@@ -448,7 +448,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 		return metas, resp.partial, errors.Wrap(resp.metaErrs, "incomplete view")
 	}
 
-	level.Debug(f.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
+	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
 	return metas, resp.partial, nil
 }
 
@@ -460,6 +460,8 @@ type MetaFetcher struct {
 	modifiers []MetadataModifier
 
 	listener func([]metadata.Meta, error)
+
+	logger log.Logger
 }
 
 // Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
@@ -740,12 +742,12 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 type IgnoreDeletionMarkFilter struct {
 	logger          log.Logger
 	delay           time.Duration
-	bkt             objstore.BucketReader
+	bkt             objstore.InstrumentedBucketReader
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
 }
 
 // NewIgnoreDeletionMarkFilter creates IgnoreDeletionMarkFilter.
-func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.BucketReader, delay time.Duration) *IgnoreDeletionMarkFilter {
+func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration) *IgnoreDeletionMarkFilter {
 	return &IgnoreDeletionMarkFilter{
 		logger: logger,
 		bkt:    bkt,

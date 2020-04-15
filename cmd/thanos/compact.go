@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -113,7 +114,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	waitInterval := cmd.Flag("wait-interval", "Wait interval between consecutive compaction runs and bucket refreshes. Only works when --wait flag specified.").
 		Default("5m").Duration()
 
-	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
+	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "DEPRECATED flag. Will be removed in next release. If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
 
 	disableDownsampling := cmd.Flag("downsampling.disable", "Disables downsampling. This is not recommended "+
@@ -290,29 +291,48 @@ func runCompact(
 	}()
 
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
-	// The delay of  deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(deleteDelay.Seconds()/2)*time.Second)
+	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+	// This is to make sure compactor will not accidentally perform compactions with gap instead.
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
-	compactFetcher := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-		block.NewLabelShardedMetaFilter(relabelConfig),
-		block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
-		ignoreDeletionMarkFilter,
-		duplicateBlocksFilter,
-	}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)})
+
 	enableVerticalCompaction := false
 	if len(dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
 		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, compactFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, blockSyncConcurrency, acceptMalformedIndex, enableVerticalCompaction)
-	if err != nil {
-		return errors.Wrap(err, "create syncer")
+	compactorView := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/loaded"), prefixHeader)
+	var sy *compact.Syncer
+	{
+		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
+		cf := baseMetaFetcher.NewMetaFetcher(
+			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+				block.NewLabelShardedMetaFilter(relabelConfig),
+				block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+				ignoreDeletionMarkFilter,
+				duplicateBlocksFilter,
+			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)},
+		)
+		cf.UpdateOnChange(compactorView.Set)
+		sy, err = compact.NewSyncer(
+			logger,
+			reg,
+			bkt,
+			cf,
+			duplicateBlocksFilter,
+			ignoreDeletionMarkFilter,
+			blocksMarkedForDeletion,
+			blockSyncConcurrency,
+			acceptMalformedIndex, enableVerticalCompaction)
+		if err != nil {
+			return errors.Wrap(err, "create syncer")
+		}
 	}
 
 	levels, err := compactions.levels(maxCompactionLevel)
@@ -371,39 +391,52 @@ func runCompact(
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, compactFetcher, downsamplingDir); err != nil {
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync before first pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, compactFetcher, downsamplingDir); err != nil {
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync before second pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
 		} else {
-			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
+			level.Info(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, compactFetcher, retentionByResolution, blocksMarkedForDeletion); err != nil {
+		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync before first pass of downsampling")
+		}
+
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
 
+		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksMarkedForDeletion)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "error cleaning blocks")
 		}
-
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, compactFetcher, bkt, partialUploadDeleteAttempts, blocksMarkedForDeletion)
 		return nil
 	}
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		// Generate index file.
+		// Generate index files.
+		// TODO(bwplotka): Remove this in next release.
 		if generateMissingIndexCacheFiles {
-			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, compactFetcher, indexCacheDir); err != nil {
+			if err := sy.SyncMetas(ctx); err != nil {
+				return err
+			}
+			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, sy.Metas(), indexCacheDir); err != nil {
 				return err
 			}
 		}
@@ -451,16 +484,14 @@ func runCompact(
 		r := route.New()
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		compactorView := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/loaded"), prefixHeader)
 		compactorView.Register(r, ins)
-		compactFetcher.UpdateOnChange(compactorView.Set)
 
 		global := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/global"), prefixHeader)
 		global.Register(r, ins)
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
-		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil)
+		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
 		f.UpdateOnChange(global.Set)
 
 		srv.Handle("/", r)
@@ -494,7 +525,7 @@ func runCompact(
 }
 
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
-func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, fetcher block.MetadataFetcher, dir string) error {
+func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, metas map[ulid.ULID]*metadata.Meta, dir string) error {
 	genIndex := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: metricIndexGenerateName,
 		Help: metricIndexGenerateHelp,
@@ -514,11 +545,6 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prom
 	}()
 
 	level.Info(logger).Log("msg", "start index cache processing")
-
-	metas, _, err := fetcher.Fetch(ctx)
-	if err != nil {
-		return errors.Wrap(err, "fetch metas")
-	}
 
 	for _, meta := range metas {
 		// New version of compactor pushes index cache along with data block.

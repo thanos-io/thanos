@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package inmem
+package objstore
 
 import (
 	"bytes"
@@ -13,37 +13,36 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 var errNotFound = errors.New("inmem: object not found")
 
-// Bucket implements the objstore.Bucket interfaces against local memory.
+// InMemBucket implements the objstore.Bucket interfaces against local memory.
 // Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
-type Bucket struct {
+type InMemBucket struct {
 	mtx     sync.RWMutex
 	objects map[string][]byte
 }
 
-// NewBucket returns a new in memory Bucket.
+// NewInMemBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
-func NewBucket() *Bucket {
-	return &Bucket{objects: map[string][]byte{}}
+func NewInMemBucket() *InMemBucket {
+	return &InMemBucket{objects: map[string][]byte{}}
 }
 
 // Objects returns internally stored objects.
 // NOTE: For assert purposes.
-func (b *Bucket) Objects() map[string][]byte {
+func (b *InMemBucket) Objects() map[string][]byte {
 	return b.objects
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error {
+func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error) error {
 	unique := map[string]struct{}{}
 
 	var dirPartsCount int
-	dirParts := strings.SplitAfter(dir, objstore.DirDelim)
+	dirParts := strings.SplitAfter(dir, DirDelim)
 	for _, p := range dirParts {
 		if p == "" {
 			continue
@@ -57,7 +56,7 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 			continue
 		}
 
-		parts := strings.SplitAfter(filename, objstore.DirDelim)
+		parts := strings.SplitAfter(filename, DirDelim)
 		unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
 	}
 	b.mtx.RUnlock()
@@ -67,13 +66,13 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 		keys = append(keys, n)
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		if strings.HasSuffix(keys[i], objstore.DirDelim) && strings.HasSuffix(keys[j], objstore.DirDelim) {
+		if strings.HasSuffix(keys[i], DirDelim) && strings.HasSuffix(keys[j], DirDelim) {
 			return strings.Compare(keys[i], keys[j]) < 0
 		}
-		if strings.HasSuffix(keys[i], objstore.DirDelim) {
+		if strings.HasSuffix(keys[i], DirDelim) {
 			return false
 		}
-		if strings.HasSuffix(keys[j], objstore.DirDelim) {
+		if strings.HasSuffix(keys[j], DirDelim) {
 			return true
 		}
 
@@ -89,7 +88,7 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 }
 
 // Get returns a reader for the given object name.
-func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
+func (b *InMemBucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 	if name == "" {
 		return nil, errors.New("inmem: object name is empty")
 	}
@@ -105,7 +104,7 @@ func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 }
 
 // GetRange returns a new range reader for the given object name and range.
-func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
+func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {
 		return nil, errors.New("inmem: object name is empty")
 	}
@@ -138,7 +137,7 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 }
 
 // Exists checks if the given directory exists in memory.
-func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
+func (b *InMemBucket) Exists(_ context.Context, name string) (bool, error) {
 	b.mtx.RLock()
 	defer b.mtx.RUnlock()
 	_, ok := b.objects[name]
@@ -146,7 +145,7 @@ func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
 }
 
 // ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
+func (b *InMemBucket) ObjectSize(_ context.Context, name string) (uint64, error) {
 	b.mtx.RLock()
 	file, ok := b.objects[name]
 	b.mtx.RUnlock()
@@ -157,7 +156,7 @@ func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
 }
 
 // Upload writes the file specified in src to into the memory.
-func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
+func (b *InMemBucket) Upload(_ context.Context, name string, r io.Reader) error {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 	body, err := ioutil.ReadAll(r)
@@ -169,7 +168,7 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 }
 
 // Delete removes all data prefixed with the dir.
-func (b *Bucket) Delete(_ context.Context, name string) error {
+func (b *InMemBucket) Delete(_ context.Context, name string) error {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 	if _, ok := b.objects[name]; !ok {
@@ -180,13 +179,13 @@ func (b *Bucket) Delete(_ context.Context, name string) error {
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
-func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	return err == errNotFound
+func (b *InMemBucket) IsObjNotFoundErr(err error) bool {
+	return errors.Cause(err) == errNotFound
 }
 
-func (b *Bucket) Close() error { return nil }
+func (b *InMemBucket) Close() error { return nil }
 
 // Name returns the bucket name.
-func (b *Bucket) Name() string {
+func (b *InMemBucket) Name() string {
 	return "inmem"
 }
