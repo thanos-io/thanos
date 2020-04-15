@@ -2,7 +2,7 @@
 title: Adding a New Thanos Component that Embeds Cortex Query Frontend
 type: proposal
 menu: proposals
-status: in-review
+status: approved
 owner: bwplotka
 ---
 
