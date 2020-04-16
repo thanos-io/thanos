@@ -19,7 +19,7 @@ func init() {
 	}
 }
 
-// copied from Prometheus querier.go, removed check for Prometheus wrapper.
+// Copied from Prometheus querier.go, removed check for Prometheus wrapper.
 // Returns list of values that can regex matches.
 func findSetMatches(pattern string) []string {
 	escaped := false
