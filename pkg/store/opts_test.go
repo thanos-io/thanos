@@ -1,5 +1,5 @@
-// Copyright 2017 The Prometheus Authors
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
 
 package store
 
