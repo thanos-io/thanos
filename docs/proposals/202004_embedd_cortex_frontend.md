@@ -71,7 +71,7 @@ At the end we decided with Thanos and Cortex maintainers that, ultimately, it wo
 
 ## Proposal
 
-The idea is to create `thanos frontend` component that allows specifying following options:
+The idea is to create `thanos query-frontend` component that allows specifying following options:
 
 * `--query-range.split-interval`, `time.Duration`
 * `--query-range.max-retries-per-request`, `int`, default = `5`
@@ -118,11 +118,11 @@ Make it implement Cortex cache.Cache interface.
 1. Add necessary changes to Cortex frontend
     * Metric generalization (they are globals now).
     * Avoid unnecessary dependencies.
-1. Add `thanos frontend` subcommand. Call it `query-frontend` in docs and in the communication.
+1. Add `thanos query-frontend` subcommand.
 1. Add proper e2e test using cache.
 1. Document new subcommand
 1. Add to [kube-thanos](https://github.com/thanos-io/kube-thanos)
 
 ## Future Work
 
-Improvements to Cortex query frontend, so Thanos `frontend` as described [here](https://github.com/thanos-io/thanos/issues/1651)
+Improvements to Cortex query frontend, so Thanos `query-frontend` as described [here](https://github.com/thanos-io/thanos/issues/1651)
