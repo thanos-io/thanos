@@ -19,6 +19,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Added
 
 ### Changed
+- [#2450](https://github.com/thanos-io/thanos/pull/2450) Store: regex-set optimization for `label=~"a|b|c"` matchers. 
 
 ## [v0.12.0](https://github.com/thanos-io/thanos/releases/tag/v0.12.0) - 2020.04.15
 
