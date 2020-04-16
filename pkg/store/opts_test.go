@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 // Refer to https://github.com/prometheus/prometheus/issues/2651.
@@ -45,6 +45,6 @@ func TestFindSetMatches(t *testing.T) {
 
 	for _, c := range cases {
 		matches := findSetMatches(c.pattern)
-		require.Equal(t, c.exp, matches)
+		testutil.Equals(t, c.exp, matches)
 	}
 }
