@@ -1030,7 +1030,7 @@ func benchmarkExpandedPostings(
 		{`n="1",i=~"1.+",j="foo"`, []*labels.Matcher{n1, i1Plus, jFoo}, int(float64(series) * 0.011111)},
 		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
-		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3"
+		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3".
 	}
 
 	for _, c := range cases {
