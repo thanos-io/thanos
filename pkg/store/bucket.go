@@ -1502,6 +1502,15 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 		return emptyPostingsGroup, nil
 	}
 
+	if m.Type == labels.MatchRegexp && len(findSetMatches(m.Value)) > 0 {
+		vals := findSetMatches(m.Value)
+		toAdd := make([]labels.Label, 0, len(vals))
+		for _, val := range vals {
+			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
+		}
+		return newPostingGroup(false, toAdd, nil), nil
+	}
+
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
