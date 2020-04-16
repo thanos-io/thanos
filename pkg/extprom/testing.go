@@ -13,6 +13,8 @@ import (
 // CurrentGaugeValuesFor returns gauge values for given metric names. Useful for testing based on registry,
 // when you don't have access to metric variable.
 func CurrentGaugeValuesFor(t *testing.T, reg prometheus.Gatherer, metricNames ...string) map[string]float64 {
+	t.Helper()
+
 	f, err := reg.Gather()
 	testutil.Ok(t, err)
 
@@ -32,4 +34,24 @@ func CurrentGaugeValuesFor(t *testing.T, reg prometheus.Gatherer, metricNames ..
 		}
 	}
 	return res
+}
+
+type MockedRegisterer struct {
+	prometheus.Registerer
+
+	Collectors []prometheus.Collector
+}
+
+func NewMockedRegisterer() *MockedRegisterer {
+	return &MockedRegisterer{}
+}
+
+func (r *MockedRegisterer) MustRegister(cs ...prometheus.Collector) {
+	for _, c := range cs {
+		_ = r.Register(c)
+	}
+}
+func (r *MockedRegisterer) Register(c prometheus.Collector) error {
+	r.Collectors = append(r.Collectors, c)
+	return nil
 }

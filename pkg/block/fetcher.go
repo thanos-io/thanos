@@ -737,7 +737,7 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 
 // IgnoreDeletionMarkFilter is a filter that filters out the blocks that are marked for deletion after a given delay.
 // The delay duration is to make sure that the replacement block can be fetched before we filter out the old block.
-// Delay is not considered when computing DeletionMarkBlocks map.
+// Delay is not considered when computing DeletionMarks map.
 // Not go-routine safe.
 type IgnoreDeletionMarkFilter struct {
 	logger          log.Logger
@@ -755,8 +755,8 @@ func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBuc
 	}
 }
 
-// DeletionMarkBlocks returns block ids that were marked for deletion.
-func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark {
+// DeletionMarks returns block ids that were marked for deletion.
+func (f *IgnoreDeletionMarkFilter) DeletionMarks() map[ulid.ULID]*metadata.DeletionMark {
 	return f.deletionMarkMap
 }
 
@@ -766,12 +766,15 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
-		deletionMark, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
+		deletionMark, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id)
 		if err == metadata.ErrorDeletionMarkNotFound {
 			continue
 		}
-		if errors.Cause(err) == metadata.ErrorUnmarshalDeletionMark {
-			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+		if errors.Cause(err) == metadata.ErrorMalformedDeletionMark {
+			level.Warn(f.logger).Log(
+				"msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage",
+				"block", id, "err", err,
+			)
 			continue
 		}
 		if err != nil {

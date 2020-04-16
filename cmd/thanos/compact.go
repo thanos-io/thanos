@@ -216,22 +216,7 @@ func runCompact(
 		Name: "thanos_compactor_iterations_total",
 		Help: "Total number of iterations that were executed successfully.",
 	})
-	partialUploadDeleteAttempts := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
-		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
-	})
-	blocksCleaned := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_cleaned_total",
-		Help: "Total number of blocks deleted in compactor.",
-	})
-	blockCleanupFailures := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_block_cleanup_failures_total",
-		Help: "Failures encountered while deleting blocks in compactor.",
-	})
-	blocksMarkedForDeletion := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_marked_for_deletion_total",
-		Help: "Total number of blocks marked for deletion in compactor.",
-	})
+
 	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "thanos_delete_delay_seconds",
 		Help: "Configured delete delay in seconds.",
@@ -290,26 +275,23 @@ func runCompact(
 		}
 	}()
 
-	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
-	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
-	// This is to make sure compactor will not accidentally perform compactions with gap instead.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2)
-	duplicateBlocksFilter := block.NewDeduplicateFilter()
-
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	enableVerticalCompaction := false
-	if len(dedupReplicaLabels) > 0 {
-		enableVerticalCompaction = true
-		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
-	}
-
 	compactorView := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/loaded"), prefixHeader)
 	var sy *compact.Syncer
+	gc := compact.NewGarbage(logger, reg, metadata.NewDeletionMarker(reg, logger, bkt))
+
+	// Create Syncer.
 	{
+		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+		// This is to make sure compactor will not accidentally perform compactions with gap instead.
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2)
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
 			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
@@ -320,16 +302,25 @@ func runCompact(
 			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)},
 		)
 		cf.UpdateOnChange(compactorView.Set)
+
+		enableVerticalCompaction := false
+		if len(dedupReplicaLabels) > 0 {
+			enableVerticalCompaction = true
+			level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
+		}
+
 		sy, err = compact.NewSyncer(
 			logger,
 			reg,
 			bkt,
 			cf,
-			duplicateBlocksFilter,
-			ignoreDeletionMarkFilter,
-			blocksMarkedForDeletion,
 			blockSyncConcurrency,
-			acceptMalformedIndex, enableVerticalCompaction)
+			acceptMalformedIndex,
+			enableVerticalCompaction,
+			gc,
+			ignoreDeletionMarkFilter,
+			duplicateBlocksFilter,
+		)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}
@@ -344,10 +335,9 @@ func runCompact(
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", maxCompactionLevel, "default", compactions.maxLevel())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	// Instantiate the compactor with different time slices. Timestamps in TSDB
-	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
+	compactCtx, cancel := context.WithCancel(context.Background())
+	// Instantiate the compactor with different time slices. Timestamps in TSDB are in milliseconds.
+	comp, err := tsdb.NewLeveledCompactor(compactCtx, reg, logger, levels, downsample.NewPool())
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create compactor")
@@ -365,7 +355,7 @@ func runCompact(
 	}
 
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
+	compactor, err := compact.NewBucketCompactor(logger, sy, gc, comp, compactDir, bkt, concurrency)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
@@ -415,14 +405,15 @@ func runCompact(
 			return errors.Wrap(err, "sync before first pass of downsampling")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("retention failed"))
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, marker, sy.Metas(), retentionByResolution); err != nil {
+			return errors.Wrap(err, "retention apply failed")
 		}
 
 		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksMarkedForDeletion)
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, marker, sy.Partial(), partialUploadDeleteAttempts)
+
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning blocks")
+			return errors.Wrap(err, "deleting marked block blocks")
 		}
 		return nil
 	}
