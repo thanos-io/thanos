@@ -217,18 +217,24 @@ func newMemcachedClient(
 		Help:        "Total number of operations against memcached.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
+	c.operations.WithLabelValues(opGetMulti)
+	c.operations.WithLabelValues(opSet)
 
 	c.failures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operation_failures_total",
 		Help:        "Total number of operations against memcached that failed.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
+	c.failures.WithLabelValues(opGetMulti)
+	c.failures.WithLabelValues(opSet)
 
 	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operation_skipped_total",
 		Help:        "Total number of operations against memcached that have been skipped.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation", "reason"})
+	c.skipped.WithLabelValues(opGetMulti, reasonMaxItemSize)
+	c.skipped.WithLabelValues(opSet, reasonMaxItemSize)
 
 	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:        "thanos_memcached_operation_duration_seconds",
@@ -236,6 +242,8 @@ func newMemcachedClient(
 		ConstLabels: prometheus.Labels{"name": name},
 		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1},
 	}, []string{"operation"})
+	c.duration.WithLabelValues(opGetMulti)
+	c.duration.WithLabelValues(opSet)
 
 	// As soon as the client is created it must ensure that memcached server
 	// addresses are resolved, so we're going to trigger an initial addresses
