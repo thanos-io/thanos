@@ -115,10 +115,11 @@ func (s *tenantSeriesSetServer) Context() context.Context {
 func (s *tenantSeriesSetServer) Series(store *TSDBStore, r *storepb.SeriesRequest) {
 	err := store.Series(r, s)
 	if err != nil {
-		err = errors.Wrapf(s.err, "get series for tenant %s", s.tenant)
 		if r.PartialResponseDisabled {
-			s.err = err
+			s.err = errors.Wrapf(err, "get series for tenant %s", s.tenant)
 		} else {
+			// Consistently prefix tenant specific warnings as done in various other places.
+			err = errors.New(prefixTenantWarning(s.tenant, err.Error()))
 			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
 		}
 	}
