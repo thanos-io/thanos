@@ -7,11 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -63,6 +66,10 @@ func ReadDeletionMark(ctx context.Context, bkt objstore.InstrumentedBucketReader
 		return nil, errors.Wrapf(err, "read file: %s", deletionMarkFile)
 	}
 
+	return unmarshalDeletionMark(metaContent, deletionMarkFile)
+}
+
+func unmarshalDeletionMark(metaContent []byte, deletionMarkFile string) (*DeletionMark, error) {
 	deletionMark := DeletionMark{}
 	if err := json.Unmarshal(metaContent, &deletionMark); err != nil {
 		return nil, errors.Wrapf(ErrorUnmarshalDeletionMark, "file: %s; err: %v", deletionMarkFile, err.Error())
@@ -73,4 +80,36 @@ func ReadDeletionMark(ctx context.Context, bkt objstore.InstrumentedBucketReader
 	}
 
 	return &deletionMark, nil
+}
+
+func WriteDeletionMarkToLocalDir(logger log.Logger, dir string, mark *DeletionMark) error {
+	data, err := json.Marshal(mark)
+	if err != nil {
+		return errors.Wrap(err, "json encode deletion mark")
+	}
+
+	p := filepath.Join(dir, DeletionMarkFilename)
+	tmp := p + ".tmp"
+
+	err = ioutil.WriteFile(tmp, data, 0600)
+	if err != nil {
+		return err
+	}
+	return renameFile(logger, tmp, p)
+}
+
+// ReadDeletionMarkFromLocalDir from <dir>/deletion-mark.json in the local filesystem.
+// Returns ErrorDeletionMarkNotFound if file doesn't exist, ErrorUnmarshalDeletionMark if file is corrupted
+func ReadDeletionMarkFromLocalDir(dir string) (*DeletionMark, error) {
+	deletionMarkFile := filepath.Join(dir, DeletionMarkFilename)
+
+	b, err := ioutil.ReadFile(deletionMarkFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrorDeletionMarkNotFound
+		}
+		return nil, errors.Wrapf(err, "read file: %s", deletionMarkFile)
+	}
+
+	return unmarshalDeletionMark(b, deletionMarkFile)
 }

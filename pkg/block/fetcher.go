@@ -130,7 +130,7 @@ type MetadataFetcher interface {
 }
 
 type MetadataFilter interface {
-	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, incompleteView bool) error
+	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, markers map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, incompleteView bool) error
 }
 
 type MetadataModifier interface {
@@ -144,9 +144,10 @@ type BaseFetcher struct {
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
 
-	// Optional local directory to cache meta.json files.
+	// Optional local directory to cache meta.json and deletion mark files.
 	cacheDir string
 	cached   map[ulid.ULID]*metadata.Meta
+	marks    map[ulid.ULID]*metadata.DeletionMark
 	syncs    prometheus.Counter
 	g        singleflight.Group
 }
@@ -274,8 +275,58 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	return m, nil
 }
 
+// loadDeletionMark returns deletion marker from object storage or error.
+// It returns `ErrorDeletionMarkNotFound` and `ErrorUnmarshalDeletionMark` sentinel errors in those cases.
+func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID) (*metadata.DeletionMark, error) {
+	var (
+		markFile       = path.Join(id.String(), metadata.DeletionMarkFilename)
+		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
+	)
+
+	ok, err := f.bkt.Exists(ctx, markFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "deletion marker file exists: %v", markFile)
+	}
+	if !ok {
+		return nil, metadata.ErrorDeletionMarkNotFound
+	}
+
+	if m, seen := f.marks[id]; seen {
+		return m, nil
+	}
+
+	if f.cacheDir != "" {
+		m, err := metadata.ReadDeletionMarkFromLocalDir(cachedBlockDir)
+		if err == nil {
+			return m, nil
+		}
+
+		if err == metadata.ErrorDeletionMarkNotFound {
+			level.Warn(f.logger).Log("msg", "loading locally-cached deletion marker file failed, ignoring", "dir", cachedBlockDir, "err", err)
+		}
+	}
+
+	m, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	// Best effort cache in local dir.
+	if f.cacheDir != "" {
+		if err := os.MkdirAll(cachedBlockDir, os.ModePerm); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort mkdir of the deletion dir block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+		}
+
+		if err := metadata.WriteDeletionMarkToLocalDir(f.logger, cachedBlockDir, m); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort save of the deletion mark to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+		}
+	}
+	return m, nil
+}
+
 type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
+	marks   map[ulid.ULID]*metadata.DeletionMark
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
 	metaErrs tsdberrors.MultiError
@@ -286,12 +337,29 @@ type response struct {
 	incompleteView bool
 }
 
+func (r response) metasCopy() map[ulid.ULID]*metadata.Meta {
+	metas := make(map[ulid.ULID]*metadata.Meta, len(r.metas))
+	for id, m := range r.metas {
+		metas[id] = m
+	}
+	return metas
+}
+
+func (r response) marksCopy() map[ulid.ULID]*metadata.DeletionMark {
+	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(r.marks))
+	for id, m := range r.marks {
+		marks[id] = m
+	}
+	return marks
+}
+
 func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	f.syncs.Inc()
 
 	var (
 		resp = response{
 			metas:   make(map[ulid.ULID]*metadata.Meta),
+			marks:   make(map[ulid.ULID]*metadata.DeletionMark),
 			partial: make(map[ulid.ULID]error),
 		}
 		eg  errgroup.Group
@@ -301,10 +369,28 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
 			for id := range ch {
+				var (
+					meta *metadata.Meta
+					mark *metadata.DeletionMark
+				)
+
 				meta, err := f.loadMeta(ctx, id)
+				if err == nil {
+					mark, err = f.loadDeletionMark(ctx, id)
+					if err == metadata.ErrorDeletionMarkNotFound {
+						err = nil
+					}
+
+					if errors.Is(err, metadata.ErrorUnmarshalDeletionMark) {
+						level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+						err = nil
+					}
+				}
+
 				if err == nil {
 					mtx.Lock()
 					resp.metas[id] = meta
+					resp.marks[id] = mark
 					mtx.Unlock()
 					continue
 				}
@@ -361,11 +447,8 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	}
 
 	// Only for complete view of blocks update the cache.
-	cached := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
-	for id, m := range resp.metas {
-		cached[id] = m
-	}
-	f.cached = cached
+	f.cached = resp.metasCopy()
+	f.marks = resp.marksCopy()
 
 	// Best effort cleanup of disk-cached metas.
 	if f.cacheDir != "" {
@@ -379,13 +462,15 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 					continue
 				}
 
-				if _, ok := resp.metas[id]; ok {
+				_, metaOk := resp.metas[id]
+				_, markOk := resp.marks[id]
+				if metaOk || markOk {
 					continue
 				}
 
 				cachedBlockDir := filepath.Join(f.cacheDir, id.String())
 
-				// No such block loaded, remove the local dir.
+				// No meta or mark exists, remove the local dir.
 				if err := os.RemoveAll(cachedBlockDir); err != nil {
 					level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 				}
@@ -418,10 +503,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	resp := v.(response)
 
 	// Copy as same response might be reused by different goroutines.
-	metas := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
-	for id, m := range resp.metas {
-		metas[id] = m
-	}
+	metas := resp.metasCopy()
+	marks := resp.marksCopy()
 
 	metrics.synced.WithLabelValues(failedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.synced.WithLabelValues(noMeta).Set(resp.noMetas)
@@ -429,7 +512,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
-		if err := filter.Filter(ctx, metas, metrics.synced, resp.incompleteView); err != nil {
+		if err := filter.Filter(ctx, metas, marks, metrics.synced, resp.incompleteView); err != nil {
 			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
@@ -499,7 +582,7 @@ func NewTimePartitionMetaFilter(MinTime, MaxTime model.TimeOrDurationValue) *Tim
 }
 
 // Filter filters out blocks that are outside of specified time range.
-func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *TimePartitionMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	for id, m := range metas {
 		if m.MaxTime >= f.minTime.PrometheusTimestamp() && m.MinTime <= f.maxTime.PrometheusTimestamp() {
 			continue
@@ -527,7 +610,7 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 const blockIDLabel = "__block_id"
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
-func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	var lbls labels.Labels
 	for id, m := range metas {
 		lbls = lbls[:0]
@@ -559,7 +642,7 @@ func NewDeduplicateFilter() *DeduplicateFilter {
 
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
-func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	var wg sync.WaitGroup
 
 	metasByResolution := make(map[int64][]*metadata.Meta)
@@ -716,7 +799,7 @@ func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Dura
 }
 
 // Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
-func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	for id, meta := range metas {
 		// TODO(khyatisoneji): Remove the checks about Thanos Source
 		//  by implementing delete delay to fetch metas.
@@ -762,20 +845,13 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
-func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, markers map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
-		deletionMark, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
-		if err == metadata.ErrorDeletionMarkNotFound {
+		deletionMark := markers[id]
+		if deletionMark == nil {
 			continue
-		}
-		if errors.Cause(err) == metadata.ErrorUnmarshalDeletionMark {
-			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
-			continue
-		}
-		if err != nil {
-			return err
 		}
 		f.deletionMarkMap[id] = deletionMark
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
