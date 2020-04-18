@@ -40,3 +40,39 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 - Who uploaded the block? Search for logs with this ULID across all sidecars/rulers. Check access logs to object storage. Check debug/metas or meta.json of problematic block to see how blocks looks like and what is the `source`.
 - Determine what you misconfigured.
 - If all looks sane and you double-checked everything: Then post an issue on Github, Bugs can happen but we heavily test against such problems.
+
+# Sidecar
+
+## Connection Refused
+
+### Description
+
+```shell
+level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="changing probe status" status=not-ready reason="request flags against http://localhost:9090/api/v1/status/config: Get \"http://localhost:9090/api/v1/status/config\": dial tcp 127.0.0.1:9090: connect: connection refused"
+```
+* This issue might happen when thanos is not configured properly.
+
+### Possible Solution
+
+* Make sure that prometheus is running while thanos is started. The `connection_refused` states that there is no server running in the `localhost:9090`, which is the address for prometheus in this case.
+
+
+## Thanos not identifying Prometheus
+
+### Description
+
+```shell
+level=info ts=2020-04-18T03:16:32.158536285Z caller=grpc.go:137 service=gRPC/server component=sidecar msg="internal server shutdown" err="no external labels configured on Prometheus server, uniquely identifying external labels must be configured"
+```
+* This issue happens when thanos doesn't recognise prometheus
+
+### Possible Solution
+
+* Thanos sidecar requires `external_labels` for further processing. So make sure that the `external_labels` are set up in the prometheus config file. A possible example - 
+
+```yml
+global:
+  external_labels:
+    cluster: eu1
+    replica: 0
+```
