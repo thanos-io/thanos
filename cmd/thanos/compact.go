@@ -416,7 +416,7 @@ func runCompact(
 		}
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("retention failed"))
+			return errors.Wrap(err, "retention failed")
 		}
 
 		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
