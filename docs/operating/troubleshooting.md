@@ -68,7 +68,7 @@ level=info ts=2020-04-18T03:16:32.158536285Z caller=grpc.go:137 service=gRPC/ser
 
 ### Possible Solution
 
-* Thanos sidecar requires `external_labels` for further processing. So make sure that the `external_labels` are set up in the prometheus config file. A possible example -
+* Thanos requires **unique** `external_labels` for further processing. So make sure that the `external_labels` are not empty and globally unique in the prometheus config file. A possible example -
 
 ```yml
 global:
