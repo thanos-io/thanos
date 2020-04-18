@@ -222,7 +222,7 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -233,7 +233,7 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
 			},
@@ -244,7 +244,7 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, nil, nil),
 				},
 			},
@@ -255,10 +255,10 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -269,13 +269,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -286,13 +286,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -303,13 +303,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 1,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
 			},
@@ -320,13 +320,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
 			},
@@ -337,15 +337,15 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender:    newFakeAppender(nil, nil, nil, nil),
 					appenderErr: appenderErrFn,
 				},
-				&fakeAppendable{
+				{
 					appender:    newFakeAppender(nil, nil, nil, nil),
 					appenderErr: appenderErrFn,
 				},
-				&fakeAppendable{
+				{
 					appender:    newFakeAppender(nil, nil, nil, nil),
 					appenderErr: appenderErrFn,
 				},
@@ -357,13 +357,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, nil, nil),
 				},
 			},
@@ -374,13 +374,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, commitErrFn, nil),
 				},
 			},
@@ -391,13 +391,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -408,13 +408,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -425,13 +425,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(conflictErrFn, nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -442,13 +442,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},
@@ -459,13 +459,13 @@ func TestReceive(t *testing.T) {
 			replicationFactor: 3,
 			wreq:              wreq1,
 			appendables: []*fakeAppendable{
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, commitErrFn, nil),
 				},
-				&fakeAppendable{
+				{
 					appender: newFakeAppender(nil, nil, nil, nil),
 				},
 			},

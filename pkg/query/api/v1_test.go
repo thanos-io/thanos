@@ -52,34 +52,34 @@ func TestEndpoints(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	lbls := []labels.Labels{
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
 			labels.Label{Name: "foo", Value: "bar"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
 			labels.Label{Name: "foo", Value: "boo"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric2"},
 			labels.Label{Name: "foo", Value: "boo"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
 			labels.Label{Name: "foo", Value: "bar"},
 			labels.Label{Name: "replica", Value: "a"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
 			labels.Label{Name: "foo", Value: "boo"},
 			labels.Label{Name: "replica", Value: "a"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
 			labels.Label{Name: "foo", Value: "boo"},
 			labels.Label{Name: "replica", Value: "b"},
 		},
-		labels.Labels{
+		{
 			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
 			labels.Label{Name: "foo", Value: "boo"},
 			labels.Label{Name: "replica1", Value: "a"},

@@ -17,10 +17,10 @@ func Test_checkRules(t *testing.T) {
 	}
 
 	invalidFiles := [][]string{
-		[]string{"./testdata/rules-files/non-existing-file.yaml"},
-		[]string{"./testdata/rules-files/invalid-yaml-format.yaml"},
-		[]string{"./testdata/rules-files/invalid-rules-data.yaml"},
-		[]string{"./testdata/rules-files/invalid-unknown-field.yaml"},
+		{"./testdata/rules-files/non-existing-file.yaml"},
+		{"./testdata/rules-files/invalid-yaml-format.yaml"},
+		{"./testdata/rules-files/invalid-rules-data.yaml"},
+		{"./testdata/rules-files/invalid-unknown-field.yaml"},
 	}
 
 	logger := log.NewNopLogger()

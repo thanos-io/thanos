@@ -95,33 +95,33 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	testutil.Assert(t, len(ser) == 4, "should return 4 series (got %d)", len(ser))
 
 	exp := []promql.Series{
-		promql.Series{
+		{
 			Metric: labels.FromStrings("zzz", "a"),
 			Points: []promql.Point{
-				promql.Point{
+				{
 					T: 100,
 					V: 1,
 				},
-				promql.Point{
+				{
 					T: 200,
 					V: 5,
 				},
 			},
 		},
-		promql.Series{
+		{
 			Metric: labels.FromStrings("zzz", "b"),
 			Points: []promql.Point{
-				promql.Point{
+				{
 					T: 100,
 					V: 3,
 				},
-				promql.Point{
+				{
 					T: 200,
 					V: 8,
 				},
 			},
 		},
-		promql.Series{
+		{
 			Metric: labels.FromStrings("zzz", "c"),
 			// Test case: downsampling code adds all of the samples in the
 			// 5 minute window of each series and pre-aggregates the data. However,
@@ -129,26 +129,26 @@ func TestQuerier_DownsampledData(t *testing.T) {
 			// the retrieved data. Since we were operating in pre-aggregated data here, it lead
 			// to overinflated values.
 			Points: []promql.Point{
-				promql.Point{
+				{
 					T: 100,
 					V: 128,
 				},
-				promql.Point{
+				{
 					T: 200,
 					V: 30,
 				},
 			},
 		},
-		promql.Series{
+		{
 			Metric: labels.FromStrings("zzz", "d"),
 			// Test case: Prometheus engine in each time window selects the sample
 			// which is closest to the boundaries and adds up the different dimensions.
 			Points: []promql.Point{
-				promql.Point{
+				{
 					T: 100,
 					V: 16,
 				},
-				promql.Point{
+				{
 					T: 200,
 					V: 30,
 				},
@@ -276,7 +276,7 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "b", Value: "replica-1"},
 				}},
 			},
-			dedupLabels: map[string]struct{}{"b": struct{}{}},
+			dedupLabels: map[string]struct{}{"b": {}},
 		},
 		// 1 Multi deduplication labels.
 		{
@@ -345,8 +345,8 @@ func TestSortReplicaLabel(t *testing.T) {
 				}},
 			},
 			dedupLabels: map[string]struct{}{
-				"b":  struct{}{},
-				"b1": struct{}{},
+				"b":  {},
+				"b1": {},
 			},
 		},
 	}
@@ -438,7 +438,7 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 			},
 			dedupLabels: map[string]struct{}{
-				"replica": struct{}{},
+				"replica": {},
 			},
 		},
 		{ // 1 Multi dedup label.
@@ -498,8 +498,8 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 			},
 			dedupLabels: map[string]struct{}{
-				"replica":  struct{}{},
-				"replicaA": struct{}{},
+				"replica":  {},
+				"replicaA": {},
 			},
 		},
 		{ // 2 Multi dedup label - some series don't have all dedup labels.
@@ -525,8 +525,8 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 			},
 			dedupLabels: map[string]struct{}{
-				"replica":  struct{}{},
-				"replicaA": struct{}{},
+				"replica":  {},
+				"replicaA": {},
 			},
 		},
 	}

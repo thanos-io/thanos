@@ -97,7 +97,7 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	r = append(r, recordingRule)
 
 	return []thanosrule.Group{
-		thanosrule.Group{
+		{
 			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
 			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		},

@@ -92,14 +92,14 @@ func main() {
 	}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
-	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
+	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
 		os.Exit(1)
 	}
 
 	queryCfg := query.DefaultConfig()
-	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
+	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)

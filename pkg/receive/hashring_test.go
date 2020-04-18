@@ -64,7 +64,7 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node1"},
 				},
 			},
-			nodes: map[string]struct{}{"node1": struct{}{}},
+			nodes: map[string]struct{}{"node1": {}},
 		},
 		{
 			name: "specific",
@@ -77,7 +77,7 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node1"},
 				},
 			},
-			nodes:  map[string]struct{}{"node2": struct{}{}},
+			nodes:  map[string]struct{}{"node2": {}},
 			tenant: "tenant2",
 		},
 		{
@@ -96,7 +96,7 @@ func TestHashringGet(t *testing.T) {
 					Tenants:   []string{"tenant3"},
 				},
 			},
-			nodes:  map[string]struct{}{"node1": struct{}{}},
+			nodes:  map[string]struct{}{"node1": {}},
 			tenant: "tenant1",
 		},
 		{
@@ -129,9 +129,9 @@ func TestHashringGet(t *testing.T) {
 				},
 			},
 			nodes: map[string]struct{}{
-				"node1": struct{}{},
-				"node2": struct{}{},
-				"node3": struct{}{},
+				"node1": {},
+				"node2": {},
+				"node3": {},
 			},
 			tenant: "tenant1",
 		},
@@ -147,9 +147,9 @@ func TestHashringGet(t *testing.T) {
 				},
 			},
 			nodes: map[string]struct{}{
-				"node4": struct{}{},
-				"node5": struct{}{},
-				"node6": struct{}{},
+				"node4": {},
+				"node5": {},
+				"node6": {},
 			},
 		},
 	} {
