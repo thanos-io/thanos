@@ -109,6 +109,19 @@ $ make build
 $ ./thanos -h
 ```
 
+1. Signing your work: DCO (Developer Certificate of Origin) Process.
+
+By contributing to this project you agree to the [Developer Certificate of Origin](https://developercertificate.org/)(DCO). This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
+
+To signoff, you need to add  `Signed-off-by: Your Name <your email id>` at the end of your commit messages. You can do this using  [`git commit -s`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s). For example:
+```
+$ git commit -s -m 'This is my commit message'
+```
+
+You can also alias ``commit`` as `commit -s` in your `~/.gitconfig` to signoff all your future commits.
+
+If you have authored an unsigned commit, you can update it using ``git commit --amend --signoff``. If you've pushed your changes to GitHub already you'll need to force push your branch after this with ``git push -f``.
+
 1. Keep PRs as small as possible. For each of your PRs, you create a new branch based on the latest master.
 Chain them if needed (base one PR on other PRs). You can read more details about the workflow from [here](https://gist.github.com/Chaser324/ce0505fbed06b947d962).
 
