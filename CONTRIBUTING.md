@@ -109,7 +109,7 @@ $ make build
 $ ./thanos -h
 ```
 
-1. Signing your work(Developer Certificate of Origin)
+1. Signing your work: DCO (Developer Certificate of Origin) Process.
 
 By contributing to this project you agree to the [Developer Certificate of Origin](https://developercertificate.org/)(DCO). This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
 
