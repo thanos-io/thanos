@@ -1110,10 +1110,10 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 	})
 }
 
-func BenchmarkDeduplicateFilter_Filter(b *testing.B){
+func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 
 	var (
-		reg prometheus.Registerer
+		reg   prometheus.Registerer
 		count uint64
 		cases []map[ulid.ULID]*metadata.Meta
 	)
@@ -1127,12 +1127,12 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B){
 		// blocksNum number of blocks with all of them unique ULID and unique 100 sources
 		cases = append(cases, make(map[ulid.ULID]*metadata.Meta, blocksNum))
 		for i := 0; i < blocksNum; i++ {
-			
+
 			id := ulid.MustNew(count, nil)
 			count++
 
 			cases[0][id] = &metadata.Meta{
-				BlockMeta : tsdb.BlockMeta{
+				BlockMeta: tsdb.BlockMeta{
 					ULID: id,
 				},
 			}
@@ -1146,9 +1146,9 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B){
 		// Case for running 3x resolution as they can be run concurrently
 		// blocksNum number of blocks. all of them with unique ULID and unique 100 cases
 		cases = append(cases, make(map[ulid.ULID]*metadata.Meta, 3*blocksNum))
-		
-		for i := 0; i < blocksNum;i++ {
-			for _, res := range[]int64{0, 5 * 60 * 1000, 60 * 60 * 1000} {
+
+		for i := 0; i < blocksNum; i++ {
+			for _, res := range []int64{0, 5 * 60 * 1000, 60 * 60 * 1000} {
 
 				id := ulid.MustNew(count, nil)
 				count++
@@ -1161,14 +1161,14 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B){
 					},
 				}
 				for j := 0; j < 100; j++ {
-					cases[1][id].Compaction.Sources = append(cases[1][id].Compaction.Sources, ulid.MustNew(count, nil),)
+					cases[1][id].Compaction.Sources = append(cases[1][id].Compaction.Sources, ulid.MustNew(count, nil))
 					count++
 				}
 
 			}
 		}
 
-		b.Run(fmt.Sprintf("Block-%d",blocksNum),func(b *testing.B){
+		b.Run(fmt.Sprintf("Block-%d", blocksNum), func(b *testing.B) {
 			for _, tcase := range cases {
 				b.ResetTimer()
 				b.Run("", func(b *testing.B) {
