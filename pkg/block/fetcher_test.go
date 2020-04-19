@@ -1173,7 +1173,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 				b.ResetTimer()
 				b.Run("", func(b *testing.B) {
 					for n := 0; n <= b.N; n++ {
-						dedupFilter.Filter(ctx, tcase, synced, false)
+						_ = dedupFilter.Filter(ctx, tcase, synced, false)
 						testutil.Equals(b, 0, len(dedupFilter.DuplicateIDs()))
 					}
 				})
