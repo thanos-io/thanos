@@ -138,7 +138,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		Default("48h"))
 
 	dedupReplicaLabels := cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. when it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().Strings()
