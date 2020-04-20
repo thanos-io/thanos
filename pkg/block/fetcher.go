@@ -137,6 +137,13 @@ type MetadataModifier interface {
 	Modify(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, modified *extprom.TxGaugeVec, incompleteView bool) error
 }
 
+const deletionMarkRecheckTime = 1 * time.Hour
+
+type deletionMark struct {
+	nextCheck time.Time
+	mark      metadata.DeletionMark
+}
+
 // BaseFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
 // Go-routine safe.
 type BaseFetcher struct {
@@ -147,7 +154,7 @@ type BaseFetcher struct {
 	// Optional local directory to cache meta.json and deletion mark files.
 	cacheDir string
 	cached   map[ulid.ULID]*metadata.Meta
-	marks    map[ulid.ULID]*metadata.DeletionMark
+	marks    map[ulid.ULID]*deletionMark
 	syncs    prometheus.Counter
 	g        singleflight.Group
 }
@@ -277,11 +284,17 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 
 // loadDeletionMark returns deletion marker from object storage or error.
 // It returns `ErrorDeletionMarkNotFound` and `ErrorUnmarshalDeletionMark` sentinel errors in those cases.
-func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID) (*metadata.DeletionMark, error) {
+func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now time.Time) (*deletionMark, error) {
 	var (
 		markFile       = path.Join(id.String(), metadata.DeletionMarkFilename)
 		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
+
+	if m, seen := f.marks[id]; seen {
+		if m.nextCheck.After(now) {
+			return m, nil
+		}
+	}
 
 	ok, err := f.bkt.Exists(ctx, markFile)
 	if err != nil {
@@ -291,18 +304,20 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID) (*meta
 		return nil, metadata.ErrorDeletionMarkNotFound
 	}
 
-	if m, seen := f.marks[id]; seen {
-		return m, nil
-	}
-
 	if f.cacheDir != "" {
 		m, err := metadata.ReadDeletionMarkFromLocalDir(cachedBlockDir)
 		if err == nil {
-			return m, nil
+			return &deletionMark{
+				nextCheck: now.Add(deletionMarkRecheckTime),
+				mark:      *m,
+			}, nil
 		}
 
-		if err == metadata.ErrorDeletionMarkNotFound {
-			level.Warn(f.logger).Log("msg", "loading locally-cached deletion marker file failed, ignoring", "dir", cachedBlockDir, "err", err)
+		if !errors.Is(err, metadata.ErrorDeletionMarkNotFound) {
+			level.Warn(f.logger).Log("msg", "loading locally-cached deletion marker file failed, ignoring and deleting", "dir", cachedBlockDir, "err", err)
+			if err := metadata.DeleteDeletionMarkFromLocalDir(cachedBlockDir); err != nil {
+				level.Warn(f.logger).Log("msg", "best-effort deletion of locally cached deletion mark failed", "dir", cachedBlockDir, "err", err)
+			}
 		}
 	}
 
@@ -321,12 +336,15 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID) (*meta
 			level.Warn(f.logger).Log("msg", "best effort save of the deletion mark to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 	}
-	return m, nil
+	return &deletionMark{
+		nextCheck: now.Add(deletionMarkRecheckTime),
+		mark:      *m,
+	}, nil
 }
 
 type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
-	marks   map[ulid.ULID]*metadata.DeletionMark
+	marks   map[ulid.ULID]*deletionMark
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
 	metaErrs tsdberrors.MultiError
@@ -345,10 +363,10 @@ func (r response) metasCopy() map[ulid.ULID]*metadata.Meta {
 	return metas
 }
 
-func (r response) marksCopy() map[ulid.ULID]*metadata.DeletionMark {
+func (r response) filterMarksCopy() map[ulid.ULID]*metadata.DeletionMark {
 	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(r.marks))
 	for id, m := range r.marks {
-		marks[id] = m
+		marks[id] = &m.mark
 	}
 	return marks
 }
@@ -359,7 +377,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	var (
 		resp = response{
 			metas:   make(map[ulid.ULID]*metadata.Meta),
-			marks:   make(map[ulid.ULID]*metadata.DeletionMark),
+			marks:   make(map[ulid.ULID]*deletionMark),
 			partial: make(map[ulid.ULID]error),
 		}
 		eg  errgroup.Group
@@ -371,12 +389,12 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 			for id := range ch {
 				var (
 					meta *metadata.Meta
-					mark *metadata.DeletionMark
+					mark *deletionMark
 				)
 
 				meta, err := f.loadMeta(ctx, id)
 				if err == nil {
-					mark, err = f.loadDeletionMark(ctx, id)
+					mark, err = f.loadDeletionMark(ctx, id, time.Now())
 					if err == metadata.ErrorDeletionMarkNotFound {
 						err = nil
 					}
@@ -448,7 +466,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 
 	// Only for complete view of blocks update the cache.
 	f.cached = resp.metasCopy()
-	f.marks = resp.marksCopy()
+	f.marks = resp.marks // no need to copy, as it's not going to be modified
 
 	// Best effort cleanup of disk-cached metas.
 	if f.cacheDir != "" {
@@ -504,7 +522,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 
 	// Copy as same response might be reused by different goroutines.
 	metas := resp.metasCopy()
-	marks := resp.marksCopy()
+	marks := resp.filterMarksCopy()
 
 	metrics.synced.WithLabelValues(failedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.synced.WithLabelValues(noMeta).Set(resp.noMetas)

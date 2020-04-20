@@ -113,3 +113,7 @@ func ReadDeletionMarkFromLocalDir(dir string) (*DeletionMark, error) {
 
 	return unmarshalDeletionMark(b, deletionMarkFile)
 }
+
+func DeleteDeletionMarkFromLocalDir(dir string) error {
+	return os.Remove(filepath.Join(dir, DeletionMarkFilename))
+}
