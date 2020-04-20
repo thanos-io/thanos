@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,12 +27,13 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"golang.org/x/sync/errgroup"
 )
 
 type fetcherMetrics struct {
@@ -137,8 +139,6 @@ type MetadataModifier interface {
 	Modify(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, modified *extprom.TxGaugeVec, incompleteView bool) error
 }
 
-const deletionMarkRecheckTime = 1 * time.Hour
-
 type deletionMark struct {
 	nextCheck time.Time
 	mark      metadata.DeletionMark
@@ -150,6 +150,8 @@ type BaseFetcher struct {
 	logger      log.Logger
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
+
+	deletionMarkRecheckTime time.Duration
 
 	// Optional local directory to cache meta.json and deletion mark files.
 	cacheDir string
@@ -184,6 +186,7 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 			Name:      "base_syncs_total",
 			Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 		}),
+		deletionMarkRecheckTime: 1 * time.Hour, // TODO: configurable?
 	}, nil
 }
 
@@ -308,7 +311,7 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		m, err := metadata.ReadDeletionMarkFromLocalDir(cachedBlockDir)
 		if err == nil {
 			return &deletionMark{
-				nextCheck: now.Add(deletionMarkRecheckTime),
+				nextCheck: now.Add(f.deletionMarkRecheckTime/2 + time.Duration(rand.Int63n(f.deletionMarkRecheckTime.Nanoseconds()))),
 				mark:      *m,
 			}, nil
 		}
@@ -337,7 +340,7 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		}
 	}
 	return &deletionMark{
-		nextCheck: now.Add(deletionMarkRecheckTime),
+		nextCheck: now.Add(f.deletionMarkRecheckTime/2 + time.Duration(rand.Int63n(f.deletionMarkRecheckTime.Nanoseconds()))),
 		mark:      *m,
 	}, nil
 }
