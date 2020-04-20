@@ -380,6 +380,13 @@ func parseRelabelConfig(contentYaml []byte) ([]*relabel.Config, error) {
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
 	}
+	supportedActions := map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
+
+	for _, cfg := range relabelConfig {
+		if _, ok := supportedActions[cfg.Action]; !ok {
+			return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+		}
+	}
 
 	return relabelConfig, nil
 }
