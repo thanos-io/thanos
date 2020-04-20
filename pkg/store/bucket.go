@@ -1485,23 +1485,8 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 	return p
 }
 
-var (
-	allPostingsGroup   = newPostingGroup(true, nil, nil)
-	emptyPostingsGroup = newPostingGroup(false, nil, nil)
-)
-
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
-	// This matches any label value, and also series that don't have this label at all.
-	if m.Type == labels.MatchRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return allPostingsGroup, nil
-	}
-
-	// NOT matching any value = match nothing. We can shortcut this easily.
-	if m.Type == labels.MatchNotRegexp && (m.Value == ".*" || m.Value == "^.*$") {
-		return emptyPostingsGroup, nil
-	}
-
 	if m.Type == labels.MatchRegexp && len(findSetMatches(m.Value)) > 0 {
 		vals := findSetMatches(m.Value)
 		toAdd := make([]labels.Label, 0, len(vals))
