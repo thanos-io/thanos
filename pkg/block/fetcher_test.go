@@ -242,13 +242,13 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					markBlock := func(id ulid.ULID, deletionTime time.Time) {
 						buf := bytes.Buffer{}
 
-						ulid1 := &metadata.DeletionMark{
+						m := &metadata.DeletionMark{
 							ID:           id,
 							DeletionTime: deletionTime.Unix(),
 							Version:      1,
 						}
 
-						testutil.Ok(t, json.NewEncoder(&buf).Encode(&ulid1))
+						testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
 						testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), &buf))
 					}
 
@@ -1145,6 +1145,93 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 	testutil.Ok(t, f.Filter(ctx, input, marks, m.synced, false))
 	testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
 	testutil.Equals(t, expected, input)
+}
+
+func TestMetaFetcher_FetchDeletionMarkerCache(t *testing.T) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		dir, err := ioutil.TempDir("", "test-meta-fetcher")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		r := prometheus.NewRegistry()
+		baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, objstore.WithNoopInstr(bkt), dir, r)
+		testutil.Ok(t, err)
+
+		id := ULID(1)
+
+		// prepare files
+		meta := &metadata.Meta{
+			BlockMeta: tsdb.BlockMeta{
+				Version: 1,
+				ULID:    id,
+			},
+		}
+		{
+			buf := bytes.Buffer{}
+
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(meta))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		now := time.Now()
+
+		{
+			resp, err := baseFetcher.fetchMetadata(ctx, now)
+			testutil.Ok(t, err)
+			testutil.Equals(t, meta, resp.metas[id])
+			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp.marks[id].mark)
+		}
+
+		// write deletion mark
+		mark := &metadata.DeletionMark{
+			ID:           id,
+			DeletionTime: time.Now().Unix(),
+			Version:      1,
+		}
+
+		{
+			buf := bytes.Buffer{}
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&mark))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(mark.ID.String(), metadata.DeletionMarkFilename), &buf))
+		}
+
+		// Even after writing deletion marker, if we ask again, cached negative result will be returned
+		{
+			resp, err := baseFetcher.fetchMetadata(ctx, now)
+			testutil.Ok(t, err)
+			testutil.Equals(t, meta, resp.metas[id])
+			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp.marks[id].mark)
+		}
+
+		// Ask again, this time in the future
+		now = now.Add(2 * defaultDeletionMarkNegativeCacheEntryTTL)
+
+		resp, err := baseFetcher.fetchMetadata(ctx, now)
+		testutil.Ok(t, err)
+		testutil.Equals(t, meta, resp.metas[id])
+		testutil.Equals(t, mark, resp.marks[id].mark)
+
+		// delete from bucket, and try to fetch metadata again, with same timestamp...
+		// it should hit the cache, and keep using deletion marker
+		testutil.Ok(t, bkt.Delete(ctx, path.Join(id.String(), metadata.DeletionMarkFilename)))
+
+		{
+			resp2, err := baseFetcher.fetchMetadata(ctx, now)
+			testutil.Ok(t, err)
+			testutil.Equals(t, resp.marks[id], resp2.marks[id])
+		}
+
+		// Try again, with time in the future -- mark is no longer available.
+		now = now.Add(3 * defaultDeletionMarkPositiveCacheEntryTTL)
+		{
+			resp3, err := baseFetcher.fetchMetadata(ctx, now)
+			testutil.Ok(t, err)
+			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp3.marks[id].mark)
+		}
+	})
 }
 
 type sortedULIDs []ulid.ULID
