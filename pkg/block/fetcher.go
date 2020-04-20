@@ -75,7 +75,7 @@ const (
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 
-	// Default values for caching deletion marks in memory
+	// Default values for caching deletion marks in memory.
 	defaultDeletionMarkPositiveCacheEntryTTL = 1 * time.Hour
 	defaultDeletionMarkNegativeCacheEntryTTL = 5 * time.Minute
 )
@@ -156,8 +156,8 @@ type BaseFetcher struct {
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
 
-	// How long to cache deletion mark cache entries (positive -- when deletion mark exists, and negative -- when it doesn't exist)
-	// Note that real TTL is computed as: TTL/2 + random(TTL)
+	// How long to cache deletion mark cache entries (positive -- when deletion mark exists, and negative -- when it doesn't exist).
+	// Note that real TTL is computed as: TTL/2 + random(TTL).
 	deletionMarkPositiveCacheEntryTTL time.Duration
 	deletionMarkNegativeCacheEntryTTL time.Duration
 
