@@ -237,8 +237,11 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 			{
-				name: "markers",
+				name: "delete markers",
 				do: func() {
+					// Flush cache, because it also caches negative results.
+					baseFetcher.marks = map[ulid.ULID]*cachedDeletionMark{}
+
 					markBlock := func(id ulid.ULID, deletionTime time.Time) {
 						buf := bytes.Buffer{}
 

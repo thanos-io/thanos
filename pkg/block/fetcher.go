@@ -145,14 +145,8 @@ type MetadataModifier interface {
 
 type cachedDeletionMark struct {
 	nextCheck time.Time
-	mark      *metadata.DeletionMark // if nil, entry didn't exist
-}
-
-func (c *cachedDeletionMark) cacheEntryError() error {
-	if c.mark == nil {
-		return metadata.ErrorDeletionMarkNotFound
-	}
-	return nil
+	// If nil, mark didn't exist.
+	mark *metadata.DeletionMark
 }
 
 // BaseFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
@@ -313,9 +307,9 @@ func (f *BaseFetcher) newCachedDeletionMark(m *metadata.DeletionMark, now time.T
 	}
 }
 
-// loadDeletionMark returns deletion marker from object storage or error.
-// Cached deletion mark is returned even if error is not nil, and can be reused.
-// It returns `ErrorDeletionMarkNotFound` and `ErrorUnmarshalDeletionMark` sentinel errors in those cases.
+// loadDeletionMark returns (possibly cached) deletion mark from object storage or error.
+// Result is a entry that can be stored into a cache, or error.
+// Note that result (cache entry) is also returned if mark was not found. No error is returned in such case.
 func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now time.Time) (*cachedDeletionMark, error) {
 	var (
 		markFile       = path.Join(id.String(), metadata.DeletionMarkFilename)
@@ -324,28 +318,26 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 
 	if m := f.marks[id]; m != nil {
 		if now.Before(m.nextCheck) {
-			return m, m.cacheEntryError()
+			return m, nil
 		}
 	}
 
 	ok, err := f.bkt.Exists(ctx, markFile)
 	if err != nil {
-		return nil, errors.Wrapf(err, "deletion marker file exists: %v", markFile)
+		return nil, errors.Wrapf(err, "deletion mark file exists: %v", markFile)
 	}
 	if !ok {
-		c := f.newCachedDeletionMark(nil, now)
-		return c, c.cacheEntryError()
+		return f.newCachedDeletionMark(nil, now), nil
 	}
 
 	if f.cacheDir != "" {
 		m, err := metadata.ReadDeletionMarkFromLocalDir(cachedBlockDir)
 		if err == nil {
-			c := f.newCachedDeletionMark(m, now)
-			return c, c.cacheEntryError()
+			return f.newCachedDeletionMark(m, now), nil
 		}
 
 		if !errors.Is(err, metadata.ErrorDeletionMarkNotFound) {
-			level.Warn(f.logger).Log("msg", "loading locally-cached deletion marker file failed, ignoring and deleting", "dir", cachedBlockDir, "err", err)
+			level.Warn(f.logger).Log("msg", "loading locally-cached deletion mark file failed, ignoring and deleting", "dir", cachedBlockDir, "err", err)
 			if err := metadata.DeleteDeletionMarkFromLocalDir(cachedBlockDir); err != nil {
 				level.Warn(f.logger).Log("msg", "best-effort deletion of locally cached deletion mark failed", "dir", cachedBlockDir, "err", err)
 			}
@@ -354,9 +346,14 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 
 	m, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
 	if err != nil {
-		if err == metadata.ErrorDeletionMarkNotFound {
-			c := f.newCachedDeletionMark(nil, now)
-			return c, c.cacheEntryError()
+		if errors.Is(err, metadata.ErrorDeletionMarkNotFound) {
+			return f.newCachedDeletionMark(nil, now), nil
+		}
+
+		if errors.Is(err, metadata.ErrorUnmarshalDeletionMark) {
+			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+			// Report non-existent mark.
+			return f.newCachedDeletionMark(nil, now), nil
 		}
 
 		return nil, err
@@ -373,8 +370,7 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		}
 	}
 
-	c := f.newCachedDeletionMark(m, now)
-	return c, c.cacheEntryError()
+	return f.newCachedDeletionMark(m, now), nil
 }
 
 type response struct {
@@ -433,20 +429,13 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context, now time.Time) (respons
 				)
 				if metaErr == nil {
 					mark, markErr = f.loadDeletionMark(ctx, id, now)
-
-					if errors.Is(markErr, metadata.ErrorDeletionMarkNotFound) {
-						markErr = nil
-					} else if errors.Is(markErr, metadata.ErrorUnmarshalDeletionMark) {
-						level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", markErr)
-						markErr = nil
-					}
 				}
 
 				func() {
 					mtx.Lock()
 					defer mtx.Unlock()
 
-					// meta
+					// Handle meta result.
 					switch {
 					case metaErr == nil:
 						resp.metas[id] = meta
@@ -460,7 +449,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context, now time.Time) (respons
 						resp.metaErrs.Add(metaErr)
 					}
 
-					// mark
+					// Handle deletion mark.
 					if mark != nil {
 						resp.marks[id] = mark
 					}
