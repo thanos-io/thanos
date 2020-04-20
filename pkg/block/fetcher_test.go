@@ -253,11 +253,11 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					}
 
 					markBlock(ULID(1), time.Now())
-					markBlock(ULID(2), time.Now()) // no meta, deletion marker will not be reported
-					markBlock(ULID(5), time.Now()) // corrupted meta, deletion marker will not be reported
+					markBlock(ULID(2), time.Now()) // No meta, deletion marker will not be reported.
+					markBlock(ULID(5), time.Now()) // Corrupted meta, deletion marker will not be reported.
 					markBlock(ULID(6), time.Now())
 
-					// this will be ignored
+					// This mark will be ignored.
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(3).String(), metadata.DeletionMarkFilename), bytes.NewBufferString("not a valid deletion-mark.json")))
 				},
 
@@ -1114,13 +1114,13 @@ func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 	}
 
 	marks := map[ulid.ULID]*metadata.DeletionMark{
-		// should fetch
+		// Should fetch.
 		ULID(1): {
 			ID:           ULID(1),
 			DeletionTime: now.Add(-15 * time.Hour).Unix(),
 			Version:      1,
 		},
-		// should ignore
+		// Should ignore.
 		ULID(2): {
 			ID:           ULID(2),
 			DeletionTime: now.Add(-60 * time.Hour).Unix(),

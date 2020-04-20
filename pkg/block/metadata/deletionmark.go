@@ -99,7 +99,7 @@ func WriteDeletionMarkToLocalDir(logger log.Logger, dir string, mark *DeletionMa
 }
 
 // ReadDeletionMarkFromLocalDir from <dir>/deletion-mark.json in the local filesystem.
-// Returns ErrorDeletionMarkNotFound if file doesn't exist, ErrorUnmarshalDeletionMark if file is corrupted
+// Returns ErrorDeletionMarkNotFound if file doesn't exist, ErrorUnmarshalDeletionMark if file is corrupted.
 func ReadDeletionMarkFromLocalDir(dir string) (*DeletionMark, error) {
 	deletionMarkFile := filepath.Join(dir, DeletionMarkFilename)
 
