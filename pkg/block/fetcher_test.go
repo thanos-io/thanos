@@ -1124,7 +1124,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 	for blocksNum := 10; blocksNum <= 10000; blocksNum *= 10 {
 
 		var ctx context.Context
-		// blocksNum number of blocks with all of them unique ULID and unique 100 sources
+		// blocksNum number of blocks with all of them unique ULID and unique 100 sources.
 		cases = append(cases, make(map[ulid.ULID]*metadata.Meta, blocksNum))
 		for i := 0; i < blocksNum; i++ {
 
@@ -1143,8 +1143,8 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 			}
 		}
 
-		// Case for running 3x resolution as they can be run concurrently
-		// blocksNum number of blocks. all of them with unique ULID and unique 100 cases
+		// Case for running 3x resolution as they can be run concurrently.
+		// blocksNum number of blocks. all of them with unique ULID and unique 100 cases.
 		cases = append(cases, make(map[ulid.ULID]*metadata.Meta, 3*blocksNum))
 
 		for i := 0; i < blocksNum; i++ {
