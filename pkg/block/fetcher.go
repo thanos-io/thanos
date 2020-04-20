@@ -401,7 +401,8 @@ func (r response) metasCopy() map[ulid.ULID]*metadata.Meta {
 func (r response) filterMarksCopy() map[ulid.ULID]*metadata.DeletionMark {
 	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(r.marks))
 	for id, m := range r.marks {
-		if m.mark != nil { // don't return cached non-existant marks
+		// Don't return cached non-existent marks.
+		if m.mark != nil {
 			marks[id] = m.mark
 		}
 	}
