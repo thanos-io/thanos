@@ -89,6 +89,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			expectedMetas         []ulid.ULID
 			expectedCorruptedMeta []ulid.ULID
 			expectedNoMeta        []ulid.ULID
+			expectedMarks         []ulid.ULID
 			expectedFiltered      int
 			expectedMetaErr       error
 		}{
@@ -235,12 +236,46 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedNoMeta:        ULIDs(4),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
+			{
+				name: "markers",
+				do: func() {
+					markBlock := func(id ulid.ULID, deletionTime time.Time) {
+						buf := bytes.Buffer{}
+
+						ulid1 := &metadata.DeletionMark{
+							ID:           id,
+							DeletionTime: deletionTime.Unix(),
+							Version:      1,
+						}
+
+						testutil.Ok(t, json.NewEncoder(&buf).Encode(&ulid1))
+						testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), &buf))
+					}
+
+					markBlock(ULID(1), time.Now())
+					markBlock(ULID(2), time.Now()) // no meta, deletion marker will not be reported
+					markBlock(ULID(5), time.Now()) // corrupted meta, deletion marker will not be reported
+					markBlock(ULID(6), time.Now())
+
+					// this will be ignored
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(3).String(), metadata.DeletionMarkFilename), bytes.NewBufferString("not a valid deletion-mark.json")))
+				},
+
+				// from previous tests...
+				expectedMetas:         ULIDs(1, 3, 6),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 2),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+
+				// deletion marker files.
+				expectedMarks: ULIDs(1, 6),
+			},
 		} {
 			if ok := t.Run(tcase.name, func(t *testing.T) {
 				tcase.do()
 
 				ulidToDelete = tcase.filterULID
-				metas, partial, err := fetcher.Fetch(ctx)
+				metas, marks, partial, err := fetcher.FetchWithMarks(ctx)
 				if tcase.expectedMetaErr != nil {
 					testutil.NotOk(t, err)
 					testutil.Equals(t, tcase.expectedMetaErr.Error(), err.Error())
@@ -254,10 +289,21 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 						testutil.Assert(t, m != nil, "meta is nil")
 						metasSlice = append(metasSlice, id)
 					}
-					sort.Slice(metasSlice, func(i, j int) bool {
-						return metasSlice[i].Compare(metasSlice[j]) < 0
-					})
+					sort.Sort(sortedULIDs(metasSlice))
 					testutil.Equals(t, tcase.expectedMetas, metasSlice)
+				}
+
+				{
+					marksSlice := make([]ulid.ULID, 0, len(marks))
+					for id, m := range marks {
+						testutil.Assert(t, m != nil, "mark is nil")
+						marksSlice = append(marksSlice, id)
+					}
+					sort.Sort(sortedULIDs(marksSlice))
+					if tcase.expectedMarks == nil {
+						tcase.expectedMarks = ULIDs()
+					}
+					testutil.Equals(t, tcase.expectedMarks, marksSlice)
 				}
 
 				{
@@ -1058,54 +1104,51 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 }
 
 func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
-		now := time.Now()
-		f := &IgnoreDeletionMarkFilter{
-			logger: log.NewNopLogger(),
-			bkt:    objstore.WithNoopInstr(bkt),
-			delay:  48 * time.Hour,
-		}
+	now := time.Now()
+	f := &IgnoreDeletionMarkFilter{
+		logger: log.NewNopLogger(),
+		delay:  48 * time.Hour,
+	}
 
-		shouldFetch := &metadata.DeletionMark{
+	marks := map[ulid.ULID]*metadata.DeletionMark{
+		// should fetch
+		ULID(1): {
 			ID:           ULID(1),
 			DeletionTime: now.Add(-15 * time.Hour).Unix(),
 			Version:      1,
-		}
-
-		shouldIgnore := &metadata.DeletionMark{
+		},
+		// should ignore
+		ULID(2): {
 			ID:           ULID(2),
 			DeletionTime: now.Add(-60 * time.Hour).Unix(),
 			Version:      1,
-		}
+		},
+	}
 
-		var buf bytes.Buffer
-		testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldFetch))
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldFetch.ID.String(), metadata.DeletionMarkFilename), &buf))
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(2): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
 
-		testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldIgnore))
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnore.ID.String(), metadata.DeletionMarkFilename), &buf))
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
 
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(3).String(), metadata.DeletionMarkFilename), bytes.NewBufferString("not a valid deletion-mark.json")))
-
-		input := map[ulid.ULID]*metadata.Meta{
-			ULID(1): {},
-			ULID(2): {},
-			ULID(3): {},
-			ULID(4): {},
-		}
-
-		expected := map[ulid.ULID]*metadata.Meta{
-			ULID(1): {},
-			ULID(3): {},
-			ULID(4): {},
-		}
-
-		m := newTestFetcherMetrics()
-		testutil.Ok(t, f.Filter(ctx, input, nil, m.synced, false))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
-		testutil.Equals(t, expected, input)
-	})
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, marks, m.synced, false))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(m.synced.WithLabelValues(markedForDeletionMeta)))
+	testutil.Equals(t, expected, input)
 }
+
+type sortedULIDs []ulid.ULID
+
+func (s sortedULIDs) Len() int           { return len(s) }
+func (s sortedULIDs) Less(i, j int) bool { return s[i].Compare(s[j]) < 0 }
+func (s sortedULIDs) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }

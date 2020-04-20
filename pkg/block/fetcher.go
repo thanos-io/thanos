@@ -132,7 +132,7 @@ type MetadataFetcher interface {
 }
 
 type MetadataFilter interface {
-	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, markers map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, incompleteView bool) error
+	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, deletionMarks map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, incompleteView bool) error
 }
 
 type MetadataModifier interface {
@@ -293,8 +293,8 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
 
-	if m, seen := f.marks[id]; seen {
-		if m.nextCheck.After(now) {
+	if m := f.marks[id]; m != nil {
+		if now.Before(m.nextCheck) {
 			return m, nil
 		}
 	}
@@ -390,51 +390,49 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	for i := 0; i < f.concurrency; i++ {
 		eg.Go(func() error {
 			for id := range ch {
+				meta, metaErr := f.loadMeta(ctx, id)
+
 				var (
-					meta *metadata.Meta
-					mark *deletionMark
+					mark    *deletionMark
+					markErr error
 				)
+				if metaErr == nil {
+					mark, markErr = f.loadDeletionMark(ctx, id, time.Now())
 
-				meta, err := f.loadMeta(ctx, id)
-				if err == nil {
-					mark, err = f.loadDeletionMark(ctx, id, time.Now())
-					if err == metadata.ErrorDeletionMarkNotFound {
-						err = nil
-					}
-
-					if errors.Is(err, metadata.ErrorUnmarshalDeletionMark) {
-						level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
-						err = nil
+					if errors.Is(markErr, metadata.ErrorDeletionMarkNotFound) {
+						markErr = nil
+					} else if errors.Is(markErr, metadata.ErrorUnmarshalDeletionMark) {
+						level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", markErr)
+						markErr = nil
 					}
 				}
 
-				if err == nil {
+				func() {
 					mtx.Lock()
-					resp.metas[id] = meta
-					resp.marks[id] = mark
-					mtx.Unlock()
-					continue
-				}
+					defer mtx.Unlock()
 
-				switch errors.Cause(err) {
-				default:
-					mtx.Lock()
-					resp.metaErrs.Add(err)
-					mtx.Unlock()
-					continue
-				case ErrorSyncMetaNotFound:
-					mtx.Lock()
-					resp.noMetas++
-					mtx.Unlock()
-				case ErrorSyncMetaCorrupted:
-					mtx.Lock()
-					resp.corruptedMetas++
-					mtx.Unlock()
-				}
+					// meta
+					switch {
+					case metaErr == nil:
+						resp.metas[id] = meta
+					case errors.Cause(metaErr) == ErrorSyncMetaNotFound:
+						resp.noMetas++
+						resp.partial[id] = metaErr
+					case errors.Cause(metaErr) == ErrorSyncMetaCorrupted:
+						resp.corruptedMetas++
+						resp.partial[id] = metaErr
+					default:
+						resp.metaErrs.Add(metaErr)
+					}
 
-				mtx.Lock()
-				resp.partial[id] = err
-				mtx.Unlock()
+					// mark
+					if mark != nil {
+						resp.marks[id] = mark
+					}
+					if markErr != nil {
+						resp.metaErrs.Add(metaErr)
+					}
+				}()
 			}
 			return nil
 		})
@@ -501,7 +499,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	return resp, nil
 }
 
-func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filters []MetadataFilter, modifiers []MetadataModifier) (_ map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]error, err error) {
+func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filters []MetadataFilter, modifiers []MetadataModifier) (_ map[ulid.ULID]*metadata.Meta, _ map[ulid.ULID]*metadata.DeletionMark, _ map[ulid.ULID]error, err error) {
 	start := time.Now()
 	defer func() {
 		metrics.syncDuration.Observe(time.Since(start).Seconds())
@@ -519,7 +517,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 		return f.fetchMetadata(ctx)
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	resp := v.(response)
 
@@ -534,14 +532,14 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
 		if err := filter.Filter(ctx, metas, marks, metrics.synced, resp.incompleteView); err != nil {
-			return nil, nil, errors.Wrap(err, "filter metas")
+			return nil, nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
 
 	for _, m := range modifiers {
 		// NOTE: modifier can update modified metric accordingly to the reason of the modification.
 		if err := m.Modify(ctx, metas, metrics.modified, resp.incompleteView); err != nil {
-			return nil, nil, errors.Wrap(err, "modify metas")
+			return nil, nil, nil, errors.Wrap(err, "modify metas")
 		}
 	}
 
@@ -549,11 +547,11 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	metrics.submit()
 
 	if len(resp.metaErrs) > 0 {
-		return metas, resp.partial, errors.Wrap(resp.metaErrs, "incomplete view")
+		return metas, marks, resp.partial, errors.Wrap(resp.metaErrs, "incomplete view")
 	}
 
 	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
-	return metas, resp.partial, nil
+	return metas, marks, resp.partial, nil
 }
 
 type MetaFetcher struct {
@@ -573,7 +571,12 @@ type MetaFetcher struct {
 //
 // Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
 func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
-	metas, partial, err = f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
+	metas, _, partial, err = f.FetchWithMarks(ctx)
+	return metas, partial, err
+}
+
+func (f *MetaFetcher) FetchWithMarks(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, marks map[ulid.ULID]*metadata.DeletionMark, partial map[ulid.ULID]error, err error) {
+	metas, marks, partial, err = f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
 	if f.listener != nil {
 		blocks := make([]metadata.Meta, 0, len(metas))
 		for _, meta := range metas {
@@ -581,7 +584,7 @@ func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 		}
 		f.listener(blocks, err)
 	}
-	return metas, partial, err
+	return metas, marks, partial, err
 }
 
 // UpdateOnChange allows to add listener that will be update on every change.
@@ -846,15 +849,13 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 type IgnoreDeletionMarkFilter struct {
 	logger          log.Logger
 	delay           time.Duration
-	bkt             objstore.InstrumentedBucketReader
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
 }
 
 // NewIgnoreDeletionMarkFilter creates IgnoreDeletionMarkFilter.
-func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader, delay time.Duration) *IgnoreDeletionMarkFilter {
+func NewIgnoreDeletionMarkFilter(logger log.Logger, delay time.Duration) *IgnoreDeletionMarkFilter {
 	return &IgnoreDeletionMarkFilter{
 		logger: logger,
-		bkt:    bkt,
 		delay:  delay,
 	}
 }
@@ -866,11 +867,11 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
-func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, markers map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
+func (f *IgnoreDeletionMarkFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, deletionMarks map[ulid.ULID]*metadata.DeletionMark, synced *extprom.TxGaugeVec, _ bool) error {
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
-		deletionMark := markers[id]
+		deletionMark := deletionMarks[id]
 		if deletionMark == nil {
 			continue
 		}
