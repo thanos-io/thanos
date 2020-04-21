@@ -398,17 +398,17 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 
 	const maxGapSize = 1024 * 512
 
-	for _, c := range []struct {
+	for ix, c := range []struct {
 		input    [][2]int
 		expected []part
 	}{
 		{
 			input:    [][2]int{{1, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 1}}},
+			expected: []part{{start: 1, end: 10, ixStart: 0, ixEnd: 1}},
 		},
 		{
 			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 3}}},
+			expected: []part{{start: 1, end: 10, ixStart: 0, ixEnd: 3}},
 		},
 		{
 			input: [][2]int{
@@ -418,8 +418,8 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{maxGapSize + 31, maxGapSize + 32},
 			},
 			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 32, elemRng: [2]int{3, 4}},
+				{start: 1, end: 30, ixStart: 0, ixEnd: 3},
+				{start: maxGapSize + 31, end: maxGapSize + 32, ixStart: 3, ixEnd: 4},
 			},
 		},
 		// Overlapping ranges.
@@ -432,8 +432,8 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{maxGapSize + 31, maxGapSize + 40},
 			},
 			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 40, elemRng: [2]int{3, 5}},
+				{start: 1, end: 30, ixStart: 0, ixEnd: 3},
+				{start: maxGapSize + 31, end: maxGapSize + 40, ixStart: 3, ixEnd: 5},
 			},
 		},
 		{
@@ -443,13 +443,15 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
+			expected: []part{{start: 1, end: maxGapSize + 100, ixStart: 0, ixEnd: 3}},
 		},
 	} {
-		res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
-			return uint64(c.input[i][0]), uint64(c.input[i][1])
+		t.Run(fmt.Sprintf("%d", ix), func(t *testing.T) {
+			res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
+				return uint64(c.input[i][0]), uint64(c.input[i][1])
+			})
+			testutil.Equals(t, c.expected, res)
 		})
-		testutil.Equals(t, c.expected, res)
 	}
 }
 

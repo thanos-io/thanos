@@ -464,7 +464,7 @@ type naivePartitioner struct{}
 func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
 	for i := 0; i < length; i++ {
 		s, e := rng(i)
-		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+		parts = append(parts, part{start: s, end: e, ixStart: i, ixEnd: i + 1})
 	}
 	return parts
 }

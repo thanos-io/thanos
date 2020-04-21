@@ -1614,7 +1614,7 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 
 	g, ctx := errgroup.WithContext(r.ctx)
 	for _, part := range parts {
-		i, j := part.elemRng[0], part.elemRng[1]
+		i, j := part.ixStart, part.ixEnd
 
 		start := int64(part.start)
 		// We assume index does not have any ptrs that has 0 length.
@@ -1768,7 +1768,7 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	g, ctx := errgroup.WithContext(r.ctx)
 	for _, p := range parts {
 		s, e := p.start, p.end
-		i, j := p.elemRng[0], p.elemRng[1]
+		i, j := p.ixStart, p.ixEnd
 
 		g.Go(func() error {
 			return r.loadSeries(ctx, ids[i:j], false, s, e)
@@ -1821,17 +1821,18 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetc
 }
 
 type part struct {
-	start uint64
-	end   uint64
+	// position into file
+	start, end uint64
 
-	elemRng [2]int
+	// offsets subslice for this part
+	ixStart, ixEnd int
 }
 
 type partitioner interface {
 	// Partition partitions length entries into n <= length ranges that cover all
 	// input ranges
 	// It supports overlapping ranges.
-	// NOTE: It expects range to be ted by start time.
+	// NOTE: It expects range to be soted by start time.
 	Partition(length int, rng func(int) (uint64, uint64)) []part
 }
 
@@ -1843,18 +1844,15 @@ type gapBasedPartitioner struct {
 // input ranges by combining entries that are separated by reasonably small gaps.
 // It is used to combine multiple small ranges from object storage into bigger, more efficient/cheaper ones.
 func (g gapBasedPartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
-	j := 0
-	k := 0
-	for k < length {
-		j = k
-		k++
-
+	ix := 0
+	for ix < length {
 		p := part{}
-		p.start, p.end = rng(j)
+		p.ixStart = ix
+		p.start, p.end = rng(ix)
 
 		// Keep growing the range until the end or we encounter a large gap.
-		for ; k < length; k++ {
-			s, e := rng(k)
+		for ix++; ix < length; ix++ {
+			s, e := rng(ix)
 
 			if p.end+g.maxGapSize < s {
 				break
@@ -1864,7 +1862,7 @@ func (g gapBasedPartitioner) Partition(length int, rng func(int) (uint64, uint64
 				p.end = e
 			}
 		}
-		p.elemRng = [2]int{j, k}
+		p.ixEnd = ix
 		parts = append(parts, p)
 	}
 	return parts
@@ -1952,7 +1950,7 @@ func (r *bucketChunkReader) preload(samplesLimiter SampleLimiter) error {
 
 		for _, p := range parts {
 			s, e := uint32(p.start), uint32(p.end)
-			m, n := p.elemRng[0], p.elemRng[1]
+			m, n := p.ixStart, p.ixEnd
 
 			g.Go(func() error {
 				return r.loadChunks(ctx, offsets[m:n], seq, s, e)
