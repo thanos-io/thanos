@@ -15,6 +15,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2416](https://github.com/thanos-io/thanos/pull/2416) Bucket: fixes issue #2416 bug in `inspect --sort-by` doesn't work correctly in all cases
 - [#2411](https://github.com/thanos-io/thanos/pull/2411) Query: fix a bug where queries might not time out sometimes due to issues with one or more StoreAPIs
+- [##2484](https://github.com/thanos-io/thanos/pull/2484) Query/Ruler: fix issue #2483, when web.route-prefix is set, it is added twice in http router prefix.
 
 ### Added
 
