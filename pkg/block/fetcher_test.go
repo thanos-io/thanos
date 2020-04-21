@@ -275,7 +275,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				tcase.do()
 
 				ulidToDelete = tcase.filterULID
-				metas, marks, partial, err := fetcher.FetchWithMarks(ctx)
+				metas, marks, partial, err := fetcher.fetchWithDeletionMarks(ctx)
 				if tcase.expectedMetaErr != nil {
 					testutil.NotOk(t, err)
 					testutil.Equals(t, tcase.expectedMetaErr.Error(), err.Error())
@@ -1214,7 +1214,7 @@ func TestMetaFetcher_FetchDeletionMarkerCache(t *testing.T) {
 		}
 
 		// Try again, with time in the future -- mark is no longer available.
-		now = now.Add(3 * defaultDeletionMarkPositiveCacheEntryTTL)
+		now = now.Add(3 * defaultDeletionMarkCacheEntryTTL)
 		{
 			resp3, err := baseFetcher.fetchMetadata(ctx, now)
 			testutil.Ok(t, err)

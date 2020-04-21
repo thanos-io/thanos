@@ -76,7 +76,7 @@ const (
 	replicaRemovedMeta = "replica-label-removed"
 
 	// Default value for caching deletion marks in memory.
-	defaultDeletionMarkPositiveCacheEntryTTL = 1 * time.Hour
+	defaultDeletionMarkCacheEntryTTL = 1 * time.Hour
 )
 
 func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
@@ -155,8 +155,8 @@ type BaseFetcher struct {
 	bkt         objstore.InstrumentedBucketReader
 
 	// How long to cache deletion mark cache entries.
-	// Note that next check time is computed as: TTL/2 + random(TTL).
-	deletionMarkPositiveCacheEntryTTL time.Duration
+	// Note that next check time is computed as: TTL/2 + random(TTL), so this is an average TTL, not max.
+	deletionMarkCacheEntryTTL time.Duration
 
 	// Optional local directory to cache meta.json and deletion mark files.
 	cacheDir string
@@ -192,7 +192,7 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 			Help:      "Total blocks metadata synchronization attempts by base Fetcher",
 		}),
 		// TODO: configurable?
-		deletionMarkPositiveCacheEntryTTL: defaultDeletionMarkPositiveCacheEntryTTL,
+		deletionMarkCacheEntryTTL: defaultDeletionMarkCacheEntryTTL,
 	}, nil
 }
 
@@ -292,7 +292,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 }
 
 func (f *BaseFetcher) newCachedDeletionMark(m metadata.DeletionMark, now time.Time) *cachedDeletionMark {
-	ttl := f.deletionMarkPositiveCacheEntryTTL
+	ttl := f.deletionMarkCacheEntryTTL
 
 	return &cachedDeletionMark{
 		nextCheck: now.Add(ttl/2 + time.Duration(rand.Int63n(ttl.Nanoseconds()))),
@@ -387,7 +387,8 @@ func (r response) metasCopy() map[ulid.ULID]*metadata.Meta {
 	return metas
 }
 
-func (r response) filterMarksCopy() map[ulid.ULID]*metadata.DeletionMark {
+// deletionMarksCopyForFilter makes a copy of deletion marks map, suitable for passing to Filter method.
+func (r response) deletionMarksCopyForFilter() map[ulid.ULID]*metadata.DeletionMark {
 	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(r.marks))
 	for id, m := range r.marks {
 		marks[id] = &m.mark
@@ -444,7 +445,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context, now time.Time) (respons
 						resp.marks[id] = mark
 					}
 					if markErr != nil {
-						resp.metaErrs.Add(metaErr)
+						resp.metaErrs.Add(markErr)
 					}
 				}()
 			}
@@ -537,7 +538,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 
 	// Copy as same response might be reused by different goroutines.
 	metas := resp.metasCopy()
-	marks := resp.filterMarksCopy()
+	marks := resp.deletionMarksCopyForFilter()
 
 	metrics.synced.WithLabelValues(failedMeta).Set(float64(len(resp.metaErrs)))
 	metrics.synced.WithLabelValues(noMeta).Set(resp.noMetas)
@@ -585,11 +586,12 @@ type MetaFetcher struct {
 //
 // Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
 func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
-	metas, _, partial, err = f.FetchWithMarks(ctx)
+	metas, _, partial, err = f.fetchWithDeletionMarks(ctx)
 	return metas, partial, err
 }
 
-func (f *MetaFetcher) FetchWithMarks(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, marks map[ulid.ULID]*metadata.DeletionMark, partial map[ulid.ULID]error, err error) {
+// This method returns all block metas, deletion marks, and partial blocks (without meta or with corrupted meta file).
+func (f *MetaFetcher) fetchWithDeletionMarks(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, marks map[ulid.ULID]*metadata.DeletionMark, partial map[ulid.ULID]error, err error) {
 	metas, marks, partial, err = f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
 	if f.listener != nil {
 		blocks := make([]metadata.Meta, 0, len(metas))

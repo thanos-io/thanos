@@ -91,7 +91,7 @@ func WriteDeletionMarkToLocalDir(logger log.Logger, dir string, mark *DeletionMa
 	p := filepath.Join(dir, DeletionMarkFilename)
 	tmp := p + ".tmp"
 
-	err = ioutil.WriteFile(tmp, data, 0600)
+	err = ioutil.WriteFile(tmp, data, 0666)
 	if err != nil {
 		return err
 	}
