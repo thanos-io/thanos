@@ -96,7 +96,7 @@ func main() {
 			logger = log.With(logger, "name", *debugName)
 		}
 
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+		logger = log.With(logger, "app", "thanos", "service", cmd, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
 	}
 
 	loggerAdapter := func(template string, args ...interface{}) {
