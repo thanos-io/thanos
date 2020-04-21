@@ -1931,13 +1931,11 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 func (r *bucketChunkReader) preload(samplesLimiter SampleLimiter) error {
 	g, ctx := errgroup.WithContext(r.ctx)
 
-	numChunks := uint64(0)
+	numChunks := 0
 	for _, offsets := range r.preloads {
-		for range offsets {
-			numChunks++
-		}
+		numChunks += len(offsets)
 	}
-	if err := samplesLimiter.Check(numChunks * maxSamplesPerChunk); err != nil {
+	if err := samplesLimiter.Check(uint64(numChunks) * maxSamplesPerChunk); err != nil {
 		return errors.Wrap(err, "exceeded samples limit")
 	}
 
