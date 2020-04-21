@@ -239,9 +239,6 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "delete markers",
 				do: func() {
-					// Flush cache, because it also caches negative results.
-					baseFetcher.marks = map[ulid.ULID]*cachedDeletionMark{}
-
 					markBlock := func(id ulid.ULID, deletionTime time.Time) {
 						buf := bytes.Buffer{}
 
