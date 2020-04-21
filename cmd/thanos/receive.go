@@ -6,7 +6,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -224,6 +226,12 @@ func runReceive(
 		}
 	} else {
 		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
+	}
+
+	// TODO(brancz): remove after a couple of versions
+	// Migrate non-multi-tsdb capable storage to multi-tsdb disk layout.
+	if err := migrateLegacyStorage(logger, dataDir, defaultTenantID); err != nil {
+		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", dataDir, defaultTenantID)
 	}
 
 	dbs := receive.NewMultiTSDB(
@@ -514,5 +522,40 @@ func runReceive(
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
+	return nil
+}
+
+func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) error {
+	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
+
+	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
+		level.Info(logger).Log("msg", "default tenant data dir already present, not attempting to migrate storage")
+		return nil
+	}
+
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		level.Info(logger).Log("msg", "no existing storage found, no data migration attempted")
+		return nil
+	}
+
+	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
+
+	files, err := ioutil.ReadDir(dataDir)
+	if err != nil {
+		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
+	}
+
+	if err := os.MkdirAll(defaultTenantDataDir, 0777); err != nil {
+		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
+	}
+
+	for _, f := range files {
+		from := path.Join(dataDir, f.Name())
+		to := path.Join(defaultTenantDataDir, f.Name())
+		if err := os.Rename(from, to); err != nil {
+			return errors.Wrapf(err, "migrate file from %v to %v", from, to)
+		}
+	}
+
 	return nil
 }
