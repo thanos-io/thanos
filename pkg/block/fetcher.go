@@ -302,7 +302,7 @@ func (f *BaseFetcher) newCachedDeletionMark(m metadata.DeletionMark, now time.Ti
 
 // loadDeletionMark returns (possibly cached) deletion mark from object storage or error.
 // Result is a entry that can be stored into a cache, or error.
-// Missing entry is not considered to be an error, and simply returns nil.
+// Missing deletion mark is not considered to be an error, and simply returns nil.
 func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now time.Time) (*cachedDeletionMark, error) {
 	var (
 		markFile       = path.Join(id.String(), metadata.DeletionMarkFilename)
