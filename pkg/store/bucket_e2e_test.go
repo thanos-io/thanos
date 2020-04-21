@@ -159,6 +159,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		metaFetcher,
 		dir,
 		s.cache,
+		nil,
 		0,
 		maxSampleCount,
 		20,

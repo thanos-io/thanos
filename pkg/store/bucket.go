@@ -222,13 +222,14 @@ type FilterConfig struct {
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
-	logger     log.Logger
-	metrics    *bucketStoreMetrics
-	bkt        objstore.InstrumentedBucketReader
-	fetcher    block.MetadataFetcher
-	dir        string
-	indexCache storecache.IndexCache
-	chunkPool  pool.BytesPool
+	logger      log.Logger
+	metrics     *bucketStoreMetrics
+	bkt         objstore.InstrumentedBucketReader
+	fetcher     block.MetadataFetcher
+	dir         string
+	indexCache  storecache.IndexCache
+	chunksCache storecache.ChunksCache
+	chunkPool   pool.BytesPool
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
 	mtx       sync.RWMutex
@@ -268,6 +269,7 @@ func NewBucketStore(
 	fetcher block.MetadataFetcher,
 	dir string,
 	indexCache storecache.IndexCache,
+	chunksCache storecache.ChunksCache,
 	maxChunkPoolBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
@@ -299,6 +301,7 @@ func NewBucketStore(
 		fetcher:              fetcher,
 		dir:                  dir,
 		indexCache:           indexCache,
+		chunksCache:          chunksCache,
 		chunkPool:            chunkPool,
 		blocks:               map[ulid.ULID]*bucketBlock{},
 		blockSets:            map[uint64]*bucketBlockSet{},
@@ -492,6 +495,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.bkt,
 		dir,
 		s.indexCache,
+		s.chunksCache,
 		s.chunkPool,
 		indexHeaderReader,
 		s.partitioner,
@@ -1217,12 +1221,13 @@ func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.M
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.
 type bucketBlock struct {
-	logger     log.Logger
-	bkt        objstore.BucketReader
-	meta       *metadata.Meta
-	dir        string
-	indexCache storecache.IndexCache
-	chunkPool  pool.BytesPool
+	logger      log.Logger
+	bkt         objstore.BucketReader
+	meta        *metadata.Meta
+	dir         string
+	indexCache  storecache.IndexCache
+	chunksCache storecache.ChunksCache
+	chunkPool   pool.BytesPool
 
 	indexHeaderReader indexheader.Reader
 
@@ -1244,6 +1249,7 @@ func newBucketBlock(
 	bkt objstore.BucketReader,
 	dir string,
 	indexCache storecache.IndexCache,
+	chunksCache storecache.ChunksCache,
 	chunkPool pool.BytesPool,
 	indexHeadReader indexheader.Reader,
 	p partitioner,
@@ -1254,6 +1260,7 @@ func newBucketBlock(
 		logger:                    logger,
 		bkt:                       bkt,
 		indexCache:                indexCache,
+		chunksCache:               chunksCache,
 		chunkPool:                 chunkPool,
 		dir:                       dir,
 		partitioner:               p,
@@ -1927,8 +1934,6 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
 func (r *bucketChunkReader) preload(samplesLimiter SampleLimiter) error {
-	g, ctx := errgroup.WithContext(r.ctx)
-
 	numChunks := 0
 	for _, offsets := range r.preloads {
 		numChunks += len(offsets)
@@ -1937,27 +1942,91 @@ func (r *bucketChunkReader) preload(samplesLimiter SampleLimiter) error {
 		return errors.Wrap(err, "exceeded samples limit")
 	}
 
+	g, ctx := errgroup.WithContext(r.ctx)
 	for seq, offsets := range r.preloads {
-		sort.Slice(offsets, func(i, j int) bool {
-			return offsets[i] < offsets[j]
-		})
-		parts := r.block.partitioner.Partition(len(offsets), func(i int) (start, end uint64) {
-			return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
-		})
-
 		seq := seq
 		offsets := offsets
 
-		for _, p := range parts {
-			s, e := uint32(p.start), uint32(p.end)
-			m, n := p.ixStart, p.ixEnd
-
-			g.Go(func() error {
-				return r.loadChunks(ctx, offsets[m:n], seq, s, e)
+		// Handle each part in its own goroutine, so that cache fetches are done concurrently.
+		g.Go(func() error {
+			sort.Slice(offsets, func(i, j int) bool {
+				return offsets[i] < offsets[j]
 			})
-		}
+			parts := r.block.partitioner.Partition(len(offsets), func(i int) (start, end uint64) {
+				return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
+			})
+
+			if r.block.chunksCache != nil {
+				parts = r.loadChunksFromCache(ctx, parts, seq, offsets)
+			}
+
+			// Fetch missing parts.
+			for _, p := range parts {
+				s, e := uint32(p.start), uint32(p.end)
+				m, n := p.ixStart, p.ixEnd
+
+				g.Go(func() error {
+					return r.loadChunks(ctx, offsets[m:n], seq, s, e)
+				})
+			}
+
+			return nil
+		})
 	}
 	return g.Wait()
+}
+
+// Loads parts from cache, and returns parts that should be loaded from storage.
+func (r *bucketChunkReader) loadChunksFromCache(ctx context.Context, parts []part, seq int, offsets []uint32) []part {
+	begin := time.Now()
+	partSize := r.block.chunksCache.PartSize()
+
+	segparts := make([]storecache.SegmentPart, len(parts))
+	for ix, p := range parts {
+		// Make individual parts block-aligned. This helps caching.
+		segparts[ix] = storecache.SegmentPart{
+			Start:  (p.start / partSize) * partSize,
+			Length: ((p.end / partSize) + 1) * partSize,
+		}
+	}
+
+	hits, misses := r.block.chunksCache.FetchSegmentFileParts(ctx, r.block.meta.ULID, seq, segparts)
+
+	// Handle cache hits.
+	r.mtx.Lock()
+	r.stats.chunksCacheDurationSum += time.Since(begin)
+	r.stats.chunksCacheHitsCount += len(hits)
+
+	for ix, chunkdata := range hits {
+		p := parts[ix]
+		sp := segparts[ix]
+		for _, o := range offsets[p.ixStart:p.ixEnd] {
+			c, err := getChunk(chunkdata[uint64(o)-sp.Start:])
+			if err != nil {
+				r.stats.chunksCacheInvalid++
+				// Failed to decode chunk at offset o, weird. Add it to the misses to
+				// fetch from storage instead.
+				misses = append(misses, ix)
+				break
+			}
+
+			r.chunks[chunkId(seq, o)] = c
+		}
+	}
+	r.mtx.Unlock()
+
+	// Handle cache misses. Returned parts are also block-aligned.
+	newparts := make([]part, len(misses))
+	for ix, pix := range misses {
+		p := parts[pix]
+		newparts[ix] = part{
+			start:   (p.start / partSize) * partSize,
+			end:     ((p.end / partSize) + 1) * partSize,
+			ixStart: p.ixStart,
+			ixEnd:   p.ixEnd,
+		}
+	}
+	return newparts
 }
 
 func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq int, start, end uint32) error {
@@ -1978,19 +2047,31 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
-		cb := (*b)[o-start:]
-
-		l, n := binary.Uvarint(cb)
-		if n < 1 {
-			return errors.New("reading chunk length failed")
+		c, err := getChunk((*b)[o-start:])
+		if err != nil {
+			return err
 		}
-		if len(cb) < n+int(l)+1 {
-			return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)
+		r.chunks[chunkId(seq, o)] = c
+		if r.block.chunksCache != nil {
+			r.block.chunksCache.StoreSegmentFilePart(ctx, r.block.meta.ULID, seq, storecache.SegmentPart{Start: uint64(start), Length: uint64(end - start)}, c)
 		}
-		cid := uint64(seq<<32) | uint64(o)
-		r.chunks[cid] = rawChunk(cb[n : n+int(l)+1])
 	}
 	return nil
+}
+
+func chunkId(seq int, offset uint32) uint64 {
+	return uint64(seq<<32) | uint64(offset)
+}
+
+func getChunk(cb []byte) (rawChunk, error) {
+	l, n := binary.Uvarint(cb)
+	if n <= 1 {
+		return nil, errors.New("reading chunk length failed")
+	}
+	if len(cb) < n+int(l)+1 {
+		return nil, errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)
+	}
+	return cb[n : n+int(l)+1], nil
 }
 
 func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
@@ -2072,6 +2153,9 @@ type queryStats struct {
 	chunksFetchedSizeSum   int
 	chunksFetchCount       int
 	chunksFetchDurationSum time.Duration
+	chunksCacheHitsCount   int
+	chunksCacheDurationSum time.Duration
+	chunksCacheInvalid     int
 
 	getAllDuration    time.Duration
 	mergedSeriesCount int

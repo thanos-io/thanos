@@ -41,6 +41,25 @@ type IndexCache interface {
 	FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64)
 }
 
+// Defines single part of segments file (also called chunks file).
+type SegmentPart struct {
+	Start, Length uint64
+}
+
+// ChunksCache is interface exported by chunks cache backends. It operates on block-aligned parts,
+// i.e. part's Start and Length must be divisible by PartSize in order to cache work correctly.
+type ChunksCache interface {
+	// Specifies size of cached part of the segment file.
+	PartSize() uint64
+
+	// Stores data for single part into the cache.
+	// ChunksCache does NOT retain data slice after this method exits, but creates a copy, if needed.
+	StoreSegmentFilePart(ctx context.Context, blockID ulid.ULID, segmentSeqNo int, part SegmentPart, data []byte)
+
+	// Fetches multiple parts from the cache. Returned hits are indexed by part index. Misses contains missing indexes.
+	FetchSegmentFileParts(ctx context.Context, blockID ulid.ULID, segmentSeqNo int, parts []SegmentPart) (hits map[int][]byte, misses []int)
+}
+
 type cacheKey struct {
 	block ulid.ULID
 	key   interface{}

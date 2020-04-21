@@ -274,6 +274,7 @@ func runStore(
 		metaFetcher,
 		dataDir,
 		indexCache,
+		nil, // chunksCache
 		chunkPoolSizeBytes,
 		maxSampleCount,
 		maxConcurrency,
