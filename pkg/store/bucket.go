@@ -1839,7 +1839,7 @@ type partitioner interface {
 	// Partition partitions length entries into n <= length ranges that cover all
 	// input ranges
 	// It supports overlapping ranges.
-	// NOTE: It expects range to be soted by start time.
+	// NOTE: It expects range to be sorted by start time.
 	Partition(length int, rng func(int) (uint64, uint64)) []part
 }
 
