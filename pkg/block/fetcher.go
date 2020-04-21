@@ -75,9 +75,8 @@ const (
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 
-	// Default values for caching deletion marks in memory.
+	// Default value for caching deletion marks in memory.
 	defaultDeletionMarkPositiveCacheEntryTTL = 1 * time.Hour
-	defaultDeletionMarkNegativeCacheEntryTTL = 5 * time.Minute
 )
 
 func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
@@ -145,8 +144,7 @@ type MetadataModifier interface {
 
 type cachedDeletionMark struct {
 	nextCheck time.Time
-	// If nil, mark didn't exist.
-	mark *metadata.DeletionMark
+	mark      metadata.DeletionMark
 }
 
 // BaseFetcher is a struct that synchronizes filtered metadata of all block in the object storage with the local state.
@@ -156,10 +154,9 @@ type BaseFetcher struct {
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
 
-	// How long to cache deletion mark cache entries (positive -- when deletion mark exists, and negative -- when it doesn't exist).
-	// Note that real TTL is computed as: TTL/2 + random(TTL).
+	// How long to cache deletion mark cache entries.
+	// Note that next check time is computed as: TTL/2 + random(TTL).
 	deletionMarkPositiveCacheEntryTTL time.Duration
-	deletionMarkNegativeCacheEntryTTL time.Duration
 
 	// Optional local directory to cache meta.json and deletion mark files.
 	cacheDir string
@@ -196,7 +193,6 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 		}),
 		// TODO: configurable?
 		deletionMarkPositiveCacheEntryTTL: defaultDeletionMarkPositiveCacheEntryTTL,
-		deletionMarkNegativeCacheEntryTTL: defaultDeletionMarkNegativeCacheEntryTTL,
 	}, nil
 }
 
@@ -295,11 +291,8 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	return m, nil
 }
 
-func (f *BaseFetcher) newCachedDeletionMark(m *metadata.DeletionMark, now time.Time) *cachedDeletionMark {
+func (f *BaseFetcher) newCachedDeletionMark(m metadata.DeletionMark, now time.Time) *cachedDeletionMark {
 	ttl := f.deletionMarkPositiveCacheEntryTTL
-	if m == nil {
-		ttl = f.deletionMarkNegativeCacheEntryTTL
-	}
 
 	return &cachedDeletionMark{
 		nextCheck: now.Add(ttl/2 + time.Duration(rand.Int63n(ttl.Nanoseconds()))),
@@ -309,7 +302,7 @@ func (f *BaseFetcher) newCachedDeletionMark(m *metadata.DeletionMark, now time.T
 
 // loadDeletionMark returns (possibly cached) deletion mark from object storage or error.
 // Result is a entry that can be stored into a cache, or error.
-// Note that result (cache entry) is also returned if mark was not found. No error is returned in such case.
+// Missing entry is not considered to be an error, and simply returns nil.
 func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now time.Time) (*cachedDeletionMark, error) {
 	var (
 		markFile       = path.Join(id.String(), metadata.DeletionMarkFilename)
@@ -327,13 +320,13 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		return nil, errors.Wrapf(err, "deletion mark file exists: %v", markFile)
 	}
 	if !ok {
-		return f.newCachedDeletionMark(nil, now), nil
+		return nil, nil
 	}
 
 	if f.cacheDir != "" {
 		m, err := metadata.ReadDeletionMarkFromLocalDir(cachedBlockDir)
 		if err == nil {
-			return f.newCachedDeletionMark(m, now), nil
+			return f.newCachedDeletionMark(*m, now), nil
 		}
 
 		if !errors.Is(err, metadata.ErrorDeletionMarkNotFound) {
@@ -347,13 +340,13 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 	m, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
 	if err != nil {
 		if errors.Is(err, metadata.ErrorDeletionMarkNotFound) {
-			return f.newCachedDeletionMark(nil, now), nil
+			return nil, nil
 		}
 
 		if errors.Is(err, metadata.ErrorUnmarshalDeletionMark) {
 			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
 			// Report non-existent mark.
-			return f.newCachedDeletionMark(nil, now), nil
+			return nil, nil
 		}
 
 		return nil, err
@@ -370,7 +363,7 @@ func (f *BaseFetcher) loadDeletionMark(ctx context.Context, id ulid.ULID, now ti
 		}
 	}
 
-	return f.newCachedDeletionMark(m, now), nil
+	return f.newCachedDeletionMark(*m, now), nil
 }
 
 type response struct {
@@ -397,10 +390,7 @@ func (r response) metasCopy() map[ulid.ULID]*metadata.Meta {
 func (r response) filterMarksCopy() map[ulid.ULID]*metadata.DeletionMark {
 	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(r.marks))
 	for id, m := range r.marks {
-		// Don't return cached non-existent marks.
-		if m.mark != nil {
-			marks[id] = m.mark
-		}
+		marks[id] = &m.mark
 	}
 	return marks
 }

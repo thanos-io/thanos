@@ -1185,7 +1185,7 @@ func TestMetaFetcher_FetchDeletionMarkerCache(t *testing.T) {
 			resp, err := baseFetcher.fetchMetadata(ctx, now)
 			testutil.Ok(t, err)
 			testutil.Equals(t, meta, resp.metas[id])
-			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp.marks[id].mark)
+			testutil.Equals(t, (*cachedDeletionMark)(nil), resp.marks[id])
 		}
 
 		// Write deletion mark.
@@ -1201,21 +1201,10 @@ func TestMetaFetcher_FetchDeletionMarkerCache(t *testing.T) {
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(mark.ID.String(), metadata.DeletionMarkFilename), &buf))
 		}
 
-		// Even after writing deletion marker, if we ask again, cached negative result will be returned.
-		{
-			resp, err := baseFetcher.fetchMetadata(ctx, now)
-			testutil.Ok(t, err)
-			testutil.Equals(t, meta, resp.metas[id])
-			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp.marks[id].mark)
-		}
-
-		// Ask again, this time in the future.
-		now = now.Add(2 * defaultDeletionMarkNegativeCacheEntryTTL)
-
 		resp, err := baseFetcher.fetchMetadata(ctx, now)
 		testutil.Ok(t, err)
 		testutil.Equals(t, meta, resp.metas[id])
-		testutil.Equals(t, mark, resp.marks[id].mark)
+		testutil.Equals(t, *mark, resp.marks[id].mark)
 
 		// Delete marker from bucket, and try to fetch metadata again, with the same timestamp.
 		// It should hit the cache, and keep using deletion marker.
@@ -1232,7 +1221,7 @@ func TestMetaFetcher_FetchDeletionMarkerCache(t *testing.T) {
 		{
 			resp3, err := baseFetcher.fetchMetadata(ctx, now)
 			testutil.Ok(t, err)
-			testutil.Equals(t, (*metadata.DeletionMark)(nil), resp3.marks[id].mark)
+			testutil.Equals(t, (*cachedDeletionMark)(nil), resp3.marks[id])
 		}
 	})
 }
