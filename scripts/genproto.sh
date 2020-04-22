@@ -29,17 +29,14 @@ DIRS="pkg/store/storepb pkg/store/storepb/prompb"
 echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
-		${PROTOC_BIN} --gogofast_out=plugins=grpc:. \
+		${PROTOC_BIN} --gogofast_out=\
+Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,\
+Mprompb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb/prompb,\
+plugins=grpc:. \
 		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
 			*.proto
 
-		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
-		sed -i.bak -E 's/import _ \"google\/protobuf\"//g' *.pb.go
-		# Hacky hack.
-		sed -i.bak -E 's/prompb \"prompb\"/prompb \"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
-
-		rm -f *.bak
 		${GOIMPORTS_BIN} -w *.pb.go
 	popd
 done

@@ -7,6 +7,7 @@ package thanos;
 import "types.proto";
 import "gogoproto/gogo.proto";
 import "prompb/types.proto";
+import "google/protobuf/any.proto";
 
 option go_package = "storepb";
 
@@ -114,6 +115,11 @@ message SeriesRequest {
 
   // skip_chunks controls whether sending chunks or not in series responses.
   bool skip_chunks = 8;
+
+  // hints_enabled controls whether sending hints or not in the series responses. Hints
+  // are store implementation specific and used to carry information about how the series
+  // have been queried.
+  bool hints_enabled  = 9;
 }
 
 enum Aggr {
@@ -132,6 +138,13 @@ message SeriesResponse {
     /// warning is considered an information piece in place of series for warning purposes.
     /// It is used to warn query customer about suspicious cases or partial response (if enabled).
     string warning = 2;
+
+    /// hints in an opaque data structure that can be used to carry information about how the series
+    /// have been queried. The content of this field and whether it's supported depends on the
+    /// implementation of a specific store. It's also implementation specific if it's allowed that
+    /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
+    /// be handled in such case (ie. merged vs keep the first/last one).
+    google.protobuf.Any hints = 3;
   }
 }
 
