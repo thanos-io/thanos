@@ -1379,10 +1379,12 @@ func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
 		return nil
 	}
 
-	if r.GetSeries() == nil {
-		return errors.New("no seriesSet")
+	if r.GetSeries() != nil {
+		s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
+		return nil
 	}
-	s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
+
+	// Unsupported field, skip.
 	return nil
 }
 
