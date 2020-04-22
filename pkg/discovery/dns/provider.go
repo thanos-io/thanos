@@ -19,7 +19,7 @@ import (
 
 // Provider is a stateful cache for asynchronous DNS resolutions. It provides a way to resolve addresses and obtain them.
 type Provider struct {
-	sync.Mutex
+	sync.RWMutex
 	resolver Resolver
 	// A map from domain name to a slice of resolved targets.
 	resolved map[string][]string
@@ -108,19 +108,12 @@ func GetQTypeName(addr string) (qtype string, name string) {
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // defaultPort is used for non-SRV records when a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) {
-	p.Lock()
-	defer p.Unlock()
-
-	p.resolverAddrs.ResetTx()
-	defer p.resolverAddrs.Submit()
-
 	resolvedAddrs := map[string][]string{}
 	for _, addr := range addrs {
 		var resolved []string
 		qtype, name := GetQTypeName(addr)
 		if qtype == "" {
 			resolvedAddrs[name] = []string{name}
-			p.resolverAddrs.WithLabelValues(name).Set(1.0)
 			continue
 		}
 
@@ -131,18 +124,31 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 			p.resolverFailuresCount.Inc()
 			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
 			// Use cached values.
+			p.RLock()
 			resolved = p.resolved[addr]
+			p.RUnlock()
 		}
 		resolvedAddrs[addr] = resolved
-		p.resolverAddrs.WithLabelValues(addr).Set(float64(len(resolved)))
 	}
+
+	// All addresses have been resolved. We can now take an exclusive lock to
+	// update the resolved addresses metric and update the local state.
+	p.Lock()
+	defer p.Unlock()
+
+	p.resolverAddrs.ResetTx()
+	for name, addrs := range resolvedAddrs {
+		p.resolverAddrs.WithLabelValues(name).Set(float64(len(addrs)))
+	}
+	p.resolverAddrs.Submit()
+
 	p.resolved = resolvedAddrs
 }
 
 // Addresses returns the latest addresses present in the Provider.
 func (p *Provider) Addresses() []string {
-	p.Lock()
-	defer p.Unlock()
+	p.RLock()
+	defer p.RUnlock()
 
 	var result []string
 	for _, addrs := range p.resolved {
