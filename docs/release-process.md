@@ -33,7 +33,7 @@ Release shepherd responsibilities:
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
 | v0.13.0   | (planned) 2020.05.13     | `TBD`                    |
-| v0.12.0   | (planned) 2020.04.01     | `@squat`                 |
+| v0.12.0   | 2020.04.15               | `@squat`                 |
 | v0.11.0   | 2020.02.19               | `@metalmatze`            |
 | v0.10.0   | 2020.01.08               | `@GiedriusS`             |
 | v0.9.0    | 2019.11.26               | `@bwplotka`              |

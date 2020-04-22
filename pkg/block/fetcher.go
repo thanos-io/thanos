@@ -550,6 +550,7 @@ var _ MetadataFilter = &DeduplicateFilter{}
 // Not go-routine safe.
 type DeduplicateFilter struct {
 	duplicateIDs []ulid.ULID
+	mu           sync.Mutex
 }
 
 // NewDeduplicateFilter creates DeduplicateFilter.
@@ -603,11 +604,13 @@ func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadat
 
 	duplicateULIDs := getNonRootIDs(root)
 	for _, id := range duplicateULIDs {
+		f.mu.Lock()
 		if metas[id] != nil {
 			f.duplicateIDs = append(f.duplicateIDs, id)
 		}
 		synced.WithLabelValues(duplicateMeta).Inc()
 		delete(metas, id)
+		f.mu.Unlock()
 	}
 }
 

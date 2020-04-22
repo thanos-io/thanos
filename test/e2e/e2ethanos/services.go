@@ -373,7 +373,6 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--data-dir":                container,
 			"--objstore.config":         string(bktConfigBytes),
 			"--http-address":            ":80",
-			"--delete-delay":            "0s",
 			"--block-sync-concurrency":  "20",
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
