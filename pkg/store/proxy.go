@@ -432,7 +432,6 @@ func startStreamSeriesSet(
 
 			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
-				continue
 			}
 
 			if series := rr.r.GetSeries(); series != nil {
@@ -442,7 +441,6 @@ func startStreamSeriesSet(
 					s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
 					return
 				}
-				continue
 			}
 		}
 	}()
