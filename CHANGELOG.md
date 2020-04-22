@@ -15,9 +15,14 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2501](https://github.com/thanos-io/thanos/pull/2501) Query: gracefully handle additional fields in `SeriesResponse` protobuf message that may be added in the future.
 
+### Added
+
+- [#2502](https://github.com/thanos-io/thanos/pull/2502) Added `hints_enabled` proto field to `SeriesRequest` and `hints` field to `SeriesResponse`. Hints in an opaque data structure that can be used to carry information about how the series and its content is implementation specific.
+
 ### Changed
 
 - [#2505](https://github.com/thanos.io/thanos/pull/2505) Store: remove obsolete `thanos_store_node_info` metric.
+
 
 ## [v0.12.1](https://github.com/thanos-io/thanos/releases/tag/v0.12.1) - 2020.04.20
 
