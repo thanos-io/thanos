@@ -139,8 +139,8 @@ message SeriesResponse {
     /// It is used to warn query customer about suspicious cases or partial response (if enabled).
     string warning = 2;
 
-    /// hints in an opaque data structure that can be used to carry information about how the series
-    /// have been queried. The content of this field and whether it's supported depends on the
+    /// hints is an opaque data structure that can be used to carry additional information from
+    /// the store. The content of this field and whether it's supported depends on the
     /// implementation of a specific store. It's also implementation specific if it's allowed that
     /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
     /// be handled in such case (ie. merged vs keep the first/last one).
