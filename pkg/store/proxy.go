@@ -432,13 +432,15 @@ func startStreamSeriesSet(
 
 			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
-				continue
 			}
-			select {
-			case s.recvCh <- rr.r.GetSeries():
-			case <-ctx.Done():
-				s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
-				return
+
+			if series := rr.r.GetSeries(); series != nil {
+				select {
+				case s.recvCh <- series:
+				case <-ctx.Done():
+					s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
+					return
+				}
 			}
 		}
 	}()
