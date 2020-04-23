@@ -1,18 +1,75 @@
 ---
-title: Bucket
+title: Tools
 type: docs
 menu: components
 ---
 
-# Bucket
+# Tools
 
-The bucket component of Thanos is a set of commands to inspect data in object storage buckets.
-It is normally run as a stand alone command to aid with troubleshooting.
+The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that
+are meant to be ran for development or debugging purposes.
+
+All commands added as tools should land in `tools.go` or file with `tools_` prefix.
+
+## Flags
+
+[embedmd]:# (flags/tools.txt $)
+```$
+usage: thanos tools <command> [<args> ...]
+
+Tools utility commands
+
+Flags:
+  -h, --help               Show context-sensitive help (also try --help-long and
+                           --help-man).
+      --version            Show application version.
+      --log.level=info     Log filtering level.
+      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
+                           https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
+                           https://thanos.io/tracing.md/#configuration
+
+Subcommands:
+  tools bucket verify [<flags>]
+    Verify all blocks in the bucket against specified issues
+
+  tools bucket ls [<flags>]
+    List all blocks in the bucket
+
+  tools bucket inspect [<flags>]
+    Inspect all blocks in the bucket in detailed, table-like way
+
+  tools bucket web [<flags>]
+    Web interface for remote storage bucket
+
+  tools bucket replicate [<flags>]
+    Replicate data from one object storage to another. NOTE: Currently it works
+    only with Thanos blocks (meta.json has to have Thanos metadata).
+
+  tools bucket downsample [<flags>]
+    continuously downsamples blocks in an object store bucket
+
+  tools rules-check --rules=RULES
+    Check if the rule files are valid or not.
+
+
+```
+
+## Bucket
+
+The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets.
+It is normally run as a standalone command to aid with troubleshooting.
 
 Example:
 
 ```bash
-$ thanos bucket verify --objstore.config-file=bucket.yml
+thanos tools bucket verify --objstore.config-file=bucket.yml
 ```
 
 The content of `bucket.yml`:
@@ -24,16 +81,11 @@ config:
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
-by adding a new command within `/cmd/thanos/bucket.go`.
+by adding a new command within [`/cmd/thanos/tools_bucket.go`](/cmd/thanos/tools_bucket.go)  .
 
-## Deployment
-
-## Flags
-
-[embedmd]: # "flags/bucket.txt $"
-
+[embedmd]:# (flags/tools_bucket.txt $)
 ```$
-usage: thanos bucket [<flags>] <command> [<args> ...]
+usage: thanos tools bucket [<flags>] <command> [<args> ...]
 
 Bucket utility commands
 
@@ -63,31 +115,31 @@ Flags:
                            https://thanos.io/storage.md/#configuration
 
 Subcommands:
-  bucket verify [<flags>]
+  tools bucket verify [<flags>]
     Verify all blocks in the bucket against specified issues
 
-  bucket ls [<flags>]
+  tools bucket ls [<flags>]
     List all blocks in the bucket
 
-  bucket inspect [<flags>]
+  tools bucket inspect [<flags>]
     Inspect all blocks in the bucket in detailed, table-like way
 
-  bucket web [<flags>]
+  tools bucket web [<flags>]
     Web interface for remote storage bucket
 
-  bucket replicate [<flags>]
+  tools bucket replicate [<flags>]
     Replicate data from one object storage to another. NOTE: Currently it works
     only with Thanos blocks (meta.json has to have Thanos metadata).
 
-  bucket downsample [<flags>]
+  tools bucket downsample [<flags>]
     continuously downsamples blocks in an object store bucket
 
 
 ```
 
-### Web
+### Bucket Web
 
-`bucket web` is used to inspect bucket blocks in form of interactive web UI.
+`tools bucket web` is used to inspect bucket blocks in form of interactive web UI.
 
 This will start local webserver that will periodically update the view with given refresh.
 
@@ -96,13 +148,12 @@ This will start local webserver that will periodically update the view with give
 Example:
 
 ```
-$ thanos bucket web --objstore.config-file="..."
+thanos tools bucket web --objstore.config-file="..."
 ```
 
-[embedmd]: # "flags/bucket_web.txt"
-
-```txt
-usage: thanos bucket web [<flags>]
+[embedmd]:# (flags/tools_bucket_web.txt $)
+```$
+usage: thanos tools bucket web [<flags>]
 
 Web interface for remote storage bucket
 
@@ -162,22 +213,21 @@ Flags:
 
 ```
 
-### Verify
+### Bucket Verify
 
-`bucket verify` is used to verify and optionally repair blocks within the specified bucket.
+`tools bucket verify` is used to verify and optionally repair blocks within the specified bucket.
 
 Example:
 
 ```
-$ thanos bucket verify --objstore.config-file="..."
+thanos tools bucket verify --objstore.config-file="..."
 ```
 
 When using the `--repair` option, make sure that the compactor job is disabled first.
 
-[embedmd]: # "flags/bucket_verify.txt"
-
-```txt
-usage: thanos bucket verify [<flags>]
+[embedmd]:# (flags/tools_bucket_verify.txt $)
+```$
+usage: thanos tools bucket verify [<flags>]
 
 Verify all blocks in the bucket against specified issues
 
@@ -227,27 +277,34 @@ Flags:
                            Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
-  --delete-delay=0s        Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component.
-                           If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket.
-                           If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately.
-                           Note that deleting blocks immediately can cause query failures, if store gateway still has the block
-                           loaded, or compactor is ignoring the deletion because it's compacting the block at the same time.
+      --delete-delay=0s    Duration after which blocks marked for deletion would
+                           be deleted permanently from source bucket by
+                           compactor component. If delete-delay is non zero,
+                           blocks will be marked for deletion and compactor
+                           component is required to delete blocks from source
+                           bucket. If delete-delay is 0, blocks will be deleted
+                           straight away. Use this if you want to get rid of or
+                           move the block immediately. Note that deleting blocks
+                           immediately can cause query failures, if store
+                           gateway still has the block loaded, or compactor is
+                           ignoring the deletion because it's compacting the
+                           block at the same time.
+
 ```
 
-### ls
+### Bucket ls
 
-`bucket ls` is used to list all blocks in the specified bucket.
+`tools bucket ls` is used to list all blocks in the specified bucket.
 
 Example:
 
 ```
-$ thanos bucket ls -o json --objstore.config-file="..."
+thanos tools bucket ls -o json --objstore.config-file="..."
 ```
 
-[embedmd]: # "flags/bucket_ls.txt"
-
-```txt
-usage: thanos bucket ls [<flags>]
+[embedmd]:# (flags/tools_bucket_ls.txt $)
+```$
+usage: thanos tools bucket ls [<flags>]
 
 List all blocks in the bucket
 
@@ -281,20 +338,19 @@ Flags:
 
 ```
 
-### inspect
+### Bucket inspect
 
-`bucket inspect` is used to inspect buckets in a detailed way using stdout in ASCII table format.
+`tools bucket inspect` is used to inspect buckets in a detailed way using stdout in ASCII table format.
 
 Example:
 
 ```
-$ thanos bucket inspect -l environment=\"prod\" --objstore.config-file="..."
+thanos tools bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```
 
-[embedmd]: # "flags/bucket_inspect.txt"
-
-```txt
-usage: thanos bucket inspect [<flags>]
+[embedmd]:# (flags/tools_bucket_inspect.txt $)
+```$
+usage: thanos tools bucket inspect [<flags>]
 
 Inspect all blocks in the bucket in detailed, table-like way
 
@@ -335,20 +391,20 @@ Flags:
 
 ```
 
-### replicate
+### Bucket replicate
 
-`bucket replicate` is used to replicate buckets from one object storage to another.
+`bucket tools replicate` is used to replicate buckets from one object storage to another.
 
 NOTE: Currently it works only with Thanos blocks (meta.json has to have Thanos metadata).
 
 Example:
 ```
-$ thanos bucket replicate --objstore.config-file="..." --objstore-to.config="..."
+thanos tools bucket replicate --objstore.config-file="..." --objstore-to.config="..."
 ```
 
-[embedmd]:# (flags/bucket_replicate.txt)
-```txt
-usage: thanos bucket replicate [<flags>]
+[embedmd]:# (flags/tools_bucket_replicate.txt $)
+```$
+usage: thanos tools bucket replicate [<flags>]
 
 Replicate data from one object storage to another. NOTE: Currently it works only
 with Thanos blocks (meta.json has to have Thanos metadata).
@@ -405,13 +461,13 @@ Flags:
 
 ```
 
-### downsample
+### Bucket downsample
 
-`bucket downsample` is used to continuously downsample blocks in an object store bucket as a service.
+`tools bucket downsample` is used to continuously downsample blocks in an object store bucket as a service.
 It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
-$ thanos bucket downsample \
+thanos tools bucket downsample \
     --data-dir        "/local/state/data/dir" \
     --objstore.config-file "bucket.yml"
 ```
@@ -424,9 +480,9 @@ config:
   bucket: example-bucket
 ```
 
-[embedmd]:# (flags/bucket_downsample.txt $)
+[embedmd]:# (flags/tools_bucket_downsample.txt $)
 ```$
-usage: thanos bucket downsample [<flags>]
+usage: thanos tools bucket downsample [<flags>]
 
 continuously downsamples blocks in an object store bucket
 
@@ -461,6 +517,47 @@ Flags:
                               Server.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+
+```
+## Rules-check
+
+The `tools rules-check` subcommand contains tools for validation of Prometheus rules.
+
+This is allowing to check the rules with the same validation as is used by the Thanos rule node.
+
+NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos rule extended rules file syntax,
+which includes `partial_response_strategy` field which `promtool` does not allow.
+
+If the check fails the command fails with exit code `1`, otherwise `0`.
+
+Example:
+
+```
+./thanos tools rules-check --rules cmd/thanos/testdata/rules-files/*.yaml
+```
+
+[embedmd]:# (flags/tools_rules-check.txt $)
+```$
+usage: thanos tools rules-check --rules=RULES
+
+Check if the rule files are valid or not.
+
+Flags:
+  -h, --help               Show context-sensitive help (also try --help-long and
+                           --help-man).
+      --version            Show application version.
+      --log.level=info     Log filtering level.
+      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
+                           https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
+                           https://thanos.io/tracing.md/#configuration
+      --rules=RULES ...    The rule files glob to check (repeated).
 
 ```
 

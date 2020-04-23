@@ -10,7 +10,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func Test_checkRules(t *testing.T) {
+func Test_CheckRules(t *testing.T) {
 
 	validFiles := []string{
 		"./testdata/rules-files/valid.yaml",

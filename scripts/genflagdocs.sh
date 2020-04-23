@@ -8,7 +8,7 @@ EMBEDMD_BIN=${EMBEDMD_BIN:-embedmd}
 SED_BIN=${SED_BIN:-sed}
 
 function docs {
-# if check arg was passed, instead of the docs generation verifies if docs coincide with the codebase
+# If check arg was passed, instead of the docs generation verifies if docs coincide with the codebase.
 if [[ "${CHECK}" == "check" ]]; then
     set +e
     DIFF=$(${EMBEDMD_BIN} -d *.md)
@@ -34,25 +34,27 @@ fi
 
 CHECK=${1:-}
 
-commands=("compact" "query" "rule" "sidecar" "store" "bucket" "check")
+# Auto update flags.
 
+commands=("compact" "query" "rule" "sidecar" "store" "tools")
 for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-bucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample")
-for x in "${bucketCommands[@]}"; do
-    ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
+toolsCommands=("bucket" "rules-check")
+for x in "${toolsCommands[@]}"; do
+    ./thanos tools "${x}" --help &> "docs/components/flags/tools_${x}.txt"
 done
 
-checkCommands=("rules")
-for x in "${checkCommands[@]}"; do
-    ./thanos check "${x}" --help &> "docs/components/flags/check_${x}.txt"
+toolsBucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample")
+for x in "${toolsBucketCommands[@]}"; do
+    ./thanos tools bucket "${x}" --help &> "docs/components/flags/tools_bucket_${x}.txt"
 done
 
-# remove white noise
+# Remove white noise.
 ${SED_BIN} -i -e 's/[ \t]*$//' docs/components/flags/*.txt
 
+# Auto update configuration.
 go run scripts/cfggen/main.go --output-dir=docs/flags
 
 # Change dir so embedmd understand the local references made in our markdown doc.

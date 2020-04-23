@@ -17,19 +17,18 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func registerChecks(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "Linting tools for Thanos")
-	registerCheckRules(m, cmd, name)
+func registerTools(m map[string]setupFunc, app *kingpin.Application) {
+	cmd := app.Command("tools", "Tools utility commands")
+
+	registerBucket(m, cmd, "tools")
+	registerCheckRules(m, cmd, "tools")
 }
 
-func registerCheckRules(m map[string]setupFunc, root *kingpin.CmdClause, name string) {
-	checkRulesCmd := root.Command("rules", "Check if the rule files are valid or not.")
-	ruleFiles := checkRulesCmd.Arg(
-		"rule-files",
-		"The rule files to check.",
-	).Required().ExistingFiles()
+func registerCheckRules(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {
+	checkRulesCmd := app.Command("rules-check", "Check if the rule files are valid or not.")
+	ruleFiles := checkRulesCmd.Flag("rules", "The rule files glob to check (repeated).").Required().ExistingFiles()
 
-	m[name+" rules"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	m[pre+" rules-check"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 		return checkRulesFiles(logger, ruleFiles)
