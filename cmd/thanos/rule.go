@@ -561,7 +561,7 @@ func runRule(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
-		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
+		router.Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 			reloadMsg := make(chan error)
 			reloadWebhandler <- reloadMsg
 			if err := <-reloadMsg; err != nil {
