@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -257,6 +259,9 @@ type BucketStore struct {
 	// When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 	enablePostingsCompression   bool
 	postingOffsetsInMemSampling int
+
+	// Enables hits in the Series() response.
+	enableSeriesHints bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -278,6 +283,7 @@ func NewBucketStore(
 	enableIndexHeader bool,
 	enablePostingsCompression bool,
 	postingOffsetsInMemSampling int,
+	enableSeriesHints bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -315,6 +321,7 @@ func NewBucketStore(
 		enableIndexHeader:           enableIndexHeader,
 		enablePostingsCompression:   enablePostingsCompression,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
+		enableSeriesHints:           enableSeriesHints,
 	}
 	s.metrics = metrics
 
@@ -868,6 +875,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		res     []storepb.SeriesSet
 		mtx     sync.Mutex
 		g, gctx = errgroup.WithContext(ctx)
+		hints   = &hintspb.SeriesResponseHints{}
 	)
 
 	s.mtx.RLock()
@@ -890,6 +898,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 		for _, b := range blocks {
 			b := b
+
+			// Keep track of queried blocks.
+			if s.enableSeriesHints {
+				hints.AddQueriedBlock(b.meta.ULID.String())
+			}
 
 			// We must keep the readers open until all their data has been sent.
 			indexr := b.indexReader(gctx)
@@ -1000,6 +1013,21 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 		err = nil
 	})
+
+	if s.enableSeriesHints {
+		var anyHints *types.Any
+
+		if anyHints, err = types.MarshalAny(hints); err != nil {
+			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+			return
+		}
+
+		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
+			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
+			return
+		}
+	}
+
 	return err
 }
 

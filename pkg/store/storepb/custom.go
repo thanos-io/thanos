@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -31,6 +32,14 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Series{
 			Series: series,
+		},
+	}
+}
+
+func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Hints{
+			Hints: hints,
 		},
 	}
 }

@@ -284,6 +284,7 @@ func runStore(
 		!disableIndexHeader,
 		enablePostingsCompression,
 		postingOffsetsInMemSampling,
+		false,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

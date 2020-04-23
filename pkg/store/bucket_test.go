@@ -23,6 +23,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -45,6 +46,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -481,6 +483,7 @@ func TestBucketStore_Info(t *testing.T) {
 		true,
 		true,
 		DefaultPostingOffsetInMemorySampling,
+		false,
 	)
 	testutil.Ok(t, err)
 
@@ -734,6 +737,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				true,
 				true,
 				DefaultPostingOffsetInMemorySampling,
+				false,
 			)
 			testutil.Ok(t, err)
 
@@ -1349,11 +1353,12 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
-			expected: expected,
+			expectedSeries: expected,
 		})
 	}
 
 	fmt.Println("Starting")
+
 	benchmarkSeries(t, store, bCases)
 	if !t.IsBenchmark() {
 		// Make sure the pool is correctly used. This is expected for 200k numbers.
@@ -1411,9 +1416,10 @@ type noopLimiter struct{}
 func (noopLimiter) Check(uint64) error { return nil }
 
 type benchSeriesCase struct {
-	name     string
-	req      *storepb.SeriesRequest
-	expected []storepb.Series
+	name           string
+	req            *storepb.SeriesRequest
+	expectedSeries []storepb.Series
+	expectedHints  []hintspb.SeriesResponseHints
 }
 
 func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase) {
@@ -1424,17 +1430,25 @@ func benchmarkSeries(t testutil.TB, store *BucketStore, cases []*benchSeriesCase
 				srv := newStoreSeriesServer(context.Background())
 				testutil.Ok(t, store.Series(c.req, srv))
 				testutil.Equals(t, 0, len(srv.Warnings))
-				testutil.Equals(t, len(c.expected), len(srv.SeriesSet))
+				testutil.Equals(t, len(c.expectedSeries), len(srv.SeriesSet))
 
 				if !t.IsBenchmark() {
-					if len(c.expected) == 1 {
+					if len(c.expectedSeries) == 1 {
 						// Chunks are not sorted within response. TODO: Investigate: Is this fine?
 						sort.Slice(srv.SeriesSet[0].Chunks, func(i, j int) bool {
 							return srv.SeriesSet[0].Chunks[i].MinTime < srv.SeriesSet[0].Chunks[j].MinTime
 						})
 					}
 					// This might give unreadable output for millions of series if error.
-					testutil.Equals(t, c.expected, srv.SeriesSet)
+					testutil.Equals(t, c.expectedSeries, srv.SeriesSet)
+
+					var actualHints []hintspb.SeriesResponseHints
+					for _, anyHints := range srv.HintsSet {
+						hints := hintspb.SeriesResponseHints{}
+						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
+						actualHints = append(actualHints, hints)
+					}
+					testutil.Equals(t, c.expectedHints, actualHints)
 				}
 
 			}
@@ -1616,4 +1630,107 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Equals(t, 0, len(srv.Warnings))
 		testutil.Equals(t, numSeries, len(srv.SeriesSet))
 	})
+}
+
+func TestSeries_HintsEnabled(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bktDir := filepath.Join(tmpDir, "bkt")
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	var (
+		logger   = log.NewNopLogger()
+		instrBkt = objstore.WithNoopInstr(bkt)
+	)
+
+	// Create TSDB blocks.
+	block1, seriesSet1 := createBlockWithOneSample(tb, bktDir, 0, 2)
+	block2, seriesSet2 := createBlockWithOneSample(tb, bktDir, 1, 2)
+
+	// Inject the Thanos meta to each block in the storage.
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	for _, blockID := range []ulid.ULID{block1, block2} {
+		_, err := metadata.InjectThanos(logger, filepath.Join(bktDir, blockID.String()), thanosMeta, nil)
+		testutil.Ok(t, err)
+	}
+
+	// Instance a real bucket store we'll use to query back the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		logger,
+		nil,
+		instrBkt,
+		fetcher,
+		tmpDir,
+		indexCache,
+		1000000,
+		10000,
+		10,
+		false,
+		10,
+		nil,
+		false,
+		true,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		true)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	testCases := []*benchSeriesCase{
+		{
+			name: "query a single block",
+			req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 1,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+			},
+			expectedSeries: seriesSet1,
+			expectedHints: []hintspb.SeriesResponseHints{
+				{
+					QueriedBlocks: []hintspb.Block{
+						{Id: block1.String()},
+					},
+				},
+			},
+		}, {
+			name: "query multiple blocks",
+			req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+			},
+			expectedSeries: append(append([]storepb.Series{}, seriesSet1...), seriesSet2...),
+			expectedHints: []hintspb.SeriesResponseHints{
+				{
+					QueriedBlocks: []hintspb.Block{
+						{Id: block1.String()},
+						{Id: block2.String()},
+					},
+				},
+			},
+		},
+	}
+
+	benchmarkSeries(tb, store, testCases)
 }
