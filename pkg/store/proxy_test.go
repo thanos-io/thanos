@@ -6,7 +6,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"github.com/gogo/protobuf/types"
 	"io"
 	"os"
 	"sort"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
