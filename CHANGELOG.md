@@ -14,6 +14,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 - [#2501](https://github.com/thanos-io/thanos/pull/2501) Query: gracefully handle additional fields in `SeriesResponse` protobuf message that may be added in the future.
+- [#2515](https://github.com/thanos-io/thanos/pull/2515) Rule: do not wrap reload endpoint with `/`. Makes `/-/reload` accessible again when no prefix has been specified.
 
 ### Added
 
