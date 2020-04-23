@@ -17,7 +17,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 
-- [#2502](https://github.com/thanos-io/thanos/pull/2502) Added `hints_enabled` proto field to `SeriesRequest` and `hints` field to `SeriesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
+- [#2502](https://github.com/thanos-io/thanos/pull/2502) Added `hints` field to `SeriesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
 
 ### Changed
 

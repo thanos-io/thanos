@@ -115,11 +115,6 @@ message SeriesRequest {
 
   // skip_chunks controls whether sending chunks or not in series responses.
   bool skip_chunks = 8;
-
-  // hints_enabled controls whether sending hints or not in the series responses. Hints
-  // are store implementation specific and used to carry information about how the series
-  // have been queried.
-  bool hints_enabled  = 9;
 }
 
 enum Aggr {
