@@ -1,8 +1,7 @@
 ---
 title: Community
-type: contributing
-menu: thanos
-weight: 2
+type: docs
+menu: contributing
 slug: /community.md
 ---
 
