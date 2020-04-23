@@ -85,15 +85,14 @@ func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient
 	return resp.LabelSets, resp.MinTime, resp.MaxTime, component.FromProto(resp.StoreType), nil
 }
 
-// storeSetNodeCollector is metric collector for Guge indicated number of available storeAPIs for Querier.
-// Collector is requires as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
+// storeSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
+// A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
 type storeSetNodeCollector struct {
 	mtx             sync.Mutex
 	storeNodes      map[component.StoreAPI]map[string]int
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
-	nodeInfoDesc    *prometheus.Desc
 }
 
 func newStoreSetNodeCollector() *storeSetNodeCollector {
@@ -103,13 +102,6 @@ func newStoreSetNodeCollector() *storeSetNodeCollector {
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
 			[]string{"external_labels", "store_type"}, nil,
-		),
-		// TODO(bwplotka): Obsolete; Replaced by thanos_store_nodes_grpc_connections.
-		// Remove in next minor release.
-		nodeInfoDesc: prometheus.NewDesc(
-			"thanos_store_node_info",
-			"Deprecated, use thanos_store_nodes_grpc_connections instead.",
-			[]string{"external_labels"}, nil,
 		),
 	}
 }
@@ -134,7 +126,6 @@ func (c *storeSetNodeCollector) Update(nodes map[component.StoreAPI]map[string]i
 
 func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
-	ch <- c.nodeInfoDesc
 }
 
 func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
@@ -149,9 +140,6 @@ func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
 		}
-	}
-	for externalLabels, occur := range c.storePerExtLset {
-		ch <- prometheus.MustNewConstMetric(c.nodeInfoDesc, prometheus.GaugeValue, float64(occur), externalLabels)
 	}
 }
 
