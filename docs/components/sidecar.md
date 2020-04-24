@@ -79,6 +79,9 @@ To use this, the Prometheus compaction needs to be disabled. This can be done by
 - `--storage.tsdb.min-block-duration=2h`
 - `--storage.tsdb.max-block-duration=2h`
 
+A known issue is that Prometheus and Thanos use different compaction schedules, so Compact may
+get confused when trying to further compact or downsample compacted blocks from Prometheus.
+
 ## Flags
 
 [embedmd]:# (flags/sidecar.txt $)
