@@ -72,6 +72,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -89,6 +91,12 @@ type Reloader struct {
 
 	lastCfgHash  []byte
 	lastRuleHash []byte
+
+	reloads      prometheus.Counter
+	reloadErrors prometheus.Counter
+	watches      prometheus.Gauge
+	watchEvents  prometheus.Counter
+	watchErrors  prometheus.Counter
 }
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
@@ -98,11 +106,11 @@ var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
 // If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
 // will be substituted and the output written into the given path. Prometheus should then use
 // cfgOutputFile as its config file path.
-func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgOutputFile string, ruleDirs []string) *Reloader {
+func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFile string, cfgOutputFile string, ruleDirs []string) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	return &Reloader{
+	r := &Reloader{
 		logger:        logger,
 		reloadURL:     reloadURL,
 		cfgFile:       cfgFile,
@@ -110,7 +118,39 @@ func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgOutputFile st
 		ruleDirs:      ruleDirs,
 		watchInterval: 3 * time.Minute,
 		retryInterval: 5 * time.Second,
+
+		reloads: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_reloads_total",
+				Help: "Total number of reload requests.",
+			},
+		),
+		reloadErrors: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_reloads_failed_total",
+				Help: "Total number of reload requests that failed.",
+			},
+		),
+		watches: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "reloader_watches",
+				Help: "Number of resources watched by the reloader.",
+			},
+		),
+		watchEvents: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_watch_events_total",
+				Help: "Total number of events received by the reloader from the watcher.",
+			},
+		),
+		watchErrors: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_watch_errors_total",
+				Help: "Total number of errors received by the reloader from the watcher.",
+			},
+		),
 	}
+	return r
 }
 
 // We cannot detect everything via watch. Watch interval controls how often we re-read given dirs non-recursively.
@@ -154,6 +194,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	tick := time.NewTicker(r.watchInterval)
 	defer tick.Stop()
 
+	r.watches.Set(float64(len(watchables)))
 	level.Info(r.logger).Log(
 		"msg", "started watching config file and non-recursively rule dirs for changes",
 		"cfg", r.cfgFile,
@@ -166,11 +207,12 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			return nil
 		case <-tick.C:
 		case event := <-watcher.Events:
-			// TODO(bwplotka): Add metric if we are not cycling CPU here too much.
+			r.watchEvents.Inc()
 			if _, ok := watchables[filepath.Dir(event.Name)]; !ok {
 				continue
 			}
 		case err := <-watcher.Errors:
+			r.watchErrors.Inc()
 			level.Error(r.logger).Log("msg", "watch error", "err", err)
 			continue
 		}
@@ -280,7 +322,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 	defer cancel()
 
 	if err := runutil.RetryWithLog(r.logger, r.retryInterval, retryCtx.Done(), func() error {
+		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
+			r.reloadErrors.Inc()
 			return errors.Wrap(err, "trigger reload")
 		}
 
