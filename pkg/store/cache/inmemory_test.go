@@ -260,7 +260,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls})
-	testutil.Equals(t, map[labels.Label][]byte{lbls: []byte{42, 33}}, pHits, "key exists")
+	testutil.Equals(t, map[labels.Label][]byte{lbls: {42, 33}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, ulid.MustNew(1, nil), []labels.Label{lbls})
@@ -286,7 +286,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
 	sHits, sMisses := cache.FetchMultiSeries(ctx, id, []uint64{1234})
-	testutil.Equals(t, map[uint64][]byte{1234: []byte{222, 223, 224}}, sHits, "key exists")
+	testutil.Equals(t, map[uint64][]byte{1234: {222, 223, 224}}, sHits, "key exists")
 	testutil.Equals(t, emptySeriesMisses, sMisses)
 
 	lbls2 := labels.Label{Name: "test", Value: "124"}
@@ -391,7 +391,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls3})
-	testutil.Equals(t, map[labels.Label][]byte{lbls3: []byte{}}, pHits, "key exists")
+	testutil.Equals(t, map[labels.Label][]byte{lbls3: {}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// nil works and still allocates empty slice.
@@ -411,7 +411,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls4})
-	testutil.Equals(t, map[labels.Label][]byte{lbls4: []byte{}}, pHits, "key exists")
+	testutil.Equals(t, map[labels.Label][]byte{lbls4: {}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// Other metrics.

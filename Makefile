@@ -199,6 +199,7 @@ check-comments: ## Checks Go code comments if they have trailing period (exclude
 format: ## Formats Go code including imports and cleans up white noise.
 format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
+	@gofmt -s -w $(FILES_TO_FMT)
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
