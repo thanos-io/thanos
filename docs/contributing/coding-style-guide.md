@@ -278,7 +278,7 @@ And what's broken is tiny `:` or lack of it.
 This is also why we recommend to scope errors if you can:
 
 ```go
-    if err := doSomething; err != nil {
+    if err := doSomething(); err != nil {
         // handle err
     }
 ```
@@ -491,7 +491,7 @@ more readable to inline those few lines directly on the caller side.
 }
 
 func (s *myStruct) doSomethingAndHandleError() {
-    if err := doSomething; err != nil {
+    if err := doSomething(); err != nil {
         level.Error(s.logger).Log("msg" "failed to do something; sorry", "err", err)
     }
 }
@@ -504,7 +504,7 @@ func (s *myStruct) doSomethingAndHandleError() {
 
 ```go
     // Some code...
-    if err := doSomething; err != nil {
+    if err := doSomething(); err != nil {
         level.Error(s.logger).Log("msg" "failed to do something; sorry", "err", err)
     }
 
