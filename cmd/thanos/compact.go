@@ -344,6 +344,13 @@ func runCompact(
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", maxCompactionLevel, "default", compactions.maxLevel())
 	}
 
+	// Ensure the lowest resolution downsampling is triggered at the highest compaction level.
+	downsample_range1 := downsample.DownsampleRange1 * time.Millisecond
+	if downsample_range1 <= compactions[len(compactions)-2] ||
+		downsample_range1 >= compactions[len(compactions)-1] {
+		panic("DownsampleRange1 must be between the final two compaction levels")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.

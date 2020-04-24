@@ -33,8 +33,11 @@ const (
 
 // Downsampling ranges i.e. minimum block size after which we start to downsample blocks (in seconds).
 const (
-	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours.
-	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days.
+	// NOTE: although DownsampleRange1 can be as high as our last compaction level (14d),
+	//   we use just over the penultimate level to accommodate compacted blocks migrated
+	//   from other systems (e.g. Prometheus server, which maxes out at 6.75d).
+	DownsampleRange0 = 40 * 60 * 60 * 1000     // 40 hours.
+	DownsampleRange1 = 3 * 24 * 60 * 60 * 1000 // 3 days.
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.

@@ -12,7 +12,7 @@ It is generally not semantically concurrency safe and must be deployed as a sing
 It is also responsible for downsampling of data:
 
 - creating 5m downsampling for blocks larger than **40 hours** (2d, 2w)
-- creating 1h downsampling for blocks larger than **10 days** (2w).
+- creating 1h downsampling for blocks larger than **3 days** (2w).
 
 Example:
 
