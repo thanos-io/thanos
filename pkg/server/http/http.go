@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/pprof"
+	"path"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -30,16 +31,16 @@ type Server struct {
 }
 
 // New creates a new Server.
-func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.HTTPProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, webRoutePrefix string, prober *prober.HTTPProbe, opts ...Option) *Server {
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
 	}
 
 	mux := http.NewServeMux()
-	registerMetrics(mux, reg)
-	registerProbes(mux, prober, logger)
-	registerProfiler(mux)
+	registerMetrics(mux, reg, webRoutePrefix)
+	registerProbes(mux, prober, logger, webRoutePrefix)
+	registerProfiler(mux, webRoutePrefix)
 
 	return &Server{
 		logger: log.With(logger, "service", "http/server", "component", comp.String()),
@@ -85,23 +86,23 @@ func (s *Server) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 
-func registerProfiler(mux *http.ServeMux) {
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+func registerProfiler(mux *http.ServeMux, webRoutePrefix string) {
+	mux.HandleFunc(path.Join(webRoutePrefix, "/debug/pprof/"), pprof.Index)
+	mux.HandleFunc(path.Join(webRoutePrefix, "/debug/pprof/cmdline"), pprof.Cmdline)
+	mux.HandleFunc(path.Join(webRoutePrefix, "/debug/pprof/profile"), pprof.Profile)
+	mux.HandleFunc(path.Join(webRoutePrefix, "/debug/pprof/symbol"), pprof.Symbol)
+	mux.HandleFunc(path.Join(webRoutePrefix, "/debug/pprof/trace"), pprof.Trace)
 }
 
-func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
+func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer, webRoutePrefix string) {
 	if g != nil {
-		mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+		mux.Handle(path.Join(webRoutePrefix, "/metrics"), promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 	}
 }
 
-func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe, logger log.Logger) {
+func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe, logger log.Logger, webRoutePrefix string) {
 	if p != nil {
-		mux.Handle("/-/healthy", p.HealthyHandler(logger))
-		mux.Handle("/-/ready", p.ReadyHandler(logger))
+		mux.Handle(path.Join(webRoutePrefix, "/-/healthy"), p.HealthyHandler(logger))
+		mux.Handle(path.Join(webRoutePrefix, "/-/ready"), p.ReadyHandler(logger))
 	}
 }

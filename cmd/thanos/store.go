@@ -191,7 +191,8 @@ func runStore(
 		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	srv := httpserver.New(logger, reg, component, httpProbe,
+	srv := httpserver.New(logger, reg, component, "/",
+		httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)

@@ -580,7 +580,8 @@ func runRule(
 		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
-		srv := httpserver.New(logger, reg, comp, httpProbe,
+		srv := httpserver.New(logger, reg, comp, webRoutePrefix,
+			httpProbe,
 			httpserver.WithListen(httpBindAddr),
 			httpserver.WithGracePeriod(httpGracePeriod),
 		)

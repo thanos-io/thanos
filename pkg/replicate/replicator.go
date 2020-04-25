@@ -85,7 +85,8 @@ func RunReplicate(
 		prober.NewInstrumentation(component.Replicate, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	s := http.New(logger, reg, component.Replicate, httpProbe,
+	s := http.New(logger, reg, component.Replicate, "/",
+		httpProbe,
 		http.WithListen(httpBindAddr),
 		http.WithGracePeriod(httpGracePeriod),
 	)

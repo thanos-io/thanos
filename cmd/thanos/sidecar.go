@@ -110,9 +110,10 @@ func runSidecar(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	srv := httpserver.New(logger, reg, comp, httpProbe,
-		httpserver.WithListen(conf.http.bindAddress),
-		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
+	srv := httpserver.New(logger, reg, comp, "/",
+		httpProbe,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
 	g.Add(func() error {

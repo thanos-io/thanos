@@ -125,7 +125,8 @@ func RunDownsample(
 		})
 	}
 
-	srv := httpserver.New(logger, reg, comp, httpProbe,
+	srv := httpserver.New(logger, reg, comp, "/",
+		httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
