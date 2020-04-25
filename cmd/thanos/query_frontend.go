@@ -268,7 +268,7 @@ func runQueryFrontend(
 
 	// Start metrics HTTP server.
 	{
-		srv := httpserver.New(logger, reg, comp, httpProbe,
+		srv := httpserver.New(logger, reg, comp, "/", httpProbe,
 			httpserver.WithListen(cfg.http.bindAddress),
 			httpserver.WithGracePeriod(time.Duration(cfg.http.gracePeriod)),
 			httpserver.WithTLSConfig(cfg.http.tlsConfig),

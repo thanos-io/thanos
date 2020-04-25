@@ -180,7 +180,7 @@ func runCompact(
 		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	srv := httpserver.New(logger, reg, component, httpProbe,
+	srv := httpserver.New(logger, reg, component, conf.webConf.routePrefix, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		httpserver.WithTLSConfig(conf.http.tlsConfig),

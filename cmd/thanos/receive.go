@@ -240,7 +240,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up http server")
 	{
-		srv := httpserver.New(logger, reg, comp, httpProbe,
+		srv := httpserver.New(logger, reg, comp, "/", httpProbe,
 			httpserver.WithListen(*conf.httpBindAddr),
 			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),

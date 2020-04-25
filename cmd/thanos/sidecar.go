@@ -132,7 +132,7 @@ func runSidecar(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	srv := httpserver.New(logger, reg, comp, httpProbe,
+	srv := httpserver.New(logger, reg, comp, "/", httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		httpserver.WithTLSConfig(conf.http.tlsConfig),

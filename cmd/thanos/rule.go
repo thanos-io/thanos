@@ -664,7 +664,7 @@ func runRule(
 		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, conf.web.disableCORS, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
-		srv := httpserver.New(logger, reg, comp, httpProbe,
+		srv := httpserver.New(logger, reg, comp, conf.web.routePrefix, httpProbe,
 			httpserver.WithListen(conf.http.bindAddress),
 			httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 			httpserver.WithTLSConfig(conf.http.tlsConfig),

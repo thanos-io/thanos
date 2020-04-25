@@ -225,7 +225,7 @@ func runStore(
 		prober.NewInstrumentation(conf.component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
-	srv := httpserver.New(logger, reg, conf.component, httpProbe,
+	srv := httpserver.New(logger, reg, conf.component, conf.webConfig.routePrefix, httpProbe,
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
 		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
