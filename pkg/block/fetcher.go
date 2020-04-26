@@ -668,7 +668,7 @@ type ReplicaLabelRemover struct {
 	logger log.Logger
 
 	replicaLabels []string
-	labelIfEmpty []string
+	labelIfEmpty  []string
 }
 
 // NewReplicaLabelRemover creates a ReplicaLabelRemover.

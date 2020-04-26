@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Added
 
 - [#2502](https://github.com/thanos-io/thanos/pull/2502) Added `hints` field to `SeriesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
+- [#2526](https://github.com/thanos-io/thanos/pull/2526) Added new flag `--deduplication.label-if-empty=label=value` to handle situation, when there are no labels left after deduplication via `--deduplication.replica-label`
 
 ### Changed
 
