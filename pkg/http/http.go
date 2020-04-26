@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
@@ -163,7 +164,7 @@ func (c FileSDConfig) convert() (file.SDConfig, error) {
 }
 
 type AddressProvider interface {
-	Resolve(context.Context, []string)
+	Resolve(context.Context, []string) error
 	Addresses() []string
 }
 
@@ -260,5 +261,9 @@ func (c *Client) Discover(ctx context.Context) {
 
 // Resolve refreshes and resolves the list of targets.
 func (c *Client) Resolve(ctx context.Context) {
-	c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+
+	// If some of the dns resolution fails, log the errors.
+	if err := c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...)); err != nil {
+		level.Error(c.logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+	}
 }

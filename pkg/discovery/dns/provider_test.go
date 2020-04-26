@@ -5,6 +5,7 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -32,14 +33,17 @@ func TestProvider(t *testing.T) {
 	}
 	ctx := context.TODO()
 
-	prv.Resolve(ctx, []string{"any+x"})
+	err := prv.Resolve(ctx, []string{"any+x"})
+	fmt.Println(err)
+	testutil.Ok(t, err)
 	result := prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, []string(nil), result)
 	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	err = prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips, result)
@@ -48,7 +52,8 @@ func TestProvider(t *testing.T) {
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
-	prv.Resolve(ctx, []string{"any+b", "any+c"})
+	err = prv.Resolve(ctx, []string{"any+b", "any+c"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips[2:], result)
@@ -56,14 +61,16 @@ func TestProvider(t *testing.T) {
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
-	prv.Resolve(ctx, []string{"any+x"})
+	err = prv.Resolve(ctx, []string{"any+x"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, []string(nil), result)
 	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	err = prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips, result)
@@ -72,7 +79,8 @@ func TestProvider(t *testing.T) {
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+b")))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
-	prv.Resolve(ctx, []string{"any+b", "example.com:90", "any+c"})
+	err = prv.Resolve(ctx, []string{"any+b", "example.com:90", "any+c"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, append(ips[2:], "example.com:90"), result)
@@ -81,7 +89,8 @@ func TestProvider(t *testing.T) {
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("example.com:90")))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+c")))
 
-	prv.Resolve(ctx, []string{"any+b", "any+c"})
+	err = prv.Resolve(ctx, []string{"any+b", "any+c"})
+	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
 	testutil.Equals(t, ips[2:], result)

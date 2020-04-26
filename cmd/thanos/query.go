@@ -304,7 +304,9 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
-					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
+					if err := dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+					}
 				case <-ctxUpdate.Done():
 					return nil
 				}
@@ -319,7 +321,9 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...))
+				if err := dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+				}
 				return nil
 			})
 		}, func(error) {
