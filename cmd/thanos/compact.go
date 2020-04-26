@@ -142,6 +142,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().Strings()
+	dedupLabelIfEmpty := cmd.Flag("deduplication.label-if-empty", "Label=value pair to add in case you deduplicate against the only label set for blocks. And after deduplication new block being left without any label.").
+		Hidden().Default("").String()
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
@@ -172,6 +174,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*blockSyncConcurrency,
 			*compactionConcurrency,
 			*dedupReplicaLabels,
+			*dedupLabelIfEmpty,
 			selectorRelabelConf,
 			*waitInterval,
 			*label,
@@ -198,6 +201,7 @@ func runCompact(
 	maxCompactionLevel, blockSyncConcurrency int,
 	concurrency int,
 	dedupReplicaLabels []string,
+	dedupLabelIfEmpty string,
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
 	label string,
@@ -302,9 +306,17 @@ func runCompact(
 	}
 
 	enableVerticalCompaction := false
+	var labelIfEmpty []string
 	if len(dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
 		level.Info(logger).Log("msg", "deduplication.replica-label specified, vertical compaction is enabled", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","))
+		if len(dedupLabelIfEmpty) > 0 {
+			labelIfEmpty = strings.Split(dedupLabelIfEmpty, "=")
+			if len(labelIfEmpty) != 2 {
+				return errors.New("deduplication.label-if-empty should be in 'label=value' format")
+			}
+			level.Info(logger).Log("msg", "deduplication.label-if-empty specified with value:", "labelIfEmpty", strings.Join(labelIfEmpty, "="))
+		}
 	}
 
 	compactorView := ui.NewBucketUI(logger, label, path.Join(externalPrefix, "/loaded"), prefixHeader)
@@ -317,7 +329,7 @@ func runCompact(
 				block.NewConsistencyDelayMetaFilter(logger, consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
-			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels)},
+			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, dedupReplicaLabels, labelIfEmpty)},
 		)
 		cf.UpdateOnChange(compactorView.Set)
 		sy, err = compact.NewSyncer(
