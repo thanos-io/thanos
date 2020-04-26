@@ -687,7 +687,7 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 				modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
 		}
-		if len(l) == 0  {
+		if len(l) == 0 && len(r.labelIfEmpty) == 2 {
 			l[r.labelIfEmpty[0]] = r.labelIfEmpty[1]
 		}
 		metas[u].Thanos.Labels = l
