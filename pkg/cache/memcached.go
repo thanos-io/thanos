@@ -33,12 +33,12 @@ func NewMemcachedCache(logger log.Logger, memcached cacheutil.MemcachedClient, r
 	}
 
 	c.requests = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_store_memcached_requests_total",
+		Name: "thanos_cache_memcached_requests_total",
 		Help: "Total number of items requests to the memcached.",
 	})
 
 	c.hits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_store_memcached_hits_total",
+		Name: "thanos_cache_memcached_hits_total",
 		Help: "Total number of items requests to the cache that were a hit.",
 	})
 
@@ -53,13 +53,12 @@ func NewMemcachedCache(logger log.Logger, memcached cacheutil.MemcachedClient, r
 func (c *MemcachedCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
 	for key, val := range data {
 		if err := c.memcached.SetAsync(ctx, key, val, ttl); err != nil {
-			level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
+			level.Error(c.logger).Log("msg", "failed to store data into memcached", "err", err)
 		}
 	}
 }
 
-// FetchMultiPostings fetches multiple postings - each identified by a label -
-// and returns a map containing cache hits, along with a list of missing keys.
+// Fetch fetches multiple keys and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
 func (c *MemcachedCache) Fetch(ctx context.Context, keys []string) (map[string][]byte, []string) {
 	// Fetch the keys from memcached in a single request.

@@ -55,6 +55,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
 		false)
 
+	cachingBucketConfig := extflag.RegisterPathOrContent(cmd, "experimental.caching-bucket.config",
+		"YAML file that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/components/store.md/#TBD",
+		false)
+
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").Bytes()
 
@@ -149,6 +153,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*postingOffsetsInMemSampling,
+			cachingBucketConfig,
 		)
 	}
 }
@@ -179,6 +184,7 @@ func runStore(
 	ignoreDeletionMarksDelay time.Duration,
 	externalPrefix, prefixHeader string,
 	postingOffsetsInMemSampling int,
+	cachingBucketConfig *extflag.PathOrContent,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -212,6 +218,18 @@ func runStore(
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
+	}
+
+	cachingBucketConfigYaml, err := cachingBucketConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "get caching bucket configuration")
+	}
+	if len(cachingBucketConfigYaml) > 0 {
+		newbkt, err := storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
+		if err != nil {
+			return errors.Wrap(err, "create caching bucket")
+		}
+		bkt = newbkt
 	}
 
 	relabelContentYaml, err := selectorRelabelConf.Content()
