@@ -25,7 +25,7 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type SeriesResponseHints struct {
-	// queried_blocks is the list of blocks that have been queried.
+	/// queried_blocks is the list of blocks that have been queried.
 	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
 }
 

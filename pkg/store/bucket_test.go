@@ -1689,7 +1689,8 @@ func TestSeries_HintsEnabled(t *testing.T) {
 		true,
 		true,
 		DefaultPostingOffsetInMemorySampling,
-		true)
+		true,
+	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
 

@@ -3,8 +3,10 @@
 
 package hintspb
 
-func (m *SeriesResponseHints) AddQueriedBlock(id string) {
+import "github.com/oklog/ulid"
+
+func (m *SeriesResponseHints) AddQueriedBlock(id ulid.ULID) {
 	m.QueriedBlocks = append(m.QueriedBlocks, Block{
-		Id: id,
+		Id: id.String(),
 	})
 }

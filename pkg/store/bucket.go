@@ -260,7 +260,7 @@ type BucketStore struct {
 	enablePostingsCompression   bool
 	postingOffsetsInMemSampling int
 
-	// Enables hits in the Series() response.
+	// Enables hints in the Series() response.
 	enableSeriesHints bool
 }
 
@@ -283,7 +283,7 @@ func NewBucketStore(
 	enableIndexHeader bool,
 	enablePostingsCompression bool,
 	postingOffsetsInMemSampling int,
-	enableSeriesHints bool,
+	enableSeriesHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -899,9 +899,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for _, b := range blocks {
 			b := b
 
-			// Keep track of queried blocks.
 			if s.enableSeriesHints {
-				hints.AddQueriedBlock(b.meta.ULID.String())
+				// Keep track of queried blocks.
+				hints.AddQueriedBlock(b.meta.ULID)
 			}
 
 			// We must keep the readers open until all their data has been sent.
