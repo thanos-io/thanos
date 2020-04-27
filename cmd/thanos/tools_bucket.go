@@ -64,16 +64,17 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
-func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "Bucket utility commands")
+func registerBucket(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {
+	cmd := app.Command("bucket", "Bucket utility commands")
 
+	pre += " bucket"
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-	registerBucketVerify(m, cmd, name, objStoreConfig)
-	registerBucketLs(m, cmd, name, objStoreConfig)
-	registerBucketInspect(m, cmd, name, objStoreConfig)
-	registerBucketWeb(m, cmd, name, objStoreConfig)
-	registerBucketReplicate(m, cmd, name, objStoreConfig)
-	registerBucketDownsample(m, cmd, name, objStoreConfig)
+	registerBucketVerify(m, cmd, pre, objStoreConfig)
+	registerBucketLs(m, cmd, pre, objStoreConfig)
+	registerBucketInspect(m, cmd, pre, objStoreConfig)
+	registerBucketWeb(m, cmd, pre, objStoreConfig)
+	registerBucketReplicate(m, cmd, pre, objStoreConfig)
+	registerBucketDownsample(m, cmd, pre, objStoreConfig)
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {

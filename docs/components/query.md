@@ -6,7 +6,7 @@ menu: components
 
 # Querier/Query
 
-The Querier component (also known as "Query") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
+The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
 In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
@@ -15,7 +15,7 @@ Querier is fully stateless and horizontally scalable.
 Example command to run Querier:
 
 ```bash
-$ thanos query \
+thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
     --store            "<store-api2>:<grpc-port>"
@@ -81,7 +81,7 @@ This also hides gaps in collection of a single data source.
 If we configure Querier like this:
 
 ```
-$ thanos query \
+thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --store               "<store-api>:<grpc-port>" \
@@ -106,7 +106,7 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 * Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
 
 ```
-$ thanos query \
+thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --query.replica-label "replicaX" \
