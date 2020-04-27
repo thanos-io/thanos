@@ -18,12 +18,12 @@ import (
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
-	set       storepb.SeriesSet
-	initiated bool
-	done      bool
+	set  storepb.SeriesSet
+	done bool
 
 	mint, maxt int64
-	aggr       resAggr
+	aggrs      []storepb.Aggr
+	initiated  bool
 
 	currLset   []storepb.Label
 	currChunks []storepb.AggrChunk
@@ -39,7 +39,8 @@ func (s *promSeriesSet) Next() bool {
 		return false
 	}
 
-	// storage.Series are more strict then SeriesSet: It requires storage.Series to iterate over full series.
+	// storage.Series are more strict then SeriesSet:
+	// * It requires storage.Series to iterate over full series.
 	s.currLset, s.currChunks = s.set.At()
 	for {
 		s.done = s.set.Next()
@@ -52,14 +53,47 @@ func (s *promSeriesSet) Next() bool {
 		}
 		s.currChunks = append(s.currChunks, nextChunks...)
 	}
+
+	// Samples (so chunks as well) have to be sorted by time.
+	// TODO(bwplotka): Benchmark if we can do better.
+	// For example we could iterate in above loop and write our own binary search based insert sort.
+	// We could also remove duplicates in same loop.
+	sort.Slice(s.currChunks, func(i, j int) bool {
+		return s.currChunks[i].MinTime < s.currChunks[j].MinTime
+	})
+
+	// newChunkSeriesIterator will handle overlaps well, however we don't need to iterate over those samples,
+	// removed early duplicates here.
+	// TODO(bwplotka): Remove chunk duplicates on proxy level as well to avoid decoding those.
+	// https://github.com/thanos-io/thanos/issues/2546, consider skipping removal here then.
+	s.currChunks = removeExactDuplicates(s.currChunks)
 	return true
+}
+
+// removeExactDuplicates returns chunks without 1:1 duplicates.
+// NOTE: input chunks has to be sorted by minTime.
+func removeExactDuplicates(chks []storepb.AggrChunk) []storepb.AggrChunk {
+	if len(chks) <= 1 {
+		return chks
+	}
+
+	ret := make([]storepb.AggrChunk, 0, len(chks))
+	ret = append(ret, chks[0])
+
+	for _, c := range chks[1:] {
+		if ret[len(ret)-1].String() == c.String() {
+			continue
+		}
+		ret = append(ret, c)
+	}
+	return ret
 }
 
 func (s *promSeriesSet) At() storage.Series {
 	if !s.initiated || s.set.Err() != nil {
 		return nil
 	}
-	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggr)
+	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggrs)
 }
 
 func (s *promSeriesSet) Err() error {
@@ -98,6 +132,7 @@ func translateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
 
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
 type storeSeriesSet struct {
+	// TODO(bwplotka): Don't buffer all, we have to buffer single series (to sort and dedup chunks), but nothing more.
 	series []storepb.Series
 	i      int
 }
@@ -119,8 +154,7 @@ func (storeSeriesSet) Err() error {
 }
 
 func (s storeSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
-	ser := s.series[s.i]
-	return ser.Labels, ser.Chunks
+	return s.series[s.i].Labels, s.series[s.i].Chunks
 }
 
 // chunkSeries implements storage.Series for a series on storepb types.
@@ -128,20 +162,17 @@ type chunkSeries struct {
 	lset       labels.Labels
 	chunks     []storepb.AggrChunk
 	mint, maxt int64
-	aggr       resAggr
+	aggrs      []storepb.Aggr
 }
 
-func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64, aggr resAggr) *chunkSeries {
-	sort.Slice(chunks, func(i, j int) bool {
-		return chunks[i].MinTime < chunks[j].MinTime
-	})
-
+// newChunkSeries allows to iterate over samples for each sorted and non-overlapped chunks.
+func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
 	return &chunkSeries{
 		lset:   storepb.LabelsToPromLabels(lset),
 		chunks: chunks,
 		mint:   mint,
 		maxt:   maxt,
-		aggr:   aggr,
+		aggrs:  aggrs,
 	}
 }
 
@@ -153,33 +184,47 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 	var sit storage.SeriesIterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
-	switch s.aggr {
-	case resAggrCount:
-		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Count, c.Raw))
+	if len(s.aggrs) == 1 {
+		switch s.aggrs[0] {
+		case storepb.Aggr_COUNT:
+			for _, c := range s.chunks {
+				its = append(its, getFirstIterator(c.Count, c.Raw))
+			}
+			sit = newChunkSeriesIterator(its)
+		case storepb.Aggr_SUM:
+			for _, c := range s.chunks {
+				its = append(its, getFirstIterator(c.Sum, c.Raw))
+			}
+			sit = newChunkSeriesIterator(its)
+		case storepb.Aggr_MIN:
+			for _, c := range s.chunks {
+				its = append(its, getFirstIterator(c.Min, c.Raw))
+			}
+			sit = newChunkSeriesIterator(its)
+		case storepb.Aggr_MAX:
+			for _, c := range s.chunks {
+				its = append(its, getFirstIterator(c.Max, c.Raw))
+			}
+			sit = newChunkSeriesIterator(its)
+		case storepb.Aggr_COUNTER:
+			for _, c := range s.chunks {
+				its = append(its, getFirstIterator(c.Counter, c.Raw))
+			}
+			sit = downsample.NewCounterSeriesIterator(its...)
+		default:
+			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
-		sit = newChunkSeriesIterator(its)
-	case resAggrSum:
-		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Sum, c.Raw))
-		}
-		sit = newChunkSeriesIterator(its)
-	case resAggrMin:
-		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Min, c.Raw))
-		}
-		sit = newChunkSeriesIterator(its)
-	case resAggrMax:
-		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Max, c.Raw))
-		}
-		sit = newChunkSeriesIterator(its)
-	case resAggrCounter:
-		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Counter, c.Raw))
-		}
-		sit = downsample.NewCounterSeriesIterator(its...)
-	case resAggrAvg:
+		return newBoundedSeriesIterator(sit, s.mint, s.maxt)
+	}
+
+	if len(s.aggrs) != 2 {
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
+	}
+
+	switch {
+	case s.aggrs[0] == storepb.Aggr_SUM && s.aggrs[1] == storepb.Aggr_COUNT,
+		s.aggrs[0] == storepb.Aggr_COUNT && s.aggrs[1] == storepb.Aggr_SUM:
+
 		for _, c := range s.chunks {
 			if c.Raw != nil {
 				its = append(its, getFirstIterator(c.Raw))
@@ -190,7 +235,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 		}
 		sit = newChunkSeriesIterator(its)
 	default:
-		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggr)}
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 	}
 	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
@@ -282,7 +327,6 @@ type chunkSeriesIterator struct {
 func newChunkSeriesIterator(cs []chunkenc.Iterator) storage.SeriesIterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
-		// NOTE(bplotka): Metric, err log here?
 		return errSeriesIterator{}
 	}
 	return &chunkSeriesIterator{chunks: cs}
@@ -400,8 +444,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 	if len(s.replicas) == 1 {
 		return seriesWithLabels{Series: s.replicas[0], lset: s.lset}
 	}
-	// Clients may store the series, so we must make a copy of the slice
-	// before advancing.
+	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
 	return newDedupSeries(s.lset, repl...)
@@ -453,8 +496,8 @@ func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
 		a:     a,
 		b:     b,
 		lastT: math.MinInt64,
-		aok:   true,
-		bok:   true,
+		aok:   a.Next(),
+		bok:   b.Next(),
 	}
 }
 
