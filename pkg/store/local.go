@@ -80,9 +80,8 @@ func NewLocalStoreFromJSONMmappableFile(
 	contentStart := bytes.Index(content, []byte("{"))
 	if contentStart != -1 {
 		content = content[contentStart:]
-	} else {
-		contentStart = 0
 	}
+
 	if idx := bytes.LastIndex(content, []byte("}")); idx != -1 {
 		content = content[:idx+1]
 	}
