@@ -786,6 +786,13 @@ func TestEndpoints(t *testing.T) {
 			errType: errorBadData,
 			method:  http.MethodPost,
 		},
+		// deleteSeries should return bad request.
+		{
+			endpoint: api.deleteSeries,
+			query:    url.Values{},
+			method:   http.MethodPost,
+			errType:  errorBadData,
+		},
 	}
 
 	for _, test := range tests {
