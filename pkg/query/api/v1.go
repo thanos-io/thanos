@@ -26,6 +26,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -38,11 +39,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -98,7 +99,7 @@ func SetCORS(w http.ResponseWriter) {
 type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 
 type rulesRetriever interface {
-	RuleGroups() ([]*rules.Group, error)
+	RuleGroups(context.Context) ([]*storepb.RuleGroup, storage.Warnings, error)
 }
 
 // API can register a set of endpoints in a router and handle
@@ -638,5 +639,52 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 }
 
 func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
-	panic("implement me")
+	var (
+		res       = &storepb.RuleGroups{}
+		typeParam = strings.ToLower(r.URL.Query().Get("type"))
+	)
+
+	if typeParam != "" && typeParam != "alert" && typeParam != "record" {
+		return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid query parameter type='%v'", typeParam)}
+	}
+
+	returnAlerts := typeParam == "" || typeParam == "alert"
+	returnRecording := typeParam == "" || typeParam == "record"
+
+	groups, warnings, err := api.rulesRetriever.RuleGroups(r.Context())
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("error retrieving rules: %v", err)}
+	}
+
+	for _, grp := range groups {
+		apiRuleGroup := &storepb.RuleGroup{
+			Name:                              grp.Name,
+			File:                              grp.File,
+			Interval:                          grp.Interval,
+			EvaluationDurationSeconds:         grp.EvaluationDurationSeconds,
+			LastEvaluation:                    grp.LastEvaluation,
+			DeprecatedPartialResponseStrategy: grp.DeprecatedPartialResponseStrategy,
+			PartialResponseStrategy:           grp.PartialResponseStrategy,
+		}
+
+		for _, r := range grp.Rules {
+			switch {
+			case r.GetAlert() != nil:
+				if !returnAlerts {
+					break
+				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
+			case r.GetRecording() != nil:
+				if !returnRecording {
+					break
+				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
+			default:
+				return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("rule %v: unsupported", r)}
+			}
+		}
+		res.Groups = append(res.Groups, apiRuleGroup)
+	}
+
+	return res, warnings, nil
 }
