@@ -153,10 +153,10 @@ func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) 
 	return 0, f.addErr()
 }
 
-func (f *fakeAppender) AddFast(l labels.Labels, ref uint64, t int64, v float64) error {
+func (f *fakeAppender) AddFast(ref uint64, t int64, v float64) error {
 	f.Lock()
 	defer f.Unlock()
-	f.samples[l.String()] = append(f.samples[l.String()], prompb.Sample{Value: v, Timestamp: t})
+	f.samples[string(ref)] = append(f.samples[string(ref)], prompb.Sample{Value: v, Timestamp: t})
 	return f.addFastErr()
 }
 

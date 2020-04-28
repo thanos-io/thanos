@@ -28,11 +28,11 @@ import (
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Add(l labels.Labels, t int64, v float64) (uint64, error)       { return 0, nil }
-func (n nopAppendable) AddFast(l labels.Labels, ref uint64, t int64, v float64) error { return nil }
-func (n nopAppendable) Commit() error                                                 { return nil }
-func (n nopAppendable) Rollback() error                                               { return nil }
 func (n nopAppendable) Appender() (storage.Appender, error)                           { return n, nil }
+func (n nopAppendable) Add(l labels.Labels, t int64, v float64) (uint64, error) { return 0, nil }
+func (n nopAppendable) AddFast(ref uint64, t int64, v float64) error            { return nil }
+func (n nopAppendable) Commit() error                                           { return nil }
+func (n nopAppendable) Rollback() error                                         { return nil }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
 func TestRun(t *testing.T) {
