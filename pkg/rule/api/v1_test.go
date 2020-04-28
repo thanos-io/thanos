@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -41,8 +40,8 @@ func newStorage(t *testing.T) storage.Storage {
 	// Tests just load data for a series sequentially. Thus we
 	// need a long appendable window.
 	db, err := tsdb.Open(dir, nil, nil, &tsdb.Options{
-		MinBlockDuration: model.Duration(24 * time.Hour),
-		MaxBlockDuration: model.Duration(24 * time.Hour),
+		MinBlockDuration: int64(24 * time.Hour),
+		MaxBlockDuration: int64(24 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("Opening test storage failed: %s", err)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -32,10 +31,10 @@ func TestFlushableStorage(t *testing.T) {
 		defer func() { testutil.Ok(t, os.RemoveAll(dbDir)) }()
 
 		tsdbCfg := &tsdb.Options{
-			RetentionDuration: model.Duration(time.Hour * 24 * 15),
+			RetentionDuration: int64(time.Hour * 24 * 15),
 			NoLockfile:        true,
-			MinBlockDuration:  model.Duration(time.Hour * 2),
-			MaxBlockDuration:  model.Duration(time.Hour * 2),
+			MinBlockDuration:  int64(time.Hour * 2),
+			MaxBlockDuration:  int64(time.Hour * 2),
 			WALCompression:    true,
 		}
 

@@ -91,7 +91,6 @@ func NewTSDB() (*tsdb.DB, error) {
 		return nil, err
 	}
 	return tsdb.Open(dir, nil, nil, &tsdb.Options{
-		BlockRanges:       []int64{2 * 3600 * 1000},
 		RetentionDuration: math.MaxInt64,
 	})
 }
