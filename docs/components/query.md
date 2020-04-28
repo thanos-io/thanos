@@ -205,7 +205,7 @@ Currently Thanos UI exposed by Thanos understands
 
 ```go
 type queryData struct {
-	ResultType promql.ValueType `json:"resultType"`
+	ResultType parser.ValueType `json:"resultType"`
 	Result     promql.Value     `json:"result"`
 
 	// Additional Thanos Response field.

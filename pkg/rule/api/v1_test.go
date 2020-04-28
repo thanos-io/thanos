@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -89,7 +90,7 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 		r = append(r, ar)
 	}
 
-	recordingExpr, err := promql.ParseExpr(`vector(1)`)
+	recordingExpr, err := parser.ParseExpr(`vector(1)`)
 	if err != nil {
 		m.testing.Fatalf("unable to parse alert expression: %s", err)
 	}
@@ -113,11 +114,11 @@ func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 }
 
 func alertingRules(t *testing.T) []*rules.AlertingRule {
-	expr1, err := promql.ParseExpr(`absent(test_metric3) != 1`)
+	expr1, err := parser.ParseExpr(`absent(test_metric3) != 1`)
 	if err != nil {
 		t.Fatalf("unable to parse alert expression: %s", err)
 	}
-	expr2, err := promql.ParseExpr(`up == 1`)
+	expr2, err := parser.ParseExpr(`up == 1`)
 	if err != nil {
 		t.Fatalf("unable to parse alert expression: %s", err)
 	}

@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -171,8 +172,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 }
 
 type queryData struct {
-	ResultType promql.ValueType `json:"resultType"`
-	Result     promql.Value     `json:"result"`
+	ResultType parser.ValueType `json:"resultType"`
+	Result     parser.Value     `json:"result"`
 
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
@@ -483,7 +484,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 
 	var matcherSets [][]*labels.Matcher
 	for _, s := range r.Form["match[]"] {
-		matchers, err := promql.ParseMetricSelector(s)
+		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, &ApiError{errorBadData, err}
 		}
