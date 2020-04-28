@@ -23,7 +23,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Changed
 
 - [#2505](https://github.com/thanos.io/thanos/pull/2505) Store: remove obsolete `thanos_store_node_info` metric.
-- [#2508](https://github.com/thanos.io/thanos/pull/2508) Dockerfile: Leveraging docker layer caching.
+- [2513](https://github.com/thanos-io/thanos/pull/2513) Tools: Moved `thanos bucket` commands to `thanos tools bucket`, also
+moved `thanos check rules` to `thanos tools rules-check`. `thanos tools rules-check` also takes rules by `--rules` repeated flag not argument
+anymore.
 
 ## [v0.12.1](https://github.com/thanos-io/thanos/releases/tag/v0.12.1) - 2020.04.20
 

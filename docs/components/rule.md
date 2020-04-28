@@ -10,7 +10,7 @@ _**NOTE:** It is recommended to keep deploying rules inside the relevant Prometh
 
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
-The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
+The `thanos rule` command evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
 
 Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
@@ -20,7 +20,7 @@ The data of each Rule node can be labeled to satisfy the clusters labeling schem
 Read more about Ruler in HA [here](rule.md#ruler-ha)
 
 ```bash
-$ thanos rule \
+thanos rule \
     --data-dir             "/path/to/data" \
     --eval-interval        "30s" \
     --rule-file            "/path/to/rules/*.rules.yaml" \

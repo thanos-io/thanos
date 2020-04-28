@@ -14,6 +14,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -1363,6 +1364,7 @@ type storeSeriesServer struct {
 
 	SeriesSet []storepb.Series
 	Warnings  []string
+	HintsSet  []*types.Any
 
 	Size int64
 }
@@ -1381,6 +1383,11 @@ func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetSeries() != nil {
 		s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
+		return nil
+	}
+
+	if r.GetHints() != nil {
+		s.HintsSet = append(s.HintsSet, r.GetHints())
 		return nil
 	}
 

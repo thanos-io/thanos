@@ -60,9 +60,8 @@ func main() {
 	registerQuery(cmds, app)
 	registerRule(cmds, app)
 	registerCompact(cmds, app)
-	registerBucket(cmds, app, "bucket")
+	registerTools(cmds, app)
 	registerReceive(cmds, app)
-	registerChecks(cmds, app, "check")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
