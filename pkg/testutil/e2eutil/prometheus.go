@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -275,7 +276,7 @@ func (p *Prometheus) cleanup() error {
 // Appender returns a new appender to populate the Prometheus instance with data.
 // All appenders must be closed before Start is called and no new ones must be opened
 // afterwards.
-func (p *Prometheus) Appender() tsdb.Appender {
+func (p *Prometheus) Appender() storage.Appender {
 	if p.running {
 		panic("Appender must not be called after start")
 	}

@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"

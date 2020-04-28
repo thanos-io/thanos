@@ -23,7 +23,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	"github.com/thanos-io/thanos/pkg/store/storepb"

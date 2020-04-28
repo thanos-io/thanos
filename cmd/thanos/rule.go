@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
