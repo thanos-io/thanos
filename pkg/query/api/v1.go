@@ -519,7 +519,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		sets     []storage.SeriesSet
 	)
 	for _, mset := range matcherSets {
-		s, warns, err := q.Select(nil, mset...)
+		s, warns, err := q.Select(false, nil, mset...)
 		if err != nil {
 			return nil, nil, &ApiError{errorExec, err}
 		}

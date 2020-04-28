@@ -106,7 +106,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier series")
 
-	set, err := q.Select(matchers...)
+	set, _, err := q.Select(false, nil, matchers...)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}

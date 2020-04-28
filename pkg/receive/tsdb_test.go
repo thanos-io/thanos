@@ -66,7 +66,8 @@ func TestFlushableStorage(t *testing.T) {
 		defer func() { testutil.Ok(t, querier.Close()) }()
 
 		// Sum the values.
-		seriesSet, err := querier.Select(&labels.Matcher{Type: labels.MatchEqual, Name: "thanos", Value: "flush"})
+		//TODO: Should we assert on the warnings returned?
+		seriesSet, _, err := querier.Select(false, nil, &labels.Matcher{Type: labels.MatchEqual, Name: "thanos", Value: "flush"})
 		testutil.Ok(t, err)
 		sum := 0.0
 		for seriesSet.Next() {
