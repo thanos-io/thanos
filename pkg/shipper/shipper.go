@@ -384,15 +384,15 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 // If f returns an error, the function returns with the same error.
 func (s *Shipper) iterBlockMetas(f func(m *metadata.Meta) error) error {
 	var metas []*metadata.Meta
-	names, err := fileutil.ReadDir(s.dir)
+	files, err := ioutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
-	for _, n := range names {
-		if _, ok := block.IsBlockDir(n); !ok {
+	for _, f := range files {
+		if _, ok := block.IsBlockDir(f.Name()); !ok {
 			continue
 		}
-		dir := filepath.Join(s.dir, n)
+		dir := filepath.Join(s.dir, f.Name())
 
 		fi, err := os.Stat(dir)
 		if err != nil {
@@ -428,16 +428,18 @@ func hardlinkBlock(src, dst string) error {
 		return errors.Wrap(err, "create chunks dir")
 	}
 
-	files, err := fileutil.ReadDir(filepath.Join(src, block.ChunksDirname))
+	files, err := ioutil.ReadDir(filepath.Join(src, block.ChunksDirname))
 	if err != nil {
 		return errors.Wrap(err, "read chunk dir")
 	}
-	for i, fn := range files {
-		files[i] = filepath.Join(block.ChunksDirname, fn)
-	}
-	files = append(files, block.MetaFilename, block.IndexFilename)
-
+	// NOTE: Besides the block filenames, we're going to append the metadata and index filenames.
+	fnames := make([]string, 0, len(files)+2)
 	for _, fn := range files {
+		fnames = append(fnames, filepath.Join(block.ChunksDirname, fn.Name()))
+	}
+	fnames = append(fnames, block.MetaFilename, block.IndexFilename)
+
+	for _, fn := range fnames {
 		if err := os.Link(filepath.Join(src, fn), filepath.Join(dst, fn)); err != nil {
 			return errors.Wrapf(err, "hard link file %s", fn)
 		}

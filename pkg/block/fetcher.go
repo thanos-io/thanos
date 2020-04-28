@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
-	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -367,12 +366,12 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 
 	// Best effort cleanup of disk-cached metas.
 	if f.cacheDir != "" {
-		names, err := fileutil.ReadDir(f.cacheDir)
+		files, err := ioutil.ReadDir(f.cacheDir)
 		if err != nil {
 			level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dirs failed; ignoring", "err", err)
 		} else {
-			for _, n := range names {
-				id, ok := IsBlockDir(n)
+			for _, fi := range files {
+				id, ok := IsBlockDir(fi.Name())
 				if !ok {
 					continue
 				}

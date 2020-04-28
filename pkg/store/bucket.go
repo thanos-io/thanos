@@ -30,7 +30,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
-	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -425,12 +424,12 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	names, err := fileutil.ReadDir(s.dir)
+	files, err := ioutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
-	for _, n := range names {
-		id, ok := block.IsBlockDir(n)
+	for _, f := range files {
+		id, ok := block.IsBlockDir(f.Name())
 		if !ok {
 			continue
 		}
