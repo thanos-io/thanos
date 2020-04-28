@@ -92,6 +92,17 @@ func (c AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
 	return chunkenc.FromData(chunkenc.Encoding(x[0]), x[1:])
 }
 
+// Compact removes any allocated extra memory from the chunk.
+func (c AggrChunk) Compact() {
+	//TODO: (gotjosh) what's the approach here? should we noop?
+	// Is 32 a good number? Should we move it to a constant?
+	if l := len(c); cap(c) > l+32 {
+		buf := make([]byte, l)
+		copy(buf, c)
+		c = buf
+	}
+}
+
 // AggrType represents an aggregation type.
 type AggrType uint8
 
