@@ -4,6 +4,7 @@
 package receive
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -60,7 +61,7 @@ func TestFlushableStorage(t *testing.T) {
 		// Flush the WAL.
 		testutil.Ok(t, db.Flush())
 
-		querier, err := db.Querier(0, int64(maxt)-1)
+		querier, err := db.Querier(context.Background(), 0, int64(maxt)-1)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, querier.Close()) }()
 

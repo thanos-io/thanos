@@ -100,7 +100,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	q, err := s.db.Querier(r.MinTime, r.MaxTime)
+	q, err := s.db.Querier(context.Background(), r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -213,7 +213,7 @@ func (s *TSDBStore) translateAndExtendLabels(m, extend labels.Labels) []storepb.
 func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	q, err := s.db.Querier(math.MinInt64, math.MaxInt64)
+	q, err := s.db.Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -230,7 +230,7 @@ func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest
 func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
-	q, err := s.db.Querier(math.MinInt64, math.MaxInt64)
+	q, err := s.db.Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
