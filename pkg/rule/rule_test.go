@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/promql"
@@ -225,6 +226,19 @@ groups:
 	}
 }
 
+// ruleGroupsTest for running tests over rules.
+type ruleGroupsTest struct {
+	Groups []ruleGroupTest `yaml:"groups"`
+}
+
+// ruleGroupTest forms a testing struct for running tests over rules.
+type ruleGroupTest struct {
+	Name                    string         `yaml:"name"`
+	Interval                model.Duration `yaml:"interval,omitempty"`
+	Rules                   []rulefmt.Rule `yaml:"rules"`
+	PartialResponseStrategy string         `yaml:"partial_response_strategy,omitempty"`
+}
+
 func TestRuleGroupMarshalYAML(t *testing.T) {
 	const expected = `groups:
 - name: something1
@@ -238,31 +252,27 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
   partial_response_strategy: ABORT
 `
 
-	a := storepb.PartialResponseStrategy_ABORT
-	var input = RuleGroups{
-		Groups: []RuleGroup{
+	a := storepb.PartialResponseStrategy_ABORT.String()
+	var input = ruleGroupsTest{
+		Groups: []ruleGroupTest{
 			{
-				RuleGroup: rulefmt.RuleGroup{
-					Name: "something1",
-					Rules: []rulefmt.Rule{
-						{
-							Alert: "some",
-							Expr:  "up",
-						},
+				Name: "something1",
+				Rules: []rulefmt.Rule{
+					{
+						Alert: "some",
+						Expr:  "up",
 					},
 				},
 			},
 			{
-				RuleGroup: rulefmt.RuleGroup{
-					Name: "something2",
-					Rules: []rulefmt.Rule{
-						{
-							Alert: "some",
-							Expr:  "rate(some_metric[1h:5m] offset 1d)",
-						},
+				Name: "something2",
+				Rules: []rulefmt.Rule{
+					{
+						Alert: "some",
+						Expr:  "rate(some_metric[1h:5m] offset 1d)",
 					},
 				},
-				PartialResponseStrategy: &a,
+				PartialResponseStrategy: a,
 			},
 		},
 	}
