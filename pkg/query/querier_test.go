@@ -20,7 +20,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -359,7 +358,7 @@ func TestSortReplicaLabel(t *testing.T) {
 	}
 }
 
-func expandSeries(t testing.TB, it tsdb.SeriesIterator) (res []sample) {
+func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	for it.Next() {
 		t, v := it.At()
 		res = append(res, sample{t, v})

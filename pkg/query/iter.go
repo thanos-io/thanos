@@ -149,8 +149,8 @@ func (s *chunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *chunkSeries) Iterator() storage.SeriesIterator {
-	var sit storage.SeriesIterator
+func (s *chunkSeries) Iterator() chunkenc.Iterator {
+	var sit chunkenc.Iterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
 	switch s.aggr {
@@ -229,11 +229,11 @@ func (it errSeriesIterator) Err() error        { return it.err }
 // boundedSeriesIterator wraps a series iterator and ensures that it only emits
 // samples within a fixed time range.
 type boundedSeriesIterator struct {
-	it         storage.SeriesIterator
+	it         chunkenc.Iterator
 	mint, maxt int64
 }
 
-func newBoundedSeriesIterator(it storage.SeriesIterator, mint, maxt int64) *boundedSeriesIterator {
+func newBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
 	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
 }
 
@@ -279,7 +279,7 @@ type chunkSeriesIterator struct {
 	i      int
 }
 
-func newChunkSeriesIterator(cs []chunkenc.Iterator) storage.SeriesIterator {
+func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
 		// NOTE(bplotka): Metric, err log here?
@@ -431,7 +431,7 @@ func (s *dedupSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
+func (s *dedupSeries) Iterator() (it chunkenc.Iterator) {
 	it = s.replicas[0].Iterator()
 	for _, o := range s.replicas[1:] {
 		it = newDedupSeriesIterator(it, o.Iterator())
@@ -440,7 +440,7 @@ func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 }
 
 type dedupSeriesIterator struct {
-	a, b storage.SeriesIterator
+	a, b chunkenc.Iterator
 
 	aok, bok   bool
 	lastT      int64
@@ -448,7 +448,7 @@ type dedupSeriesIterator struct {
 	useA       bool
 }
 
-func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
+func newDedupSeriesIterator(a, b chunkenc.Iterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
 		a:     a,
 		b:     b,

@@ -141,7 +141,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	return nil
 }
 
-func (s *TSDBStore) encodeChunks(it tsdb.SeriesIterator, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
+func (s *TSDBStore) encodeChunks(it chunkenc.Iterator, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
 	var (
 		chkMint int64
 		chk     *chunkenc.XORChunk
