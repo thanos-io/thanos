@@ -84,7 +84,7 @@ func FromProto(storeType storepb.StoreType) StoreAPI {
 	case storepb.StoreType_DEBUG:
 		return Debug
 	default:
-		return unknownStoreAPI
+		return UnknownStoreAPI
 	}
 }
 
@@ -98,6 +98,6 @@ var (
 	Rule            = sourceStoreAPI{component: component{name: "rule"}}
 	Sidecar         = sourceStoreAPI{component: component{name: "sidecar"}}
 	Store           = storeAPI{component: component{name: "store"}}
-	unknownStoreAPI = storeAPI{component: component{name: "unknown-store-api"}}
+	UnknownStoreAPI = storeAPI{component: component{name: "unknown-store-api"}}
 	Query           = storeAPI{component: component{name: "query"}}
 )
