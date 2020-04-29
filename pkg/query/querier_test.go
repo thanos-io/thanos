@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"strconv"
 	"testing"
@@ -59,12 +60,15 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	}
 
 	q := NewQueryableCreator(nil, testProxy)(false, nil, 9999999, false, false)
+	dir, err := ioutil.TempDir("/tmp", "activequerytracker")
+	testutil.Ok(t, err)
+	defer os.RemoveAll(dir)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
-			MaxConcurrent: 10,
-			MaxSamples:    math.MaxInt32,
-			Timeout:       10 * time.Second,
+			ActiveQueryTracker: promql.NewActiveQueryTracker(dir, 10, nil),
+			MaxSamples:         math.MaxInt32,
+			Timeout:            10 * time.Second,
 		},
 	)
 

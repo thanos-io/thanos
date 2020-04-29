@@ -104,11 +104,11 @@ func TestEndpoints(t *testing.T) {
 	api := &API{
 		queryableCreate: query.NewQueryableCreator(nil, store.NewTSDBStore(nil, nil, db, component.Query, nil)),
 		queryEngine: promql.NewEngine(promql.EngineOpts{
-			Logger:        nil,
-			Reg:           nil,
-			MaxConcurrent: 20,
-			MaxSamples:    10000,
-			Timeout:       100 * time.Second,
+			Logger:             nil,
+			Reg:                nil,
+			ActiveQueryTracker: promql.NewActiveQueryTracker(db.Dir(), 20, nil),
+			MaxSamples:         10000,
+			Timeout:            100 * time.Second,
 		}),
 		now: func() time.Time { return now },
 	}

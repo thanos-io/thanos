@@ -69,11 +69,11 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	storage := newStorage(m.testing)
 
 	engineOpts := promql.EngineOpts{
-		Logger:        nil,
-		Reg:           nil,
-		MaxConcurrent: 10,
-		MaxSamples:    10,
-		Timeout:       100 * time.Second,
+		Logger:             nil,
+		Reg:                nil,
+		ActiveQueryTracker: promql.NewActiveQueryTracker(storage.(testStorage).dir, 10, log.NewNopLogger()),
+		MaxSamples:         10,
+		Timeout:            100 * time.Second,
 	}
 
 	engine := promql.NewEngine(engineOpts)

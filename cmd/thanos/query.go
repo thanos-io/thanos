@@ -255,11 +255,13 @@ func runQuery(
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy)
-		engine           = promql.NewEngine(
+		//TODO:(gotjosh) Figure out the path for the activeQueryTracker. It requires a path for logging the active queries - do we need one?
+		activeQueryTracker = promql.NewActiveQueryTracker("", maxConcurrentQueries, logger)
+		engine             = promql.NewEngine(
 			promql.EngineOpts{
-				Logger:        logger,
-				Reg:           reg,
-				MaxConcurrent: maxConcurrentQueries,
+				Logger:             logger,
+				Reg:                reg,
+				ActiveQueryTracker: activeQueryTracker,
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
