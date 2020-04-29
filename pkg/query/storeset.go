@@ -387,6 +387,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 		stores[addr] = st
 		s.updateStoreStatus(st, nil)
+
+		if st.rule != nil {
+			level.Info(s.logger).Log("msg", "adding new rulesAPI to query storeset", "address", addr)
+		}
+
 		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 

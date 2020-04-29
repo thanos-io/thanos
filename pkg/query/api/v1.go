@@ -667,6 +667,8 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
 			PartialResponseStrategy:           grp.PartialResponseStrategy,
 		}
 
+		apiRuleGroup.Rules = make([]*storepb.Rule, 0, len(grp.Rules))
+
 		for _, r := range grp.Rules {
 			switch {
 			case r.GetAlert() != nil:

@@ -235,7 +235,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 		{
 			EndpointsConfig: http_util.EndpointsConfig{
 				StaticAddresses: func() []string {
-					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil)
+					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil, nil)
 					testutil.Ok(t, err)
 					return []string{q.NetworkHTTPEndpointFor(s.NetworkName())}
 				}(),
@@ -246,7 +246,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -322,7 +322,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

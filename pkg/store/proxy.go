@@ -65,8 +65,6 @@ func (s *ProxyStore) Rules(req *storepb.RulesRequest, srv storepb.Rules_RulesSer
 		groups   []*storepb.RuleGroup
 	)
 
-	defer func() { close(respChan) }()
-
 	for _, rulesClient := range s.rules() {
 		rs := &rulesStream{
 			client:  rulesClient,
@@ -76,6 +74,11 @@ func (s *ProxyStore) Rules(req *storepb.RulesRequest, srv storepb.Rules_RulesSer
 		}
 		g.Go(func() error { return rs.receive(gctx) })
 	}
+
+	go func() {
+		_ = g.Wait()
+		close(respChan)
+	}()
 
 	for resp := range respChan {
 		groups = append(groups, resp)
@@ -122,7 +125,7 @@ func dedupGroups(groups []*storepb.RuleGroup) []*storepb.RuleGroup {
 type rulesStream struct {
 	client  storepb.RulesClient
 	request *storepb.RulesRequest
-	channel chan *storepb.RuleGroup
+	channel chan<- *storepb.RuleGroup
 	server  storepb.Rules_RulesServer
 }
 
@@ -167,7 +170,11 @@ func (stream *rulesStream) receive(ctx context.Context) error {
 			continue
 		}
 
-		stream.channel <- rule.GetGroup()
+		select {
+		case stream.channel <- rule.GetGroup():
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
