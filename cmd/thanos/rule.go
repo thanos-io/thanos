@@ -73,10 +73,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("1m"))
 	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s"))
-	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h"))
-	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h"))
+	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h").
+		Int64()
+	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h").
+		Int64()
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
