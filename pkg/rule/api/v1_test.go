@@ -96,9 +96,17 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	recordingRule := rules.NewRecordingRule("recording-rule-1", recordingExpr, labels.Labels{})
 	r = append(r, recordingRule)
 
+	groupOptions := rules.GroupOptions{
+		Name:          "grp",
+		File:          "/path/to/file",
+		Interval:      time.Second,
+		Rules:         r,
+		ShouldRestore: false,
+		Opts:          opts,
+	}
 	return []thanosrule.Group{
 		{
-			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
+			Group:                   rules.NewGroup(groupOptions),
 			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		},
 	}
