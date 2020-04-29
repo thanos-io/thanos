@@ -219,7 +219,7 @@ func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	res, err := q.LabelNames()
+	res, _, err := q.LabelNames()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -236,7 +236,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label values")
 
-	res, err := q.LabelValues(r.Label)
+	res, _, err := q.LabelValues(r.Label)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
