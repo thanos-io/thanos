@@ -42,7 +42,9 @@ type Server struct {
 
 // New creates a new Server.
 func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, opts ...Option) *Server {
-	options := options{}
+	options := options{
+		network: "tcp",
+	}
 	for _, o := range opts {
 		o.apply(&options)
 	}
@@ -97,7 +99,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 // ListenAndServe listens on the TCP network address and handles requests on incoming connections.
 func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("tcp", s.opts.listen)
+	l, err := net.Listen(s.opts.network, s.opts.listen)
 	if err != nil {
 		return errors.Wrapf(err, "listen gRPC on address %s", s.opts.listen)
 	}
