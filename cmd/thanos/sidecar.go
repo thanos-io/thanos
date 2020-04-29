@@ -80,6 +80,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
+			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			reloader.ReloadURLFromBase(*promURL),
 			*reloaderCfgFile,
 			*reloaderCfgOutputFile,

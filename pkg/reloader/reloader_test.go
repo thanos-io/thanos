@@ -62,7 +62,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		input  = path.Join(dir, "in", "cfg.yaml.tmpl")
 		output = path.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, reloadURL, input, output, nil)
+	reloader := New(nil, nil, reloadURL, input, output, nil)
 	reloader.watchInterval = 9999 * time.Hour // Disable interval to test watch logic only.
 	reloader.retryInterval = 100 * time.Millisecond
 
@@ -205,7 +205,7 @@ func TestReloader_RuleApply(t *testing.T) {
 	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
 
-	reloader := New(nil, reloadURL, "", "", []string{dir, path.Join(dir, "rule-dir")})
+	reloader := New(nil, nil, reloadURL, "", "", []string{dir, path.Join(dir, "rule-dir")})
 	reloader.watchInterval = 100 * time.Millisecond
 	reloader.retryInterval = 100 * time.Millisecond
 
