@@ -105,12 +105,12 @@ func thanosRuleGroupsToPromRuleGroups(ruleGroups ThanosRuleGroups) rulefmt.RuleG
 		group := rulefmt.RuleGroup{
 			Name:     g.Name,
 			Interval: g.Interval,
-			Rules:    []rulefmt.Rule{},
+			Rules:    []rulefmt.RuleNode{},
 		}
 		for _, r := range g.Rules {
 			group.Rules = append(
 				group.Rules,
-				rulefmt.Rule{
+				rulefmt.RuleNode{
 					Record:      r.Record,
 					Alert:       r.Alert,
 					Expr:        r.Expr,
