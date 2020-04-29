@@ -427,7 +427,7 @@ func runRule(
 			}
 			alertQ.Push(res)
 		}
-		st := tsdb.Adapter(db, 0)
+		st := db
 
 		opts := rules.ManagerOptions{
 			NotifyFunc:  notify,
