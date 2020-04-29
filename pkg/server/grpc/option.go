@@ -8,9 +8,12 @@ import (
 	"time"
 )
 
+const UnixSocket = "/tmp/test.sock"
+
 type options struct {
 	gracePeriod time.Duration
 	listen      string
+	network     string
 
 	tlsConfig *tls.Config
 }
@@ -39,6 +42,13 @@ func WithGracePeriod(t time.Duration) Option {
 func WithListen(s string) Option {
 	return optionFunc(func(o *options) {
 		o.listen = s
+	})
+}
+
+// WithNetwork sets network to listen for gRPC server e.g tcp, udp or unix.
+func WithNetwork(s string) Option {
+	return optionFunc(func(o *options) {
+		o.network = s
 	})
 }
 
