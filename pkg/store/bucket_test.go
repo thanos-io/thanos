@@ -33,6 +33,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -955,7 +956,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	return id
 }
 
-func appendTestData(t testing.TB, app tsdb.Appender, series int) {
+func appendTestData(t testing.TB, app storage.Appender, series int) {
 	addSeries := func(l labels.Labels) {
 		_, err := app.Add(l, 0, 0)
 		testutil.Ok(t, err)
