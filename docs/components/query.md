@@ -228,7 +228,7 @@ Additionally, Thanos supports dynamic prefix configuration, which
 [is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156).
 Dynamic prefixing simplifies setup when `thanos query` is exposed on a sub-path behind
 a reverse proxy, for example, via a Kubernetes ingress controller
-[Traefik](https://docs.traefik.io/basics/#frontends)
+[Traefik](https://docs.traefik.io/routing/routers/)
 or [nginx](https://github.com/kubernetes/ingress-nginx/pull/1805).
 If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPrefixStrip`
 Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header.
