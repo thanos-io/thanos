@@ -228,7 +228,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabels), warns, nil
+	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), warns, nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
