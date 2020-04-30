@@ -418,7 +418,8 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 	return metas
 }
 
-func Test_Issue2459_e2e(t *testing.T) {
+// Regression test for #2459 issue
+func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
@@ -483,12 +484,12 @@ func Test_Issue2459_e2e(t *testing.T) {
 
 		testutil.Equals(t, ids, rem)
 
-		// delete source blocks
+		// Delete source blocks.
 		for _, id := range ids {
 			testutil.Ok(t, block.Delete(ctx, logger, bkt, id))
 		}
 
-		// After another garbage-collect, we should not find new blocks that are deleted.
+		// After another garbage-collect, we should not find new blocks that are deleted with new deletion mark files.
 		testutil.Ok(t, sy.SyncMetas(ctx))
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
