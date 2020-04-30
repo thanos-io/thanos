@@ -19,6 +19,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2502](https://github.com/thanos-io/thanos/pull/2502) Added `hints` field to `SeriesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
 - [#2521](https://github.com/thanos-io/thanos/pull/2521) Sidecar: add `thanos_sidecar_reloader_reloads_failed_total`, `thanos_sidecar_reloader_reloads_total`, `thanos_sidecar_reloader_watch_errors_total`, `thanos_sidecar_reloader_watch_events_total` and `thanos_sidecar_reloader_watches` metrics.
+- [#2523](https://github.com/thanos-io/thanos/pull/2523) Added `thanos tools serve storeapi --json` command that expose local JSON file with metrics as StoreAPI.
 
 ### Changed
 

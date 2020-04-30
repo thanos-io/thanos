@@ -22,6 +22,7 @@ func registerTools(m map[string]setupFunc, app *kingpin.Application) {
 
 	registerBucket(m, cmd, "tools")
 	registerCheckRules(m, cmd, "tools")
+	registerServe(m, cmd, "tools")
 }
 
 func registerCheckRules(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {

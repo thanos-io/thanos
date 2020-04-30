@@ -519,6 +519,24 @@ Flags:
                               process downsamplings.
 
 ```
+## Serve
+
+The `tools serve` subcommand allows to serve certain data on various APIs.
+
+[embedmd]:# (flags/tools_serve.txt $)
+```$
+```
+
+### StoreAPI
+
+The `tools serve storeapi` subcommand starts debug server serving StoreAPI (metrics) from local files.
+
+This utility is mainly for debug purposes stores all the data in memory. Insufficient for large number of series.
+
+[embedmd]:# (flags/tools_serve_storeapi.txt $)
+```$
+```
+
 ## Rules-check
 
 The `tools rules-check` subcommand contains tools for validation of Prometheus rules.

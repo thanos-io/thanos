@@ -3,6 +3,7 @@
 # Generate --help output for all commands and embed them into the component docs.
 set -e
 set -u
+set +x
 
 EMBEDMD_BIN=${EMBEDMD_BIN:-embedmd}
 SED_BIN=${SED_BIN:-sed}
@@ -41,9 +42,14 @@ for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-toolsCommands=("bucket" "rules-check")
+toolsCommands=("bucket" "rules-check", "serve")
 for x in "${toolsCommands[@]}"; do
     ./thanos tools "${x}" --help &> "docs/components/flags/tools_${x}.txt"
+done
+
+toolsServeCommands=("storeapi")
+for x in "${toolsServeCommands[@]}"; do
+    ./thanos tools serve "${x}" --help &> "docs/components/flags/tools_serve_${x}.txt"
 done
 
 toolsBucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample")
