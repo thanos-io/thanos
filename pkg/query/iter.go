@@ -210,7 +210,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 			for _, c := range s.chunks {
 				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
-			sit = downsample.NewCounterSeriesIterator(its...)
+			sit = downsample.NewApplyCounterResetsIterator(its...)
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
@@ -376,6 +376,7 @@ func (it *chunkSeriesIterator) Err() error {
 type dedupSeriesSet struct {
 	set           storage.SeriesSet
 	replicaLabels map[string]struct{}
+	isCounter     bool
 
 	replicas []storage.Series
 	lset     labels.Labels
@@ -383,8 +384,8 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, isCounter bool) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels, isCounter: isCounter}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -447,7 +448,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
-	return newDedupSeries(s.lset, repl...)
+	return newDedupSeries(s.lset, repl, s.isCounter)
 }
 
 func (s *dedupSeriesSet) Err() error {
@@ -464,10 +465,12 @@ func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
 type dedupSeries struct {
 	lset     labels.Labels
 	replicas []storage.Series
+
+	isCounter bool
 }
 
-func newDedupSeries(lset labels.Labels, replicas ...storage.Series) *dedupSeries {
-	return &dedupSeries{lset: lset, replicas: replicas}
+func newDedupSeries(lset labels.Labels, replicas []storage.Series, isCounter bool) *dedupSeries {
+	return &dedupSeries{lset: lset, isCounter: isCounter, replicas: replicas}
 }
 
 func (s *dedupSeries) Labels() labels.Labels {
@@ -478,6 +481,9 @@ func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 	it = s.replicas[0].Iterator()
 	for _, o := range s.replicas[1:] {
 		it = newDedupSeriesIterator(it, o.Iterator())
+	}
+	if s.isCounter {
+		return newCounterDedupAdjustSeriesIterator(it)
 	}
 	return it
 }
@@ -586,4 +592,41 @@ func (it *dedupSeriesIterator) Err() error {
 		return it.a.Err()
 	}
 	return it.b.Err()
+}
+
+// counterDedupAdjustSeriesIterator is used when we deduplicate counter.
+// It makes sure we always adjust for the latest seen last counter value for all replicas.
+// This short-term solution to mitigate https://github.com/thanos-io/thanos/issues/2401.
+// TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given
+// series is counter or not: https://github.com/thanos-io/thanos/issues/2547.
+type counterDedupAdjustSeriesIterator struct {
+	storage.SeriesIterator
+
+	lastV  float64
+	adjust float64
+}
+
+func newCounterDedupAdjustSeriesIterator(iter storage.SeriesIterator) storage.SeriesIterator {
+	return &counterDedupAdjustSeriesIterator{
+		SeriesIterator: iter,
+		lastV:          -1 * math.MaxFloat64,
+	}
+
+}
+
+func (it *counterDedupAdjustSeriesIterator) Next() bool {
+	if it.SeriesIterator.Next() {
+		_, v := it.SeriesIterator.At()
+		if it.lastV > v {
+			it.adjust += it.lastV - v
+		}
+		it.lastV = v
+		return true
+	}
+	return false
+}
+
+func (it *counterDedupAdjustSeriesIterator) At() (int64, float64) {
+	t, v := it.SeriesIterator.At()
+	return t, v + it.adjust
 }
