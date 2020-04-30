@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -83,7 +84,6 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// Create all blocks in the bucket.
 		for _, m := range append(metas, &m1, &m2, &m3, &m4) {
-			fmt.Println("create", m.ULID)
 			var buf bytes.Buffer
 			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
@@ -97,7 +97,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour)
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false, true)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -185,7 +185,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false, true)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -289,6 +289,12 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
+
+		testutil.Equals(t, 3.0, promtest.ToFloat64(sy.metrics.blocksRetained.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.blocksRetained.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksRetained.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksRetained.WithLabelValues(GroupKey(metas[5].Thanos))))
+
 		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[0].Thanos))))
 		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[7].Thanos))))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[4].Thanos))))
@@ -314,15 +320,28 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
 
-		// Check object storage. All blocks that were included in new compacted one should be removed. New compacted ones
-		// are present and looks as expected.
+		for id, meta := range metas {
+			fmt.Printf("YYY, index: %d, meta: %s\n", id, meta.ULID.String())
+		}
+
+		// Check object storage. All blocks that were included in new compacted one should be removed and retained to another dir.
+		// New compacted ones are present and looks as expected.
 		nonCompactedExpected := map[ulid.ULID]bool{
 			metas[3].ULID: false,
 			metas[4].ULID: false,
 			metas[5].ULID: false,
 			metas[8].ULID: false,
 		}
+		retainedExpected := map[ulid.ULID]bool{
+			metas[0].ULID: false,
+			metas[1].ULID: false,
+			metas[2].ULID: false,
+			metas[6].ULID: false,
+			metas[7].ULID: false,
+			metas[7].ULID: false,
+		}
 		others := map[string]metadata.Meta{}
+
 		testutil.Ok(t, bkt.Iter(ctx, "", func(n string) error {
 			id, ok := block.IsBlockDir(n)
 			if !ok {
@@ -343,12 +362,30 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			return nil
 		}))
 
+		testutil.Ok(t, bkt.Iter(ctx, "retained", func(n string) error {
+			id, ok := block.IsBlockDir(n)
+			if !ok && n != "retained/debug/" {
+				return errors.New("found non block dir in retained other than debug: " + n)
+			}
+
+			if _, ok := retainedExpected[id]; ok {
+				retainedExpected[id] = true
+				return nil
+			}
+			return errors.New("found unexpected block in retained: " + id.String())
+		}))
+
 		for id, found := range nonCompactedExpected {
 			testutil.Assert(t, found, "not found expected block %s", id.String())
 		}
 
+		for id, found := range retainedExpected {
+			testutil.Assert(t, found, "not found retained block %s", id.String())
+		}
+
 		// We expect two compacted blocks only outside of what we expected in `nonCompactedExpected`.
 		testutil.Equals(t, 2, len(others))
+
 		{
 			meta, ok := others[groupKey(124, extLabels)]
 			testutil.Assert(t, ok, "meta not found")
