@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Generic cache
+// Generic best-effort cache.
 type Cache interface {
 	// Store data into the cache.
 	//
