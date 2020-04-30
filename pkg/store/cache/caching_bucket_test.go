@@ -21,7 +21,7 @@ import (
 
 func TestCachingBucket(t *testing.T) {
 	length := int64(1024 * 1024)
-	blockSize := int64(16000) // all tests are based on this value
+	blockSize := int64(16000) // All tests are based on this value.
 
 	data := make([]byte, length)
 	for ix := 0; ix < len(data); ix++ {
@@ -71,7 +71,7 @@ func TestCachingBucket(t *testing.T) {
 			offset:               length - 10,
 			length:               3000,
 			expectedLength:       10,
-			expectedFetchedBytes: 8576, // last block is fetched
+			expectedFetchedBytes: 8576, // Last (incomplete) block is fetched.
 		},
 
 		{
@@ -87,7 +87,7 @@ func TestCachingBucket(t *testing.T) {
 			offset:               0,
 			length:               length,
 			expectedLength:       length,
-			expectedCachedBytes:  5*blockSize + 8576, // 5 block cached from first test, plus last incomplete block
+			expectedCachedBytes:  5*blockSize + 8576, // 5 block cached from first test, plus last incomplete block.
 			expectedFetchedBytes: 60 * blockSize,
 		},
 
@@ -96,7 +96,7 @@ func TestCachingBucket(t *testing.T) {
 			offset:              0,
 			length:              length,
 			expectedLength:      length,
-			expectedCachedBytes: length, // entire file is now cached
+			expectedCachedBytes: length, // Entire file is now cached.
 		},
 
 		{
@@ -104,7 +104,8 @@ func TestCachingBucket(t *testing.T) {
 			offset:               0,
 			length:               length,
 			expectedLength:       length,
-			expectedFetchedBytes: length, // cache is flushed
+			expectedFetchedBytes: length,
+			expectedCachedBytes:  0, // Cache is flushed.
 			init: func() {
 				cache.cache = map[string][]byte{} // flush cache
 			},
@@ -118,7 +119,7 @@ func TestCachingBucket(t *testing.T) {
 			expectedFetchedBytes: 3 * blockSize,
 			expectedCachedBytes:  7 * blockSize,
 			init: func() {
-				// delete first 3 blocks
+				// Delete first 3 blocks.
 				delete(cache.cache, cachingKeyObjectBlock(name, 0*blockSize, 1*blockSize))
 				delete(cache.cache, cachingKeyObjectBlock(name, 1*blockSize, 2*blockSize))
 				delete(cache.cache, cachingKeyObjectBlock(name, 2*blockSize, 3*blockSize))
@@ -133,7 +134,7 @@ func TestCachingBucket(t *testing.T) {
 			expectedFetchedBytes: 3 * blockSize,
 			expectedCachedBytes:  7 * blockSize,
 			init: func() {
-				// delete last 3 blocks
+				// Delete last 3 blocks.
 				delete(cache.cache, cachingKeyObjectBlock(name, 7*blockSize, 8*blockSize))
 				delete(cache.cache, cachingKeyObjectBlock(name, 8*blockSize, 9*blockSize))
 				delete(cache.cache, cachingKeyObjectBlock(name, 9*blockSize, 10*blockSize))

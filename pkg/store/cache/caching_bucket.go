@@ -37,7 +37,7 @@ type ChunksCachingConfig struct {
 
 func DefaultChunksCachingConfig() ChunksCachingConfig {
 	return ChunksCachingConfig{
-		ChunkBlockSize:            16000, // equal to max chunk size
+		ChunkBlockSize:            16000, // Equal to max chunk size.
 		ChunkObjectSizeTTL:        24 * time.Hour,
 		ChunkBlockTTL:             24 * time.Hour,
 		MaxChunksGetRangeRequests: 1,
@@ -99,7 +99,7 @@ func (cb *CachingBucket) Name() string {
 
 func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpectedFunc) objstore.Bucket {
 	if ib, ok := cb.bucket.(objstore.InstrumentedBucket); ok {
-		// make a copy, but replace bucket
+		// Make a copy, but replace bucket with instrumented one.
 		res := &CachingBucket{}
 		*res = *cb
 		res.bucket = ib.WithExpectedErrs(expectedFunc)
