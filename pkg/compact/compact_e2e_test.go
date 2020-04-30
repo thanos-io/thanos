@@ -129,6 +129,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// After another sync the changes should also be reflected in the local groups.
 		testutil.Ok(t, sy.SyncMetas(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		groups, err := sy.Groups()
@@ -415,4 +416,103 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, id.String())))
 	}
 	return metas
+}
+
+// Regression test for #2459 issue.
+func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		// Generate two blocks, and then another block that covers both of them.
+		var metas []*metadata.Meta
+		var ids []ulid.ULID
+
+		for i := 0; i < 2; i++ {
+			var m metadata.Meta
+
+			m.Version = 1
+			m.ULID = ulid.MustNew(uint64(i), nil)
+			m.Compaction.Sources = []ulid.ULID{m.ULID}
+			m.Compaction.Level = 1
+
+			ids = append(ids, m.ULID)
+			metas = append(metas, &m)
+		}
+
+		var m1 metadata.Meta
+		m1.Version = 1
+		m1.ULID = ulid.MustNew(100, nil)
+		m1.Compaction.Level = 2
+		m1.Compaction.Sources = ids
+		m1.Thanos.Downsample.Resolution = 0
+
+		// Create all blocks in the bucket.
+		for _, m := range append(metas, &m1) {
+			fmt.Println("create", m.ULID)
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour)
+
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+			ignoreDeletionMarkFilter,
+			duplicateBlocksFilter,
+		}, nil)
+		testutil.Ok(t, err)
+
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false)
+		testutil.Ok(t, err)
+
+		// Do one initial synchronization with the bucket.
+		testutil.Ok(t, sy.SyncMetas(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+
+		rem, err := listBlocksMarkedForDeletion(ctx, bkt)
+		testutil.Ok(t, err)
+
+		sort.Slice(rem, func(i, j int) bool {
+			return rem[i].Compare(rem[j]) < 0
+		})
+
+		testutil.Equals(t, ids, rem)
+
+		// Delete source blocks.
+		for _, id := range ids {
+			testutil.Ok(t, block.Delete(ctx, logger, bkt, id))
+		}
+
+		// After another garbage-collect, we should not find new blocks that are deleted with new deletion mark files.
+		testutil.Ok(t, sy.SyncMetas(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx))
+
+		rem, err = listBlocksMarkedForDeletion(ctx, bkt)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 0, len(rem))
+	})
+}
+
+func listBlocksMarkedForDeletion(ctx context.Context, bkt objstore.Bucket) ([]ulid.ULID, error) {
+	var rem []ulid.ULID
+	err := bkt.Iter(ctx, "", func(n string) error {
+		id := ulid.MustParse(n[:len(n)-1])
+		deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+
+		exists, err := bkt.Exists(ctx, deletionMarkFile)
+		if err != nil {
+			return err
+		}
+		if exists {
+			rem = append(rem, id)
+		}
+		return nil
+	})
+	return rem, err
 }
