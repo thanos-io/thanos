@@ -107,7 +107,7 @@ func TestCachingBucket(t *testing.T) {
 			expectedFetchedBytes: length,
 			expectedCachedBytes:  0, // Cache is flushed.
 			init: func() {
-				cache.cache = map[string][]byte{} // flush cache
+				cache.cache = map[string][]byte{} // Flush cache.
 			},
 		},
 
