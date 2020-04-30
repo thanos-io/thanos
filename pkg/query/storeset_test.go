@@ -654,7 +654,7 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 
 			gotRules := 0
 			for _, ref := range storeSet.stores {
-				if ref.rule != nil {
+				if ref.HasRulesAPI() {
 					gotRules += 1
 				}
 			}

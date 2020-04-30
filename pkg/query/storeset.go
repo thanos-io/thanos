@@ -218,12 +218,11 @@ func NewStoreSet(
 type storeRef struct {
 	storepb.StoreClient
 
-	// if rule is not nil, then this store also supports rules API.
-	rule storepb.RulesClient
-
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
+	// if rule is not nil, then this store also supports rules API.
+	rule storepb.RulesClient
 
 	// Meta (can change during runtime).
 	labelSets []storepb.LabelSet
@@ -249,6 +248,13 @@ func (s *storeRef) StoreType() component.StoreAPI {
 	defer s.mtx.RUnlock()
 
 	return s.storeType
+}
+
+func (s *storeRef) HasRulesAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.rule != nil
 }
 
 func (s *storeRef) LabelSets() []storepb.LabelSet {
@@ -388,7 +394,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		stores[addr] = st
 		s.updateStoreStatus(st, nil)
 
-		if st.rule != nil {
+		if st.HasRulesAPI() {
 			level.Info(s.logger).Log("msg", "adding new rulesAPI to query storeset", "address", addr)
 		}
 
@@ -542,10 +548,9 @@ func (s *StoreSet) GetRulesClients() []storepb.RulesClient {
 
 	rules := make([]storepb.RulesClient, 0, len(s.stores))
 	for _, st := range s.stores {
-		if st.rule == nil {
-			continue
+		if st.HasRulesAPI() {
+			rules = append(rules, st.rule)
 		}
-		rules = append(rules, st.rule)
 	}
 	return rules
 }
