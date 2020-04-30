@@ -418,7 +418,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 	return metas
 }
 
-// Regression test for #2459 issue
+// Regression test for #2459 issue.
 func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
