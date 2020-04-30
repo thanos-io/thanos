@@ -81,7 +81,7 @@ anymore.
 - [#2450](https://github.com/thanos-io/thanos/pull/2450) Store: regex-set optimization for `label=~"a|b|c"` matchers.
 - [#2475](https://github.com/thanos-io/thanos/pull/2475) Store: remove incorrect optimizations for queries with `=~".*"` and `!=~".*"` matchers.
 
-- [#1735](https://github.com/thanos-io/thanos/pull/1735) Retention policies are now applied at the start of the compactor loop. Retentions policies that break downsampling are now logged as warnings.
+- [#1735](https://github.com/thanos-io/thanos/pull/1735) Retention policies are now applied at the start of the compactor loop. Retention policies that break downsampling are now logged as warnings.
 
 ## [v0.12.0](https://github.com/thanos-io/thanos/releases/tag/v0.12.0) - 2020.04.15
 
