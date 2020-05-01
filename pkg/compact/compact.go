@@ -53,7 +53,7 @@ type Syncer struct {
 	enableVerticalCompaction bool
 	duplicateBlocksFilter    *block.DeduplicateFilter
 	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
-	retainCompactedBlocks    bool
+	retainToBkt              objstore.Bucket
 }
 
 type syncerMetrics struct {
@@ -121,7 +121,7 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometh
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction, retainCompactedBlocks bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, blockSyncConcurrency int, acceptMalformedIndex, enableVerticalCompaction bool, retainToBkt objstore.Bucket) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -140,7 +140,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		// not currently used by Thanos, because the compactor is also used by Cortex
 		// which needs vertical compaction.
 		enableVerticalCompaction: enableVerticalCompaction,
-		retainCompactedBlocks:    retainCompactedBlocks,
+		retainToBkt:              retainToBkt,
 	}, nil
 }
 
@@ -227,7 +227,7 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 				s.metrics.garbageCollectedBlocks,
 				s.metrics.blocksMarkedForDeletion,
 				s.metrics.blocksRetained.WithLabelValues(groupKey),
-				s.retainCompactedBlocks,
+				s.retainToBkt,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -305,7 +305,6 @@ type Group struct {
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
 	enableVerticalCompaction    bool
-	retainBlocks                bool
 	compactions                 prometheus.Counter
 	compactionRunsStarted       prometheus.Counter
 	compactionRunsCompleted     prometheus.Counter
@@ -314,7 +313,7 @@ type Group struct {
 	groupGarbageCollectedBlocks prometheus.Counter
 	blocksMarkedForDeletion     prometheus.Counter
 	blocksRetained              prometheus.Counter
-	retainCompactedBlocks       bool
+	retainToBkt                 objstore.Bucket
 }
 
 // newGroup returns a new compaction group.
@@ -333,7 +332,7 @@ func newGroup(
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksRetained prometheus.Counter,
-	retainCompactedBlocks bool,
+	retainToBkt objstore.Bucket,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -354,7 +353,7 @@ func newGroup(
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 		blocksRetained:              blocksRetained,
-		retainCompactedBlocks:       retainCompactedBlocks,
+		retainToBkt:                 retainToBkt,
 	}
 	return g, nil
 }
@@ -601,10 +600,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	defer cancel()
 
 	// TODO(bplotka): Issue with this will introduce overlap that will halt compactor. Automate that (fix duplicate overlaps caused by this).
-	if err := block.UploadTo(delCtx, logger, bkt, ie.id.String(), "retained"); err != nil {
-		level.Error(logger).Log("msg", "error in retaining compacted block", "error", err.Error())
-	}
-	if err := block.MarkForDeletion(delCtx, logger, bkt, ie.id, blocksMarkedForDeletion); err != nil { // need to do that here too, this is a repaired block
+	if err := block.MarkForDeletion(delCtx, logger, bkt, ie.id, blocksMarkedForDeletion); err != nil {
 		return errors.Wrapf(err, "deleting old block %s failed. You need to delete this block manually", ie.id)
 	}
 	return nil
@@ -785,11 +781,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, b := range plan {
-		if cg.retainCompactedBlocks {
-			if err := block.UploadTo(ctx, cg.logger, cg.bkt, b, "retained"); err != nil {
-				level.Error(cg.logger).Log("msg", "error in retaining compacted block", "error", err.Error())
+		if cg.retainToBkt != nil {
+			level.Info(cg.logger).Log("msg", "retaining compacted block", "id", b)
+			if err := block.Upload(ctx, cg.logger, cg.retainToBkt, b); err != nil {
+				level.Error(cg.logger).Log("msg", "error in retaining compacted block", "id", b, "error", err.Error())
 			} else {
-				level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 				cg.blocksRetained.Inc()
 			}
 		}

@@ -30,7 +30,8 @@ import (
 )
 
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, 1, func(t *testing.T, bkts ...objstore.Bucket) {
+		bkt := bkts[0]
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {

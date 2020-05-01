@@ -65,7 +65,8 @@ func ULIDs(is ...int) []ulid.ULID {
 }
 
 func TestMetaFetcher_Fetch(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, 1, func(t *testing.T, bkts ...objstore.Bucket) {
+		bkt := bkts[0]
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -1058,7 +1059,8 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 }
 
 func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, 1, func(t *testing.T, bkts ...objstore.Bucket) {
+		bkt := bkts[0]
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 

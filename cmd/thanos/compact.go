@@ -149,7 +149,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 	label := cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").String()
 
-	retainCompactedBlocks := cmd.Flag("retain-compacted-blocks", "Do not remove old blocks even after they are safely compacted, but move them to another directory").Default("false").Bool()
+	retainCompactedBlocksToBucket := regCommonObjStoreFlags(cmd, "-retain-compacted-blocks-to-bucket", false, "The object storage in which to retain data.")
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runCompact(g, logger, reg,
@@ -179,7 +179,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*label,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
-			*retainCompactedBlocks,
+			retainCompactedBlocksToBucket,
 		)
 	}
 }
@@ -204,7 +204,8 @@ func runCompact(
 	selectorRelabelConf *extflag.PathOrContent,
 	waitInterval time.Duration,
 	label string,
-	externalPrefix, prefixHeader string, retainCompactedBlocks bool,
+	externalPrefix, prefixHeader string,
+	retainCompactedBlocksToBucket *extflag.PathOrContent,
 ) error {
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -276,6 +277,21 @@ func runCompact(
 		return err
 	}
 
+	var retainToBkt objstore.Bucket
+	retainToConfContentYaml, err := retainCompactedBlocksToBucket.Content()
+	if err != nil {
+		return err
+	}
+
+	if len(retainToConfContentYaml) == 0 {
+		retainToBkt = nil
+		level.Info(logger).Log("msg", "objstore-retain-compacted-blocks-to-bucket.config not specified, not retaining compacted blocks")
+	} else if retainToBkt, err = client.NewBucket(logger, retainToConfContentYaml, extprom.WrapRegistererWithPrefix("retain_", reg), component.String()); err != nil {
+		return errors.Wrap(err, "create bucket to retain blocks")
+	} else {
+		level.Info(logger).Log("msg", "objstore-retain-compacted-blocks-to-bucket.config specified, retaining compacted blocks")
+	}
+
 	relabelContentYaml, err := selectorRelabelConf.Content()
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
@@ -332,7 +348,7 @@ func runCompact(
 			ignoreDeletionMarkFilter,
 			blocksMarkedForDeletion,
 			blockSyncConcurrency,
-			acceptMalformedIndex, enableVerticalCompaction, retainCompactedBlocks)
+			acceptMalformedIndex, enableVerticalCompaction, retainToBkt)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}

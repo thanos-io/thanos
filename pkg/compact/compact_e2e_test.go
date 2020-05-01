@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -33,7 +32,8 @@ import (
 )
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, 2, func(t *testing.T, bkts ...objstore.Bucket) {
+		bkt, retainToBkt := bkts[0], bkts[1]
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -97,7 +97,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour)
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false, true)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false, retainToBkt)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -163,7 +163,8 @@ func MetricCount(c prometheus.Collector) int {
 }
 
 func TestGroup_Compact_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, 2, func(t *testing.T, bkts ...objstore.Bucket) {
+		bkt, retainToBkt := bkts[0], bkts[1]
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -185,7 +186,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false, true)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false, retainToBkt)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -203,6 +204,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsStarted))
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsCompleted))
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionFailures))
+		testutil.Equals(t, 0, MetricCount(sy.metrics.blocksRetained))
 
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
@@ -320,12 +322,8 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
 
-		for id, meta := range metas {
-			fmt.Printf("YYY, index: %d, meta: %s\n", id, meta.ULID.String())
-		}
-
-		// Check object storage. All blocks that were included in new compacted one should be removed and retained to another dir.
-		// New compacted ones are present and looks as expected.
+		// Check object storage. All blocks that were included in new compacted one should be
+		// removed and retained to another bucket if specified. New compacted ones are present and looks as expected.
 		nonCompactedExpected := map[ulid.ULID]bool{
 			metas[3].ULID: false,
 			metas[4].ULID: false,
@@ -337,7 +335,6 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			metas[1].ULID: false,
 			metas[2].ULID: false,
 			metas[6].ULID: false,
-			metas[7].ULID: false,
 			metas[7].ULID: false,
 		}
 		others := map[string]metadata.Meta{}
@@ -362,9 +359,12 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			return nil
 		}))
 
-		testutil.Ok(t, bkt.Iter(ctx, "retained", func(n string) error {
+		testutil.Ok(t, retainToBkt.Iter(ctx, "", func(n string) error {
+			if n == "debug/" {
+				return nil
+			}
 			id, ok := block.IsBlockDir(n)
-			if !ok && n != "retained/debug/" {
+			if !ok {
 				return errors.New("found non block dir in retained other than debug: " + n)
 			}
 
@@ -372,7 +372,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				retainedExpected[id] = true
 				return nil
 			}
-			return errors.New("found unexpected block in retained: " + id.String())
+			return errors.New("found unexpected block in retained: " + n)
 		}))
 
 		for id, found := range nonCompactedExpected {

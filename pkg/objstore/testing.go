@@ -79,7 +79,8 @@ func (b noopInstrumentedBucket) ReaderWithExpectedErrs(IsOpFailureExpectedFunc) 
 	return b
 }
 
-func AcceptanceTest(t *testing.T, bkt Bucket) {
+func AcceptanceTest(t *testing.T, bkts ...Bucket) {
+	bkt := bkts[0]
 	ctx := context.Background()
 
 	_, err := bkt.Get(ctx, "")

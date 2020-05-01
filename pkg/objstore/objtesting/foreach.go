@@ -4,6 +4,7 @@
 package objtesting
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -42,12 +43,19 @@ func IsObjStoreSkipped(t *testing.T, provider client.ObjProvider) bool {
 // For each it creates a new bucket with a random name and a cleanup function
 // that deletes it after test was run.
 // Use THANOS_TEST_OBJSTORE_SKIP to skip explicitly certain object storages.
-func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) {
+func ForeachStore(t *testing.T, numBkts int, testFn func(t *testing.T, bkts ...objstore.Bucket)) {
+	if numBkts == 0 {
+		t.Errorf("got empty bucket list")
+	}
 	t.Parallel()
 
 	// Mandatory Inmem. Not parallel, to detect problem early.
 	if ok := t.Run("inmem", func(t *testing.T) {
-		testFn(t, objstore.NewInMemBucket())
+		bkts := []objstore.Bucket{}
+		for i := 0; i < numBkts; i++ {
+			bkts = append(bkts, objstore.Bucket(objstore.NewInMemBucket()))
+		}
+		testFn(t, bkts...)
 	}); !ok {
 		return
 	}
@@ -56,96 +64,123 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 	t.Run("filesystem", func(t *testing.T) {
 		t.Parallel()
 
-		dir, err := ioutil.TempDir("", "filesystem-foreach-store-test")
-		testutil.Ok(t, err)
-		defer testutil.Ok(t, os.RemoveAll(dir))
+		bkts := []objstore.Bucket{}
+		for i := 0; i < numBkts; i++ {
+			dir, err := ioutil.TempDir("", fmt.Sprintf("filesystem-foreach-store-test-%d", i))
+			testutil.Ok(t, err)
+			defer testutil.Ok(t, os.RemoveAll(dir))
 
-		b, err := filesystem.NewBucket(dir)
-		testutil.Ok(t, err)
-		testFn(t, b)
+			b, err := filesystem.NewBucket(dir)
+			testutil.Ok(t, err)
+			bkts = append(bkts, objstore.Bucket(b))
+		}
+
+		testFn(t, bkts...)
 	})
 
 	// Optional GCS.
 	if !IsObjStoreSkipped(t, client.GCS) {
 		t.Run("gcs", func(t *testing.T) {
-			bkt, closeFn, err := gcs.NewTestBucket(t, os.Getenv("GCP_PROJECT"))
-			testutil.Ok(t, err)
+			gsBuckets := []objstore.Bucket{}
+			for i := 0; i < numBkts; i++ {
+				bkt, closeFn, err := gcs.NewTestBucket(t, os.Getenv("GCP_PROJECT"))
+				testutil.Ok(t, err)
 
+				defer closeFn()
+
+				// TODO(bwplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
+				gsBuckets = append(gsBuckets, bkt)
+			}
 			t.Parallel()
-			defer closeFn()
-
-			// TODO(bwplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
-			testFn(t, bkt)
+			testFn(t, gsBuckets...)
 		})
 	}
 
 	// Optional S3.
 	if !IsObjStoreSkipped(t, client.S3) {
 		t.Run("aws s3", func(t *testing.T) {
-			// TODO(bwplotka): Allow taking location from envvar.
-			bkt, closeFn, err := s3.NewTestBucket(t, "us-west-2")
-			testutil.Ok(t, err)
+			awsBuckets := []objstore.Bucket{}
+			for i := 0; i < numBkts; i++ {
+				// TODO(bwplotka): Allow taking location from envvar.
+				bkt, closeFn, err := s3.NewTestBucket(t, "us-west-2")
+				testutil.Ok(t, err)
+				defer closeFn()
 
+				// TODO(bwplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
+				awsBuckets = append(awsBuckets, bkt)
+			}
 			t.Parallel()
-			defer closeFn()
-
 			// TODO(bwplotka): Add leaktest when we fix potential leak in minio library.
 			// We cannot use leaktest for detecting our own potential leaks, when leaktest detects leaks in minio itself.
 			// This needs to be investigated more.
-
-			testFn(t, bkt)
+			testFn(t, awsBuckets...)
 		})
 	}
 
 	// Optional Azure.
 	if !IsObjStoreSkipped(t, client.AZURE) {
 		t.Run("azure", func(t *testing.T) {
-			bkt, closeFn, err := azure.NewTestBucket(t, "e2e-tests")
-			testutil.Ok(t, err)
+			azureBuckets := []objstore.Bucket{}
+			for i := 0; i < numBkts; i++ {
+				bkt, closeFn, err := azure.NewTestBucket(t, "e2e-tests")
+				testutil.Ok(t, err)
+
+				defer closeFn()
+				azureBuckets = append(azureBuckets, bkt)
+			}
 
 			t.Parallel()
-			defer closeFn()
-
-			testFn(t, bkt)
+			testFn(t, azureBuckets...)
 		})
 	}
 
 	// Optional SWIFT.
 	if !IsObjStoreSkipped(t, client.SWIFT) {
 		t.Run("swift", func(t *testing.T) {
-			container, closeFn, err := swift.NewTestContainer(t)
-			testutil.Ok(t, err)
 
-			t.Parallel()
-			defer closeFn()
+			swiftBuckets := []objstore.Bucket{}
+			for i := 0; i < numBkts; i++ {
+				container, closeFn, err := swift.NewTestContainer(t)
+				testutil.Ok(t, err)
+				t.Parallel()
+				defer closeFn()
+				swiftBuckets = append(swiftBuckets, container)
+			}
 
-			testFn(t, container)
+			testFn(t, swiftBuckets...)
 		})
 	}
 
 	// Optional COS.
 	if !IsObjStoreSkipped(t, client.COS) {
 		t.Run("Tencent cos", func(t *testing.T) {
-			bkt, closeFn, err := cos.NewTestBucket(t)
-			testutil.Ok(t, err)
-
-			t.Parallel()
-			defer closeFn()
-
-			testFn(t, bkt)
+			cosBuckets := []objstore.Bucket{}
+			for i := 0; i < numBkts; i++ {
+				bkt, closeFn, err := cos.NewTestBucket(t)
+				testutil.Ok(t, err)
+				t.Parallel()
+				defer closeFn()
+				cosBuckets = append(cosBuckets, bkt)
+			}
+			testFn(t, cosBuckets...)
 		})
 	}
 
 	// Optional OSS.
 	if !IsObjStoreSkipped(t, client.ALIYUNOSS) {
-		bkt, closeFn, err := oss.NewTestBucket(t)
-		testutil.Ok(t, err)
+
+		ossBuckets := []objstore.Bucket{}
+		for i := 0; i < numBkts; i++ {
+			bkt, closeFn, err := oss.NewTestBucket(t)
+			testutil.Ok(t, err)
+			defer closeFn()
+			ossBuckets = append(ossBuckets, bkt)
+		}
 
 		ok := t.Run("AliYun oss", func(t *testing.T) {
-			testFn(t, bkt)
+			testFn(t, ossBuckets...)
 		})
 
-		closeFn()
 		if !ok {
 			return
 		}

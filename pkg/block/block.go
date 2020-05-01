@@ -69,14 +69,6 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 // It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string) error {
-	return UploadTo(ctx, logger, bkt, bdir, ".")
-}
-
-// UploadTo uploads block from given block dir that ends with block id.
-// It makes sure cleanup is done on error to avoid partial block uploads.
-// It also verifies basic features of Thanos block.
-// TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
-func UploadTo(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir, dstDir string) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
@@ -101,27 +93,27 @@ func UploadTo(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir,
 		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(dstDir, DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
+	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
 		return errors.Wrap(err, "upload meta file to debug dir")
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(dstDir, id.String(), ChunksDirname)); err != nil {
+	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(dstDir, id.String(), IndexFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
 	}
 
 	if meta.Thanos.Source == metadata.CompactorSource {
-		if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexCacheFilename), path.Join(dstDir, id.String(), IndexCacheFilename)); err != nil {
+		if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexCacheFilename), path.Join(id.String(), IndexCacheFilename)); err != nil {
 			return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index cache"))
 		}
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
 	// to be pending uploads.
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(dstDir, id.String(), MetaFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload meta file"))
 	}
 
