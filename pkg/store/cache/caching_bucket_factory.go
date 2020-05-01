@@ -19,24 +19,24 @@ type BucketCacheProvider string
 
 const MemcachedBucketCacheProvider BucketCacheProvider = "memcached"
 
-type CachingBucketConfig struct {
-	Type        BucketCacheProvider `yaml:"backend"`
-	CacheConfig interface{}         `yaml:"backend_config"`
+type CachingBucketWithBackendConfig struct {
+	Type          BucketCacheProvider `yaml:"backend"`
+	BackendConfig interface{}         `yaml:"backend_config"`
 
-	ChunksCachingConfig ChunksCachingConfig `yaml:"chunks_caching_config"`
+	CachingBucketConfig CachingBucketConfig `yaml:"caching_config"`
 }
 
 func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
-	config := &CachingBucketConfig{}
-	config.ChunksCachingConfig = DefaultChunksCachingConfig()
+	config := &CachingBucketWithBackendConfig{}
+	config.CachingBucketConfig = DefaultCachingBucketConfig()
 
 	if err := yaml.UnmarshalStrict(yamlContent, config); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
 	}
 
-	backendConfig, err := yaml.Marshal(config.CacheConfig)
+	backendConfig, err := yaml.Marshal(config.BackendConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
 	}
@@ -55,5 +55,5 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}
 
-	return NewCachingBucket(bucket, c, config.ChunksCachingConfig, logger, reg)
+	return NewCachingBucket(bucket, c, config.CachingBucketConfig, logger, reg)
 }

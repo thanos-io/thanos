@@ -35,9 +35,9 @@ func TestCachingBucket(t *testing.T) {
 
 	cache := &mockCache{cache: make(map[string][]byte)}
 
-	cachingBucket, err := NewCachingBucket(inmem, cache, DefaultChunksCachingConfig(), nil, nil)
+	cachingBucket, err := NewCachingBucket(inmem, cache, DefaultCachingBucketConfig(), nil, nil)
 	testutil.Ok(t, err)
-	cachingBucket.chunks.ChunkBlockSize = blockSize
+	cachingBucket.config.ChunkBlockSize = blockSize
 
 	// Warning, these tests must be run in order, they depend cache state from previous test.
 	for _, tc := range []struct {
@@ -219,7 +219,7 @@ func TestCachingBucket(t *testing.T) {
 			cachedBytes, fetchedBytes := &counter{}, &counter{}
 			cachingBucket.cachedChunkBytes = cachedBytes
 			cachingBucket.fetchedChunkBytes = fetchedBytes
-			cachingBucket.chunks.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
+			cachingBucket.config.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
 
 			verifyGetRange(t, cachingBucket, name, tc.offset, tc.length, tc.expectedLength)
 			testutil.Equals(t, tc.expectedCachedBytes, int64(cachedBytes.Get()))
