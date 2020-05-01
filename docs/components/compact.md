@@ -49,6 +49,8 @@ Ideally, you will have equal retention set (or no retention at all) to all resol
 
 Not setting this flag, or setting it to `0d`, i.e. `--retention.resolution-X=0d`, will mean that samples at the `X` resolution level will be kept forever.
 
+Optionally, you can also retain blocks which are compacted into larger blocks. You can supply `--objstore-retain-compacted-blocks-to-bucket.config` and Thanos will move compacted blocks to the specified bucket. This can be useful if you do not want to lose blocks during rewrites, which can happen in compaction, delete series etc.
+
 ## Storage space consumption
 
 In fact, downsampling doesn't save you any space but instead it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is required by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), but it gives massive advantage on querying long ranges.
