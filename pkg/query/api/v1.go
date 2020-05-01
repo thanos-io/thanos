@@ -166,8 +166,6 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Get("/series", instr("series", api.series))
 	r.Post("/series", instr("series", api.series))
 
-	r.Post("/delete_series", instr("delete_series", api.deleteSeries))
-
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
 }
@@ -536,10 +534,6 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
 	return metrics, warnings, nil
-}
-
-func (api *API) deleteSeries(r *http.Request) (interface{}, []error, *ApiError) {
-	return nil, nil, &ApiError{errorBadData, errors.New("delete_series is not implemented yet")}
 }
 
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
