@@ -461,7 +461,7 @@ func TestStoreSet_Update(t *testing.T) {
 
 	// Check stats.
 	expected = newStoreAPIStats()
-	expected[component.StoreAPI(nil)] = map[string]int{
+	expected[component.UnknownStoreAPI] = map[string]int{
 		"{l1=\"no-store-type\", l2=\"v3\"}": 1,
 	}
 	expected[component.Query] = map[string]int{

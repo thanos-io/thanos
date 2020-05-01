@@ -69,6 +69,8 @@ enum StoreType {
   SIDECAR = 3;
   STORE = 4;
   RECEIVE = 5;
+  // DEBUG represents some debug StoreAPI components e.g. thanos tools store-api-serve.
+  DEBUG = 6;
 }
 
 message InfoResponse {

@@ -221,7 +221,7 @@ The compactor is not in the critical path of querying or data backup. It can eit
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
 
-* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compactor-statefulSet.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compact-statefulSet.yaml)_
 
 ### [Ruler/Rule](components/rule.md)
 

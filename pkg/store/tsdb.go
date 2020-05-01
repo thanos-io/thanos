@@ -27,7 +27,7 @@ import (
 type TSDBStore struct {
 	logger         log.Logger
 	db             *tsdb.DB
-	component      component.SourceStoreAPI
+	component      component.StoreAPI
 	externalLabels labels.Labels
 }
 
@@ -38,7 +38,7 @@ type ReadWriteTSDBStore struct {
 }
 
 // NewTSDBStore creates a new TSDBStore.
-func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, component component.SourceStoreAPI, externalLabels labels.Labels) *TSDBStore {
+func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, component component.StoreAPI, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
