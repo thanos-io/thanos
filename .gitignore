@@ -12,6 +12,7 @@ kube/.minikube
 
 # Ignore e2e working dirs.
 data/
+test/e2e/e2e_integration_test*
 
 # Ignore promu artifacts.
 /.build
