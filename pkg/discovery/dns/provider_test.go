@@ -5,7 +5,6 @@ package dns
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"testing"
 
@@ -34,7 +33,6 @@ func TestProvider(t *testing.T) {
 	ctx := context.TODO()
 
 	err := prv.Resolve(ctx, []string{"any+x"})
-	fmt.Println(err)
 	testutil.Ok(t, err)
 	result := prv.Addresses()
 	sort.Strings(result)
