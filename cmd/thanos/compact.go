@@ -345,10 +345,10 @@ func runCompact(
 	}
 
 	// Ensure the lowest resolution downsampling is triggered at the highest compaction level.
-	downsample_range1 := downsample.DownsampleRange1 * time.Millisecond
+	downsample_range1 := downsample.ResLevel2MinBlockRange * time.Millisecond
 	if downsample_range1 <= compactions[len(compactions)-2] ||
 		downsample_range1 >= compactions[len(compactions)-1] {
-		panic("DownsampleRange1 must be between the final two compaction levels")
+		panic("ResLevel2MinBlockRange must be between the final two compaction levels")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

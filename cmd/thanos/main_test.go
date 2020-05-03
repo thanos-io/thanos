@@ -45,7 +45,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1MinBlockRange+1, // Pass the minimum ResLevel1MinBlockRange check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0)
 		testutil.Ok(t, err)
@@ -63,7 +63,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1MinBlockRange+1, // Pass the minimum ResLevel1MinBlockRange check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0)
 		testutil.Ok(t, err)
@@ -106,7 +106,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1MinBlockRange+1, // Pass the minimum ResLevel1MinBlockRange check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0)
 		testutil.Ok(t, err)

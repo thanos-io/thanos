@@ -146,9 +146,9 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	case downsample.ResLevel2:
 		return time.Duration(0), errors.New("no downsampling")
 	case downsample.ResLevel1:
-		return time.Duration(downsample.DownsampleRange1*time.Millisecond) - timeRange, nil
+		return time.Duration(downsample.ResLevel2MinBlockRange*time.Millisecond) - timeRange, nil
 	case downsample.ResLevel0:
-		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
+		return time.Duration(downsample.ResLevel1MinBlockRange*time.Millisecond) - timeRange, nil
 	default:
 		panic(errors.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
 	}
