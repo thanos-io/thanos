@@ -140,6 +140,8 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 
 // UntilNextDownsampling calculates how long it will take until the next downsampling operation.
 // Returns an error if there will be no downsampling.
+// TODO: This should take the compaction schedule into account.  Currenty it assumes that
+//   the downsample min ranges match the compaction schedule, which is not actually the case.
 func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	timeRange := time.Duration((m.MaxTime - m.MinTime) * int64(time.Millisecond))
 	switch m.Thanos.Downsample.Resolution {
