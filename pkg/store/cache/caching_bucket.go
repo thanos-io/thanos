@@ -40,7 +40,7 @@ func DefaultCachingBucketConfig() CachingBucketConfig {
 		ChunkBlockSize:            16000, // Equal to max chunk size.
 		ChunkObjectSizeTTL:        24 * time.Hour,
 		ChunkBlockTTL:             24 * time.Hour,
-		MaxChunksGetRangeRequests: 1,
+		MaxChunksGetRangeRequests: 3,
 	}
 }
 
@@ -71,11 +71,11 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		logger: logger,
 
 		cachedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_store_caching_bucket_cached_chunk_bytes_total",
+			Name: "thanos_store_bucket_cache_cached_chunk_bytes_total",
 			Help: "Total number of chunk bytes used from cache",
 		}),
 		fetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_store_caching_bucket_fetched_chunk_bytes_total",
+			Name: "thanos_store_bucket_cache_fetched_chunk_bytes_total",
 			Help: "Total number of chunk bytes fetched from storage",
 		}),
 	}, nil
@@ -106,7 +106,6 @@ func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpec
 		return res
 	}
 
-	// nothing else to do (?)
 	return cb
 }
 
@@ -151,7 +150,7 @@ func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, e
 func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, ttl time.Duration) (uint64, error) {
 	key := cachingKeyObjectSize(name)
 
-	hits, _ := cb.cache.Fetch(ctx, []string{key})
+	hits := cb.cache.Fetch(ctx, []string{key})
 	if s := hits[key]; len(s) == 8 {
 		return binary.BigEndian.Uint64(s), nil
 	}
@@ -179,34 +178,32 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 		length = int64(size - uint64(offset))
 	}
 
-	startOffset := (offset / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
-	endOffset := ((offset + length) / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
+	startRange := (offset / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
+	endRange := ((offset + length) / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
+	lastBlockLength := 0
 	if (offset+length)%cb.config.ChunkBlockSize > 0 {
-		endOffset += cb.config.ChunkBlockSize
+		lastBlockLength = int((offset + length) - endRange)
+		endRange += cb.config.ChunkBlockSize
 	}
 
-	blocks := (endOffset - startOffset) / cb.config.ChunkBlockSize
+	numBlocks := (endRange - startRange) / cb.config.ChunkBlockSize
 
-	offsetKeys := make(map[int64]string, blocks)
-	keys := make([]string, 0, blocks)
-	lastBlockLength := 0
+	offsetKeys := make(map[int64]string, numBlocks)
+	keys := make([]string, 0, numBlocks)
 
-	for o := startOffset; o < endOffset; o += cb.config.ChunkBlockSize {
-		end := o + cb.config.ChunkBlockSize
+	for off := startRange; off < endRange; off += cb.config.ChunkBlockSize {
+		end := off + cb.config.ChunkBlockSize
 		if end > int64(size) {
 			end = int64(size)
 		}
 
-		lastBlockLength = int(end - o)
-
-		k := cachingKeyObjectBlock(name, o, end)
+		k := cachingKeyObjectBlock(name, off, end)
 		keys = append(keys, k)
-		offsetKeys[o] = k
+		offsetKeys[off] = k
 	}
 
 	// Try to get all blocks from the cache.
-	hits, _ := cb.cache.Fetch(ctx, keys)
-
+	hits := cb.cache.Fetch(ctx, keys)
 	for _, b := range hits {
 		cb.cachedChunkBytes.Add(float64(len(b)))
 	}
@@ -216,7 +213,7 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 			hits = map[string][]byte{}
 		}
 
-		err := cb.fetchMissingChunkBlocks(ctx, name, startOffset, endOffset, offsetKeys, hits, lastBlockLength)
+		err := cb.fetchMissingChunkBlocks(ctx, name, startRange, endRange, offsetKeys, hits, lastBlockLength)
 		if err != nil {
 			return nil, err
 		}
@@ -230,11 +227,11 @@ type rng struct {
 }
 
 // Fetches missing blocks and stores them into "hits" map.
-func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name string, startOffset, endOffset int64, cacheKeys map[int64]string, hits map[string][]byte, lastBlockLength int) error {
+func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastBlockLength int) error {
 	// Ordered list of missing sub-ranges.
 	var missing []rng
 
-	for off := startOffset; off < endOffset; off += cb.config.ChunkBlockSize {
+	for off := startRange; off < endRange; off += cb.config.ChunkBlockSize {
 		if hits[cacheKeys[off]] == nil {
 			missing = append(missing, rng{start: off, end: off + cb.config.ChunkBlockSize})
 		}
@@ -249,17 +246,17 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 	var hitsMutex sync.Mutex
 
 	// Run parallel queries for each missing range. Fetched data is stored into 'hits' map, protected by hitsMutex.
-	eg, nctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(ctx)
 	for _, m := range missing {
 		m := m
-		eg.Go(func() error {
-			r, err := cb.bucket.GetRange(nctx, name, m.start, m.end-m.start)
+		g.Go(func() error {
+			r, err := cb.bucket.GetRange(gctx, name, m.start, m.end-m.start)
 			if err != nil {
 				return errors.Wrapf(err, "fetching range [%d, %d]", m.start, m.end)
 			}
 			defer runutil.CloseWithLogOnErr(cb.logger, r, "fetching range [%d, %d]", m.start, m.end)
 
-			for off := m.start; off < m.end && nctx.Err() == nil; off += cb.config.ChunkBlockSize {
+			for off := m.start; off < m.end && gctx.Err() == nil; off += cb.config.ChunkBlockSize {
 				key := cacheKeys[off]
 				if key == "" {
 					return errors.Errorf("fetching range [%d, %d]: caching key for offset %d not found", m.start, m.end, off)
@@ -268,7 +265,7 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 				// We need a new buffer for each block, both for storing into hits, and also for caching.
 				blockData := make([]byte, cb.config.ChunkBlockSize)
 				n, err := io.ReadFull(r, blockData)
-				if err == io.ErrUnexpectedEOF && (off+cb.config.ChunkBlockSize) == endOffset && n == lastBlockLength {
+				if err == io.ErrUnexpectedEOF && (off+cb.config.ChunkBlockSize) == endRange && n == lastBlockLength {
 					// Last block can be shorter.
 					err = nil
 					blockData = blockData[:n]
@@ -282,14 +279,14 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 				hitsMutex.Unlock()
 
 				cb.fetchedChunkBytes.Add(float64(len(blockData)))
-				cb.cache.Store(nctx, map[string][]byte{key: blockData}, cb.config.ChunkBlockTTL)
+				cb.cache.Store(gctx, map[string][]byte{key: blockData}, cb.config.ChunkBlockTTL)
 			}
 
-			return nctx.Err()
+			return gctx.Err()
 		})
 	}
 
-	return eg.Wait()
+	return g.Wait()
 }
 
 // Merges ranges that are close to each other. Modifies input.

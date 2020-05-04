@@ -76,7 +76,7 @@ func TestMemcachedIndexCache(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c := NewMemcachedCache(log.NewNopLogger(), memcached, nil)
+			c := NewMemcachedCache("test", log.NewNopLogger(), memcached, nil)
 
 			// Store the postings expected before running the test.
 			ctx := context.Background()

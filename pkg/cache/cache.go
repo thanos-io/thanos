@@ -15,6 +15,7 @@ type Cache interface {
 	// Note that individual byte buffers may be retained by the cache!
 	Store(ctx context.Context, data map[string][]byte, ttl time.Duration)
 
-	// Fetch multiple keys from cache.
-	Fetch(ctx context.Context, keys []string) (found map[string][]byte, missing []string)
+	// Fetch multiple keys from cache. Returns map of input keys to data.
+	// If key isn't in the map, data for given key was not found.
+	Fetch(ctx context.Context, keys []string) map[string][]byte
 }

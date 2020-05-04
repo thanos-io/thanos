@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -33,11 +32,8 @@ func TestCachingBucket(t *testing.T) {
 	inmem := objstore.NewInMemBucket()
 	testutil.Ok(t, inmem.Upload(context.Background(), name, bytes.NewReader(data)))
 
+	// We reuse cache between tests (!)
 	cache := &mockCache{cache: make(map[string][]byte)}
-
-	cachingBucket, err := NewCachingBucket(inmem, cache, DefaultCachingBucketConfig(), nil, nil)
-	testutil.Ok(t, err)
-	cachingBucket.config.ChunkBlockSize = blockSize
 
 	// Warning, these tests must be run in order, they depend cache state from previous test.
 	for _, tc := range []struct {
@@ -216,14 +212,15 @@ func TestCachingBucket(t *testing.T) {
 			if tc.init != nil {
 				tc.init()
 			}
-			cachedBytes, fetchedBytes := &counter{}, &counter{}
-			cachingBucket.cachedChunkBytes = cachedBytes
-			cachingBucket.fetchedChunkBytes = fetchedBytes
+
+			cachingBucket, err := NewCachingBucket(inmem, cache, DefaultCachingBucketConfig(), nil, nil)
+			testutil.Ok(t, err)
+			cachingBucket.config.ChunkBlockSize = blockSize
 			cachingBucket.config.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
 
 			verifyGetRange(t, cachingBucket, name, tc.offset, tc.length, tc.expectedLength)
-			testutil.Equals(t, tc.expectedCachedBytes, int64(cachedBytes.Get()))
-			testutil.Equals(t, tc.expectedFetchedBytes, int64(fetchedBytes.Get()))
+			testutil.Equals(t, tc.expectedCachedBytes, int64(promtest.ToFloat64(cachingBucket.cachedChunkBytes)))
+			testutil.Equals(t, tc.expectedFetchedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedChunkBytes)))
 		})
 	}
 }
@@ -258,22 +255,20 @@ func (m *mockCache) Store(_ context.Context, data map[string][]byte, _ time.Dura
 	}
 }
 
-func (m *mockCache) Fetch(_ context.Context, keys []string) (found map[string][]byte, missing []string) {
+func (m *mockCache) Fetch(_ context.Context, keys []string) map[string][]byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	found = make(map[string][]byte)
+	found := make(map[string][]byte, len(keys))
 
 	for _, k := range keys {
 		v, ok := m.cache[k]
 		if ok {
 			found[k] = v
-		} else {
-			missing = append(missing, k)
 		}
 	}
 
-	return
+	return found
 }
 
 func TestMergeRanges(t *testing.T) {
@@ -309,29 +304,4 @@ func TestMergeRanges(t *testing.T) {
 			testutil.Equals(t, tc.expected, mergeRanges(tc.input, tc.limit))
 		})
 	}
-}
-
-type counter struct {
-	mu    sync.Mutex
-	count float64
-}
-
-func (c *counter) Desc() *prometheus.Desc             { return nil }
-func (c *counter) Write(_ *dto.Metric) error          { return nil }
-func (c *counter) Describe(_ chan<- *prometheus.Desc) {}
-func (c *counter) Collect(_ chan<- prometheus.Metric) {}
-func (c *counter) Inc() {
-	c.mu.Lock()
-	c.count++
-	c.mu.Unlock()
-}
-func (c *counter) Add(f float64) {
-	c.mu.Lock()
-	c.count += f
-	c.mu.Unlock()
-}
-func (c *counter) Get() float64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.count
 }

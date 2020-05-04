@@ -46,11 +46,11 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	switch config.Type {
 	case MemcachedBucketCacheProvider:
 		var memcached cacheutil.MemcachedClient
-		memcached, err := cacheutil.NewMemcachedClient(logger, "cache-bucket", backendConfig, reg)
+		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create memcached client")
 		}
-		c = cache.NewMemcachedCache(logger, memcached, reg)
+		c = cache.NewMemcachedCache("caching-bucket", logger, memcached, reg)
 	default:
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}

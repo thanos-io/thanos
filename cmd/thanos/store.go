@@ -225,11 +225,10 @@ func runStore(
 		return errors.Wrap(err, "get caching bucket configuration")
 	}
 	if len(cachingBucketConfigYaml) > 0 {
-		newbkt, err := storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
+		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
-		bkt = newbkt
 	}
 
 	relabelContentYaml, err := selectorRelabelConf.Content()
