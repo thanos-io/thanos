@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -60,6 +61,7 @@ func TestProxyStore_Info(t *testing.T) {
 	q := NewProxyStore(nil,
 		nil,
 		func() []Client { return nil },
+		nil,
 		component.Query,
 		nil, 0*time.Second,
 	)
@@ -420,6 +422,7 @@ func TestProxyStore_Series(t *testing.T) {
 			q := NewProxyStore(nil,
 				nil,
 				func() []Client { return tc.storeAPIs },
+				nil,
 				component.Query,
 				tc.selectorLabels,
 				0*time.Second,
@@ -886,6 +889,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			q := NewProxyStore(nil,
 				nil,
 				func() []Client { return tc.storeAPIs },
+				nil,
 				component.Query,
 				tc.selectorLabels,
 				4*time.Second,
@@ -935,6 +939,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 	q := NewProxyStore(nil,
 		nil,
 		func() []Client { return cls },
+		nil,
 		component.Query,
 		nil,
 		0*time.Second,
@@ -995,6 +1000,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	q := NewProxyStore(nil,
 		nil,
 		func() []Client { return cls },
+		nil,
 		component.Query,
 		labels.FromStrings("fed", "a"),
 		0*time.Second,
@@ -1034,6 +1040,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	q := NewProxyStore(nil,
 		nil,
 		func() []Client { return cls },
+		nil,
 		component.Query,
 		nil,
 		0*time.Second,
@@ -1138,6 +1145,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				nil,
 				nil,
 				func() []Client { return tc.storeAPIs },
+				nil,
 				component.Query,
 				nil,
 				0*time.Second,
@@ -1478,4 +1486,150 @@ func TestMergeLabels(t *testing.T) {
 	sort.Sort(resLabels)
 
 	testutil.Equals(t, expected, resLabels)
+}
+
+func TestDedupGroups(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		groups, want []*storepb.RuleGroup
+	}{
+		{
+			name:   "no groups",
+			groups: nil,
+			want:   nil,
+		},
+		{
+			name: "empty group",
+			groups: []*storepb.RuleGroup{
+				{Name: "a"},
+			},
+			want: []*storepb.RuleGroup{
+				{Name: "a"},
+			},
+		},
+		{
+			name: "multiple empty groups",
+			groups: []*storepb.RuleGroup{
+				{Name: "a"},
+				{Name: "b"},
+			},
+			want: []*storepb.RuleGroup{
+				{Name: "a"},
+				{Name: "b"},
+			},
+		},
+		{
+			name: "single group",
+			groups: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+			want: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+		},
+		{
+			name: "separate groups",
+			groups: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b2"}),
+					},
+				},
+			},
+			want: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b2"}),
+					},
+				},
+			},
+		},
+		{
+			name: "duplicate groups",
+			groups: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+			want: []*storepb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*storepb.Rule{
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b1"}),
+						storepb.NewRecordingRule(&storepb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dedupGroups(tc.groups)
+			if !reflect.DeepEqual(tc.want, got) {
+				t.Errorf("want groups %v, got %v", tc.want, got)
+			}
+		})
+	}
 }

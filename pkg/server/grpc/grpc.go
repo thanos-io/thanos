@@ -39,7 +39,8 @@ type Server struct {
 	opts options
 }
 
-// New creates a new gRPC Store API or Store API + Rules API server based on what storeSrv and rulesSrv.
+// New creates a new gRPC Store API.
+// If rulesSrv is not nil, it also registers Rules API to the returned server.
 func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv storepb.RulesServer, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{}

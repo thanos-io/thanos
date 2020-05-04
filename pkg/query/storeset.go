@@ -35,7 +35,12 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
+	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, Type component.StoreAPI, err error)
+}
+
+type RuleSpec interface {
+	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+	Addr() string
 }
 
 type StoreStatus struct {
@@ -54,7 +59,7 @@ type grpcStoreSpec struct {
 
 // NewGRPCStoreSpec creates store pure gRPC spec.
 // It uses Info gRPC call to get Metadata.
-func NewGRPCStoreSpec(addr string) StoreSpec {
+func NewGRPCStoreSpec(addr string) *grpcStoreSpec {
 	return &grpcStoreSpec{addr: addr}
 }
 
@@ -65,7 +70,7 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, Type component.StoreAPI, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
@@ -155,6 +160,7 @@ type StoreSet struct {
 	// Store specifications can change dynamically. If some store is missing from the list, we assuming it is no longer
 	// accessible and we close gRPC client for it.
 	storeSpecs          func() []StoreSpec
+	ruleSpecs           func() []RuleSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
@@ -176,6 +182,7 @@ func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
+	ruleSpecs func() []RuleSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
@@ -190,10 +197,14 @@ func NewStoreSet(
 	if storeSpecs == nil {
 		storeSpecs = func() []StoreSpec { return nil }
 	}
+	if ruleSpecs == nil {
+		ruleSpecs = func() []RuleSpec { return nil }
+	}
 
 	ss := &StoreSet{
 		logger:                log.With(logger, "component", "storeset"),
 		storeSpecs:            storeSpecs,
+		ruleSpecs:             ruleSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
 		gRPCInfoCallTimeout:   5 * time.Second,
@@ -210,6 +221,8 @@ type storeRef struct {
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
+	// if rule is not nil, then this store also supports rules API.
+	rule storepb.RulesClient
 
 	// Meta (can change during runtime).
 	labelSets []storepb.LabelSet
@@ -235,6 +248,13 @@ func (s *storeRef) StoreType() component.StoreAPI {
 	defer s.mtx.RUnlock()
 
 	return s.storeType
+}
+
+func (s *storeRef) HasRulesAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.rule != nil
 }
 
 func (s *storeRef) LabelSets() []storepb.LabelSet {
@@ -373,6 +393,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 		stores[addr] = st
 		s.updateStoreStatus(st, nil)
+
+		if st.HasRulesAPI() {
+			level.Info(s.logger).Log("msg", "adding new rulesAPI to query storeset", "address", addr)
+		}
+
 		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 
@@ -386,19 +411,24 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*storeRef) map[string]*storeRef {
 	var (
-		unique        = make(map[string]struct{})
+		storeAddrSet  = make(map[string]struct{})
+		ruleAddrSet   = make(map[string]struct{})
 		healthyStores = make(map[string]*storeRef, len(stores))
 		mtx           sync.Mutex
 		wg            sync.WaitGroup
 	)
 
+	for _, ruleSpec := range s.ruleSpecs() {
+		ruleAddrSet[ruleSpec.Addr()] = struct{}{}
+	}
+
 	// Gather healthy stores map concurrently. Build new store if does not exist already.
 	for _, storeSpec := range s.storeSpecs() {
-		if _, ok := unique[storeSpec.Addr()]; ok {
+		if _, ok := storeAddrSet[storeSpec.Addr()]; ok {
 			level.Warn(s.logger).Log("msg", "duplicated address in store nodes", "address", storeSpec.Addr())
 			continue
 		}
-		unique[storeSpec.Addr()] = struct{}{}
+		storeAddrSet[storeSpec.Addr()] = struct{}{}
 
 		wg.Add(1)
 		go func(spec StoreSpec) {
@@ -418,7 +448,14 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
+
+				var rule storepb.RulesClient
+
+				if _, ok := ruleAddrSet[addr]; ok {
+					rule = storepb.NewRulesClient(conn)
+				}
+
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), rule: rule, cc: conn, addr: addr, logger: s.logger}
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
@@ -442,6 +479,12 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 		}(storeSpec)
 	}
 	wg.Wait()
+
+	for ruleAddr := range ruleAddrSet {
+		if _, ok := storeAddrSet[ruleAddr]; !ok {
+			level.Warn(s.logger).Log("msg", "ignored rule store", "address", ruleAddr)
+		}
+	}
 
 	return healthyStores
 }
@@ -496,6 +539,20 @@ func (s *StoreSet) Get() []store.Client {
 		stores = append(stores, st)
 	}
 	return stores
+}
+
+// GetRulesClients returns a list of all active rules clients.
+func (s *StoreSet) GetRulesClients() []storepb.RulesClient {
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
+
+	rules := make([]storepb.RulesClient, 0, len(s.stores))
+	for _, st := range s.stores {
+		if st.HasRulesAPI() {
+			rules = append(rules, st.rule)
+		}
+	}
+	return rules
 }
 
 func (s *StoreSet) Close() {

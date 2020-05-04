@@ -318,7 +318,8 @@ Flags:
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
-                                 'dedup=false' parameter.
+                                 'dedup=false' parameter. Data includes time
+                                 series, recording rules, and alerting rules.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
@@ -326,6 +327,11 @@ Flags:
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  store API servers through respective DNS
+                                 lookups.
+      --rule=<rule> ...          Addresses of statically configured rules API
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 rule API servers through respective DNS
                                  lookups.
       --store.sd-files=<path> ...
                                  Path to files that contain addresses of store

@@ -179,12 +179,17 @@ func TestStoreSet_Update(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	discoveredStoreAddr = append(discoveredStoreAddr, discoveredStoreAddr[0])
-	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
-		for _, addr := range discoveredStoreAddr {
-			specs = append(specs, NewGRPCStoreSpec(addr))
-		}
-		return specs
-	}, testGRPCOpts, time.Minute)
+	storeSet := NewStoreSet(nil, nil,
+		func() (specs []StoreSpec) {
+			for _, addr := range discoveredStoreAddr {
+				specs = append(specs, NewGRPCStoreSpec(addr))
+			}
+			return specs
+		},
+		func() (specs []RuleSpec) {
+			return nil
+		},
+		testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -521,12 +526,15 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 	st.CloseOne(initialStoreAddr[1])
 
-	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
-		for _, addr := range initialStoreAddr {
-			specs = append(specs, NewGRPCStoreSpec(addr))
-		}
-		return specs
-	}, testGRPCOpts, time.Minute)
+	storeSet := NewStoreSet(nil, nil,
+		func() (specs []StoreSpec) {
+			for _, addr := range initialStoreAddr {
+				specs = append(specs, NewGRPCStoreSpec(addr))
+			}
+			return specs
+		},
+		func() (specs []RuleSpec) { return nil },
+		testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
@@ -538,4 +546,120 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 
 	expected := newStoreAPIStats()
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
+}
+
+func TestStoreSet_Update_Rules(t *testing.T) {
+	stores, err := startTestStores([]testStoreMeta{
+		{
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{}
+			},
+			storeType: component.Sidecar,
+		},
+		{
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{}
+			},
+			storeType: component.Rule,
+		},
+	})
+	testutil.Ok(t, err)
+	defer stores.Close()
+
+	for _, tc := range []struct {
+		name           string
+		storeSpecs     func() []StoreSpec
+		ruleSpecs      func() []RuleSpec
+		expectedStores int
+		expectedRules  int
+	}{
+		{
+			name: "stores, no rules",
+			storeSpecs: func() []StoreSpec {
+				return []StoreSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+					NewGRPCStoreSpec(stores.orderAddrs[1]),
+				}
+			},
+			expectedStores: 2,
+			expectedRules:  0,
+		},
+		{
+			name: "rules, no stores",
+			ruleSpecs: func() []RuleSpec {
+				return []RuleSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+				}
+			},
+			expectedStores: 0,
+			expectedRules:  0,
+		},
+		{
+			name: "one store, different rule",
+			storeSpecs: func() []StoreSpec {
+				return []StoreSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+				}
+			},
+			ruleSpecs: func() []RuleSpec {
+				return []RuleSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[1]),
+				}
+			},
+			expectedStores: 1,
+			expectedRules:  0,
+		},
+		{
+			name: "two stores, one rule",
+			storeSpecs: func() []StoreSpec {
+				return []StoreSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+					NewGRPCStoreSpec(stores.orderAddrs[1]),
+				}
+			},
+			ruleSpecs: func() []RuleSpec {
+				return []RuleSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+				}
+			},
+			expectedStores: 2,
+			expectedRules:  1,
+		},
+		{
+			name: "two stores, two rules",
+			storeSpecs: func() []StoreSpec {
+				return []StoreSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+					NewGRPCStoreSpec(stores.orderAddrs[1]),
+				}
+			},
+			ruleSpecs: func() []RuleSpec {
+				return []RuleSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0]),
+					NewGRPCStoreSpec(stores.orderAddrs[1]),
+				}
+			},
+			expectedStores: 2,
+			expectedRules:  2,
+		},
+	} {
+		storeSet := NewStoreSet(nil, nil,
+			tc.storeSpecs,
+			tc.ruleSpecs,
+			testGRPCOpts, time.Minute)
+
+		t.Run(tc.name, func(t *testing.T) {
+			storeSet.Update(context.Background())
+			testutil.Equals(t, tc.expectedStores, len(storeSet.stores))
+
+			gotRules := 0
+			for _, ref := range storeSet.stores {
+				if ref.HasRulesAPI() {
+					gotRules += 1
+				}
+			}
+
+			testutil.Equals(t, tc.expectedRules, gotRules)
+		})
+	}
 }

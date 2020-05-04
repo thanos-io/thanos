@@ -26,6 +26,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -42,6 +43,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -96,12 +98,17 @@ func SetCORS(w http.ResponseWriter) {
 
 type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 
+type rulesRetriever interface {
+	RuleGroups(context.Context) ([]*storepb.RuleGroup, storage.Warnings, error)
+}
+
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
 type API struct {
 	logger          log.Logger
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
+	rulesRetriever  rulesRetriever
 
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
@@ -122,6 +129,7 @@ func NewAPI(
 	enablePartialResponse bool,
 	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
+	rr rulesRetriever,
 ) *API {
 	return &API{
 		logger:                                 logger,
@@ -132,6 +140,7 @@ func NewAPI(
 		replicaLabels:                          replicaLabels,
 		reg:                                    reg,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		rulesRetriever:                         rr,
 
 		now: time.Now,
 	}
@@ -168,6 +177,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
+
+	r.Get("/rules", instr("rules", api.rules))
 }
 
 type queryData struct {
@@ -625,4 +636,57 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	return names, warnings, nil
+}
+
+func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
+	var (
+		res       = &storepb.RuleGroups{}
+		typeParam = strings.ToLower(r.URL.Query().Get("type"))
+	)
+
+	if typeParam != "" && typeParam != "alert" && typeParam != "record" {
+		return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid query parameter type='%v'", typeParam)}
+	}
+
+	returnAlerts := typeParam == "" || typeParam == "alert"
+	returnRecording := typeParam == "" || typeParam == "record"
+
+	groups, warnings, err := api.rulesRetriever.RuleGroups(r.Context())
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("error retrieving rules: %v", err)}
+	}
+
+	for _, grp := range groups {
+		apiRuleGroup := &storepb.RuleGroup{
+			Name:                              grp.Name,
+			File:                              grp.File,
+			Interval:                          grp.Interval,
+			EvaluationDurationSeconds:         grp.EvaluationDurationSeconds,
+			LastEvaluation:                    grp.LastEvaluation,
+			DeprecatedPartialResponseStrategy: grp.DeprecatedPartialResponseStrategy,
+			PartialResponseStrategy:           grp.PartialResponseStrategy,
+		}
+
+		apiRuleGroup.Rules = make([]*storepb.Rule, 0, len(grp.Rules))
+
+		for _, r := range grp.Rules {
+			switch {
+			case r.GetAlert() != nil:
+				if !returnAlerts {
+					break
+				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
+			case r.GetRecording() != nil:
+				if !returnRecording {
+					break
+				}
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
+			default:
+				return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("rule %v: unsupported", r)}
+			}
+		}
+		res.Groups = append(res.Groups, apiRuleGroup)
+	}
+
+	return res, warnings, nil
 }
