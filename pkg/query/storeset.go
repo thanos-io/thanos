@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -173,7 +174,7 @@ type StoreSet struct {
 	unhealthyStoreTimeout time.Duration
 }
 
-// NewStoreSet returns a new set of stores from cluster peers and statically configured ones.
+// NewStoreSet returns a new set of store APIs and potentially Rules APIs from given specs.
 func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -211,14 +212,15 @@ func NewStoreSet(
 	return ss
 }
 
+// TODO(bwplotka): Consider moving out of this package and renam as it also supports rules API.
 type storeRef struct {
 	storepb.StoreClient
 
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
-	// if rule is not nil, then this store also supports rules API.
-	rule storepb.RulesClient
+	// If rule is not nil, then this store also supports rules API.
+	rule rulespb.RulesClient
 
 	// Meta (can change during runtime).
 	labelSets []storepb.LabelSet
@@ -444,10 +446,10 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				var rule storepb.RulesClient
+				var rule rulespb.RulesClient
 
 				if _, ok := ruleAddrSet[addr]; ok {
-					rule = storepb.NewRulesClient(conn)
+					rule = rulespb.NewRulesClient(conn)
 				}
 
 				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), rule: rule, storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
@@ -548,11 +550,11 @@ func (s *StoreSet) Get() []store.Client {
 }
 
 // GetRulesClients returns a list of all active rules clients.
-func (s *StoreSet) GetRulesClients() []storepb.RulesClient {
+func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 	s.storesMtx.RLock()
 	defer s.storesMtx.RUnlock()
 
-	rules := make([]storepb.RulesClient, 0, len(s.stores))
+	rules := make([]rulespb.RulesClient, 0, len(s.stores))
 	for _, st := range s.stores {
 		if st.HasRulesAPI() {
 			rules = append(rules, st.rule)

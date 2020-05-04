@@ -24,12 +24,10 @@ import (
 	"github.com/golang/snappy"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -38,8 +36,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
@@ -61,7 +57,7 @@ const initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size
 // It attaches the provided external labels to all results.
 func NewPrometheusStore(
 	logger log.Logger,
-	client *http.Client,
+	client *promclient.Client,
 	baseURL *url.URL,
 	component component.StoreAPI,
 	externalLabels func() labels.Labels,
@@ -70,15 +66,10 @@ func NewPrometheusStore(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if client == nil {
-		client = &http.Client{
-			Transport: tracing.HTTPTripperware(logger, exthttp.NewTransport()),
-		}
-	}
 	p := &PrometheusStore{
 		logger:                        logger,
 		base:                          baseURL,
-		client:                        promclient.NewClient(client, logger, userAgent),
+		client:                        client,
 		component:                     component,
 		externalLabels:                externalLabels,
 		timestamps:                    timestamps,
@@ -430,7 +421,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
-	preq.Header.Set("User-Agent", userAgent)
+	preq.Header.Set("User-Agent", promclient.ThanosUserAgent)
 	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request", opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
 	preq = preq.WithContext(ctx)
 	presp, err := p.client.Do(preq)
@@ -554,23 +545,4 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 	sort.Strings(vals)
 	return &storepb.LabelValuesResponse{Values: vals}, nil
-}
-
-// Rules returns all specified rules from Prometheus.
-func (p *PrometheusStore) Rules(r *storepb.RulesRequest, s storepb.Rules_RulesServer) error {
-	var typeRules string
-	if r.Type != storepb.RulesRequest_ALL {
-		typeRules = r.Type.String()
-	}
-	groups, err := p.client.RulesInGRPC(s.Context(), p.base, typeRules)
-	if err != nil {
-		return err
-	}
-
-	for _, g := range groups {
-		if err := s.Send(&storepb.RulesResponse{Result: &storepb.RulesResponse_Group{Group: g}}); err != nil {
-			return err
-		}
-	}
-	return nil
 }

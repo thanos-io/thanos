@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package storepb
+package rulespb
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
@@ -54,8 +55,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Interval:                          2442,
 						LastEvaluation:                    now,
 						EvaluationDurationSeconds:         2.1,
-						DeprecatedPartialResponseStrategy: PartialResponseStrategy_WARN,
-						PartialResponseStrategy:           PartialResponseStrategy_ABORT,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
 					},
 				},
 			},
@@ -70,8 +71,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 			expectedProto: &RuleGroups{
 				Groups: []*RuleGroup{
 					{
-						DeprecatedPartialResponseStrategy: PartialResponseStrategy_WARN,
-						PartialResponseStrategy:           PartialResponseStrategy_WARN,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
 					},
 				},
 			},
@@ -255,7 +256,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Query: "up",
 										Name:  "recording1",
 										Labels: &PromLabels{
-											Labels: []Label{
+											Labels: []storepb.Label{
 												{Name: "a", Value: "b"},
 												{Name: "c", Value: "d"},
 											},
@@ -273,13 +274,13 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Name:  "alert1",
 										Query: "up == 0",
 										Labels: &PromLabels{
-											Labels: []Label{
+											Labels: []storepb.Label{
 												{Name: "a2", Value: "b2"},
 												{Name: "c2", Value: "d2"},
 											},
 										},
 										Annotations: &PromLabels{
-											Labels: []Label{
+											Labels: []storepb.Label{
 												{Name: "ann1", Value: "ann44"},
 												{Name: "ann2", Value: "ann33"},
 											},
@@ -287,19 +288,19 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Alerts: []*AlertInstance{
 											{
 												Labels: &PromLabels{
-													Labels: []Label{
+													Labels: []storepb.Label{
 														{Name: "instance1", Value: "1"},
 													},
 												},
 												Annotations: &PromLabels{
-													Labels: []Label{
+													Labels: []storepb.Label{
 														{Name: "annotation1", Value: "2"},
 													},
 												},
 												State:                   AlertState_INACTIVE,
 												ActiveAt:                nil,
 												Value:                   "1",
-												PartialResponseStrategy: PartialResponseStrategy_WARN,
+												PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 											},
 											{
 												Labels:                  &PromLabels{},
@@ -307,7 +308,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 												State:                   AlertState_FIRING,
 												ActiveAt:                &twoHoursAgo,
 												Value:                   "2143",
-												PartialResponseStrategy: PartialResponseStrategy_ABORT,
+												PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 											},
 										},
 										DurationSeconds:           60,
@@ -324,8 +325,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Interval:                          2442,
 						LastEvaluation:                    now,
 						EvaluationDurationSeconds:         2.1,
-						DeprecatedPartialResponseStrategy: PartialResponseStrategy_WARN,
-						PartialResponseStrategy:           PartialResponseStrategy_ABORT,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
 					},
 					{
 						Name:                              "group2",
@@ -333,8 +334,8 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Interval:                          242342442,
 						LastEvaluation:                    now.Add(40 * time.Hour),
 						EvaluationDurationSeconds:         21244.1,
-						DeprecatedPartialResponseStrategy: PartialResponseStrategy_ABORT,
-						PartialResponseStrategy:           PartialResponseStrategy_ABORT,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
 					},
 				},
 			},

@@ -1,30 +1,33 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package query
+package rules
 
 import (
 	"context"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-func NewRulesRetriever(rs storepb.RulesServer) *rulesRetriever {
-	return &rulesRetriever{
+// Retriever allows to retrieve rules from gRPC server implementation.
+// TODO(bwplotka): Switch to native gRPC transparent client->server adapter once available.
+type Retriever struct {
+	proxy rulespb.RulesServer
+}
+
+func NewRetriever(rs rulespb.RulesServer) *Retriever {
+	return &Retriever{
 		proxy: rs,
 	}
 }
 
-type rulesRetriever struct {
-	proxy storepb.RulesServer
-}
-
-func (rr *rulesRetriever) RuleGroups(ctx context.Context) ([]*storepb.RuleGroup, storage.Warnings, error) {
+func (rr *Retriever) RuleGroups(ctx context.Context) ([]*rulespb.RuleGroup, storage.Warnings, error) {
 	resp := &rulesServer{ctx: ctx}
 
-	if err := rr.proxy.Rules(&storepb.RulesRequest{
+	if err := rr.proxy.Rules(&rulespb.RulesRequest{
 		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 	}, resp); err != nil {
 		return nil, nil, errors.Wrap(err, "proxy RuleGroups()")
@@ -35,14 +38,14 @@ func (rr *rulesRetriever) RuleGroups(ctx context.Context) ([]*storepb.RuleGroup,
 
 type rulesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
-	storepb.Rules_RulesServer
+	rulespb.Rules_RulesServer
 	ctx context.Context
 
 	warnings []error
-	groups   []*storepb.RuleGroup
+	groups   []*rulespb.RuleGroup
 }
 
-func (srv *rulesServer) Send(res *storepb.RulesResponse) error {
+func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 	if res.GetWarning() != "" {
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil
