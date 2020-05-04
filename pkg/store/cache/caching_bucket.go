@@ -51,7 +51,9 @@ type CachingBucket struct {
 
 	config CachingBucketConfig
 
-	logger              log.Logger
+	logger log.Logger
+
+	requestedChunkBytes prometheus.Counter
 	cachedChunkBytes    prometheus.Counter
 	fetchedChunkBytes   prometheus.Counter
 	refetchedChunkBytes prometheus.Counter
@@ -74,6 +76,10 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		cache:  c,
 		logger: logger,
 
+		requestedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_requested_chunk_bytes_total",
+			Help: "Total number of requested bytes for chunk data ",
+		}),
 		cachedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_cached_chunk_bytes_total",
 			Help: "Total number of chunk bytes used from cache",
@@ -187,6 +193,8 @@ func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, ttl 
 }
 
 func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
+	cb.requestedChunkBytes.Add(float64(length))
+
 	size, err := cb.cachedObjectSize(ctx, name, cb.config.ChunkObjectSizeTTL)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get size of chunk file: %s", name)
