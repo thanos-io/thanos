@@ -160,6 +160,7 @@ message LabelValuesResponse {
 /// Rules represents API that is responsible for gathering rules and their statuses.
 service Rules {
   /// Rules has info for all rules.
+  /// Returned rules are expected to include external labels.
   rpc Rules(RulesRequest) returns (stream RulesResponse);
 }
 

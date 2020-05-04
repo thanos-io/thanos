@@ -628,5 +628,10 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 	var m struct {
 		Data *storepb.RuleGroups `json:"data"`
 	}
-	return m.Data.Groups, c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m)
+
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m); err != nil {
+		return nil, err
+	}
+
+	return m.Data.Groups, nil
 }
