@@ -5,9 +5,11 @@ package rulespb
 
 import (
 	"encoding/json"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -41,10 +43,111 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 	}
 }
 
+func (r1 *RecordingRule) Cmp(r2 *RecordingRule) int {
+	if r1.LastEvaluation.Before(r2.LastEvaluation) {
+		return 1
+	}
+
+	if r1.LastEvaluation.After(r2.LastEvaluation) {
+		return -1
+	}
+
+	return 0
+}
+
 func NewAlertingRule(a *Alert) *Rule {
 	return &Rule{
 		Result: &Rule_Alert{Alert: a},
 	}
+}
+
+func (r *Rule) GetLabels() []storepb.Label {
+	switch {
+	case r.GetRecording() != nil:
+		return r.GetRecording().Labels.Labels
+	case r.GetAlert() != nil:
+		return r.GetAlert().Labels.Labels
+	default:
+		return nil
+	}
+}
+
+func (r *Rule) SetLabels(ls []storepb.Label) {
+	var result PromLabels
+
+	if len(ls) > 0 {
+		result = PromLabels{Labels: ls}
+	}
+
+	switch {
+	case r.GetRecording() != nil:
+		r.GetRecording().Labels = result
+	case r.GetAlert() != nil:
+		r.GetAlert().Labels = result
+	}
+}
+
+func (r *Rule) GetName() string {
+	switch {
+	case r.GetRecording() != nil:
+		return r.GetRecording().Name
+	case r.GetAlert() != nil:
+		return r.GetAlert().Name
+	default:
+		return ""
+	}
+}
+
+func (r *Rule) GetQuery() string {
+	switch {
+	case r.GetRecording() != nil:
+		return r.GetRecording().Query
+	case r.GetAlert() != nil:
+		return r.GetAlert().Query
+	default:
+		return ""
+	}
+}
+
+func (r *Rule) GetLastEvaluation() time.Time {
+	switch {
+	case r.GetRecording() != nil:
+		return r.GetRecording().LastEvaluation
+	case r.GetAlert() != nil:
+		return r.GetAlert().LastEvaluation
+	default:
+		return time.Time{}
+	}
+}
+
+func (r1 *Rule) Cmp(r2 *Rule) int {
+	if r1.GetAlert() != nil && r2.GetRecording() != nil {
+		return -1
+	}
+
+	if r1.GetRecording() != nil && r2.GetAlert() != nil {
+		return 1
+	}
+
+	if d := strings.Compare(r1.GetName(), r2.GetName()); d != 0 {
+		return d
+	}
+
+	if d := storepb.CompareLabels(r1.GetLabels(), r2.GetLabels()); d != 0 {
+		return d
+	}
+
+	if d := strings.Compare(r1.GetQuery(), r2.GetQuery()); d != 0 {
+		return d
+	}
+
+	if r1.GetAlert() != nil && r2.GetAlert() != nil {
+		if d := big.NewFloat(r1.GetAlert().DurationSeconds).Cmp(big.NewFloat(r2.GetAlert().DurationSeconds)); d != 0 {
+			return d
+		}
+	}
+
+	return 0
 }
 
 func (m *Rule) UnmarshalJSON(entry []byte) error {
@@ -118,6 +221,33 @@ func (x *AlertState) UnmarshalJSON(entry []byte) error {
 
 func (x *AlertState) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.Quote(x.String())), nil
+}
+
+// Cmp compares x and y and returns:
+//
+//   < 0 if x < y  (alert state x is more critical than alert state y)
+//     0 if x == y
+//   > 0 if x > y  (alert state x is less critical than alert state y)
+//
+// For sorting this makes sure that more "critical" alert states come first.
+func (x AlertState) Cmp(y AlertState) int {
+	return int(y) - int(x)
+}
+
+func (a1 *Alert) Cmp(a2 *Alert) int {
+	if d := a1.State.Cmp(a2.State); d != 0 {
+		return d
+	}
+
+	if a1.LastEvaluation.Before(a2.LastEvaluation) {
+		return 1
+	}
+
+	if a1.LastEvaluation.After(a2.LastEvaluation) {
+		return -1
+	}
+
+	return 0
 }
 
 func (m *PromLabels) UnmarshalJSON(entry []byte) error {

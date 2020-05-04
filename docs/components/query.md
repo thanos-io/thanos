@@ -355,6 +355,8 @@ Flags:
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
                                  --no-query.partial-response for disabling.
+      --rule.partial-response    Enable partial response for queries.
+                                 --no-rule.partial-response for disabling.
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.

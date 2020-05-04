@@ -571,7 +571,7 @@ func runRule(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr)
+		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClientWithDedup(ruleMgr), ruleMgr)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
