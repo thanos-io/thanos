@@ -7,11 +7,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -37,14 +39,15 @@ func TestCachingBucket(t *testing.T) {
 
 	// Warning, these tests must be run in order, they depend cache state from previous test.
 	for _, tc := range []struct {
-		name                 string
-		init                 func()
-		offset               int64
-		length               int64
-		maxGetRangeRequests  int
-		expectedLength       int64
-		expectedFetchedBytes int64
-		expectedCachedBytes  int64
+		name                   string
+		init                   func()
+		offset                 int64
+		length                 int64
+		maxGetRangeRequests    int
+		expectedLength         int64
+		expectedFetchedBytes   int64
+		expectedCachedBytes    int64
+		expectedRefetchedBytes int64
 	}{
 		{
 			name:                 "basic test",
@@ -171,13 +174,14 @@ func TestCachingBucket(t *testing.T) {
 		},
 
 		{
-			name:                 "missing everything except middle blocks, one subrequest only",
-			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 10 * blockSize, // We need to fetch beginning and end in single request.
-			expectedCachedBytes:  3 * blockSize,
-			maxGetRangeRequests:  1,
+			name:                   "missing everything except middle blocks, one subrequest only",
+			offset:                 0,
+			length:                 10 * blockSize,
+			expectedLength:         10 * blockSize,
+			expectedFetchedBytes:   7 * blockSize,
+			expectedCachedBytes:    3 * blockSize,
+			expectedRefetchedBytes: 3 * blockSize, // Entire object fetched, 3 blocks are "refetched".
+			maxGetRangeRequests:    1,
 			init: func() {
 				// Delete all but 3 blocks in the middle, but only allow 1 subrequest.
 				for i := int64(0); i < 10; i++ {
@@ -213,14 +217,17 @@ func TestCachingBucket(t *testing.T) {
 				tc.init()
 			}
 
-			cachingBucket, err := NewCachingBucket(inmem, cache, DefaultCachingBucketConfig(), nil, nil)
+			cfg := DefaultCachingBucketConfig()
+			cfg.ChunkBlockSize = blockSize
+			cfg.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
+
+			cachingBucket, err := NewCachingBucket(inmem, cache, cfg, nil, nil)
 			testutil.Ok(t, err)
-			cachingBucket.config.ChunkBlockSize = blockSize
-			cachingBucket.config.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
 
 			verifyGetRange(t, cachingBucket, name, tc.offset, tc.length, tc.expectedLength)
 			testutil.Equals(t, tc.expectedCachedBytes, int64(promtest.ToFloat64(cachingBucket.cachedChunkBytes)))
 			testutil.Equals(t, tc.expectedFetchedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedChunkBytes)))
+			testutil.Equals(t, tc.expectedRefetchedBytes, int64(promtest.ToFloat64(cachingBucket.refetchedChunkBytes)))
 		})
 	}
 }
@@ -284,9 +291,9 @@ func TestMergeRanges(t *testing.T) {
 		},
 
 		{
-			input:    []rng{{start: 0, end: 100}, {start: 100, end: 200}},
+			input:    []rng{{start: 0, end: 100}, {start: 100, end: 200}, {start: 500, end: 1000}},
 			limit:    0,
-			expected: []rng{{start: 0, end: 200}},
+			expected: []rng{{start: 0, end: 200}, {start: 500, end: 1000}},
 		},
 
 		{
@@ -304,4 +311,34 @@ func TestMergeRanges(t *testing.T) {
 			testutil.Equals(t, tc.expected, mergeRanges(tc.input, tc.limit))
 		})
 	}
+}
+
+func TestInvalidOffsetAndLength(t *testing.T) {
+	b := &testBucket{objstore.NewInMemBucket()}
+	c, err := NewCachingBucket(b, &mockCache{cache: make(map[string][]byte)}, DefaultCachingBucketConfig(), nil, nil)
+	testutil.Ok(t, err)
+
+	r, err := c.GetRange(context.Background(), "test", -1, 1000)
+	testutil.Equals(t, nil, r)
+	testutil.NotOk(t, err)
+
+	r, err = c.GetRange(context.Background(), "test", 100, -1)
+	testutil.Equals(t, nil, r)
+	testutil.NotOk(t, err)
+}
+
+type testBucket struct {
+	*objstore.InMemBucket
+}
+
+func (b *testBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	if off < 0 {
+		return nil, errors.Errorf("invalid offset: %d", off)
+	}
+
+	if length <= 0 {
+		return nil, errors.Errorf("invalid length: %d", length)
+	}
+
+	return b.InMemBucket.GetRange(ctx, name, off, length)
 }
