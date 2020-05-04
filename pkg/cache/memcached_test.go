@@ -35,7 +35,7 @@ func TestMemcachedIndexCache(t *testing.T) {
 		"should return no hits on empty cache": {
 			setup:        nil,
 			fetchKeys:    []string{key1, key2},
-			expectedHits: nil,
+			expectedHits: map[string][]byte{},
 		},
 		"should return no misses on 100% hit ratio": {
 			setup: map[string][]byte{
