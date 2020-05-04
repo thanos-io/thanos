@@ -77,7 +77,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
-	rules := cmd.Flag("rule", "Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
+	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
+	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<rule>").Strings()
 
 	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
@@ -101,8 +102,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
-	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
+	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
+
+	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
+		Hidden().Default("true").Bool()
 
 	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
@@ -118,7 +122,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
 		}
 
-		if dup := firstDuplicate(*rules); dup != "" {
+		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
 		}
 
@@ -159,9 +163,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*queryReplicaLabels,
 			selectorLset,
 			*stores,
-			*rules,
+			*ruleEndpoints,
 			*enableAutodownsampling,
-			*enablePartialResponse,
+			*enableQueryPartialResponse,
+			*enableRulePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -203,7 +208,8 @@ func runQuery(
 	storeAddrs []string,
 	ruleAddrs []string,
 	enableAutodownsampling bool,
-	enablePartialResponse bool,
+	enableQueryPartialResponse bool,
+	enableRulePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -388,10 +394,12 @@ func runQuery(
 			engine,
 			queryableCreator,
 			enableAutodownsampling,
-			enablePartialResponse,
+			enableQueryPartialResponse,
+			enableRulePartialResponse,
 			queryReplicaLabels,
 			instantDefaultMaxSourceResolution,
-			rules.NewGRPCClient(rulesProxy),
+			// NOTE: Will share the same replica label as the query for now.
+			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

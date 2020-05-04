@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
@@ -21,7 +25,6 @@ import (
 )
 
 func TestRulesAPI_Fanout(t *testing.T) {
-	t.Skip("Fix in next PR")
 	t.Parallel()
 
 	netName := "e2e_test_rules_fanout"
@@ -39,7 +42,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		s.SharedDir(),
 		netName,
 		"prom1",
-		defaultPromConfig("prom1", 0, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 0, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -47,7 +50,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		s.SharedDir(),
 		netName,
 		"prom2",
-		defaultPromConfig("prom2", 1, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 1, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -60,11 +63,14 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "query",
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(),
+		"query",
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
 		nil,
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
 	)
+
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -73,17 +79,58 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(4), "thanos_store_nodes_grpc_connections"))
 
-	// TODO(bwplotka): Let's not be lazy and expect EXACT rules and alerts for all request types.
-	// TODO(bwplotka): Test dedup true and false.
-
-	// For now expects two, as we should deduplicate both rulers and prometheus.
-	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", 2)
+	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", []*rulespb.RuleGroup{
+		{
+			Name: "example_abort",
+			File: "/shared/rules/rules-0.yaml",
+			Rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_AbortOnPartialResponse",
+					State: rulespb.AlertState_FIRING,
+					Query: "absent(some_metric)",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "prometheus", Value: "ha"},
+						{Name: "severity", Value: "page"},
+					}},
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_AbortOnPartialResponse",
+					Query: "absent(some_metric)",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "severity", Value: "page"},
+					}},
+				}),
+			},
+		},
+		{
+			Name: "example_warn",
+			File: "/shared/rules/rules-1.yaml",
+			Rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_WarnOnPartialResponse",
+					State: rulespb.AlertState_FIRING,
+					Query: "absent(some_metric)",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "prometheus", Value: "ha"},
+						{Name: "severity", Value: "page"},
+					}},
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_WarnOnPartialResponse",
+					Query: "absent(some_metric)",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "severity", Value: "page"},
+					}},
+				}),
+			},
+		},
+	})
 }
 
-func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, expectedLen int) {
+func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, want []*rulespb.RuleGroup) {
 	t.Helper()
 
-	fmt.Println("ruleAndAssert: Waiting for", expectedLen, "results for rules type", typ)
+	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)
 	var result []*rulespb.RuleGroup
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, urlParse(t, "http://"+addr), typ)
@@ -95,10 +142,40 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, e
 			fmt.Println("ruleAndAssert: New result:", res)
 		}
 
-		if len(res) != expectedLen {
-			return errors.Errorf("unexpected result size, expected %d; got: %d result: %v", expectedLen, len(res), res)
+		if len(res) != len(want) {
+			return errors.Errorf("unexpected result size, want %d; got: %d result: %v", len(want), len(res), res)
 		}
-		result = res
+
+		for ig, g := range res {
+			res[ig].LastEvaluation = time.Time{}
+			res[ig].EvaluationDurationSeconds = 0
+			res[ig].Interval = 0
+			res[ig].PartialResponseStrategy = 0
+
+			sort.Slice(g.Rules, func(i, j int) bool { return g.Rules[i].Compare(g.Rules[j]) < 0 })
+
+			for ir, r := range g.Rules {
+				if alert := r.GetAlert(); alert != nil {
+					res[ig].Rules[ir] = rulespb.NewAlertingRule(&rulespb.Alert{
+						Name:   alert.Name,
+						State:  alert.State,
+						Query:  alert.Query,
+						Labels: alert.Labels,
+					})
+				} else if rec := r.GetRecording(); rec != nil {
+					res[ig].Rules[ir] = rulespb.NewAlertingRule(&rulespb.Alert{
+						Name:   rec.Name,
+						Query:  rec.Query,
+						Labels: rec.Labels,
+					})
+				}
+			}
+		}
+
+		if !reflect.DeepEqual(want, res) {
+			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
+		}
+
 		return nil
 	}))
 }
