@@ -571,6 +571,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 			v := s.v
 			if value.IsStaleNaN(v) {
 				// Nan != Nan, so substitute for another value.
+				// This is required for testutil.Equals to work deterministically.
 				v = hackyStaleMarker
 			}
 			expectedCpy = append(expectedCpy, sample{t: s.t, v: v})
@@ -937,6 +938,7 @@ func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
 	for it.Next() {
 		t, v := it.At()
 		// Nan != Nan, so substitute for another value.
+		// This is required for testutil.Equals to work deterministically.
 		if math.IsNaN(v) {
 			v = hackyStaleMarker
 		}

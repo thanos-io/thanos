@@ -394,11 +394,11 @@ func TestDownsample(t *testing.T) {
 
 			expected: []map[AggrType][]sample{
 				{
-					0x0: {{t: 1587693590791, v: 236}},
-					0x1: {{t: 1587693590791, v: 8.0151286e+07}},
-					0x2: {{t: 1587693590791, v: 75}},
-					0x3: {{t: 1587693590791, v: 496544}},
-					0x4: {{t: 1587690005791, v: 461968}, {t: 1587693590791, v: 511500}, {t: 1587693590791, v: 14956}},
+					AggrCount:   {{t: 1587693590791, v: 236}},
+					AggrSum:     {{t: 1587693590791, v: 8.0151286e+07}},
+					AggrMin:     {{t: 1587693590791, v: 75}},
+					AggrMax:     {{t: 1587693590791, v: 496544}},
+					AggrCounter: {{t: 1587690005791, v: 461968}, {t: 1587693590791, v: 511500}, {t: 1587693590791, v: 14956}},
 				},
 			},
 		},
@@ -415,13 +415,14 @@ func TestDownsample(t *testing.T) {
 				d.inAggr[0][AggrCounter] = append(d.inAggr[0][AggrCounter], sample{t: i, v: float64(i)})
 				d.inAggr[1][AggrCounter] = append(d.inAggr[1][AggrCounter], sample{t: 120 + i, v: float64(120 + i)})
 				d.inAggr[2][AggrCounter] = append(d.inAggr[2][AggrCounter], sample{t: 240 + i, v: float64(240 + i)})
+				d.inAggr[3][AggrCounter] = append(d.inAggr[3][AggrCounter], sample{t: 360 + i, v: float64(360 + i)})
 			}
 
 			d.expected[0][AggrCounter] = append(d.expected[0][AggrCounter], sample{t: 0, v: float64(0)})
-			for i := int64(0); i < 360; i += 2 {
+			for i := int64(0); i < 480; i += 2 {
 				d.expected[0][AggrCounter] = append(d.expected[0][AggrCounter], sample{t: 1 + i, v: float64(1 + i)})
 			}
-			d.expected[0][AggrCounter] = append(d.expected[0][AggrCounter], sample{t: 359, v: 359})
+			d.expected[0][AggrCounter] = append(d.expected[0][AggrCounter], sample{t: 479, v: 479})
 
 			return d
 		}(),
@@ -476,6 +477,7 @@ func TestDownsample(t *testing.T) {
 			var lset labels.Labels
 			var chks []chunks.Meta
 			testutil.Ok(t, indexr.Series(series[0], &lset, &chks))
+			testutil.Equals(t, labels.FromStrings("__name__", "a"), lset)
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {

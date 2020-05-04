@@ -577,7 +577,7 @@ type sample struct {
 // value of the later chunk ensures that counter resets between chunks are
 // recognized and that the correct value delta is calculated.
 //
-// It handles overlapped chunks (removes overlaps.
+// It handles overlapped chunks (removes overlaps).
 // NOTE: It is important to deduplicate with care ensuring that you don't hit
 // issue https://github.com/thanos-io/thanos/issues/2401#issuecomment-621958839.
 type CounterSeriesIterator struct {
