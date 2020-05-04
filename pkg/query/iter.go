@@ -596,6 +596,22 @@ func (it *dedupSeriesIterator) Err() error {
 
 // counterDedupAdjustSeriesIterator is used when we deduplicate counter.
 // It makes sure we always adjust for the latest seen last counter value for all replicas.
+// Let's consider following example:
+//
+// Replica 1 counter scrapes: 20    30    40    Nan      -     0     5
+// Replica 2 counter scrapes:    25    35    45     Nan     -     2
+//
+// Now for downsampling purposes we are accounting the resets so our replicas before going to dedup iterator looks like this:
+//
+// Replica 1 counter total: 20    30    40   -      -     40     45
+// Replica 2 counter total:    25    35    45    -     -     47
+//
+// Now if at any point we will switch our focus from replica 2 to replica 1 we will experience lower value than previous,
+// which will trigger false positive counter reset in PromQL.
+//
+// We mitigate this by taking always adjusting for the "behind" replica value to be not smaller than highest sample seen.
+// This is also what is closest to the truth (last seen counter value on this target).
+//
 // This short-term solution to mitigate https://github.com/thanos-io/thanos/issues/2401.
 // TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given
 // series is counter or not: https://github.com/thanos-io/thanos/issues/2547.
