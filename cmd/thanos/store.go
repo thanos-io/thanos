@@ -56,7 +56,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		false)
 
 	cachingBucketConfig := extflag.RegisterPathOrContent(cmd, "experimental.caching-bucket.config",
-		"YAML file that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/components/store.md/#TBD",
+		"YAML file that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/components/store.md/#caching-bucket",
 		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").

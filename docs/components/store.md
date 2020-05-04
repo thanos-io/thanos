@@ -232,6 +232,34 @@ While the remaining settings are **optional**:
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
 
+## Caching Bucket
+
+Thanos Store Gateway supports a "caching bucket" with chunks caching to speed up loading of chunks from TSDB blocks. Currently only memcached "backend" is supported:
+
+```yaml
+backend: memcached
+backend_config:
+  addresses:
+    - localhost:11211
+
+caching_config:
+  chunk_block_size: 16000
+  max_chunks_get_range_requests: 3
+  chunk_object_size_ttl: 24h
+  chunk_block_ttl: 24h
+```
+
+`backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
+
+`caching_config` is a configuration for chunks cache.
+
+- `chunk_block_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing blocks.
+- `chunk_object_size_ttl`: how long to keep information about chunk file length in the cache.
+- `chunk_block_ttl`: how long to keep individual blocks in the cache.
+
+Note that chunks cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+
 ## Index Header
 
 In order to query series inside blocks from object storage, Store Gateway has to know certain initial info about each block such as:
