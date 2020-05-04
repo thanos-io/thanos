@@ -55,6 +55,9 @@ type CachingBucket struct {
 	cachedChunkBytes    prometheus.Counter
 	fetchedChunkBytes   prometheus.Counter
 	refetchedChunkBytes prometheus.Counter
+
+	objectSizeRequests prometheus.Counter
+	objectSizeHits     prometheus.Counter
 }
 
 func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConfig, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
@@ -82,6 +85,14 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		refetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_refetched_chunk_bytes_total",
 			Help: "Total number of chunk bytes re-fetched from storage, despite being in cache already.",
+		}),
+		objectSizeRequests: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_objectsize_requests_total",
+			Help: "Number of object size requests for objects",
+		}),
+		objectSizeHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_objectsize_hits_total",
+			Help: "Number of object size hits for objects",
 		}),
 	}, nil
 }
@@ -155,8 +166,11 @@ func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, e
 func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, ttl time.Duration) (uint64, error) {
 	key := cachingKeyObjectSize(name)
 
+	cb.objectSizeRequests.Add(1)
+
 	hits := cb.cache.Fetch(ctx, []string{key})
 	if s := hits[key]; len(s) == 8 {
+		cb.objectSizeHits.Add(1)
 		return binary.BigEndian.Uint64(s), nil
 	}
 
