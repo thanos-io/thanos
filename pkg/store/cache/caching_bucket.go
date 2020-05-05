@@ -213,7 +213,7 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 	}
 
 	// The very last block in the object may have length that is not divisible by block size.
-	lastBlockOffset := int64(-1)
+	lastBlockOffset := endRange - cb.config.ChunkBlockSize
 	lastBlockLength := int(cb.config.ChunkBlockSize)
 	if uint64(endRange) > size {
 		lastBlockOffset = (int64(size) / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
