@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
@@ -157,7 +158,14 @@ func isTSDBChunkFile(name string) bool {
 
 func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if isTSDBChunkFile(name) && off >= 0 && length > 0 {
-		return cb.getRangeChunkFile(ctx, name, off, length)
+		var (
+			r   io.ReadCloser
+			err error
+		)
+		tracing.DoInSpan(ctx, "cachingbucket_getrange_chunkfile", func(ctx context.Context) {
+			r, err = cb.getRangeChunkFile(ctx, name, off, length)
+		})
+		return r, err
 	}
 
 	return cb.bucket.GetRange(ctx, name, off, length)
