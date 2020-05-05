@@ -9,31 +9,36 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-// Retriever allows to retrieve rules from gRPC server implementation.
+var _ UnaryClient = &GRPCClient{}
+
+// UnaryClient is gRPC rulespb.Rules client which expands streaming rules API. Useful for consumers that does not
+// support streaming.
+type UnaryClient interface {
+	Rules(ctx context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error)
+}
+
+// GRPCClient allows to retrieve rules from local gRPC streaming server implementation.
 // TODO(bwplotka): Switch to native gRPC transparent client->server adapter once available.
-type Retriever struct {
+type GRPCClient struct {
 	proxy rulespb.RulesServer
 }
 
-func NewRetriever(rs rulespb.RulesServer) *Retriever {
-	return &Retriever{
+func NewGRPCClient(rs rulespb.RulesServer) *GRPCClient {
+	return &GRPCClient{
 		proxy: rs,
 	}
 }
 
-func (rr *Retriever) RuleGroups(ctx context.Context) ([]*rulespb.RuleGroup, storage.Warnings, error) {
+func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
 	resp := &rulesServer{ctx: ctx}
 
-	if err := rr.proxy.Rules(&rulespb.RulesRequest{
-		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-	}, resp); err != nil {
+	if err := rr.proxy.Rules(req, resp); err != nil {
 		return nil, nil, errors.Wrap(err, "proxy RuleGroups()")
 	}
 
-	return resp.groups, resp.warnings, nil
+	return &rulespb.RuleGroups{Groups: resp.groups}, resp.warnings, nil
 }
 
 type rulesServer struct {

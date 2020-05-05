@@ -4,6 +4,8 @@
 package storepb
 
 import (
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -19,6 +21,7 @@ var PartialResponseStrategyValues = func() []string {
 	for k := range PartialResponseStrategy_value {
 		s = append(s, k)
 	}
+	sort.Strings(s)
 	return s
 }()
 
@@ -249,18 +252,18 @@ func LabelSetsToString(lsets []LabelSet) string {
 func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 	fieldStr, err := strconv.Unquote(string(entry))
 	if err != nil {
-		return errors.Wrapf(err, "partialResponseStrategy: unquote %v", string(entry))
+		return errors.Wrapf(err, fmt.Sprintf("failed to unqote %v, in order to unmarshal as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
 	}
 
 	if len(fieldStr) == 0 {
-		// Default.
-		*x = PartialResponseStrategy_WARN
+		// NOTE: For Rule default is abort as this is recommended for alerting.
+		*x = PartialResponseStrategy_ABORT
 		return nil
 	}
 
 	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf("unknown partialResponseStrategy: %v", string(entry))
+		return errors.Errorf(fmt.Sprintf("failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
 	}
 	*x = PartialResponseStrategy(strategy)
 	return nil
@@ -268,4 +271,32 @@ func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 
 func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.Quote(x.String())), nil
+}
+
+// ExtendLabels extend given labels by extend in labels format.
+// The type conversion is done safely, which means we don't modify extend labels underlying array.
+//
+// In case of existing labels already present in given label set, it will be overwritten by external one.
+func ExtendLabels(lset []Label, extend labels.Labels) []Label {
+	overwritten := map[string]struct{}{}
+	for i, l := range lset {
+		if v := extend.Get(l.Name); v != "" {
+			lset[i].Value = v
+			overwritten[l.Name] = struct{}{}
+		}
+	}
+
+	for _, l := range extend {
+		if _, ok := overwritten[l.Name]; ok {
+			continue
+		}
+		lset = append(lset, Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	sort.Slice(lset, func(i, j int) bool {
+		return lset[i].Name < lset[j].Name
+	})
+	return lset
 }

@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Proxy implements rulespb.Rules that fanouts requests to given rulespb.Rules and deduplication on the way.
+// Proxy implements rulespb.Rules gRPC that fanouts requests to given rulespb.Rules and deduplication on the way.
 type Proxy struct {
 	logger log.Logger
 	rules  func() []rulespb.RulesClient

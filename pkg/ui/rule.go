@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	"github.com/thanos-io/thanos/pkg/rules/manager"
+	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 )
 
 type Rule struct {
@@ -26,12 +26,12 @@ type Rule struct {
 
 	externalPrefix, prefixHeader string
 
-	ruleManager *manager.Manager
+	ruleManager *thanosrules.Manager
 	queryURL    string
 	reg         prometheus.Registerer
 }
 
-func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *manager.Manager, queryURL string, externalPrefix, prefixHeader string) *Rule {
+func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanosrules.Manager, queryURL, externalPrefix, prefixHeader string) *Rule {
 	return &Rule{
 		BaseUI:         NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL), externalPrefix, prefixHeader, component.Rule),
 		externalPrefix: externalPrefix,
@@ -118,7 +118,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	var groups []manager.Group
+	var groups []thanosrules.Group
 	for _, group := range ru.ruleManager.RuleGroups() {
 		if group.HasAlertingRules() {
 			groups = append(groups, group)
@@ -178,7 +178,7 @@ func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 
 // AlertStatus bundles alerting rules and the mapping of alert states to row classes.
 type AlertStatus struct {
-	Groups               []manager.Group
+	Groups               []thanosrules.Group
 	AlertStateToRowClass map[rules.AlertState]string
 	Counts               AlertByStateCount
 }
@@ -189,7 +189,7 @@ type AlertByStateCount struct {
 	Firing   int32
 }
 
-func alertCounts(groups []manager.Group) AlertByStateCount {
+func alertCounts(groups []thanosrules.Group) AlertByStateCount {
 	result := AlertByStateCount{}
 	for _, group := range groups {
 		for _, alert := range group.AlertingRules() {

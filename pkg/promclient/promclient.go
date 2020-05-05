@@ -628,5 +628,9 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 		return nil, err
 	}
 
+	// Prometheus does not support PartialResponseStrategy, and probably would never do. Make it Abort by default.
+	for _, g := range m.Data.Groups {
+		g.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
+	}
 	return m.Data.Groups, nil
 }

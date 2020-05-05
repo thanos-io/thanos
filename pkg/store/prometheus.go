@@ -515,11 +515,7 @@ Outer:
 		}
 		lset = append(lset, l)
 	}
-	for ei < len(pbExtend) {
-		lset = append(lset, pbExtend[ei])
-		ei++
-	}
-	return lset
+	return storepb.ExtendLabels(lset, extend)
 }
 
 // LabelNames returns all known label names.

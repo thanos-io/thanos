@@ -42,8 +42,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -98,17 +100,13 @@ func SetCORS(w http.ResponseWriter) {
 
 type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 
-type rulesRetriever interface {
-	RuleGroups(context.Context) ([]*rulespb.RuleGroup, storage.Warnings, error)
-}
-
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
 type API struct {
 	logger          log.Logger
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
-	rulesRetriever  rulesRetriever
+	ruleGroups      rules.UnaryClient
 
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
@@ -131,7 +129,7 @@ func NewAPI(
 	enablePartialResponse bool,
 	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
-	rr rulesRetriever,
+	ruleGroups rules.UnaryClient,
 ) *API {
 	return &API{
 		logger:                                 logger,
@@ -143,7 +141,7 @@ func NewAPI(
 		reg:                                    reg,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
-		rulesRetriever:                         rr,
+		ruleGroups:                             ruleGroups,
 
 		now: time.Now,
 	}
@@ -181,9 +179,9 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
 
-	r.Get("/rules", instr("rules", api.rules))
-
 	r.Get("/stores", instr("stores", api.stores))
+
+	r.Get("/rules", instr("rules", NewRulesHandler(api.ruleGroups)))
 }
 
 type queryData struct {
@@ -643,60 +641,32 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	return names, warnings, nil
 }
 
-func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
-	var (
-		res       = &rulespb.RuleGroups{}
-		typeParam = strings.ToLower(r.URL.Query().Get("type"))
-	)
-
-	if typeParam != "" && typeParam != "alert" && typeParam != "record" {
-		return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid query parameter type='%v'", typeParam)}
-	}
-
-	returnAlerts := typeParam == "" || typeParam == "alert"
-	returnRecording := typeParam == "" || typeParam == "record"
-
-	groups, warnings, err := api.rulesRetriever.RuleGroups(r.Context())
-	if err != nil {
-		return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("error retrieving rules: %v", err)}
-	}
-
-	for _, grp := range groups {
-		apiRuleGroup := &rulespb.RuleGroup{
-			Name:                              grp.Name,
-			File:                              grp.File,
-			Interval:                          grp.Interval,
-			EvaluationDurationSeconds:         grp.EvaluationDurationSeconds,
-			LastEvaluation:                    grp.LastEvaluation,
-			DeprecatedPartialResponseStrategy: grp.DeprecatedPartialResponseStrategy,
-			PartialResponseStrategy:           grp.PartialResponseStrategy,
-		}
-
-		apiRuleGroup.Rules = make([]*rulespb.Rule, 0, len(grp.Rules))
-
-		for _, r := range grp.Rules {
-			switch {
-			case r.GetAlert() != nil:
-				if !returnAlerts {
-					break
-				}
-				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
-			case r.GetRecording() != nil:
-				if !returnRecording {
-					break
-				}
-				apiRuleGroup.Rules = append(apiRuleGroup.Rules, r)
-			default:
-				return nil, nil, &ApiError{ErrorInternal, fmt.Errorf("rule %v: unsupported", r)}
+// NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
+// which uses gRPC Unary Rules API.
+func NewRulesHandler(client rules.UnaryClient) func(*http.Request) (interface{}, []error, *ApiError) {
+	return func(request *http.Request) (interface{}, []error, *ApiError) {
+		typeParam := request.URL.Query().Get("type")
+		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
+		if !ok {
+			if typeParam != "" {
+				return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid rules parameter type='%v'", typeParam)}
 			}
+			typ = int32(rulespb.RulesRequest_ALL)
 		}
-		res.Groups = append(res.Groups, apiRuleGroup)
-	}
 
-	return res, warnings, nil
+		req := &rulespb.RulesRequest{
+			Type:                    rulespb.RulesRequest_Type(typ),
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		}
+		groups, warnings, err := client.Rules(request.Context(), req)
+		if err != nil {
+			return nil, nil, &ApiError{ErrorInternal, errors.Errorf("error retrieving rules: %v", err)}
+		}
+		return groups, warnings, nil
+	}
 }
 
-func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
+func (api *API) stores(*http.Request) (interface{}, []error, *ApiError) {
 	statuses := make(map[string][]query.StoreStatus)
 	for _, status := range api.storeSet.GetStoreStatus() {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)

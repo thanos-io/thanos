@@ -388,7 +388,7 @@ func runQuery(
 			enablePartialResponse,
 			queryReplicaLabels,
 			instantDefaultMaxSourceResolution,
-			rules.NewRetriever(rulesProxy),
+			rules.NewGRPCClient(rulesProxy),
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

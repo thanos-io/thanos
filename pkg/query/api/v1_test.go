@@ -39,13 +39,18 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
 func TestEndpoints(t *testing.T) {
@@ -1150,5 +1155,293 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 			testutil.Assert(t, maxResMillis != test.result, "case %v: expected %v not to be equal to %v", i, maxResMillis, test.result)
 		}
 
+	}
+}
+
+type mockedRulesClient struct {
+	g   map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup
+	w   storage.Warnings
+	err error
+}
+
+func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
+	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
+}
+
+func TestRulesHandler(t *testing.T) {
+	twoHAgo := time.Now().Add(-2 * time.Hour)
+	all := []*rulespb.Rule{
+		rulespb.NewRecordingRule(&rulespb.RecordingRule{
+			Name:                      "1",
+			LastEvaluation:            time.Time{}.Add(1 * time.Minute),
+			EvaluationDurationSeconds: 12,
+			Health:                    "x",
+			Query:                     "sum(up)",
+			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label"}}},
+			LastError:                 "err1",
+		}),
+		rulespb.NewRecordingRule(&rulespb.RecordingRule{
+			Name:                      "2",
+			LastEvaluation:            time.Time{}.Add(2 * time.Minute),
+			EvaluationDurationSeconds: 12,
+			Health:                    "x",
+			Query:                     "sum(up1)",
+			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label2"}}},
+		}),
+		rulespb.NewAlertingRule(&rulespb.Alert{
+			Name:                      "3",
+			LastEvaluation:            time.Time{}.Add(3 * time.Minute),
+			EvaluationDurationSeconds: 12,
+			Health:                    "x",
+			Query:                     "sum(up2) == 2",
+			DurationSeconds:           101,
+			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label3"}}},
+			Annotations:               rulespb.PromLabels{Labels: []storepb.Label{{Name: "ann", Value: "a1"}}},
+			Alerts: []*rulespb.AlertInstance{
+				{
+					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "1"}}},
+					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "2"}}},
+					State:       rulespb.AlertState_FIRING,
+					ActiveAt:    &twoHAgo,
+					Value:       "1",
+					// This is unlikely if groups is warn, but test nevertheless.
+					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+				},
+				{
+					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "3"}}},
+					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "4"}}},
+					State:       rulespb.AlertState_PENDING,
+					ActiveAt:    nil,
+					Value:       "2",
+					// This is unlikely if groups is warn, but test nevertheless.
+					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+				},
+			},
+			State: rulespb.AlertState_FIRING,
+		}),
+		rulespb.NewAlertingRule(&rulespb.Alert{
+			Name:                      "4",
+			LastEvaluation:            time.Time{}.Add(4 * time.Minute),
+			EvaluationDurationSeconds: 122,
+			Health:                    "x",
+			DurationSeconds:           102,
+			Query:                     "sum(up3) == 3",
+			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label4"}}},
+			State:                     rulespb.AlertState_INACTIVE,
+		}),
+	}
+
+	endpoint := NewRulesHandler(mockedRulesClient{
+		g: map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup{
+			rulespb.RulesRequest_ALL: {
+				{
+					Name:                              "grp",
+					File:                              "/path/to/groupfile1",
+					Rules:                             all,
+					Interval:                          1,
+					EvaluationDurationSeconds:         214,
+					LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
+					DeprecatedPartialResponseStrategy: 0,
+					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+				},
+				{
+					Name:                              "grp2",
+					File:                              "/path/to/groupfile2",
+					Rules:                             all[3:],
+					Interval:                          10,
+					EvaluationDurationSeconds:         2142,
+					LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
+					DeprecatedPartialResponseStrategy: 0,
+					PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
+				},
+			},
+			rulespb.RulesRequest_RECORD: {
+				{
+					Name:                              "grp",
+					File:                              "/path/to/groupfile1",
+					Rules:                             all[:2],
+					Interval:                          1,
+					EvaluationDurationSeconds:         214,
+					LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
+					DeprecatedPartialResponseStrategy: 0,
+					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+				},
+			},
+			rulespb.RulesRequest_ALERT: {
+				{
+					Name:                              "grp",
+					File:                              "/path/to/groupfile1",
+					Rules:                             all[2:],
+					Interval:                          1,
+					EvaluationDurationSeconds:         214,
+					LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
+					DeprecatedPartialResponseStrategy: 0,
+					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+				},
+			},
+		},
+	})
+
+	type test struct {
+		params   map[string]string
+		query    url.Values
+		response interface{}
+	}
+	expectedAll := []testpromcompatibility.Rule{
+		testpromcompatibility.RecordingRule{
+			Name:           all[0].GetRecording().Name,
+			Query:          all[0].GetRecording().Query,
+			Labels:         storepb.LabelsToPromLabels(all[0].GetRecording().Labels.Labels),
+			Health:         rules.RuleHealth(all[0].GetRecording().Health),
+			LastError:      all[0].GetRecording().LastError,
+			LastEvaluation: all[0].GetRecording().LastEvaluation,
+			EvaluationTime: all[0].GetRecording().EvaluationDurationSeconds,
+			Type:           "recording",
+		},
+		testpromcompatibility.RecordingRule{
+			Name:           all[1].GetRecording().Name,
+			Query:          all[1].GetRecording().Query,
+			Labels:         storepb.LabelsToPromLabels(all[1].GetRecording().Labels.Labels),
+			Health:         rules.RuleHealth(all[1].GetRecording().Health),
+			LastError:      all[1].GetRecording().LastError,
+			LastEvaluation: all[1].GetRecording().LastEvaluation,
+			EvaluationTime: all[1].GetRecording().EvaluationDurationSeconds,
+			Type:           "recording",
+		},
+		testpromcompatibility.AlertingRule{
+			State:          all[2].GetAlert().State.String(),
+			Name:           all[2].GetAlert().Name,
+			Query:          all[2].GetAlert().Query,
+			Labels:         storepb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
+			Health:         rules.RuleHealth(all[2].GetAlert().Health),
+			LastError:      all[2].GetAlert().LastError,
+			LastEvaluation: all[2].GetAlert().LastEvaluation,
+			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
+			Duration:       all[2].GetAlert().DurationSeconds,
+			Annotations:    storepb.LabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
+			Alerts: []*testpromcompatibility.Alert{
+				{
+					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
+					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
+					State:                   all[2].GetAlert().Alerts[0].State.String(),
+					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
+					Value:                   all[2].GetAlert().Alerts[0].Value,
+					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
+				},
+				{
+					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
+					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
+					State:                   all[2].GetAlert().Alerts[1].State.String(),
+					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
+					Value:                   all[2].GetAlert().Alerts[1].Value,
+					PartialResponseStrategy: all[2].GetAlert().Alerts[1].PartialResponseStrategy.String(),
+				},
+			},
+			Type: "alerting",
+		},
+		testpromcompatibility.AlertingRule{
+			State:          all[3].GetAlert().State.String(),
+			Name:           all[3].GetAlert().Name,
+			Query:          all[3].GetAlert().Query,
+			Labels:         storepb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),
+			Health:         rules.RuleHealth(all[2].GetAlert().Health),
+			LastError:      all[3].GetAlert().LastError,
+			LastEvaluation: all[3].GetAlert().LastEvaluation,
+			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
+			Duration:       all[3].GetAlert().DurationSeconds,
+			Annotations:    nil,
+			Type:           "alerting",
+		},
+	}
+	var tests = []test{
+		{
+			response: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
+					{
+						Name:                              "grp",
+						File:                              "/path/to/groupfile1",
+						Rules:                             expectedAll,
+						Interval:                          1,
+						EvaluationTime:                    214,
+						LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
+						PartialResponseStrategy:           "WARN",
+						DeprecatedPartialResponseStrategy: "WARN",
+					},
+					{
+						Name:                              "grp2",
+						File:                              "/path/to/groupfile2",
+						Rules:                             expectedAll[3:],
+						Interval:                          10,
+						EvaluationTime:                    2142,
+						LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
+						PartialResponseStrategy:           "ABORT",
+						DeprecatedPartialResponseStrategy: "WARN",
+					},
+				},
+			},
+		},
+		{
+			query: url.Values{"type": []string{"record"}},
+			response: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
+					{
+						Name:                              "grp",
+						File:                              "/path/to/groupfile1",
+						Rules:                             expectedAll[:2],
+						Interval:                          1,
+						EvaluationTime:                    214,
+						LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
+						PartialResponseStrategy:           "WARN",
+						DeprecatedPartialResponseStrategy: "WARN",
+					},
+				},
+			},
+		},
+		{
+			query: url.Values{"type": []string{"alert"}},
+			response: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
+					{
+						Name:                              "grp",
+						File:                              "/path/to/groupfile1",
+						Rules:                             expectedAll[2:],
+						Interval:                          1,
+						EvaluationTime:                    214,
+						LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
+						PartialResponseStrategy:           "WARN",
+						DeprecatedPartialResponseStrategy: "WARN",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("endpoint=%s/method=%s/query=%q", "rules", http.MethodGet, test.query.Encode()), func(t *testing.T) {
+			// Build a context with the correct request params.
+			ctx := context.Background()
+			for p, v := range test.params {
+				ctx = route.WithParam(ctx, p, v)
+			}
+
+			req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://example.com?%s", test.query.Encode()), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, errors, apiError := endpoint(req.WithContext(ctx))
+			if errors != nil {
+				t.Fatalf("Unexpected errors: %s", errors)
+				return
+			}
+			testutil.Assert(t, apiError == nil, "unexpected error %v", apiError)
+
+			// Those are different types now, but let's JSON outputs.
+			got, err := json.MarshalIndent(res, "", " ")
+			testutil.Ok(t, err)
+			exp, err := json.MarshalIndent(test.response, "", " ")
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, string(exp), string(got))
+		})
 	}
 }
