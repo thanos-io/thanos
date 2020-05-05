@@ -274,7 +274,7 @@ func NewNoCopyScanner(b []byte, splitFunc bufio.SplitFunc) *noCopyScanner {
 }
 
 func (s *noCopyScanner) Scan() bool {
-	if s.start > len(s.b) {
+	if s.start >= len(s.b) {
 		return false
 	}
 
