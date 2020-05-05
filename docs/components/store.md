@@ -251,7 +251,7 @@ caching_config:
 
 `backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
-`caching_config` is a configuration for chunks cache.
+`caching_config` is a configuration for chunks cache and supports the following optional settings:
 
 - `chunk_block_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing blocks.
