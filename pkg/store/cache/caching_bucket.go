@@ -23,6 +23,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
+const (
+	originCache  = "cache"
+	originBucket = "bucket"
+)
+
 type CachingBucketConfig struct {
 	// Basic unit used to cache chunks.
 	ChunkBlockSize int64 `yaml:"chunk_block_size"`
@@ -54,9 +59,8 @@ type CachingBucket struct {
 	logger log.Logger
 
 	requestedChunkBytes prometheus.Counter
-	cachedChunkBytes    prometheus.Counter
-	fetchedChunkBytes   prometheus.Counter
-	refetchedChunkBytes prometheus.Counter
+	fetchedChunkBytes   *prometheus.CounterVec
+	refetchedChunkBytes *prometheus.CounterVec
 
 	objectSizeRequests prometheus.Counter
 	objectSizeHits     prometheus.Counter
@@ -70,7 +74,7 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		return nil, errors.New("cache is nil")
 	}
 
-	return &CachingBucket{
+	cb := &CachingBucket{
 		config: chunks,
 		bucket: b,
 		cache:  c,
@@ -80,18 +84,14 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 			Name: "thanos_store_bucket_cache_requested_chunk_bytes_total",
 			Help: "Total number of requested bytes for chunk data.",
 		}),
-		cachedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_store_bucket_cache_cached_chunk_bytes_total",
-			Help: "Total number of chunk bytes used from cache.",
-		}),
-		fetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		fetchedChunkBytes: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_fetched_chunk_bytes_total",
 			Help: "Total number of chunk bytes fetched from storage because missing from cache.",
-		}),
-		refetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		}, []string{"origin"}),
+		refetchedChunkBytes: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_refetched_chunk_bytes_total",
 			Help: "Total number of chunk bytes re-fetched from storage, despite being in cache already.",
-		}),
+		}, []string{"origin"}),
 		objectSizeRequests: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_objectsize_requests_total",
 			Help: "Number of object size requests for objects.",
@@ -100,7 +100,13 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 			Name: "thanos_store_bucket_cache_objectsize_hits_total",
 			Help: "Number of object size hits for objects.",
 		}),
-	}, nil
+	}
+
+	cb.fetchedChunkBytes.WithLabelValues(originBucket)
+	cb.fetchedChunkBytes.WithLabelValues(originCache)
+	cb.refetchedChunkBytes.WithLabelValues(originCache)
+
+	return cb, nil
 }
 
 func (cb *CachingBucket) Close() error {
@@ -239,7 +245,7 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 	// Try to get all blocks from the cache.
 	hits := cb.cache.Fetch(ctx, keys)
 	for _, b := range hits {
-		cb.cachedChunkBytes.Add(float64(len(b)))
+		cb.fetchedChunkBytes.WithLabelValues(originCache).Add(float64(len(b)))
 	}
 
 	if len(hits) < len(keys) {
@@ -319,10 +325,10 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 				hitsMutex.Unlock()
 
 				if storeToCache {
-					cb.fetchedChunkBytes.Add(float64(len(blockData)))
+					cb.fetchedChunkBytes.WithLabelValues(originBucket).Add(float64(len(blockData)))
 					cb.cache.Store(gctx, map[string][]byte{key: blockData}, cb.config.ChunkBlockTTL)
 				} else {
-					cb.refetchedChunkBytes.Add(float64(len(blockData)))
+					cb.refetchedChunkBytes.WithLabelValues(originCache).Add(float64(len(blockData)))
 				}
 			}
 
