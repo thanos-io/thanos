@@ -78,15 +78,15 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 
 		requestedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_requested_chunk_bytes_total",
-			Help: "Total number of requested bytes for chunk data",
+			Help: "Total number of requested bytes for chunk data.",
 		}),
 		cachedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_cached_chunk_bytes_total",
-			Help: "Total number of chunk bytes used from cache",
+			Help: "Total number of chunk bytes used from cache.",
 		}),
 		fetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_fetched_chunk_bytes_total",
-			Help: "Total number of chunk bytes fetched from storage because missing from cache",
+			Help: "Total number of chunk bytes fetched from storage because missing from cache.",
 		}),
 		refetchedChunkBytes: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_refetched_chunk_bytes_total",
@@ -94,11 +94,11 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		}),
 		objectSizeRequests: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_objectsize_requests_total",
-			Help: "Number of object size requests for objects",
+			Help: "Number of object size requests for objects.",
 		}),
 		objectSizeHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_objectsize_hits_total",
-			Help: "Number of object size hits for objects",
+			Help: "Number of object size hits for objects.",
 		}),
 	}, nil
 }
