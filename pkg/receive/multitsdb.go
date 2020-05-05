@@ -143,8 +143,8 @@ func (t *MultiTSDB) Open() error {
 }
 
 func (t *MultiTSDB) Flush() error {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
 
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
@@ -171,8 +171,8 @@ func (t *MultiTSDB) Flush() error {
 }
 
 func (t *MultiTSDB) Sync(ctx context.Context) error {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
 
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
