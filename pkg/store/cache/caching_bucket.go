@@ -86,7 +86,7 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		}),
 		fetchedChunkBytes: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_fetched_chunk_bytes_total",
-			Help: "Total number of chunk bytes fetched from storage because missing from cache.",
+			Help: "Total number of fetched chunk bytes. Data from bucket is then stored to cache.",
 		}, []string{"origin"}),
 		refetchedChunkBytes: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_refetched_chunk_bytes_total",
