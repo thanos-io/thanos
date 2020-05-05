@@ -134,7 +134,7 @@ func (t *MultiTSDB) Open() error {
 		}
 
 		g.Go(func() error {
-			_, err := t.getOrLoadTenant(f.Name())
+			_, err := t.getOrLoadTenant(f.Name(), true)
 			return err
 		})
 	}
@@ -213,7 +213,7 @@ func (t *MultiTSDB) TSDBStores() map[string]*store.TSDBStore {
 	return res
 }
 
-func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
+func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
 	// Fast path, as creating tenants is a very rare operation.
 	t.mtx.RLock()
 	tenant, exist := t.tenants[tenantID]
@@ -236,7 +236,8 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
 	t.tenants[tenantID] = tenant
 	t.mtx.Unlock()
 
-	go func() {
+	var err error
+	startTSDB := func() {
 		reg := prometheus.WrapRegistererWith(prometheus.Labels{
 			"tenant": tenantID,
 		}, t.reg)
@@ -263,7 +264,8 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
 			t.tsdbCfg,
 		)
 
-		if err := s.Open(); err != nil {
+		// Assign to outer error to report in blocking case.
+		if err = s.Open(); err != nil {
 			level.Error(logger).Log("msg", "failed to open tsdb", "err", err)
 			t.mtx.Lock()
 			delete(t.tenants, tenantID)
@@ -283,13 +285,18 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
 			s,
 			ship,
 		)
-	}()
+	}
+	if !blockingStart {
+		go startTSDB()
+		return tenant, nil
+	}
 
-	return tenant, nil
+	startTSDB()
+	return tenant, err
 }
 
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
-	tenant, err := t.getOrLoadTenant(tenantID)
+	tenant, err := t.getOrLoadTenant(tenantID, false)
 	if err != nil {
 		return nil, err
 	}
