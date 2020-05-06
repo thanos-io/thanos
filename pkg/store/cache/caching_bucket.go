@@ -52,8 +52,9 @@ func DefaultCachingBucketConfig() CachingBucketConfig {
 
 // Bucket implementation that provides some caching features, using knowledge about how Thanos accesses data.
 type CachingBucket struct {
-	bucket objstore.Bucket
-	cache  cache.Cache
+	objstore.Bucket
+
+	cache cache.Cache
 
 	config CachingBucketConfig
 
@@ -76,8 +77,8 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 	}
 
 	cb := &CachingBucket{
+		Bucket: b,
 		config: chunks,
-		bucket: b,
 		cache:  c,
 		logger: logger,
 
@@ -110,28 +111,16 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 	return cb, nil
 }
 
-func (cb *CachingBucket) Close() error {
-	return cb.bucket.Close()
-}
-
-func (cb *CachingBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	return cb.bucket.Upload(ctx, name, r)
-}
-
-func (cb *CachingBucket) Delete(ctx context.Context, name string) error {
-	return cb.bucket.Delete(ctx, name)
-}
-
 func (cb *CachingBucket) Name() string {
-	return "caching: " + cb.bucket.Name()
+	return "caching: " + cb.Bucket.Name()
 }
 
 func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpectedFunc) objstore.Bucket {
-	if ib, ok := cb.bucket.(objstore.InstrumentedBucket); ok {
+	if ib, ok := cb.Bucket.(objstore.InstrumentedBucket); ok {
 		// Make a copy, but replace bucket with instrumented one.
 		res := &CachingBucket{}
 		*res = *cb
-		res.bucket = ib.WithExpectedErrs(expectedFunc)
+		res.Bucket = ib.WithExpectedErrs(expectedFunc)
 		return res
 	}
 
@@ -140,14 +129,6 @@ func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpec
 
 func (cb *CachingBucket) ReaderWithExpectedErrs(expectedFunc objstore.IsOpFailureExpectedFunc) objstore.BucketReader {
 	return cb.WithExpectedErrs(expectedFunc)
-}
-
-func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	return cb.bucket.Iter(ctx, dir, f)
-}
-
-func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	return cb.bucket.Get(ctx, name)
 }
 
 var chunksMatcher = regexp.MustCompile(`^.*/chunks/\d+$`)
@@ -168,19 +149,7 @@ func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length 
 		return r, err
 	}
 
-	return cb.bucket.GetRange(ctx, name, off, length)
-}
-
-func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) {
-	return cb.bucket.Exists(ctx, name)
-}
-
-func (cb *CachingBucket) IsObjNotFoundErr(err error) bool {
-	return cb.bucket.IsObjNotFoundErr(err)
-}
-
-func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	return cb.bucket.ObjectSize(ctx, name)
+	return cb.Bucket.GetRange(ctx, name, off, length)
 }
 
 func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, ttl time.Duration) (uint64, error) {
@@ -194,7 +163,7 @@ func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, ttl 
 		return binary.BigEndian.Uint64(s), nil
 	}
 
-	size, err := cb.bucket.ObjectSize(ctx, name)
+	size, err := cb.Bucket.ObjectSize(ctx, name)
 	if err != nil {
 		return 0, err
 	}
@@ -298,7 +267,7 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 	for _, m := range missing {
 		m := m
 		g.Go(func() error {
-			r, err := cb.bucket.GetRange(gctx, name, m.start, m.end-m.start)
+			r, err := cb.Bucket.GetRange(gctx, name, m.start, m.end-m.start)
 			if err != nil {
 				return errors.Wrapf(err, "fetching range [%d, %d]", m.start, m.end)
 			}
