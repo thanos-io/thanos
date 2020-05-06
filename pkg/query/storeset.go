@@ -414,14 +414,14 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
 			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
 			if err != nil {
 				if !seenAlready && !spec.StrictStatic() {
-					// Close only if new and not static.
+					// Close only if new and not a strict static node.
 					// Unactive `s.stores` will be closed later on.
 					st.Close()
 				}
