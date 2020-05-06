@@ -15,10 +15,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+// BucketCacheProvider is a type used to evaluate all bucket cache providers.
 type BucketCacheProvider string
 
-const MemcachedBucketCacheProvider BucketCacheProvider = "memcached"
+const (
+	MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
+)
 
+// CachingBucketWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingBucketWithBackendConfig struct {
 	Type          BucketCacheProvider `yaml:"backend"`
 	BackendConfig interface{}         `yaml:"backend_config"`
@@ -26,6 +30,7 @@ type CachingBucketWithBackendConfig struct {
 	CachingBucketConfig CachingBucketConfig `yaml:"caching_config"`
 }
 
+// NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
 func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
