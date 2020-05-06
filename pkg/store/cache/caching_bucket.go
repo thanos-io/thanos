@@ -243,7 +243,8 @@ type rng struct {
 	start, end int64
 }
 
-// Fetches missing blocks and stores them into "hits" map.
+// fetchMissingChunkBlocks fetches missing blocks, stores them into "hits" map
+// and into cache as well (using provided cacheKeys).
 func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastBlockOffset int64, lastBlockLength int) error {
 	// Ordered list of missing sub-ranges.
 	var missing []rng
