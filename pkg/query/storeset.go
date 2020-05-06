@@ -420,8 +420,9 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			// Check existing or new store. Is it healthy? What are current metadata?
 			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
 			if err != nil {
-				if !seenAlready {
-					// Close only if new. Unactive `s.stores` will be closed later on.
+				if !seenAlready && !spec.StrictStatic() {
+					// Close only if new and not static.
+					// Unactive `s.stores` will be closed later on.
 					st.Close()
 				}
 				s.updateStoreStatus(st, err)
