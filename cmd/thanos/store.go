@@ -55,7 +55,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
 		false)
 
-	cachingBucketConfig := extflag.RegisterPathOrContent(cmd, "store.caching-bucket.config",
+	cachingBucketConfig := extflag.RegisterPathOrContent(extflag.HiddenCmdClause(cmd), "store.caching-bucket.config",
 		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/components/store.md/#caching-bucket",
 		false)
 
