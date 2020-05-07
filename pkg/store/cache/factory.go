@@ -24,6 +24,7 @@ const (
 
 // IndexCacheConfig specifies the index cache config.
 type IndexCacheConfig struct {
+	// TODO: rename to backend and backend_config.
 	Type   IndexCacheProvider `yaml:"type"`
 	Config interface{}        `yaml:"config"`
 }
