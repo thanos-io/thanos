@@ -73,7 +73,7 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometh
 
 	m.garbageCollectedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
-		Help: "Total number of deleted blocks by compactor.",
+		Help: "Total number of blocks marked for deletion by compactor.",
 	})
 	m.garbageCollections = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
