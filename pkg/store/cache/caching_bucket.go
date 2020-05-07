@@ -31,21 +31,21 @@ const (
 
 type CachingBucketConfig struct {
 	// Basic unit used to cache chunks.
-	ChunkBlockSize int64 `yaml:"chunk_block_size"`
+	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`
 
 	// Maximum number of GetRange requests issued by this bucket for single GetRange call. Zero or negative value = unlimited.
 	MaxChunksGetRangeRequests int `yaml:"max_chunks_get_range_requests"`
 
 	// TTLs for various cache items.
 	ChunkObjectSizeTTL time.Duration `yaml:"chunk_object_size_ttl"`
-	ChunkBlockTTL      time.Duration `yaml:"chunk_block_ttl"`
+	ChunkSubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
 }
 
 func DefaultCachingBucketConfig() CachingBucketConfig {
 	return CachingBucketConfig{
-		ChunkBlockSize:            16000, // Equal to max chunk size.
+		ChunkSubrangeSize:         16000, // Equal to max chunk size.
 		ChunkObjectSizeTTL:        24 * time.Hour,
-		ChunkBlockTTL:             24 * time.Hour,
+		ChunkSubrangeTTL:          24 * time.Hour,
 		MaxChunksGetRangeRequests: 3,
 	}
 }
@@ -188,38 +188,38 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 		length = int64(size - uint64(offset))
 	}
 
-	// Start and end range are block-aligned offsets into object, that we're going to read.
-	startRange := (offset / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
-	endRange := ((offset + length) / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
-	if (offset+length)%cb.config.ChunkBlockSize > 0 {
-		endRange += cb.config.ChunkBlockSize
+	// Start and end range are subrange-aligned offsets into object, that we're going to read.
+	startRange := (offset / cb.config.ChunkSubrangeSize) * cb.config.ChunkSubrangeSize
+	endRange := ((offset + length) / cb.config.ChunkSubrangeSize) * cb.config.ChunkSubrangeSize
+	if (offset+length)%cb.config.ChunkSubrangeSize > 0 {
+		endRange += cb.config.ChunkSubrangeSize
 	}
 
-	// The very last block in the object may have length that is not divisible by block size.
-	lastBlockOffset := endRange - cb.config.ChunkBlockSize
-	lastBlockLength := int(cb.config.ChunkBlockSize)
+	// The very last subrange in the object may have length that is not divisible by subrange size.
+	lastSubrangeOffset := endRange - cb.config.ChunkSubrangeSize
+	lastSubrangeLength := int(cb.config.ChunkSubrangeSize)
 	if uint64(endRange) > size {
-		lastBlockOffset = (int64(size) / cb.config.ChunkBlockSize) * cb.config.ChunkBlockSize
-		lastBlockLength = int(int64(size) - lastBlockOffset)
+		lastSubrangeOffset = (int64(size) / cb.config.ChunkSubrangeSize) * cb.config.ChunkSubrangeSize
+		lastSubrangeLength = int(int64(size) - lastSubrangeOffset)
 	}
 
-	numBlocks := (endRange - startRange) / cb.config.ChunkBlockSize
+	numSubranges := (endRange - startRange) / cb.config.ChunkSubrangeSize
 
-	offsetKeys := make(map[int64]string, numBlocks)
-	keys := make([]string, 0, numBlocks)
+	offsetKeys := make(map[int64]string, numSubranges)
+	keys := make([]string, 0, numSubranges)
 
-	for off := startRange; off < endRange; off += cb.config.ChunkBlockSize {
-		end := off + cb.config.ChunkBlockSize
+	for off := startRange; off < endRange; off += cb.config.ChunkSubrangeSize {
+		end := off + cb.config.ChunkSubrangeSize
 		if end > int64(size) {
 			end = int64(size)
 		}
 
-		k := cachingKeyObjectBlock(name, off, end)
+		k := cachingKeyObjectSubrange(name, off, end)
 		keys = append(keys, k)
 		offsetKeys[off] = k
 	}
 
-	// Try to get all blocks from the cache.
+	// Try to get all subranges from the cache.
 	hits := cb.cache.Fetch(ctx, keys)
 	for _, b := range hits {
 		cb.fetchedChunkBytes.WithLabelValues(originCache).Add(float64(len(b)))
@@ -230,34 +230,34 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 			hits = map[string][]byte{}
 		}
 
-		err := cb.fetchMissingChunkBlocks(ctx, name, startRange, endRange, offsetKeys, hits, lastBlockOffset, lastBlockLength)
+		err := cb.fetchMissingChunkSubranges(ctx, name, startRange, endRange, offsetKeys, hits, lastSubrangeOffset, lastSubrangeLength)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return newBlocksReader(cb.config.ChunkBlockSize, offsetKeys, hits, offset, length), nil
+	return newSubrangesReader(cb.config.ChunkSubrangeSize, offsetKeys, hits, offset, length), nil
 }
 
 type rng struct {
 	start, end int64
 }
 
-// fetchMissingChunkBlocks fetches missing blocks, stores them into "hits" map
+// fetchMissingChunkSubranges fetches missing subranges, stores them into "hits" map
 // and into cache as well (using provided cacheKeys).
-func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastBlockOffset int64, lastBlockLength int) error {
+func (cb *CachingBucket) fetchMissingChunkSubranges(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastSubrangeOffset int64, lastSubrangeLength int) error {
 	// Ordered list of missing sub-ranges.
 	var missing []rng
 
-	for off := startRange; off < endRange; off += cb.config.ChunkBlockSize {
+	for off := startRange; off < endRange; off += cb.config.ChunkSubrangeSize {
 		if hits[cacheKeys[off]] == nil {
-			missing = append(missing, rng{start: off, end: off + cb.config.ChunkBlockSize})
+			missing = append(missing, rng{start: off, end: off + cb.config.ChunkSubrangeSize})
 		}
 	}
 
 	missing = mergeRanges(missing, 0) // Merge adjacent ranges.
 	// Keep merging until we have only max number of ranges (= requests).
-	for limit := cb.config.ChunkBlockSize; cb.config.MaxChunksGetRangeRequests > 0 && len(missing) > cb.config.MaxChunksGetRangeRequests; limit = limit * 2 {
+	for limit := cb.config.ChunkSubrangeSize; cb.config.MaxChunksGetRangeRequests > 0 && len(missing) > cb.config.MaxChunksGetRangeRequests; limit = limit * 2 {
 		missing = mergeRanges(missing, limit)
 	}
 
@@ -274,22 +274,22 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 			}
 			defer runutil.CloseWithLogOnErr(cb.logger, r, "fetching range [%d, %d]", m.start, m.end)
 
-			for off := m.start; off < m.end && gctx.Err() == nil; off += cb.config.ChunkBlockSize {
+			for off := m.start; off < m.end && gctx.Err() == nil; off += cb.config.ChunkSubrangeSize {
 				key := cacheKeys[off]
 				if key == "" {
 					return errors.Errorf("fetching range [%d, %d]: caching key for offset %d not found", m.start, m.end, off)
 				}
 
-				// We need a new buffer for each block, both for storing into hits, and also for caching.
-				var blockData []byte
-				if off == lastBlockOffset {
-					// The very last block in the object may have different length,
-					// if object length isn't divisible by block size.
-					blockData = make([]byte, lastBlockLength)
+				// We need a new buffer for each subrange, both for storing into hits, and also for caching.
+				var subrangeData []byte
+				if off == lastSubrangeOffset {
+					// The very last subrange in the object may have different length,
+					// if object length isn't divisible by subrange size.
+					subrangeData = make([]byte, lastSubrangeLength)
 				} else {
-					blockData = make([]byte, cb.config.ChunkBlockSize)
+					subrangeData = make([]byte, cb.config.ChunkSubrangeSize)
 				}
-				_, err := io.ReadFull(r, blockData)
+				_, err := io.ReadFull(r, subrangeData)
 				if err != nil {
 					return errors.Wrapf(err, "fetching range [%d, %d]", m.start, m.end)
 				}
@@ -298,15 +298,15 @@ func (cb *CachingBucket) fetchMissingChunkBlocks(ctx context.Context, name strin
 				hitsMutex.Lock()
 				if _, ok := hits[key]; !ok {
 					storeToCache = true
-					hits[key] = blockData
+					hits[key] = subrangeData
 				}
 				hitsMutex.Unlock()
 
 				if storeToCache {
-					cb.fetchedChunkBytes.WithLabelValues(originBucket).Add(float64(len(blockData)))
-					cb.cache.Store(gctx, map[string][]byte{key: blockData}, cb.config.ChunkBlockTTL)
+					cb.fetchedChunkBytes.WithLabelValues(originBucket).Add(float64(len(subrangeData)))
+					cb.cache.Store(gctx, map[string][]byte{key: subrangeData}, cb.config.ChunkSubrangeTTL)
 				} else {
-					cb.refetchedChunkBytes.WithLabelValues(originCache).Add(float64(len(blockData)))
+					cb.refetchedChunkBytes.WithLabelValues(originCache).Add(float64(len(subrangeData)))
 				}
 			}
 
@@ -339,56 +339,56 @@ func cachingKeyObjectSize(name string) string {
 	return fmt.Sprintf("size:%s", name)
 }
 
-func cachingKeyObjectBlock(name string, start int64, end int64) string {
-	return fmt.Sprintf("block:%s:%d:%d", name, start, end)
+func cachingKeyObjectSubrange(name string, start int64, end int64) string {
+	return fmt.Sprintf("subrange:%s:%d:%d", name, start, end)
 }
 
-// io.ReadCloser implementation that uses in-memory blocks.
-type blocksReader struct {
-	blockSize int64
+// io.ReadCloser implementation that uses in-memory subranges.
+type subrangesReader struct {
+	subrangeSize int64
 
-	// Mapping of blockSize-aligned offsets to keys in hits.
+	// Mapping of subrangeSize-aligned offsets to keys in hits.
 	offsetsKeys map[int64]string
-	blocks      map[string][]byte
+	subranges   map[string][]byte
 
-	// Offset for next read, used to find correct block to return data from.
+	// Offset for next read, used to find correct subrange to return data from.
 	readOffset int64
 
 	// Remaining data to return from this reader. Once zero, this reader reports EOF.
 	remaining int64
 }
 
-func newBlocksReader(blockSize int64, offsetsKeys map[int64]string, blocks map[string][]byte, readOffset, remaining int64) *blocksReader {
-	return &blocksReader{
-		blockSize:   blockSize,
-		offsetsKeys: offsetsKeys,
-		blocks:      blocks,
+func newSubrangesReader(subrangeSize int64, offsetsKeys map[int64]string, subranges map[string][]byte, readOffset, remaining int64) *subrangesReader {
+	return &subrangesReader{
+		subrangeSize: subrangeSize,
+		offsetsKeys:  offsetsKeys,
+		subranges:    subranges,
 
 		readOffset: readOffset,
 		remaining:  remaining,
 	}
 }
 
-func (c *blocksReader) Close() error {
+func (c *subrangesReader) Close() error {
 	return nil
 }
 
-func (c *blocksReader) Read(p []byte) (n int, err error) {
+func (c *subrangesReader) Read(p []byte) (n int, err error) {
 	if c.remaining <= 0 {
 		return 0, io.EOF
 	}
 
-	currentBlockOffset := (c.readOffset / c.blockSize) * c.blockSize
-	currentBlock, err := c.blockAt(currentBlockOffset)
+	currentSubrangeOffset := (c.readOffset / c.subrangeSize) * c.subrangeSize
+	currentSubrange, err := c.subrangeAt(currentSubrangeOffset)
 	if err != nil {
 		return 0, errors.Wrapf(err, "read position: %d", c.readOffset)
 	}
 
-	offsetInBlock := int(c.readOffset - currentBlockOffset)
-	toCopy := len(currentBlock) - offsetInBlock
+	offsetInSubrange := int(c.readOffset - currentSubrangeOffset)
+	toCopy := len(currentSubrange) - offsetInSubrange
 	if toCopy <= 0 {
-		// This can only happen if block's length is not blockSize, and reader is told to read more data.
-		return 0, errors.Errorf("no more data left in block at position %d, block length %d, reading position %d", currentBlockOffset, len(currentBlock), c.readOffset)
+		// This can only happen if subrange's length is not subrangeSize, and reader is told to read more data.
+		return 0, errors.Errorf("no more data left in subrange at position %d, subrange length %d, reading position %d", currentSubrangeOffset, len(currentSubrange), c.readOffset)
 	}
 
 	if len(p) < toCopy {
@@ -398,17 +398,17 @@ func (c *blocksReader) Read(p []byte) (n int, err error) {
 		toCopy = int(c.remaining) // Conversion is safe, c.remaining is small enough.
 	}
 
-	copy(p, currentBlock[offsetInBlock:offsetInBlock+toCopy])
+	copy(p, currentSubrange[offsetInSubrange:offsetInSubrange+toCopy])
 	c.readOffset += int64(toCopy)
 	c.remaining -= int64(toCopy)
 
 	return toCopy, nil
 }
 
-func (c *blocksReader) blockAt(offset int64) ([]byte, error) {
-	b := c.blocks[c.offsetsKeys[offset]]
+func (c *subrangesReader) subrangeAt(offset int64) ([]byte, error) {
+	b := c.subranges[c.offsetsKeys[offset]]
 	if b == nil {
-		return nil, errors.Errorf("block for offset %d not found", offset)
+		return nil, errors.Errorf("subrange for offset %d not found", offset)
 	}
 	return b, nil
 }

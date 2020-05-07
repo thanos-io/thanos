@@ -22,7 +22,7 @@ import (
 
 func TestCachingBucket(t *testing.T) {
 	length := int64(1024 * 1024)
-	blockSize := int64(16000) // All tests are based on this value.
+	subrangeSize := int64(16000) // All tests are based on this value.
 
 	data := make([]byte, length)
 	for ix := 0; ix < len(data); ix++ {
@@ -54,15 +54,15 @@ func TestCachingBucket(t *testing.T) {
 			offset:               555555,
 			length:               55555,
 			expectedLength:       55555,
-			expectedFetchedBytes: 5 * blockSize,
+			expectedFetchedBytes: 5 * subrangeSize,
 		},
 
 		{
-			name:                "same request will hit all blocks in the cache",
+			name:                "same request will hit all subranges in the cache",
 			offset:              555555,
 			length:              55555,
 			expectedLength:      55555,
-			expectedCachedBytes: 5 * blockSize,
+			expectedCachedBytes: 5 * subrangeSize,
 		},
 
 		{
@@ -70,24 +70,24 @@ func TestCachingBucket(t *testing.T) {
 			offset:               length - 10,
 			length:               3000,
 			expectedLength:       10,
-			expectedFetchedBytes: 8576, // Last (incomplete) block is fetched.
+			expectedFetchedBytes: 8576, // Last (incomplete) subrange is fetched.
 		},
 
 		{
 			name:                "another request data close to the end of object, cached by previous test",
 			offset:              1040100,
-			length:              blockSize,
+			length:              subrangeSize,
 			expectedLength:      8476,
 			expectedCachedBytes: 8576,
 		},
 
 		{
-			name:                 "entire object, combination of cached and uncached blocks",
+			name:                 "entire object, combination of cached and uncached subranges",
 			offset:               0,
 			length:               length,
 			expectedLength:       length,
-			expectedCachedBytes:  5*blockSize + 8576, // 5 block cached from first test, plus last incomplete block.
-			expectedFetchedBytes: 60 * blockSize,
+			expectedCachedBytes:  5*subrangeSize + 8576, // 5 subrange cached from first test, plus last incomplete subrange.
+			expectedFetchedBytes: 60 * subrangeSize,
 		},
 
 		{
@@ -111,103 +111,103 @@ func TestCachingBucket(t *testing.T) {
 		},
 
 		{
-			name:                 "missing first blocks",
+			name:                 "missing first subranges",
 			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 3 * blockSize,
-			expectedCachedBytes:  7 * blockSize,
+			length:               10 * subrangeSize,
+			expectedLength:       10 * subrangeSize,
+			expectedFetchedBytes: 3 * subrangeSize,
+			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
-				// Delete first 3 blocks.
-				delete(cache.cache, cachingKeyObjectBlock(name, 0*blockSize, 1*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 1*blockSize, 2*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 2*blockSize, 3*blockSize))
+				// Delete first 3 subranges.
+				delete(cache.cache, cachingKeyObjectSubrange(name, 0*subrangeSize, 1*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 1*subrangeSize, 2*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 2*subrangeSize, 3*subrangeSize))
 			},
 		},
 
 		{
-			name:                 "missing last blocks",
+			name:                 "missing last subranges",
 			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 3 * blockSize,
-			expectedCachedBytes:  7 * blockSize,
+			length:               10 * subrangeSize,
+			expectedLength:       10 * subrangeSize,
+			expectedFetchedBytes: 3 * subrangeSize,
+			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
-				// Delete last 3 blocks.
-				delete(cache.cache, cachingKeyObjectBlock(name, 7*blockSize, 8*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 8*blockSize, 9*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 9*blockSize, 10*blockSize))
+				// Delete last 3 subranges.
+				delete(cache.cache, cachingKeyObjectSubrange(name, 7*subrangeSize, 8*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 8*subrangeSize, 9*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 9*subrangeSize, 10*subrangeSize))
 			},
 		},
 
 		{
-			name:                 "missing middle blocks",
+			name:                 "missing middle subranges",
 			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 3 * blockSize,
-			expectedCachedBytes:  7 * blockSize,
+			length:               10 * subrangeSize,
+			expectedLength:       10 * subrangeSize,
+			expectedFetchedBytes: 3 * subrangeSize,
+			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
-				// Delete 3 blocks in the middle.
-				delete(cache.cache, cachingKeyObjectBlock(name, 3*blockSize, 4*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 4*blockSize, 5*blockSize))
-				delete(cache.cache, cachingKeyObjectBlock(name, 5*blockSize, 6*blockSize))
+				// Delete 3 subranges in the middle.
+				delete(cache.cache, cachingKeyObjectSubrange(name, 3*subrangeSize, 4*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 4*subrangeSize, 5*subrangeSize))
+				delete(cache.cache, cachingKeyObjectSubrange(name, 5*subrangeSize, 6*subrangeSize))
 			},
 		},
 
 		{
-			name:                 "missing everything except middle blocks",
+			name:                 "missing everything except middle subranges",
 			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 7 * blockSize,
-			expectedCachedBytes:  3 * blockSize,
+			length:               10 * subrangeSize,
+			expectedLength:       10 * subrangeSize,
+			expectedFetchedBytes: 7 * subrangeSize,
+			expectedCachedBytes:  3 * subrangeSize,
 			init: func() {
-				// Delete all but 3 blocks in the middle, and keep unlimited number of ranged subrequests.
+				// Delete all but 3 subranges in the middle, and keep unlimited number of ranged subrequests.
 				for i := int64(0); i < 10; i++ {
 					if i > 0 && i%3 == 0 {
 						continue
 					}
-					delete(cache.cache, cachingKeyObjectBlock(name, i*blockSize, (i+1)*blockSize))
+					delete(cache.cache, cachingKeyObjectSubrange(name, i*subrangeSize, (i+1)*subrangeSize))
 				}
 			},
 		},
 
 		{
-			name:                   "missing everything except middle blocks, one subrequest only",
+			name:                   "missing everything except middle subranges, one subrequest only",
 			offset:                 0,
-			length:                 10 * blockSize,
-			expectedLength:         10 * blockSize,
-			expectedFetchedBytes:   7 * blockSize,
-			expectedCachedBytes:    3 * blockSize,
-			expectedRefetchedBytes: 3 * blockSize, // Entire object fetched, 3 blocks are "refetched".
+			length:                 10 * subrangeSize,
+			expectedLength:         10 * subrangeSize,
+			expectedFetchedBytes:   7 * subrangeSize,
+			expectedCachedBytes:    3 * subrangeSize,
+			expectedRefetchedBytes: 3 * subrangeSize, // Entire object fetched, 3 subranges are "refetched".
 			maxGetRangeRequests:    1,
 			init: func() {
-				// Delete all but 3 blocks in the middle, but only allow 1 subrequest.
+				// Delete all but 3 subranges in the middle, but only allow 1 subrequest.
 				for i := int64(0); i < 10; i++ {
 					if i == 3 || i == 5 || i == 7 {
 						continue
 					}
-					delete(cache.cache, cachingKeyObjectBlock(name, i*blockSize, (i+1)*blockSize))
+					delete(cache.cache, cachingKeyObjectSubrange(name, i*subrangeSize, (i+1)*subrangeSize))
 				}
 			},
 		},
 
 		{
-			name:                 "missing everything except middle blocks, two subrequests",
+			name:                 "missing everything except middle subranges, two subrequests",
 			offset:               0,
-			length:               10 * blockSize,
-			expectedLength:       10 * blockSize,
-			expectedFetchedBytes: 7 * blockSize,
-			expectedCachedBytes:  3 * blockSize,
+			length:               10 * subrangeSize,
+			expectedLength:       10 * subrangeSize,
+			expectedFetchedBytes: 7 * subrangeSize,
+			expectedCachedBytes:  3 * subrangeSize,
 			maxGetRangeRequests:  2,
 			init: func() {
-				// Delete all but one blocks in the middle, and allow 2 subrequests. They will be: 0-80000, 128000-160000.
+				// Delete all but one subranges in the middle, and allow 2 subrequests. They will be: 0-80000, 128000-160000.
 				for i := int64(0); i < 10; i++ {
 					if i == 5 || i == 6 || i == 7 {
 						continue
 					}
-					delete(cache.cache, cachingKeyObjectBlock(name, i*blockSize, (i+1)*blockSize))
+					delete(cache.cache, cachingKeyObjectSubrange(name, i*subrangeSize, (i+1)*subrangeSize))
 				}
 			},
 		},
@@ -218,7 +218,7 @@ func TestCachingBucket(t *testing.T) {
 			}
 
 			cfg := DefaultCachingBucketConfig()
-			cfg.ChunkBlockSize = blockSize
+			cfg.ChunkSubrangeSize = subrangeSize
 			cfg.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
 
 			cachingBucket, err := NewCachingBucket(inmem, cache, cfg, nil, nil)
