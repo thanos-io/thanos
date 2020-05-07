@@ -232,8 +232,8 @@ Alternatively, the `in-memory` index cache can also by configured using `--index
 [embedmd]: # "../flags/config_index_cache_in_memory.txt yaml"
 
 ```yaml
-type: IN-MEMORY
-config:
+backend: IN-MEMORY
+backend_config:
   max_size: 0
   max_item_size: 0
 ```
@@ -250,8 +250,8 @@ The `memcached` index cache allows to use [Memcached](https://memcached.org) as 
 [embedmd]: # "../flags/config_index_cache_memcached.txt yaml"
 
 ```yaml
-type: MEMCACHED
-config:
+backend: MEMCACHED
+backend_config:
   addresses: []
   timeout: 0s
   max_idle_connections: 0

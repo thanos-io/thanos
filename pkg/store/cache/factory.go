@@ -24,8 +24,8 @@ const (
 
 // IndexCacheConfig specifies the index cache config.
 type IndexCacheConfig struct {
-	Type   IndexCacheProvider `yaml:"type"`
-	Config interface{}        `yaml:"config"`
+	Type   IndexCacheProvider `yaml:"backend"`
+	Config interface{}        `yaml:"backend_config"`
 }
 
 // NewIndexCache initializes and returns new index cache.
