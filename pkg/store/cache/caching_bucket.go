@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"regexp"
 	"sync"
 	"time"
@@ -236,7 +237,7 @@ func (cb *CachingBucket) getRangeChunkFile(ctx context.Context, name string, off
 		}
 	}
 
-	return newSubrangesReader(cb.config.ChunkSubrangeSize, offsetKeys, hits, offset, length), nil
+	return ioutil.NopCloser(newSubrangesReader(cb.config.ChunkSubrangeSize, offsetKeys, hits, offset, length)), nil
 }
 
 type rng struct {
@@ -343,7 +344,7 @@ func cachingKeyObjectSubrange(name string, start int64, end int64) string {
 	return fmt.Sprintf("subrange:%s:%d:%d", name, start, end)
 }
 
-// io.ReadCloser implementation that uses in-memory subranges.
+// Reader implementation that uses in-memory subranges.
 type subrangesReader struct {
 	subrangeSize int64
 
@@ -367,10 +368,6 @@ func newSubrangesReader(subrangeSize int64, offsetsKeys map[int64]string, subran
 		readOffset: readOffset,
 		remaining:  remaining,
 	}
-}
-
-func (c *subrangesReader) Close() error {
-	return nil
 }
 
 func (c *subrangesReader) Read(p []byte) (n int, err error) {
