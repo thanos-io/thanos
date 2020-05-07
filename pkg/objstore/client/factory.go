@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -76,11 +77,5 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-
-	var bucketReg prometheus.Registerer
-	if reg != nil {
-		bucketReg = prometheus.WrapRegistererWithPrefix("thanos_", reg)
-	}
-
-	return objstore.BucketWithMetrics(bucket.Name(), bucket, bucketReg), nil
+	return objstore.BucketWithMetrics(bucket.Name(), bucket, extprom.WrapRegistererWithPrefix("thanos_", reg)), nil
 }
