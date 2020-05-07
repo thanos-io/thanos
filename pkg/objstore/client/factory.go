@@ -76,5 +76,11 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-	return objstore.BucketWithMetrics(bucket.Name(), bucket, reg), nil
+
+	var bucketReg prometheus.Registerer
+	if reg != nil {
+		bucketReg = prometheus.WrapRegistererWithPrefix("thanos_", reg)
+	}
+
+	return objstore.BucketWithMetrics(bucket.Name(), bucket, bucketReg), nil
 }

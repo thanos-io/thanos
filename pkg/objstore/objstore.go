@@ -43,11 +43,11 @@ type InstrumentedBucket interface {
 	Bucket
 
 	// WithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
-	// thanos_objstore_bucket_operation_failures_total metric.
+	// objstore_bucket_operation_failures_total metric.
 	WithExpectedErrs(IsOpFailureExpectedFunc) Bucket
 
 	// ReaderWithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
-	// thanos_objstore_bucket_operation_failures_total metric.
+	// objstore_bucket_operation_failures_total metric.
 	// TODO(bwplotka): Remove this when moved to Go 1.14 and replace with InstrumentedBucketReader.
 	ReaderWithExpectedErrs(IsOpFailureExpectedFunc) BucketReader
 }
@@ -79,7 +79,7 @@ type InstrumentedBucketReader interface {
 	BucketReader
 
 	// ReaderWithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
-	// thanos_objstore_bucket_operation_failures_total metric.
+	// objstore_bucket_operation_failures_total metric.
 	ReaderWithExpectedErrs(IsOpFailureExpectedFunc) BucketReader
 }
 
@@ -220,7 +220,7 @@ const (
 	deleteOp   = "delete"
 )
 
-// IsOpFailureExpectedFunc allows to mark certain errors as expected, so they will not increment thanos_objstore_bucket_operation_failures_total metric.
+// IsOpFailureExpectedFunc allows to mark certain errors as expected, so they will not increment objstore_bucket_operation_failures_total metric.
 type IsOpFailureExpectedFunc func(error) bool
 
 var _ InstrumentedBucket = &metricBucket{}
@@ -232,25 +232,25 @@ func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) *metric
 		bkt:                 b,
 		isOpFailureExpected: func(err error) bool { return false },
 		ops: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_bucket_operations_total",
+			Name:        "objstore_bucket_operations_total",
 			Help:        "Total number of all attempted operations against a bucket.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
 		opsFailures: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_bucket_operation_failures_total",
+			Name:        "objstore_bucket_operation_failures_total",
 			Help:        "Total number of operations against a bucket that failed, but were not expected to fail in certain way from caller perspective. Those errors have to be investigated.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 
 		opsDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:        "thanos_objstore_bucket_operation_duration_seconds",
+			Name:        "objstore_bucket_operation_duration_seconds",
 			Help:        "Duration of successful operations against the bucket",
 			ConstLabels: prometheus.Labels{"bucket": name},
 			Buckets:     []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 		}, []string{"operation"}),
 		lastSuccessfulUploadTime: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-			Name: "thanos_objstore_bucket_last_successful_upload_time",
+			Name: "objstore_bucket_last_successful_upload_time",
 			Help: "Second timestamp of the last successful upload to the bucket.",
 		}, []string{"bucket"}),
 	}
