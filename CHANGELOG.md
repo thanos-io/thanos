@@ -40,6 +40,7 @@ anymore.
 - [#2596](https://github.com/thanos-io/thanos/pull/2596) Update to Prometheus [@cd73b3d33e064bbd846fc7a26dc8c313d46af382](https://github.com/prometheus/prometheus/commit/cd73b3d33e064bbd846fc7a26dc8c313d46af382) which falls in between v2.17.0 and v2.18.0.
     - TSDB now supports isolation of append and queries.
     - TSDB now holds less WAL files after Head Truncation.
+- [#2575](https://github.com/thanos-io/thanos/pull/2575) Store: Rename index cache YAML fields from `type` to `backend`, `config` to `backend_config`.
 
 ## [v0.12.2](https://github.com/thanos-io/thanos/releases/tag/v0.12.2) - 2020.04.30
 
