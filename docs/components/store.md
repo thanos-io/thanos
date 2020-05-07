@@ -243,20 +243,20 @@ backend_config:
     - localhost:11211
 
 caching_config:
-  chunk_block_size: 16000
+  chunk_subrange_size: 16000
   max_chunks_get_range_requests: 3
   chunk_object_size_ttl: 24h
-  chunk_block_ttl: 24h
+  chunk_subrange_ttl: 24h
 ```
 
 `backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
 `caching_config` is a configuration for chunks cache and supports the following optional settings:
 
-- `chunk_block_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
-- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing blocks.
+- `chunk_subrange_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
 - `chunk_object_size_ttl`: how long to keep information about chunk file length in the cache.
-- `chunk_block_ttl`: how long to keep individual blocks in the cache.
+- `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
 Note that chunks cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
