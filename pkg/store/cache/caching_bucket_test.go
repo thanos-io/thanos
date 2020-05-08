@@ -444,7 +444,7 @@ func TestExists(t *testing.T) {
 	testutil.Ok(t, err)
 	cb.CacheExists("test", cache, matchAll, config)
 
-	file := "/block123" + metaFilenameSuffix
+	file := "/random_object"
 	verifyExists(t, cb, file, false, false, "test")
 
 	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
@@ -468,7 +468,7 @@ func TestExistsCachingDisabled(t *testing.T) {
 	testutil.Ok(t, err)
 	cb.CacheExists("test", cache, func(string) bool { return false }, DefaultCachingBucketConfig())
 
-	file := "/block123" + metaFilenameSuffix
+	file := "/random_object"
 	verifyExists(t, cb, file, false, false, "test")
 
 	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
@@ -493,7 +493,7 @@ func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fro
 	}
 }
 
-func TestGetMetafile(t *testing.T) {
+func TestGet(t *testing.T) {
 	inmem := objstore.NewInMemBucket()
 
 	// We reuse cache between tests (!)
@@ -504,8 +504,9 @@ func TestGetMetafile(t *testing.T) {
 	cb.CacheGet("metafile", cache, matchAll, DefaultCachingBucketConfig())
 	cb.CacheExists("metafile", cache, matchAll, DefaultCachingBucketConfig())
 
-	file := "/block123" + metaFilenameSuffix
-	verifyGet(t, cb, file, nil, false, "test")
+	file := "/random_object"
+	verifyGet(t, cb, file, nil, false, "metafile")
+	verifyExists(t, cb, file, false, true, "metafile")
 
 	data := []byte("hello world")
 	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
@@ -542,6 +543,47 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		testutil.Equals(t, expectedData, data)
 
 		hitsAfter := int(promtest.ToFloat64(cb.getCacheHits.WithLabelValues(label)))
+		if cacheUsed {
+			testutil.Equals(t, 1, hitsAfter-hitsBefore)
+		} else {
+			testutil.Equals(t, 0, hitsAfter-hitsBefore)
+		}
+	}
+}
+
+func TestObjectSize(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	cb, err := NewCachingBucket(inmem, nil, nil)
+	testutil.Ok(t, err)
+	cb.CacheObjectSize("test", cache, matchAll, DefaultCachingBucketConfig())
+
+	file := "/random_object"
+	verifyObjectSize(t, cb, file, -1, false, "test")
+	verifyObjectSize(t, cb, file, -1, false, "test") // ObjectSize doesn't cache non-existant files.
+
+	data := []byte("hello world")
+	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
+
+	verifyObjectSize(t, cb, file, len(data), false, "test")
+	verifyObjectSize(t, cb, file, len(data), true, "test")
+}
+
+func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, label string) {
+	t.Helper()
+	hitsBefore := int(promtest.ToFloat64(cb.objectSizeHits.WithLabelValues(label)))
+
+	length, err := cb.ObjectSize(context.Background(), file)
+	if expectedLength < 0 {
+		testutil.Assert(t, cb.IsObjNotFoundErr(err))
+	} else {
+		testutil.Ok(t, err)
+		testutil.Equals(t, uint64(expectedLength), length)
+
+		hitsAfter := int(promtest.ToFloat64(cb.objectSizeHits.WithLabelValues(label)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {

@@ -76,7 +76,13 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	cb.CacheGetRange("chunks", c, isTSDBChunkFile, config.CachingBucketConfig)
 	cb.CacheExists("metafile", c, isMetaFile, config.CachingBucketConfig)
 	cb.CacheGet("metafile", c, isMetaFile, config.CachingBucketConfig)
-	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.CachingBucketConfig) // Cache Iter requests for root.
+
+	// Cache Iter requests for root.
+	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.CachingBucketConfig)
+
+	// Enabling index caching.
+	cb.CacheObjectSize("index", c, isIndexFile, config.CachingBucketConfig)
+	cb.CacheGetRange("index", c, isIndexFile, config.CachingBucketConfig)
 
 	return cb, nil
 }
@@ -87,4 +93,8 @@ func isTSDBChunkFile(name string) bool { return chunksMatcher.MatchString(name) 
 
 func isMetaFile(name string) bool {
 	return strings.HasSuffix(name, metaFilenameSuffix) || strings.HasSuffix(name, deletionMarkFilenameSuffix)
+}
+
+func isIndexFile(name string) bool {
+	return strings.HasSuffix(name, "/index")
 }
