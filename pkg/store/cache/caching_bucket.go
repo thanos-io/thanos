@@ -45,19 +45,19 @@ type CachingBucketConfig struct {
 	SubrangeSize int64 `yaml:"chunk_subrange_size"`
 
 	// Maximum number of GetRange requests issued by this bucket for single GetRange call. Zero or negative value = unlimited.
-	MaxGetRangeRequests int `yaml:"max_chunks_get_range_requests"`
+	MaxGetRangeRequests int           `yaml:"max_chunks_get_range_requests"`
+	SubrangeTTL         time.Duration `yaml:"subrange_ttl"`
 
 	// TTLs for various cache items.
-	ObjectSizeTTL time.Duration `yaml:"chunk_object_size_ttl"`
-	SubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
+	ObjectSizeTTL time.Duration `yaml:"object_size_ttl"`
 
 	// How long to cache result of Iter call.
 	IterTTL time.Duration `yaml:"iter_ttl"`
 
-	// Meta files (meta.json and deletion mark file) caching config.
-	MetaFileExistsTTL      time.Duration `yaml:"metafile_exists_ttl"`
-	MetaFileDoesntExistTTL time.Duration `yaml:"metafile_doesnt_exist_ttl"`
-	MetaFileContentTTL     time.Duration `yaml:"metafile_content_ttl"`
+	// Config for Exists and Get opertions.
+	ExistsTTL      time.Duration `yaml:"exists_ttl"`
+	DoesntExistTTL time.Duration `yaml:"doesnt_exist_ttl"`
+	ContentTTL     time.Duration `yaml:"content_ttl"`
 }
 
 func DefaultCachingBucketConfig() CachingBucketConfig {
@@ -69,9 +69,9 @@ func DefaultCachingBucketConfig() CachingBucketConfig {
 
 		IterTTL: 5 * time.Minute,
 
-		MetaFileExistsTTL:      10 * time.Minute,
-		MetaFileDoesntExistTTL: 3 * time.Minute,
-		MetaFileContentTTL:     1 * time.Hour,
+		ExistsTTL:      10 * time.Minute,
+		DoesntExistTTL: 3 * time.Minute,
+		ContentTTL:     1 * time.Hour,
 	}
 }
 
@@ -109,14 +109,21 @@ type cacheConfig struct {
 	cache   cache.Cache
 }
 
+// NewCachingBucket creates caching bucket with no configuration. Various "Cache*" methods configure
+// this bucket to cache results of individual bucket methods. Configuration must be set before
+// caching bucket is used by other objects.
 func NewCachingBucket(b objstore.Bucket, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
 	if b == nil {
 		return nil, errors.New("bucket is nil")
 	}
 
 	cb := &CachingBucket{
-		Bucket: b,
-		logger: logger,
+		Bucket:          b,
+		logger:          logger,
+		getConfigs:      map[string]*cacheConfig{},
+		getRangeConfigs: map[string]*cacheConfig{},
+		existsConfigs:   map[string]*cacheConfig{},
+		iterConfigs:     map[string]*cacheConfig{},
 
 		requestedGetRangeBytes: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_getrange_requested_bytes_total",
@@ -349,10 +356,10 @@ func (cb *CachingBucket) storeExistsCacheEntry(ctx context.Context, cachingKey s
 		ttl  time.Duration
 	)
 	if exists {
-		ttl = cfg.MetaFileExistsTTL - time.Since(ts)
+		ttl = cfg.ExistsTTL - time.Since(ts)
 		data = []byte(existsTrue)
 	} else {
-		ttl = cfg.MetaFileDoesntExistTTL - time.Since(ts)
+		ttl = cfg.DoesntExistTTL - time.Since(ts)
 		data = []byte(existsFalse)
 	}
 
@@ -401,7 +408,7 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 		return nil, err
 	}
 
-	ttl := cfg.MetaFileContentTTL - time.Since(getTime)
+	ttl := cfg.ContentTTL - time.Since(getTime)
 	if ttl > 0 {
 		cfg.cache.Store(ctx, map[string][]byte{key: data}, ttl)
 	}

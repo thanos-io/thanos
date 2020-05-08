@@ -24,6 +24,9 @@ type BucketCacheProvider string
 
 const (
 	MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
+
+	metaFilenameSuffix         = "/" + metadata.MetaFilename
+	deletionMarkFilenameSuffix = "/" + metadata.DeletionMarkFilename
 )
 
 // CachingBucketWithBackendConfig is a configuration of caching bucket used by Store component.
@@ -70,19 +73,18 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	}
 
 	// Configure cache.
-	metaFilenameSuffix := "/" + metadata.MetaFilename
-	deletionMarkFilenameSuffix := "/" + metadata.DeletionMarkFilename
-
-	var isMetaFile = func(name string) bool {
-		return strings.HasSuffix(name, metaFilenameSuffix) || strings.HasSuffix(name, deletionMarkFilenameSuffix)
-	}
-
-	chunksMatcher := regexp.MustCompile(`^.*/chunks/\d+$`)
-
-	cb.CacheGetRange("chunks", c, func(name string) bool { return chunksMatcher.MatchString(name) }, config.CachingBucketConfig)
+	cb.CacheGetRange("chunks", c, isTSDBChunkFile, config.CachingBucketConfig)
 	cb.CacheExists("metafile", c, isMetaFile, config.CachingBucketConfig)
 	cb.CacheGet("metafile", c, isMetaFile, config.CachingBucketConfig)
 	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.CachingBucketConfig) // Cache Iter requests for root.
 
 	return cb, nil
+}
+
+var chunksMatcher = regexp.MustCompile(`^.*/chunks/\d+$`)
+
+func isTSDBChunkFile(name string) bool { return chunksMatcher.MatchString(name) }
+
+func isMetaFile(name string) bool {
+	return strings.HasSuffix(name, metaFilenameSuffix) || strings.HasSuffix(name, deletionMarkFilenameSuffix)
 }

@@ -224,20 +224,19 @@ func TestChunksCaching(t *testing.T) {
 			cfg.SubrangeSize = subrangeSize
 			cfg.MaxGetRangeRequests = tc.maxGetRangeRequests
 
-			cachingBucket, err := NewCachingBucket(inmem, cache, cfg, nil, nil)
+			cachingBucket, err := NewCachingBucket(inmem, nil, nil)
 			testutil.Ok(t, err)
+			cachingBucket.CacheGetRange("chunks", cache, isTSDBChunkFile, cfg)
 
 			verifyGetRange(t, cachingBucket, name, tc.offset, tc.length, tc.expectedLength)
-			testutil.Equals(t, tc.expectedCachedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedChunkBytes.WithLabelValues(originCache))))
-			testutil.Equals(t, tc.expectedFetchedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedChunkBytes.WithLabelValues(originBucket))))
-			testutil.Equals(t, tc.expectedRefetchedBytes, int64(promtest.ToFloat64(cachingBucket.refetchedChunkBytes.WithLabelValues(originCache))))
+			testutil.Equals(t, tc.expectedCachedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedGetRangeBytes.WithLabelValues(originCache, "chunks"))))
+			testutil.Equals(t, tc.expectedFetchedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedGetRangeBytes.WithLabelValues(originBucket, "chunks"))))
+			testutil.Equals(t, tc.expectedRefetchedBytes, int64(promtest.ToFloat64(cachingBucket.refetchedGetRangeBytes.WithLabelValues(originCache, "chunks"))))
 		})
 	}
 }
 
 func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, offset, length int64, expectedLength int64) {
-	t.Helper()
-
 	r, err := cachingBucket.GetRange(context.Background(), name, offset, length)
 	testutil.Ok(t, err)
 
@@ -336,8 +335,9 @@ func TestMergeRanges(t *testing.T) {
 
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
-	c, err := NewCachingBucket(b, newMockCache(), DefaultCachingBucketConfig(), nil, nil)
+	c, err := NewCachingBucket(b, nil, nil)
 	testutil.Ok(t, err)
+	c.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, DefaultCachingBucketConfig())
 
 	r, err := c.GetRange(context.Background(), "test", -1, 1000)
 	testutil.Equals(t, nil, r)
@@ -378,8 +378,9 @@ func TestCachedIter(t *testing.T) {
 
 	config := DefaultCachingBucketConfig()
 
-	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
+	cb.CacheIter("dirs", cache, func(string) bool { return true }, config)
 
 	verifyIter(t, cb, allFiles, false)
 
@@ -439,21 +440,22 @@ func TestExists(t *testing.T) {
 
 	config := DefaultCachingBucketConfig()
 
-	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
+	cb.CacheExists("test", cache, matchAll, config)
 
 	file := "/block123" + metaFilenameSuffix
-	verifyExists(t, cb, file, false, false)
+	verifyExists(t, cb, file, false, false, "test")
 
 	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
-	verifyExists(t, cb, file, false, true) // Reused cache result.
+	verifyExists(t, cb, file, false, true, "test") // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, file, true, false)
+	verifyExists(t, cb, file, true, false, "test")
 
 	testutil.Ok(t, inmem.Delete(context.Background(), file))
-	verifyExists(t, cb, file, true, true) // Reused cache result.
+	verifyExists(t, cb, file, true, true, "test") // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, file, false, false)
+	verifyExists(t, cb, file, false, false, "test")
 }
 
 func TestExistsCachingDisabled(t *testing.T) {
@@ -462,28 +464,27 @@ func TestExistsCachingDisabled(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	config := DefaultCachingBucketConfig()
-	config.MetaFilesCachingEnabled = false
-
-	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
+	cb.CacheExists("test", cache, func(string) bool { return false }, DefaultCachingBucketConfig())
 
 	file := "/block123" + metaFilenameSuffix
-	verifyExists(t, cb, file, false, false)
+	verifyExists(t, cb, file, false, false, "test")
 
 	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
-	verifyExists(t, cb, file, true, false)
+	verifyExists(t, cb, file, true, false, "test")
 
 	testutil.Ok(t, inmem.Delete(context.Background(), file))
-	verifyExists(t, cb, file, false, false)
+	verifyExists(t, cb, file, false, false, "test")
 }
 
-func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool) {
-	hitsBefore := int(promtest.ToFloat64(cb.metaFileExistsCacheHits))
+func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool, label string) {
+	t.Helper()
+	hitsBefore := int(promtest.ToFloat64(cb.existsCacheHits.WithLabelValues(label)))
 	ok, err := cb.Exists(context.Background(), file)
 	testutil.Ok(t, err)
 	testutil.Equals(t, exists, ok)
-	hitsAfter := int(promtest.ToFloat64(cb.metaFileExistsCacheHits))
+	hitsAfter := int(promtest.ToFloat64(cb.existsCacheHits.WithLabelValues(label)))
 
 	if fromCache {
 		testutil.Equals(t, 1, hitsAfter-hitsBefore)
@@ -498,41 +499,40 @@ func TestGetMetafile(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	config := DefaultCachingBucketConfig()
-
-	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
+	cb.CacheGet("metafile", cache, matchAll, DefaultCachingBucketConfig())
+	cb.CacheExists("metafile", cache, matchAll, DefaultCachingBucketConfig())
 
 	file := "/block123" + metaFilenameSuffix
-	verifyGet(t, cb, file, nil, false)
+	verifyGet(t, cb, file, nil, false, "test")
 
 	data := []byte("hello world")
 	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
 
 	// Even if file is now uploaded, old data is served from cache.
-	verifyGet(t, cb, file, nil, true)
-	verifyExists(t, cb, file, false, true)
+	verifyGet(t, cb, file, nil, true, "metafile")
+	verifyExists(t, cb, file, false, true, "metafile")
 
 	cache.flush()
 
-	verifyGet(t, cb, file, data, false)
-	verifyGet(t, cb, file, data, true)
-	verifyExists(t, cb, file, true, true)
+	verifyGet(t, cb, file, data, false, "metafile")
+	verifyGet(t, cb, file, data, true, "metafile")
+	verifyExists(t, cb, file, true, true, "metafile")
 }
 
-func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool) {
-	hitsBefore := int(promtest.ToFloat64(cb.metaFileGetCacheHits))
-	hitsDoesntExistsBefore := int(promtest.ToFloat64(cb.metaFileGetDoesntExistCacheHits))
+func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, label string) {
+	hitsBefore := int(promtest.ToFloat64(cb.getCacheHits.WithLabelValues(label)))
 
 	r, err := cb.Get(context.Background(), file)
 	if expectedData == nil {
 		testutil.Assert(t, cb.IsObjNotFoundErr(err))
 
-		hitsDoesntExistsAfter := int(promtest.ToFloat64(cb.metaFileGetDoesntExistCacheHits))
+		hitsAfter := int(promtest.ToFloat64(cb.getCacheHits.WithLabelValues(label)))
 		if cacheUsed {
-			testutil.Equals(t, 1, hitsDoesntExistsAfter-hitsDoesntExistsBefore)
+			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
-			testutil.Equals(t, 0, hitsDoesntExistsAfter-hitsDoesntExistsBefore)
+			testutil.Equals(t, 0, hitsAfter-hitsBefore)
 		}
 	} else {
 		testutil.Ok(t, err)
@@ -541,7 +541,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedData, data)
 
-		hitsAfter := int(promtest.ToFloat64(cb.metaFileGetCacheHits))
+		hitsAfter := int(promtest.ToFloat64(cb.getCacheHits.WithLabelValues(label)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
@@ -549,3 +549,5 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		}
 	}
 }
+
+func matchAll(string) bool { return true }
