@@ -27,10 +27,14 @@ var testGRPCOpts = []grpc.DialOption{
 }
 
 type testStore struct {
-	info storepb.InfoResponse
+	infoDelay time.Duration
+	info      storepb.InfoResponse
 }
 
 func (s *testStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+	if s.infoDelay > 0 {
+		time.Sleep(s.infoDelay)
+	}
 	return &s.info, nil
 }
 
@@ -54,6 +58,7 @@ type testStoreMeta struct {
 	extlsetFn        func(addr string) []storepb.LabelSet
 	storeType        component.StoreAPI
 	minTime, maxTime int64
+	infoDelay        time.Duration
 }
 
 type testStores struct {
@@ -82,6 +87,7 @@ func startTestStores(storeMetas []testStoreMeta) (*testStores, error) {
 				MaxTime:   meta.maxTime,
 				MinTime:   meta.minTime,
 			},
+			infoDelay: meta.infoDelay,
 		}
 		if meta.storeType != nil {
 			storeSrv.info.StoreType = meta.storeType.ToProto()
@@ -585,6 +591,25 @@ func TestQuerierStrict(t *testing.T) {
 			},
 			storeType: component.Sidecar,
 		},
+		// Slow store.
+		{
+			minTime: 65644,
+			maxTime: 77777,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+			storeType: component.Sidecar,
+			infoDelay: 2 * time.Second,
+		},
 	})
 
 	testutil.Ok(t, err)
@@ -595,6 +620,7 @@ func TestQuerierStrict(t *testing.T) {
 		return []StoreSpec{
 			NewGRPCStoreSpec(st.StoreAddresses()[0], true),
 			NewGRPCStoreSpec(st.StoreAddresses()[1], false),
+			NewGRPCStoreSpec(st.StoreAddresses()[2], true),
 		}
 	}, testGRPCOpts, time.Minute)
 	defer storeSet.Close()
@@ -602,7 +628,9 @@ func TestQuerierStrict(t *testing.T) {
 
 	// Initial update.
 	storeSet.Update(context.Background())
-	testutil.Equals(t, 2, len(storeSet.stores), "two clients must be available for running store nodes")
+	testutil.Equals(t, 3, len(storeSet.stores), "three clients must be available for running store nodes")
+
+	testutil.Assert(t, storeSet.stores[st.StoreAddresses()[2]].cc.GetState().String() != "SHUTDOWN", "slow store's connection should not be closed")
 
 	// The store is statically defined + strict mode is enabled
 	// so its client + information must be retained.
@@ -619,7 +647,7 @@ func TestQuerierStrict(t *testing.T) {
 	storeSet.Update(context.Background())
 
 	// Check that the information is the same.
-	testutil.Equals(t, 1, len(storeSet.stores), "one client must remain available for a store node that is down")
+	testutil.Equals(t, 2, len(storeSet.stores), "two static clients must remain available")
 	testutil.Equals(t, curMin, storeSet.stores[staticStoreAddr].minTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, curMax, storeSet.stores[staticStoreAddr].maxTime, "minimum time reported by the store node is different")
 	testutil.NotOk(t, storeSet.storeStatuses[staticStoreAddr].LastError)
