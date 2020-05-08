@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestCachingBucket(t *testing.T) {
+func TestChunksCaching(t *testing.T) {
 	length := int64(1024 * 1024)
 	subrangeSize := int64(16000) // All tests are based on this value.
 
@@ -35,7 +37,7 @@ func TestCachingBucket(t *testing.T) {
 	testutil.Ok(t, inmem.Upload(context.Background(), name, bytes.NewReader(data)))
 
 	// We reuse cache between tests (!)
-	cache := &mockCache{cache: make(map[string][]byte)}
+	cache := newMockCache()
 
 	// Warning, these tests must be run in order, they depend cache state from previous test.
 	for _, tc := range []struct {
@@ -106,7 +108,7 @@ func TestCachingBucket(t *testing.T) {
 			expectedFetchedBytes: length,
 			expectedCachedBytes:  0, // Cache is flushed.
 			init: func() {
-				cache.cache = map[string][]byte{} // Flush cache.
+				cache.flush()
 			},
 		},
 
@@ -249,16 +251,29 @@ func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, off
 	}
 }
 
-type mockCache struct {
-	mu    sync.Mutex
-	cache map[string][]byte
+type cacheItem struct {
+	data []byte
+	exp  time.Time
 }
 
-func (m *mockCache) Store(_ context.Context, data map[string][]byte, _ time.Duration) {
+type mockCache struct {
+	mu    sync.Mutex
+	cache map[string]cacheItem
+}
+
+func newMockCache() *mockCache {
+	c := &mockCache{}
+	c.flush()
+	return c
+}
+
+func (m *mockCache) Store(_ context.Context, data map[string][]byte, ttl time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	exp := time.Now().Add(ttl)
 	for key, val := range data {
-		m.cache[key] = val
+		m.cache[key] = cacheItem{data: val, exp: exp}
 	}
 }
 
@@ -268,14 +283,19 @@ func (m *mockCache) Fetch(_ context.Context, keys []string) map[string][]byte {
 
 	found := make(map[string][]byte, len(keys))
 
+	now := time.Now()
 	for _, k := range keys {
 		v, ok := m.cache[k]
-		if ok {
-			found[k] = v
+		if ok && now.Before(v.exp) {
+			found[k] = v.data
 		}
 	}
 
 	return found
+}
+
+func (m *mockCache) flush() {
+	m.cache = map[string]cacheItem{}
 }
 
 func TestMergeRanges(t *testing.T) {
@@ -315,7 +335,7 @@ func TestMergeRanges(t *testing.T) {
 
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
-	c, err := NewCachingBucket(b, &mockCache{cache: make(map[string][]byte)}, DefaultCachingBucketConfig(), nil, nil)
+	c, err := NewCachingBucket(b, newMockCache(), DefaultCachingBucketConfig(), nil, nil)
 	testutil.Ok(t, err)
 
 	r, err := c.GetRange(context.Background(), "test", -1, 1000)
@@ -341,4 +361,71 @@ func (b *testBucket) GetRange(ctx context.Context, name string, off, length int6
 	}
 
 	return b.InMemBucket.GetRange(ctx, name, off, length)
+}
+
+func TestCachedIter(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+	testutil.Ok(t, inmem.Upload(context.Background(), "/file-1", strings.NewReader("hej")))
+	testutil.Ok(t, inmem.Upload(context.Background(), "/file-2", strings.NewReader("ahoj")))
+	testutil.Ok(t, inmem.Upload(context.Background(), "/file-3", strings.NewReader("hello")))
+	testutil.Ok(t, inmem.Upload(context.Background(), "/file-4", strings.NewReader("ciao")))
+
+	allFiles := []string{"/file-1", "/file-2", "/file-3", "/file-4"}
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	config := DefaultCachingBucketConfig()
+
+	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	testutil.Ok(t, err)
+
+	testIter(t, cb, allFiles, false)
+
+	testutil.Ok(t, inmem.Upload(context.Background(), "/file-5", strings.NewReader("nazdar")))
+	testIter(t, cb, allFiles, true) // Iter returns old response.
+
+	cache.flush()
+	allFiles = append(allFiles, "/file-5")
+	testIter(t, cb, allFiles, false)
+
+	cache.flush()
+
+	e := errors.Errorf("test error")
+
+	// This iteration returns false. Result will not be cached.
+	testutil.Equals(t, e, cb.Iter(context.Background(), "/", func(_ string) error {
+		return e
+	}))
+
+	// Nothing cached now.
+	testIter(t, cb, allFiles, false)
+}
+
+func testIter(t *testing.T, cb *CachingBucket, expectedFiles []string, expectedCache bool) {
+	hitsBefore := int(promtest.ToFloat64(cb.iterCacheHits))
+
+	col := iterCollector{}
+	testutil.Ok(t, cb.Iter(context.Background(), "/", col.collect))
+
+	hitsAfter := int(promtest.ToFloat64(cb.iterCacheHits))
+
+	sort.Strings(col.items)
+	testutil.Equals(t, expectedFiles, col.items)
+
+	expectedHitsDiff := 0
+	if expectedCache {
+		expectedHitsDiff = 1
+	}
+
+	testutil.Equals(t, expectedHitsDiff, hitsAfter-hitsBefore)
+}
+
+type iterCollector struct {
+	items []string
+}
+
+func (it *iterCollector) collect(s string) error {
+	it.items = append(it.items, s)
+	return nil
 }

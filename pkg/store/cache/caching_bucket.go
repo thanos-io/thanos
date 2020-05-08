@@ -6,6 +6,7 @@ package storecache
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -40,6 +43,9 @@ type CachingBucketConfig struct {
 	// TTLs for various cache items.
 	ChunkObjectSizeTTL time.Duration `yaml:"chunk_object_size_ttl"`
 	ChunkSubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
+
+	// How long to cache result of Iter call.
+	IterTTL time.Duration `yaml:"iter_ttl"`
 }
 
 func DefaultCachingBucketConfig() CachingBucketConfig {
@@ -48,6 +54,8 @@ func DefaultCachingBucketConfig() CachingBucketConfig {
 		ChunkObjectSizeTTL:        24 * time.Hour,
 		ChunkSubrangeTTL:          24 * time.Hour,
 		MaxChunksGetRangeRequests: 3,
+
+		IterTTL: 5 * time.Minute,
 	}
 }
 
@@ -67,6 +75,9 @@ type CachingBucket struct {
 
 	objectSizeRequests prometheus.Counter
 	objectSizeHits     prometheus.Counter
+
+	iterRequests  prometheus.Counter
+	iterCacheHits prometheus.Counter
 }
 
 func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConfig, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
@@ -103,6 +114,15 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 			Name: "thanos_store_bucket_cache_objectsize_hits_total",
 			Help: "Number of object size hits for objects.",
 		}),
+
+		iterRequests: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_iter_requests_total",
+			Help: "Number of Iter requests for directories.",
+		}),
+		iterCacheHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_iter_cache_hits_total",
+			Help: "Number of Iter requests served from cache.",
+		}),
 	}
 
 	cb.fetchedChunkBytes.WithLabelValues(originBucket)
@@ -130,6 +150,70 @@ func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpec
 
 func (cb *CachingBucket) ReaderWithExpectedErrs(expectedFunc objstore.IsOpFailureExpectedFunc) objstore.BucketReader {
 	return cb.WithExpectedErrs(expectedFunc)
+}
+
+func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+	cb.iterRequests.Inc()
+
+	key := cachingKeyIter(dir)
+
+	data := cb.cache.Fetch(ctx, []string{key})
+	if data[key] != nil {
+		list, err := decodeIterResult(data[key])
+		if err == nil {
+			cb.iterCacheHits.Inc()
+
+			for _, n := range list {
+				err = f(n)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		} else {
+			// This should not happen.
+			level.Warn(cb.logger).Log("msg", "failed to decode cached Iter result", "err", err)
+		}
+	}
+
+	// Iteration can take a while (esp. since it calls function), and iterTTL is generally low.
+	// We will compute TTL based time when iteration started.
+	iterTime := time.Now()
+	var list []string
+	err := cb.Bucket.Iter(ctx, dir, func(s string) error {
+		list = append(list, s)
+		return f(s)
+	})
+
+	remainingTTL := cb.config.IterTTL - time.Since(iterTime)
+	if err == nil && remainingTTL > 0 {
+		data := encodeIterResult(list)
+		if data != nil {
+			cb.cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
+		}
+	}
+	return err
+}
+
+// Iter results should compress nicely, especially in subdirectories.
+func encodeIterResult(files []string) []byte {
+	data, err := json.Marshal(files)
+	if err != nil {
+		return nil
+	}
+
+	return snappy.Encode(nil, data)
+}
+
+func decodeIterResult(data []byte) ([]string, error) {
+	decoded, err := snappy.Decode(nil, data)
+	if err != nil {
+		return nil, err
+	}
+
+	var list []string
+	err = json.Unmarshal(decoded, &list)
+	return list, err
 }
 
 var chunksMatcher = regexp.MustCompile(`^.*/chunks/\d+$`)
@@ -342,6 +426,10 @@ func cachingKeyObjectSize(name string) string {
 
 func cachingKeyObjectSubrange(name string, start int64, end int64) string {
 	return fmt.Sprintf("subrange:%s:%d:%d", name, start, end)
+}
+
+func cachingKeyIter(name string) string {
+	return fmt.Sprintf("iter:%s", name)
 }
 
 // Reader implementation that uses in-memory subranges.
