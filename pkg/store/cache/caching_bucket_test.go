@@ -23,6 +23,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+const testFilename = "/random_object"
+
 func TestChunksCaching(t *testing.T) {
 	length := int64(1024 * 1024)
 	subrangeSize := int64(16000) // All tests are based on this value.
@@ -444,18 +446,17 @@ func TestExists(t *testing.T) {
 	testutil.Ok(t, err)
 	cb.CacheExists("test", cache, matchAll, config)
 
-	file := "/random_object"
-	verifyExists(t, cb, file, false, false, "test")
+	verifyExists(t, cb, testFilename, false, false, "test")
 
-	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
-	verifyExists(t, cb, file, false, true, "test") // Reused cache result.
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, strings.NewReader("hej")))
+	verifyExists(t, cb, testFilename, false, true, "test") // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, file, true, false, "test")
+	verifyExists(t, cb, testFilename, true, false, "test")
 
-	testutil.Ok(t, inmem.Delete(context.Background(), file))
-	verifyExists(t, cb, file, true, true, "test") // Reused cache result.
+	testutil.Ok(t, inmem.Delete(context.Background(), testFilename))
+	verifyExists(t, cb, testFilename, true, true, "test") // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, file, false, false, "test")
+	verifyExists(t, cb, testFilename, false, false, "test")
 }
 
 func TestExistsCachingDisabled(t *testing.T) {
@@ -468,14 +469,13 @@ func TestExistsCachingDisabled(t *testing.T) {
 	testutil.Ok(t, err)
 	cb.CacheExists("test", cache, func(string) bool { return false }, DefaultCachingBucketConfig())
 
-	file := "/random_object"
-	verifyExists(t, cb, file, false, false, "test")
+	verifyExists(t, cb, testFilename, false, false, "test")
 
-	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
-	verifyExists(t, cb, file, true, false, "test")
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, strings.NewReader("hej")))
+	verifyExists(t, cb, testFilename, true, false, "test")
 
-	testutil.Ok(t, inmem.Delete(context.Background(), file))
-	verifyExists(t, cb, file, false, false, "test")
+	testutil.Ok(t, inmem.Delete(context.Background(), testFilename))
+	verifyExists(t, cb, testFilename, false, false, "test")
 }
 
 func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool, label string) {
@@ -504,22 +504,21 @@ func TestGet(t *testing.T) {
 	cb.CacheGet("metafile", cache, matchAll, DefaultCachingBucketConfig())
 	cb.CacheExists("metafile", cache, matchAll, DefaultCachingBucketConfig())
 
-	file := "/random_object"
-	verifyGet(t, cb, file, nil, false, "metafile")
-	verifyExists(t, cb, file, false, true, "metafile")
+	verifyGet(t, cb, testFilename, nil, false, "metafile")
+	verifyExists(t, cb, testFilename, false, true, "metafile")
 
 	data := []byte("hello world")
-	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
 
 	// Even if file is now uploaded, old data is served from cache.
-	verifyGet(t, cb, file, nil, true, "metafile")
-	verifyExists(t, cb, file, false, true, "metafile")
+	verifyGet(t, cb, testFilename, nil, true, "metafile")
+	verifyExists(t, cb, testFilename, false, true, "metafile")
 
 	cache.flush()
 
-	verifyGet(t, cb, file, data, false, "metafile")
-	verifyGet(t, cb, file, data, true, "metafile")
-	verifyExists(t, cb, file, true, true, "metafile")
+	verifyGet(t, cb, testFilename, data, false, "metafile")
+	verifyGet(t, cb, testFilename, data, true, "metafile")
+	verifyExists(t, cb, testFilename, true, true, "metafile")
 }
 
 func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, label string) {
@@ -561,15 +560,14 @@ func TestObjectSize(t *testing.T) {
 	testutil.Ok(t, err)
 	cb.CacheObjectSize("test", cache, matchAll, DefaultCachingBucketConfig())
 
-	file := "/random_object"
-	verifyObjectSize(t, cb, file, -1, false, "test")
-	verifyObjectSize(t, cb, file, -1, false, "test") // ObjectSize doesn't cache non-existant files.
+	verifyObjectSize(t, cb, testFilename, -1, false, "test")
+	verifyObjectSize(t, cb, testFilename, -1, false, "test") // ObjectSize doesn't cache non-existant files.
 
 	data := []byte("hello world")
-	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
 
-	verifyObjectSize(t, cb, file, len(data), false, "test")
-	verifyObjectSize(t, cb, file, len(data), true, "test")
+	verifyObjectSize(t, cb, testFilename, len(data), false, "test")
+	verifyObjectSize(t, cb, testFilename, len(data), true, "test")
 }
 
 func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, label string) {
