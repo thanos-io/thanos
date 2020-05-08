@@ -19,6 +19,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -488,5 +489,63 @@ func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fro
 		testutil.Equals(t, 1, hitsAfter-hitsBefore)
 	} else {
 		testutil.Equals(t, 0, hitsAfter-hitsBefore)
+	}
+}
+
+func TestGetMetafile(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	config := DefaultCachingBucketConfig()
+
+	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	testutil.Ok(t, err)
+
+	file := "/block123" + metaFilenameSuffix
+	verifyGet(t, cb, file, nil, false)
+
+	data := []byte("hello world")
+	testutil.Ok(t, inmem.Upload(context.Background(), file, bytes.NewBuffer(data)))
+
+	// Even if file is now uploaded, old data is served from cache.
+	verifyGet(t, cb, file, nil, true)
+	verifyExists(t, cb, file, false, true)
+
+	cache.flush()
+
+	verifyGet(t, cb, file, data, false)
+	verifyGet(t, cb, file, data, true)
+	verifyExists(t, cb, file, true, true)
+}
+
+func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool) {
+	hitsBefore := int(promtest.ToFloat64(cb.metaFileGetCacheHits))
+	hitsDoesntExistsBefore := int(promtest.ToFloat64(cb.metaFileGetDoesntExistCacheHits))
+
+	r, err := cb.Get(context.Background(), file)
+	if expectedData == nil {
+		testutil.Assert(t, cb.IsObjNotFoundErr(err))
+
+		hitsDoesntExistsAfter := int(promtest.ToFloat64(cb.metaFileGetDoesntExistCacheHits))
+		if cacheUsed {
+			testutil.Equals(t, 1, hitsDoesntExistsAfter-hitsDoesntExistsBefore)
+		} else {
+			testutil.Equals(t, 0, hitsDoesntExistsAfter-hitsDoesntExistsBefore)
+		}
+	} else {
+		testutil.Ok(t, err)
+		runutil.CloseWithLogOnErr(nil, r, "verifyGet")
+		data, err := ioutil.ReadAll(r)
+		testutil.Ok(t, err)
+		testutil.Equals(t, expectedData, data)
+
+		hitsAfter := int(promtest.ToFloat64(cb.metaFileGetCacheHits))
+		if cacheUsed {
+			testutil.Equals(t, 1, hitsAfter-hitsBefore)
+		} else {
+			testutil.Equals(t, 0, hitsAfter-hitsBefore)
+		}
 	}
 }

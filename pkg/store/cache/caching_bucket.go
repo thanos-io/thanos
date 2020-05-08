@@ -4,6 +4,7 @@
 package storecache
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -41,6 +42,8 @@ const (
 	deletionMarkFilenameSuffix = "/" + metadata.DeletionMarkFilename
 )
 
+var errObjNotFound = errors.Errorf("object not found")
+
 type CachingBucketConfig struct {
 	// Basic unit used to cache chunks.
 	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`
@@ -59,6 +62,7 @@ type CachingBucketConfig struct {
 	MetaFilesCachingEnabled bool          `yaml:"metafile_caching_enabled"`
 	MetaFileExistsTTL       time.Duration `yaml:"metafile_exists_ttl"`
 	MetaFileDoesntExistTTL  time.Duration `yaml:"metafile_doesnt_exist_ttl"`
+	MetaFileContentTTL      time.Duration `yaml:"metafile_content_ttl"`
 }
 
 func DefaultCachingBucketConfig() CachingBucketConfig {
@@ -73,6 +77,7 @@ func DefaultCachingBucketConfig() CachingBucketConfig {
 		MetaFilesCachingEnabled: true,
 		MetaFileExistsTTL:       10 * time.Minute,
 		MetaFileDoesntExistTTL:  3 * time.Minute,
+		MetaFileContentTTL:      1 * time.Hour,
 	}
 }
 
@@ -98,6 +103,10 @@ type CachingBucket struct {
 
 	metaFileExistsRequests  prometheus.Counter
 	metaFileExistsCacheHits prometheus.Counter
+
+	metaFileGetRequests             prometheus.Counter
+	metaFileGetCacheHits            prometheus.Counter
+	metaFileGetDoesntExistCacheHits prometheus.Counter
 }
 
 func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConfig, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
@@ -151,6 +160,19 @@ func NewCachingBucket(b objstore.Bucket, c cache.Cache, chunks CachingBucketConf
 		metaFileExistsCacheHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_store_bucket_cache_metafile_exists_cache_hits_total",
 			Help: "Number of Exists requests for meta-files served from cache.",
+		}),
+
+		metaFileGetRequests: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_metafile_get_requests_total",
+			Help: "Number of Get requests for meta-files.",
+		}),
+		metaFileGetCacheHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_metafile_get_hits_total",
+			Help: "Number of Get requests for meta-files served from cache with data.",
+		}),
+		metaFileGetDoesntExistCacheHits: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_store_bucket_cache_metafile_get_doesnt_exist_hits_total",
+			Help: "Number of Get requests for meta-files served from cache with object not found error.",
 		}),
 	}
 
@@ -297,6 +319,58 @@ func (cb *CachingBucket) storeExistsCacheEntry(ctx context.Context, cachingKey s
 	if ttl > 0 {
 		cb.cache.Store(ctx, map[string][]byte{cachingKey: data}, ttl)
 	}
+}
+
+func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	if cb.config.MetaFilesCachingEnabled && isMetaFile(name) {
+		cb.metaFileGetRequests.Inc()
+
+		key := cachingKeyContent(name)
+		existsKey := cachingKeyExists(name)
+
+		hits := cb.cache.Fetch(ctx, []string{key, existsKey})
+		if hits[key] != nil {
+			cb.metaFileGetCacheHits.Inc()
+			return ioutil.NopCloser(bytes.NewReader(hits[key])), nil
+		}
+
+		// If we know that file doesn't exist, we can return that. Useful for deletion marks.
+		if ex := hits[existsKey]; ex != nil && string(ex) == existsFalse {
+			cb.metaFileGetDoesntExistCacheHits.Inc()
+			return nil, errObjNotFound
+		}
+
+		getTime := time.Now()
+		reader, err := cb.Bucket.Get(ctx, name)
+		if err != nil {
+			if cb.Bucket.IsObjNotFoundErr(err) {
+				// Cache that object doesn't exist.
+				cb.storeExistsCacheEntry(ctx, existsKey, false, getTime)
+			}
+
+			return nil, err
+		}
+		defer runutil.CloseWithLogOnErr(cb.logger, reader, "CachingBucket.Get(%q)", name)
+
+		data, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return nil, err
+		}
+
+		ttl := cb.config.MetaFileContentTTL - time.Since(getTime)
+		if ttl > 0 {
+			cb.cache.Store(ctx, map[string][]byte{key: data}, ttl)
+		}
+		cb.storeExistsCacheEntry(ctx, existsKey, true, getTime)
+
+		return ioutil.NopCloser(bytes.NewReader(data)), nil
+	}
+
+	return cb.Bucket.Get(ctx, name)
+}
+
+func (cb *CachingBucket) IsObjNotFoundErr(err error) bool {
+	return err == errObjNotFound || cb.Bucket.IsObjNotFoundErr(err)
 }
 
 var chunksMatcher = regexp.MustCompile(`^.*/chunks/\d+$`)
@@ -517,6 +591,10 @@ func cachingKeyIter(name string) string {
 
 func cachingKeyExists(name string) string {
 	return fmt.Sprintf("exists:%s", name)
+}
+
+func cachingKeyContent(name string) string {
+	return fmt.Sprintf("content:%s", name)
 }
 
 // Reader implementation that uses in-memory subranges.
