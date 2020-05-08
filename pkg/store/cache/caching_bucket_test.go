@@ -221,8 +221,8 @@ func TestChunksCaching(t *testing.T) {
 			}
 
 			cfg := DefaultCachingBucketConfig()
-			cfg.ChunkSubrangeSize = subrangeSize
-			cfg.MaxChunksGetRangeRequests = tc.maxGetRangeRequests
+			cfg.SubrangeSize = subrangeSize
+			cfg.MaxGetRangeRequests = tc.maxGetRangeRequests
 
 			cachingBucket, err := NewCachingBucket(inmem, cache, cfg, nil, nil)
 			testutil.Ok(t, err)

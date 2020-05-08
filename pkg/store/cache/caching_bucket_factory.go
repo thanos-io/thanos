@@ -4,12 +4,16 @@
 package storecache
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	cache "github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -60,5 +64,25 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}
 
-	return NewCachingBucket(bucket, c, config.CachingBucketConfig, logger, reg)
+	cb, err := NewCachingBucket(bucket, logger, reg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Configure cache.
+	metaFilenameSuffix := "/" + metadata.MetaFilename
+	deletionMarkFilenameSuffix := "/" + metadata.DeletionMarkFilename
+
+	var isMetaFile = func(name string) bool {
+		return strings.HasSuffix(name, metaFilenameSuffix) || strings.HasSuffix(name, deletionMarkFilenameSuffix)
+	}
+
+	chunksMatcher := regexp.MustCompile(`^.*/chunks/\d+$`)
+
+	cb.CacheGetRange("chunks", c, func(name string) bool { return chunksMatcher.MatchString(name) }, config.CachingBucketConfig)
+	cb.CacheExists("metafile", c, isMetaFile, config.CachingBucketConfig)
+	cb.CacheGet("metafile", c, isMetaFile, config.CachingBucketConfig)
+	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.CachingBucketConfig) // Cache Iter requests for root.
+
+	return cb, nil
 }
