@@ -380,14 +380,14 @@ func TestCachedIter(t *testing.T) {
 	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
 	testutil.Ok(t, err)
 
-	testIter(t, cb, allFiles, false)
+	verifyIter(t, cb, allFiles, false)
 
 	testutil.Ok(t, inmem.Upload(context.Background(), "/file-5", strings.NewReader("nazdar")))
-	testIter(t, cb, allFiles, true) // Iter returns old response.
+	verifyIter(t, cb, allFiles, true) // Iter returns old response.
 
 	cache.flush()
 	allFiles = append(allFiles, "/file-5")
-	testIter(t, cb, allFiles, false)
+	verifyIter(t, cb, allFiles, false)
 
 	cache.flush()
 
@@ -399,10 +399,10 @@ func TestCachedIter(t *testing.T) {
 	}))
 
 	// Nothing cached now.
-	testIter(t, cb, allFiles, false)
+	verifyIter(t, cb, allFiles, false)
 }
 
-func testIter(t *testing.T, cb *CachingBucket, expectedFiles []string, expectedCache bool) {
+func verifyIter(t *testing.T, cb *CachingBucket, expectedFiles []string, expectedCache bool) {
 	hitsBefore := int(promtest.ToFloat64(cb.iterCacheHits))
 
 	col := iterCollector{}
@@ -428,4 +428,65 @@ type iterCollector struct {
 func (it *iterCollector) collect(s string) error {
 	it.items = append(it.items, s)
 	return nil
+}
+
+func TestExists(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	config := DefaultCachingBucketConfig()
+
+	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	testutil.Ok(t, err)
+
+	file := "/block123" + metaFilenameSuffix
+	verifyExists(t, cb, file, false, false)
+
+	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
+	verifyExists(t, cb, file, false, true) // Reused cache result.
+	cache.flush()
+	verifyExists(t, cb, file, true, false)
+
+	testutil.Ok(t, inmem.Delete(context.Background(), file))
+	verifyExists(t, cb, file, true, true) // Reused cache result.
+	cache.flush()
+	verifyExists(t, cb, file, false, false)
+}
+
+func TestExistsCachingDisabled(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	config := DefaultCachingBucketConfig()
+	config.MetaFilesCachingEnabled = false
+
+	cb, err := NewCachingBucket(inmem, cache, config, nil, nil)
+	testutil.Ok(t, err)
+
+	file := "/block123" + metaFilenameSuffix
+	verifyExists(t, cb, file, false, false)
+
+	testutil.Ok(t, inmem.Upload(context.Background(), file, strings.NewReader("hej")))
+	verifyExists(t, cb, file, true, false)
+
+	testutil.Ok(t, inmem.Delete(context.Background(), file))
+	verifyExists(t, cb, file, false, false)
+}
+
+func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool) {
+	hitsBefore := int(promtest.ToFloat64(cb.metaFileExistsCacheHits))
+	ok, err := cb.Exists(context.Background(), file)
+	testutil.Ok(t, err)
+	testutil.Equals(t, exists, ok)
+	hitsAfter := int(promtest.ToFloat64(cb.metaFileExistsCacheHits))
+
+	if fromCache {
+		testutil.Equals(t, 1, hitsAfter-hitsBefore)
+	} else {
+		testutil.Equals(t, 0, hitsAfter-hitsBefore)
+	}
 }
