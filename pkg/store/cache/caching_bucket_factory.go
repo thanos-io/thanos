@@ -6,6 +6,7 @@ package storecache
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -35,6 +36,41 @@ type CachingBucketWithBackendConfig struct {
 	BackendConfig interface{}         `yaml:"backend_config"`
 
 	CachingBucketConfig CachingBucketConfig `yaml:"caching_config"`
+}
+
+type CachingBucketConfig struct {
+	// Basic unit used to cache chunks.
+	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`
+
+	// Maximum number of GetRange requests issued by this bucket for single GetRange call. Zero or negative value = unlimited.
+	MaxChunksGetRangeRequests int `yaml:"max_chunks_get_range_requests"`
+
+	// TTLs for various cache items.
+	ChunkObjectSizeTTL time.Duration `yaml:"chunk_object_size_ttl"`
+	ChunkSubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
+
+	// How long to cache result of Iter call in root directory.
+	RootIterTTL time.Duration `yaml:"root_iter_ttl"`
+
+	// Config for Exists and Get operations for metadata files.
+	MetafileExistsTTL      time.Duration `yaml:"metafile_exists_ttl"`
+	MetafileDoesntExistTTL time.Duration `yaml:"metafile_doesnt_exist_ttl"`
+	MetafileContentTTL     time.Duration `yaml:"metafile_content_ttl"`
+}
+
+func DefaultCachingBucketConfig() CachingBucketConfig {
+	return CachingBucketConfig{
+		ChunkSubrangeSize:         16000, // Equal to max chunk size.
+		ChunkObjectSizeTTL:        24 * time.Hour,
+		ChunkSubrangeTTL:          24 * time.Hour,
+		MaxChunksGetRangeRequests: 3,
+
+		RootIterTTL: 5 * time.Minute,
+
+		MetafileExistsTTL:      10 * time.Minute,
+		MetafileDoesntExistTTL: 3 * time.Minute,
+		MetafileContentTTL:     1 * time.Hour,
+	}
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
@@ -72,17 +108,18 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, err
 	}
 
+	cbc := config.CachingBucketConfig
 	// Configure cache.
-	cb.CacheGetRange("chunks", c, isTSDBChunkFile, config.CachingBucketConfig)
-	cb.CacheExists("metafile", c, isMetaFile, config.CachingBucketConfig)
-	cb.CacheGet("metafile", c, isMetaFile, config.CachingBucketConfig)
+	cb.CacheGetRange("chunks", c, isTSDBChunkFile, cbc.ChunkSubrangeSize, cbc.ChunkObjectSizeTTL, cbc.ChunkSubrangeTTL, cbc.MaxChunksGetRangeRequests)
+	cb.CacheExists("metafile", c, isMetaFile, cbc.MetafileExistsTTL, cbc.MetafileDoesntExistTTL)
+	cb.CacheGet("metafile", c, isMetaFile, cbc.MetafileContentTTL, cbc.MetafileExistsTTL, cbc.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.CachingBucketConfig)
+	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, cbc.RootIterTTL)
 
-	// Enabling index caching.
-	cb.CacheObjectSize("index", c, isIndexFile, config.CachingBucketConfig)
-	cb.CacheGetRange("index", c, isIndexFile, config.CachingBucketConfig)
+	// Enabling index caching (example).
+	cb.CacheObjectSize("index", c, isIndexFile, time.Hour)
+	cb.CacheGetRange("index", c, isIndexFile, 32000, time.Hour, 24*time.Hour, 3)
 
 	return cb, nil
 }

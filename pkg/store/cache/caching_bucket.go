@@ -46,41 +46,6 @@ const (
 
 var errObjNotFound = errors.Errorf("object not found")
 
-type CachingBucketConfig struct {
-	// Basic unit used to cache subranges in GetRange method.
-	SubrangeSize int64 `yaml:"subrange_size"`
-
-	// Maximum number of GetRange requests issued by this bucket for single GetRange call. Zero or negative value = unlimited.
-	MaxGetRangeRequests int           `yaml:"max_get_range_requests"`
-	SubrangeTTL         time.Duration `yaml:"subrange_ttl"`
-
-	// TTLs for various cache items.
-	ObjectSizeTTL time.Duration `yaml:"object_size_ttl"`
-
-	// How long to cache result of Iter call.
-	IterTTL time.Duration `yaml:"iter_ttl"`
-
-	// Config for Exists and Get opertions.
-	ExistsTTL      time.Duration `yaml:"exists_ttl"`
-	DoesntExistTTL time.Duration `yaml:"doesnt_exist_ttl"`
-	ContentTTL     time.Duration `yaml:"content_ttl"`
-}
-
-func DefaultCachingBucketConfig() CachingBucketConfig {
-	return CachingBucketConfig{
-		SubrangeSize:        16000, // Equal to max chunk size.
-		ObjectSizeTTL:       24 * time.Hour,
-		SubrangeTTL:         24 * time.Hour,
-		MaxGetRangeRequests: 3,
-
-		IterTTL: 5 * time.Minute,
-
-		ExistsTTL:      10 * time.Minute,
-		DoesntExistTTL: 3 * time.Minute,
-		ContentTTL:     1 * time.Hour,
-	}
-}
-
 // Bucket implementation that provides some caching features, using knowledge about how Thanos accesses data.
 type CachingBucket struct {
 	objstore.Bucket
@@ -96,13 +61,32 @@ type CachingBucket struct {
 	operationHits     *prometheus.CounterVec
 }
 
+// Generic config for single operation.
 type operationConfig struct {
-	CachingBucketConfig
-
 	configName string
 	matcher    func(name string) bool
 	cache      cache.Cache
+	opConfig   interface{}
 }
+
+// Operation-specific configs.
+type iterConfig time.Duration
+
+type existsConfig struct {
+	existsTTL, doesntExistTTL time.Duration
+}
+
+type getConfig struct {
+	contentTTL, existsTTL, doesntExistTTL time.Duration
+}
+
+type getRangeConfig struct {
+	subrangeSize               int64
+	objectSizeTTL, subrangeTTL time.Duration
+	maxSubRequests             int
+}
+
+type objectSizeCfg time.Duration
 
 // NewCachingBucket creates caching bucket with no configuration. Various "Cache*" methods configure
 // this bucket to cache results of individual bucket methods. Configuration must be set before
@@ -144,7 +128,7 @@ func NewCachingBucket(b objstore.Bucket, logger log.Logger, reg prometheus.Regis
 	return cb, nil
 }
 
-func newCacheConfig(cfg CachingBucketConfig, configName string, matcher func(string) bool, cache cache.Cache) *operationConfig {
+func (cb *CachingBucket) addOperationConfig(operationName, configName string, matcher func(string) bool, cache cache.Cache, opConfig interface{}) {
 	if matcher == nil {
 		panic("matcher")
 	}
@@ -154,35 +138,48 @@ func newCacheConfig(cfg CachingBucketConfig, configName string, matcher func(str
 	if configName == "" {
 		panic("empty configName")
 	}
-
-	return &operationConfig{
-		CachingBucketConfig: cfg,
-		configName:          configName,
-		matcher:             matcher,
-		cache:               cache,
+	if opConfig == nil {
+		panic("nil opConfig")
 	}
-}
 
-func (cb *CachingBucket) addOperationConfig(operationName, configName string, cfg *operationConfig) {
-	cb.operationConfigs[operationName] = append(cb.operationConfigs[operationName], cfg)
+	cb.operationConfigs[operationName] = append(cb.operationConfigs[operationName], &operationConfig{
+		configName: configName,
+		matcher:    matcher,
+		cache:      cache,
+		opConfig:   opConfig,
+	})
+
 	cb.operationRequests.WithLabelValues(operationName, configName)
 	cb.operationHits.WithLabelValues(operationName, configName)
 }
 
-func (cb *CachingBucket) CacheIter(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig(operationIter, configName, newCacheConfig(cfg, configName, matcher, cache))
+// CacheIter configures caching of "Iter" operation for matching directories.
+func (cb *CachingBucket) CacheIter(configName string, cache cache.Cache, matcher func(string) bool, ttl time.Duration) {
+	cb.addOperationConfig(operationIter, configName, matcher, cache, iterConfig(ttl))
 }
 
-func (cb *CachingBucket) CacheExists(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig(operationExists, configName, newCacheConfig(cfg, configName, matcher, cache))
+// CacheExists configures caching of "Exists" operation for matching files. Negative values are cached as well.
+func (cb *CachingBucket) CacheExists(configName string, cache cache.Cache, matcher func(string) bool, existsTTL, doesntExistTTL time.Duration) {
+	cb.addOperationConfig(operationExists, configName, matcher, cache, existsConfig{existsTTL, doesntExistTTL})
 }
 
-func (cb *CachingBucket) CacheGet(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig(operationGet, configName, newCacheConfig(cfg, configName, matcher, cache))
+// CacheGet configures caching of "Get" operation for matching files. Content of the object is cached, as well as whether object exists or not.
+func (cb *CachingBucket) CacheGet(configName string, cache cache.Cache, matcher func(string) bool, contentTTL, existsTTL, doesntExistTTL time.Duration) {
+	cb.addOperationConfig(operationGet, configName, matcher, cache, getConfig{contentTTL: contentTTL, existsTTL: existsTTL, doesntExistTTL: doesntExistTTL})
 }
 
-func (cb *CachingBucket) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig(operationGetRange, configName, newCacheConfig(cfg, configName, matcher, cache))
+// CacheGetRange configures caching of "GetRange" operation. Subranges (aligned on subrange size) are cached individually.
+// Since caching operation needs to know the object size to compute correct subranges, object size is cached as well.
+// Single "GetRange" requests can result in multiple smaller GetRange sub-requests issued on the underlying bucket.
+// MaxSubRequests specifies how many such subrequests may be issued. Values <= 0 mean there is no limit (requests
+// for adjacent missing subranges are still merged).
+func (cb *CachingBucket) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, subrangeSize int64, objectSizeTTL, subrangeTTL time.Duration, maxSubRequests int) {
+	cb.addOperationConfig(operationGetRange, configName, matcher, cache, getRangeConfig{
+		subrangeSize:   subrangeSize,
+		objectSizeTTL:  objectSizeTTL,
+		subrangeTTL:    subrangeTTL,
+		maxSubRequests: maxSubRequests,
+	})
 
 	cb.requestedGetRangeBytes.WithLabelValues(configName)
 	cb.fetchedGetRangeBytes.WithLabelValues(originCache, configName)
@@ -190,17 +187,18 @@ func (cb *CachingBucket) CacheGetRange(configName string, cache cache.Cache, mat
 	cb.refetchedGetRangeBytes.WithLabelValues(originCache, configName)
 }
 
-func (cb *CachingBucket) CacheObjectSize(configName string, cache cache.Cache, matcher func(name string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig(operationObjectSize, configName, newCacheConfig(cfg, configName, matcher, cache))
+// CacheObjectSize configures caching of "ObjectSize" operation for matching files.
+func (cb *CachingBucket) CacheObjectSize(configName string, cache cache.Cache, matcher func(name string) bool, ttl time.Duration) {
+	cb.addOperationConfig(operationObjectSize, configName, matcher, cache, objectSizeCfg(ttl))
 }
 
-func (cb *CachingBucket) findCacheConfig(configs []*operationConfig, objectName string) (configName string, cfg *operationConfig) {
+func (cb *CachingBucket) findCacheConfig(configs []*operationConfig, objectName string) (configName string, cache cache.Cache, cfg interface{}) {
 	for _, cfg := range configs {
 		if cfg.matcher(objectName) {
-			return cfg.configName, cfg
+			return cfg.configName, cfg.cache, cfg.opConfig
 		}
 	}
-	return "", nil
+	return "", nil, nil
 }
 
 func (cb *CachingBucket) Name() string {
@@ -224,16 +222,17 @@ func (cb *CachingBucket) ReaderWithExpectedErrs(expectedFunc objstore.IsOpFailur
 }
 
 func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationIter], dir)
+	cfgName, cache, cfg := cb.findCacheConfig(cb.operationConfigs[operationIter], dir)
 	if cfg == nil {
 		return cb.Bucket.Iter(ctx, dir, f)
 	}
+	iterCfg := cfg.(iterConfig)
 
 	cb.operationRequests.WithLabelValues(operationIter, cfgName).Inc()
 
 	key := cachingKeyIter(dir)
 
-	data := cfg.cache.Fetch(ctx, []string{key})
+	data := cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
 		list, err := decodeIterResult(data[key])
 		if err == nil {
@@ -261,11 +260,11 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 		return f(s)
 	})
 
-	remainingTTL := cfg.IterTTL - time.Since(iterTime)
+	remainingTTL := time.Duration(iterCfg) - time.Since(iterTime)
 	if err == nil && remainingTTL > 0 {
 		data := encodeIterResult(list)
 		if data != nil {
-			cfg.cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
+			cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
 		}
 	}
 	return err
@@ -293,15 +292,16 @@ func decodeIterResult(data []byte) ([]string, error) {
 }
 
 func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationExists], name)
+	cfgName, cache, cfg := cb.findCacheConfig(cb.operationConfigs[operationExists], name)
 	if cfg == nil {
 		return cb.Bucket.Exists(ctx, name)
 	}
+	existsCfg := cfg.(existsConfig)
 
 	cb.operationRequests.WithLabelValues(operationExists, cfgName).Inc()
 
 	key := cachingKeyExists(name)
-	hits := cfg.cache.Fetch(ctx, []string{key})
+	hits := cache.Fetch(ctx, []string{key})
 
 	if ex := hits[key]; ex != nil {
 		switch string(ex) {
@@ -319,42 +319,43 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 	existsTime := time.Now()
 	ok, err := cb.Bucket.Exists(ctx, name)
 	if err == nil {
-		cb.storeExistsCacheEntry(ctx, key, ok, existsTime, cfg)
+		storeExistsCacheEntry(ctx, key, ok, existsTime, cache, existsCfg.existsTTL, existsCfg.doesntExistTTL)
 	}
 
 	return ok, err
 }
 
-func (cb *CachingBucket) storeExistsCacheEntry(ctx context.Context, cachingKey string, exists bool, ts time.Time, cfg *operationConfig) {
+func storeExistsCacheEntry(ctx context.Context, cachingKey string, exists bool, ts time.Time, cache cache.Cache, existsTTL, doesntExistTTL time.Duration) {
 	var (
 		data []byte
 		ttl  time.Duration
 	)
 	if exists {
-		ttl = cfg.ExistsTTL - time.Since(ts)
+		ttl = existsTTL - time.Since(ts)
 		data = []byte(existsTrue)
 	} else {
-		ttl = cfg.DoesntExistTTL - time.Since(ts)
+		ttl = doesntExistTTL - time.Since(ts)
 		data = []byte(existsFalse)
 	}
 
 	if ttl > 0 {
-		cfg.cache.Store(ctx, map[string][]byte{cachingKey: data}, ttl)
+		cache.Store(ctx, map[string][]byte{cachingKey: data}, ttl)
 	}
 }
 
 func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationGet], name)
+	cfgName, cache, cfg := cb.findCacheConfig(cb.operationConfigs[operationGet], name)
 	if cfg == nil {
 		return cb.Bucket.Get(ctx, name)
 	}
+	getCfg := cfg.(getConfig)
 
 	cb.operationRequests.WithLabelValues(operationGet, cfgName).Inc()
 
 	key := cachingKeyContent(name)
 	existsKey := cachingKeyExists(name)
 
-	hits := cfg.cache.Fetch(ctx, []string{key, existsKey})
+	hits := cache.Fetch(ctx, []string{key, existsKey})
 	if hits[key] != nil {
 		cb.operationHits.WithLabelValues(operationGet, cfgName).Inc()
 		return ioutil.NopCloser(bytes.NewReader(hits[key])), nil
@@ -371,7 +372,7 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 	if err != nil {
 		if cb.Bucket.IsObjNotFoundErr(err) {
 			// Cache that object doesn't exist.
-			cb.storeExistsCacheEntry(ctx, existsKey, false, getTime, cfg)
+			storeExistsCacheEntry(ctx, existsKey, false, getTime, cache, getCfg.existsTTL, getCfg.doesntExistTTL)
 		}
 
 		return nil, err
@@ -383,11 +384,11 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 		return nil, err
 	}
 
-	ttl := cfg.ContentTTL - time.Since(getTime)
+	ttl := getCfg.contentTTL - time.Since(getTime)
 	if ttl > 0 {
-		cfg.cache.Store(ctx, map[string][]byte{key: data}, ttl)
+		cache.Store(ctx, map[string][]byte{key: data}, ttl)
 	}
-	cb.storeExistsCacheEntry(ctx, existsKey, true, getTime, cfg)
+	storeExistsCacheEntry(ctx, existsKey, true, getTime, cache, getCfg.existsTTL, getCfg.doesntExistTTL)
 
 	return ioutil.NopCloser(bytes.NewReader(data)), nil
 }
@@ -401,28 +402,30 @@ func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length 
 		return cb.Bucket.GetRange(ctx, name, off, length)
 	}
 
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationGetRange], name)
+	cfgName, cache, cfg := cb.findCacheConfig(cb.operationConfigs[operationGetRange], name)
 	if cfg == nil {
 		return cb.Bucket.GetRange(ctx, name, off, length)
 	}
+	rangeCfg := cfg.(getRangeConfig)
 
 	var (
 		r   io.ReadCloser
 		err error
 	)
 	tracing.DoInSpan(ctx, "cachingbucket_getrange", func(ctx context.Context) {
-		r, err = cb.cachedGetRange(ctx, name, off, length, cfgName, cfg)
+		r, err = cb.cachedGetRange(ctx, name, off, length, cfgName, cache, rangeCfg)
 	})
 	return r, err
 }
 
 func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	lname, cfg := cb.findCacheConfig(cb.operationConfigs[operationObjectSize], name)
+	cfgName, cache, cfg := cb.findCacheConfig(cb.operationConfigs[operationObjectSize], name)
 	if cfg == nil {
 		return cb.Bucket.ObjectSize(ctx, name)
 	}
+	osCfg := cfg.(objectSizeCfg)
 
-	return cb.cachedObjectSize(ctx, name, lname, cfg.cache, cfg.ObjectSizeTTL)
+	return cb.cachedObjectSize(ctx, name, cfgName, cache, time.Duration(osCfg))
 }
 
 func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgName string, cache cache.Cache, ttl time.Duration) (uint64, error) {
@@ -448,11 +451,11 @@ func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgN
 	return size, nil
 }
 
-func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset, length int64, cfgName string, cfg *operationConfig) (io.ReadCloser, error) {
+func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset, length int64, cfgName string, cache cache.Cache, cfg getRangeConfig) (io.ReadCloser, error) {
 	cb.operationRequests.WithLabelValues(operationGetRange, cfgName)
 	cb.requestedGetRangeBytes.WithLabelValues(cfgName).Add(float64(length))
 
-	size, err := cb.cachedObjectSize(ctx, name, cfgName, cfg.cache, cfg.ObjectSizeTTL)
+	size, err := cb.cachedObjectSize(ctx, name, cfgName, cache, cfg.objectSizeTTL)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get size of object: %s", name)
 	}
@@ -463,28 +466,28 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 	}
 
 	// Start and end range are subrange-aligned offsets into object, that we're going to read.
-	startRange := (offset / cfg.SubrangeSize) * cfg.SubrangeSize
-	endRange := ((offset + length) / cfg.SubrangeSize) * cfg.SubrangeSize
-	if (offset+length)%cfg.SubrangeSize > 0 {
-		endRange += cfg.SubrangeSize
+	startRange := (offset / cfg.subrangeSize) * cfg.subrangeSize
+	endRange := ((offset + length) / cfg.subrangeSize) * cfg.subrangeSize
+	if (offset+length)%cfg.subrangeSize > 0 {
+		endRange += cfg.subrangeSize
 	}
 
 	// The very last subrange in the object may have length that is not divisible by subrange size.
-	lastSubrangeOffset := endRange - cfg.SubrangeSize
-	lastSubrangeLength := int(cfg.SubrangeSize)
+	lastSubrangeOffset := endRange - cfg.subrangeSize
+	lastSubrangeLength := int(cfg.subrangeSize)
 	if uint64(endRange) > size {
-		lastSubrangeOffset = (int64(size) / cfg.SubrangeSize) * cfg.SubrangeSize
+		lastSubrangeOffset = (int64(size) / cfg.subrangeSize) * cfg.subrangeSize
 		lastSubrangeLength = int(int64(size) - lastSubrangeOffset)
 	}
 
-	numSubranges := (endRange - startRange) / cfg.SubrangeSize
+	numSubranges := (endRange - startRange) / cfg.subrangeSize
 
 	offsetKeys := make(map[int64]string, numSubranges)
 	keys := make([]string, 0, numSubranges)
 
 	totalRequestedBytes := int64(0)
-	for off := startRange; off < endRange; off += cfg.SubrangeSize {
-		end := off + cfg.SubrangeSize
+	for off := startRange; off < endRange; off += cfg.subrangeSize {
+		end := off + cfg.subrangeSize
 		if end > int64(size) {
 			end = int64(size)
 		}
@@ -497,7 +500,7 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 
 	// Try to get all subranges from the cache.
 	totalCachedBytes := int64(0)
-	hits := cfg.cache.Fetch(ctx, keys)
+	hits := cache.Fetch(ctx, keys)
 	for _, b := range hits {
 		totalCachedBytes += int64(len(b))
 		cb.fetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(len(b)))
@@ -509,13 +512,13 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 			hits = map[string][]byte{}
 		}
 
-		err := cb.fetchMissingSubranges(ctx, name, startRange, endRange, offsetKeys, hits, lastSubrangeOffset, lastSubrangeLength, cfgName, cfg)
+		err := cb.fetchMissingSubranges(ctx, name, startRange, endRange, offsetKeys, hits, lastSubrangeOffset, lastSubrangeLength, cfgName, cache, cfg)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return ioutil.NopCloser(newSubrangesReader(cfg.SubrangeSize, offsetKeys, hits, offset, length)), nil
+	return ioutil.NopCloser(newSubrangesReader(cfg.subrangeSize, offsetKeys, hits, offset, length)), nil
 }
 
 type rng struct {
@@ -524,19 +527,19 @@ type rng struct {
 
 // fetchMissingSubranges fetches missing subranges, stores them into "hits" map
 // and into cache as well (using provided cacheKeys).
-func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastSubrangeOffset int64, lastSubrangeLength int, labelName string, cfg *operationConfig) error {
+func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string, startRange, endRange int64, cacheKeys map[int64]string, hits map[string][]byte, lastSubrangeOffset int64, lastSubrangeLength int, cfgName string, cache cache.Cache, cfg getRangeConfig) error {
 	// Ordered list of missing sub-ranges.
 	var missing []rng
 
-	for off := startRange; off < endRange; off += cfg.SubrangeSize {
+	for off := startRange; off < endRange; off += cfg.subrangeSize {
 		if hits[cacheKeys[off]] == nil {
-			missing = append(missing, rng{start: off, end: off + cfg.SubrangeSize})
+			missing = append(missing, rng{start: off, end: off + cfg.subrangeSize})
 		}
 	}
 
 	missing = mergeRanges(missing, 0) // Merge adjacent ranges.
 	// Keep merging until we have only max number of ranges (= requests).
-	for limit := cfg.SubrangeSize; cfg.MaxGetRangeRequests > 0 && len(missing) > cfg.MaxGetRangeRequests; limit = limit * 2 {
+	for limit := cfg.subrangeSize; cfg.maxSubRequests > 0 && len(missing) > cfg.maxSubRequests; limit = limit * 2 {
 		missing = mergeRanges(missing, limit)
 	}
 
@@ -553,7 +556,7 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 			}
 			defer runutil.CloseWithLogOnErr(cb.logger, r, "fetching range [%d, %d]", m.start, m.end)
 
-			for off := m.start; off < m.end && gctx.Err() == nil; off += cfg.SubrangeSize {
+			for off := m.start; off < m.end && gctx.Err() == nil; off += cfg.subrangeSize {
 				key := cacheKeys[off]
 				if key == "" {
 					return errors.Errorf("fetching range [%d, %d]: caching key for offset %d not found", m.start, m.end, off)
@@ -566,7 +569,7 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 					// if object length isn't divisible by subrange size.
 					subrangeData = make([]byte, lastSubrangeLength)
 				} else {
-					subrangeData = make([]byte, cfg.SubrangeSize)
+					subrangeData = make([]byte, cfg.subrangeSize)
 				}
 				_, err := io.ReadFull(r, subrangeData)
 				if err != nil {
@@ -582,10 +585,10 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 				hitsMutex.Unlock()
 
 				if storeToCache {
-					cb.fetchedGetRangeBytes.WithLabelValues(originBucket, labelName).Add(float64(len(subrangeData)))
-					cfg.cache.Store(gctx, map[string][]byte{key: subrangeData}, cfg.SubrangeTTL)
+					cb.fetchedGetRangeBytes.WithLabelValues(originBucket, cfgName).Add(float64(len(subrangeData)))
+					cache.Store(gctx, map[string][]byte{key: subrangeData}, cfg.subrangeTTL)
 				} else {
-					cb.refetchedGetRangeBytes.WithLabelValues(originCache, labelName).Add(float64(len(subrangeData)))
+					cb.refetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(len(subrangeData)))
 				}
 			}
 
