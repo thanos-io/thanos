@@ -36,6 +36,12 @@ const (
 
 	existsTrue  = "true"
 	existsFalse = "false"
+
+	operationGet        = "get"
+	operationGetRange   = "getrange"
+	operationIter       = "iter"
+	operationExists     = "exists"
+	operationObjectSize = "objectsize"
 )
 
 var errObjNotFound = errors.Errorf("object not found")
@@ -164,19 +170,19 @@ func (cb *CachingBucket) addOperationConfig(operationName, configName string, cf
 }
 
 func (cb *CachingBucket) CacheIter(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig("iter", configName, newCacheConfig(cfg, configName, matcher, cache))
+	cb.addOperationConfig(operationIter, configName, newCacheConfig(cfg, configName, matcher, cache))
 }
 
 func (cb *CachingBucket) CacheExists(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig("exists", configName, newCacheConfig(cfg, configName, matcher, cache))
+	cb.addOperationConfig(operationExists, configName, newCacheConfig(cfg, configName, matcher, cache))
 }
 
 func (cb *CachingBucket) CacheGet(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig("get", configName, newCacheConfig(cfg, configName, matcher, cache))
+	cb.addOperationConfig(operationGet, configName, newCacheConfig(cfg, configName, matcher, cache))
 }
 
 func (cb *CachingBucket) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig("getrange", configName, newCacheConfig(cfg, configName, matcher, cache))
+	cb.addOperationConfig(operationGetRange, configName, newCacheConfig(cfg, configName, matcher, cache))
 
 	cb.requestedGetRangeBytes.WithLabelValues(configName)
 	cb.fetchedGetRangeBytes.WithLabelValues(originCache, configName)
@@ -185,7 +191,7 @@ func (cb *CachingBucket) CacheGetRange(configName string, cache cache.Cache, mat
 }
 
 func (cb *CachingBucket) CacheObjectSize(configName string, cache cache.Cache, matcher func(name string) bool, cfg CachingBucketConfig) {
-	cb.addOperationConfig("objectsize", configName, newCacheConfig(cfg, configName, matcher, cache))
+	cb.addOperationConfig(operationObjectSize, configName, newCacheConfig(cfg, configName, matcher, cache))
 }
 
 func (cb *CachingBucket) findCacheConfig(configs []*operationConfig, objectName string) (configName string, cfg *operationConfig) {
@@ -218,12 +224,12 @@ func (cb *CachingBucket) ReaderWithExpectedErrs(expectedFunc objstore.IsOpFailur
 }
 
 func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs["iter"], dir)
+	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationIter], dir)
 	if cfg == nil {
 		return cb.Bucket.Iter(ctx, dir, f)
 	}
 
-	cb.operationRequests.WithLabelValues("iter", cfgName).Inc()
+	cb.operationRequests.WithLabelValues(operationIter, cfgName).Inc()
 
 	key := cachingKeyIter(dir)
 
@@ -231,7 +237,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	if data[key] != nil {
 		list, err := decodeIterResult(data[key])
 		if err == nil {
-			cb.operationHits.WithLabelValues("iter", cfgName).Inc()
+			cb.operationHits.WithLabelValues(operationIter, cfgName).Inc()
 
 			for _, n := range list {
 				err = f(n)
@@ -287,12 +293,12 @@ func decodeIterResult(data []byte) ([]string, error) {
 }
 
 func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs["exists"], name)
+	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationExists], name)
 	if cfg == nil {
 		return cb.Bucket.Exists(ctx, name)
 	}
 
-	cb.operationRequests.WithLabelValues("exists", cfgName).Inc()
+	cb.operationRequests.WithLabelValues(operationExists, cfgName).Inc()
 
 	key := cachingKeyExists(name)
 	hits := cfg.cache.Fetch(ctx, []string{key})
@@ -300,10 +306,10 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 	if ex := hits[key]; ex != nil {
 		switch string(ex) {
 		case existsTrue:
-			cb.operationHits.WithLabelValues("exists", cfgName).Inc()
+			cb.operationHits.WithLabelValues(operationExists, cfgName).Inc()
 			return true, nil
 		case existsFalse:
-			cb.operationHits.WithLabelValues("exists", cfgName).Inc()
+			cb.operationHits.WithLabelValues(operationExists, cfgName).Inc()
 			return false, nil
 		default:
 			level.Warn(cb.logger).Log("msg", "unexpected cached 'exists' value", "val", string(ex))
@@ -338,25 +344,25 @@ func (cb *CachingBucket) storeExistsCacheEntry(ctx context.Context, cachingKey s
 }
 
 func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs["get"], name)
+	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationGet], name)
 	if cfg == nil {
 		return cb.Bucket.Get(ctx, name)
 	}
 
-	cb.operationRequests.WithLabelValues("get", cfgName).Inc()
+	cb.operationRequests.WithLabelValues(operationGet, cfgName).Inc()
 
 	key := cachingKeyContent(name)
 	existsKey := cachingKeyExists(name)
 
 	hits := cfg.cache.Fetch(ctx, []string{key, existsKey})
 	if hits[key] != nil {
-		cb.operationHits.WithLabelValues("get", cfgName).Inc()
+		cb.operationHits.WithLabelValues(operationGet, cfgName).Inc()
 		return ioutil.NopCloser(bytes.NewReader(hits[key])), nil
 	}
 
 	// If we know that file doesn't exist, we can return that. Useful for deletion marks.
 	if ex := hits[existsKey]; ex != nil && string(ex) == existsFalse {
-		cb.operationHits.WithLabelValues("get", cfgName).Inc()
+		cb.operationHits.WithLabelValues(operationGet, cfgName).Inc()
 		return nil, errObjNotFound
 	}
 
@@ -395,7 +401,7 @@ func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length 
 		return cb.Bucket.GetRange(ctx, name, off, length)
 	}
 
-	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs["getrange"], name)
+	cfgName, cfg := cb.findCacheConfig(cb.operationConfigs[operationGetRange], name)
 	if cfg == nil {
 		return cb.Bucket.GetRange(ctx, name, off, length)
 	}
@@ -411,7 +417,7 @@ func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length 
 }
 
 func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	lname, cfg := cb.findCacheConfig(cb.operationConfigs["objectsize"], name)
+	lname, cfg := cb.findCacheConfig(cb.operationConfigs[operationObjectSize], name)
 	if cfg == nil {
 		return cb.Bucket.ObjectSize(ctx, name)
 	}
@@ -422,11 +428,11 @@ func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, e
 func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgName string, cache cache.Cache, ttl time.Duration) (uint64, error) {
 	key := cachingKeyObjectSize(name)
 
-	cb.operationRequests.WithLabelValues("objectsize", cfgName).Add(1)
+	cb.operationRequests.WithLabelValues(operationObjectSize, cfgName).Inc()
 
 	hits := cache.Fetch(ctx, []string{key})
 	if s := hits[key]; len(s) == 8 {
-		cb.operationHits.WithLabelValues("objectsize", cfgName).Add(1)
+		cb.operationHits.WithLabelValues(operationObjectSize, cfgName).Inc()
 		return binary.BigEndian.Uint64(s), nil
 	}
 
@@ -443,7 +449,7 @@ func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgN
 }
 
 func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset, length int64, cfgName string, cfg *operationConfig) (io.ReadCloser, error) {
-	cb.operationRequests.WithLabelValues("getrange", cfgName)
+	cb.operationRequests.WithLabelValues(operationGetRange, cfgName)
 	cb.requestedGetRangeBytes.WithLabelValues(cfgName).Add(float64(length))
 
 	size, err := cb.cachedObjectSize(ctx, name, cfgName, cfg.cache, cfg.ObjectSizeTTL)
@@ -496,7 +502,7 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 		totalCachedBytes += int64(len(b))
 		cb.fetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(len(b)))
 	}
-	cb.operationHits.WithLabelValues("getrange", cfgName).Add(float64(totalCachedBytes) / float64(totalRequestedBytes))
+	cb.operationHits.WithLabelValues(operationGetRange, cfgName).Add(float64(totalCachedBytes) / float64(totalRequestedBytes))
 
 	if len(hits) < len(keys) {
 		if hits == nil {

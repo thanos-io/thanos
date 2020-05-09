@@ -408,12 +408,12 @@ func TestCachedIter(t *testing.T) {
 }
 
 func verifyIter(t *testing.T, cb *CachingBucket, expectedFiles []string, expectedCache bool, cfgName string) {
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("iter", cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationIter, cfgName)))
 
 	col := iterCollector{}
 	testutil.Ok(t, cb.Iter(context.Background(), "/", col.collect))
 
-	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("iter", cfgName)))
+	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationIter, cfgName)))
 
 	sort.Strings(col.items)
 	testutil.Equals(t, expectedFiles, col.items)
@@ -445,19 +445,21 @@ func TestExists(t *testing.T) {
 
 	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
-	cb.CacheExists("test", cache, matchAll, config)
 
-	verifyExists(t, cb, testFilename, false, false, "test")
+	const cfgName = "test"
+	cb.CacheExists(cfgName, cache, matchAll, config)
+
+	verifyExists(t, cb, testFilename, false, false, cfgName)
 
 	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, strings.NewReader("hej")))
-	verifyExists(t, cb, testFilename, false, true, "test") // Reused cache result.
+	verifyExists(t, cb, testFilename, false, true, cfgName) // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, testFilename, true, false, "test")
+	verifyExists(t, cb, testFilename, true, false, cfgName)
 
 	testutil.Ok(t, inmem.Delete(context.Background(), testFilename))
-	verifyExists(t, cb, testFilename, true, true, "test") // Reused cache result.
+	verifyExists(t, cb, testFilename, true, true, cfgName) // Reused cache result.
 	cache.flush()
-	verifyExists(t, cb, testFilename, false, false, "test")
+	verifyExists(t, cb, testFilename, false, false, cfgName)
 }
 
 func TestExistsCachingDisabled(t *testing.T) {
@@ -483,11 +485,11 @@ func TestExistsCachingDisabled(t *testing.T) {
 
 func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool, cfgName string) {
 	t.Helper()
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("exists", cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationExists, cfgName)))
 	ok, err := cb.Exists(context.Background(), file)
 	testutil.Ok(t, err)
 	testutil.Equals(t, exists, ok)
-	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("exists", cfgName)))
+	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationExists, cfgName)))
 
 	if fromCache {
 		testutil.Equals(t, 1, hitsAfter-hitsBefore)
@@ -504,34 +506,36 @@ func TestGet(t *testing.T) {
 
 	cb, err := NewCachingBucket(inmem, nil, nil)
 	testutil.Ok(t, err)
-	cb.CacheGet("metafile", cache, matchAll, DefaultCachingBucketConfig())
-	cb.CacheExists("metafile", cache, matchAll, DefaultCachingBucketConfig())
 
-	verifyGet(t, cb, testFilename, nil, false, "metafile")
-	verifyExists(t, cb, testFilename, false, true, "metafile")
+	const cfgName = "metafile"
+	cb.CacheGet(cfgName, cache, matchAll, DefaultCachingBucketConfig())
+	cb.CacheExists(cfgName, cache, matchAll, DefaultCachingBucketConfig())
+
+	verifyGet(t, cb, testFilename, nil, false, cfgName)
+	verifyExists(t, cb, testFilename, false, true, cfgName)
 
 	data := []byte("hello world")
 	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
 
 	// Even if file is now uploaded, old data is served from cache.
-	verifyGet(t, cb, testFilename, nil, true, "metafile")
-	verifyExists(t, cb, testFilename, false, true, "metafile")
+	verifyGet(t, cb, testFilename, nil, true, cfgName)
+	verifyExists(t, cb, testFilename, false, true, cfgName)
 
 	cache.flush()
 
-	verifyGet(t, cb, testFilename, data, false, "metafile")
-	verifyGet(t, cb, testFilename, data, true, "metafile")
-	verifyExists(t, cb, testFilename, true, true, "metafile")
+	verifyGet(t, cb, testFilename, data, false, cfgName)
+	verifyGet(t, cb, testFilename, data, true, cfgName)
+	verifyExists(t, cb, testFilename, true, true, cfgName)
 }
 
 func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, cfgName string) {
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("get", cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
 
 	r, err := cb.Get(context.Background(), file)
 	if expectedData == nil {
 		testutil.Assert(t, cb.IsObjNotFoundErr(err))
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("get", cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
@@ -544,7 +548,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedData, data)
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("get", cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
@@ -577,7 +581,7 @@ func TestObjectSize(t *testing.T) {
 
 func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, cfgName string) {
 	t.Helper()
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("objectsize", cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationObjectSize, cfgName)))
 
 	length, err := cb.ObjectSize(context.Background(), file)
 	if expectedLength < 0 {
@@ -586,7 +590,7 @@ func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLeng
 		testutil.Ok(t, err)
 		testutil.Equals(t, uint64(expectedLength), length)
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues("objectsize", cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationObjectSize, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
