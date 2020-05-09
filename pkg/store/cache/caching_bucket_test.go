@@ -562,7 +562,7 @@ func TestObjectSize(t *testing.T) {
 	cb.CacheObjectSize(cfgName, cache, matchAll, time.Minute)
 
 	verifyObjectSize(t, cb, testFilename, -1, false, cfgName)
-	verifyObjectSize(t, cb, testFilename, -1, false, cfgName) // ObjectSize doesn't cache non-existant files.
+	verifyObjectSize(t, cb, testFilename, -1, false, cfgName) // ObjectSize doesn't cache non-existent files.
 
 	data := []byte("hello world")
 	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
