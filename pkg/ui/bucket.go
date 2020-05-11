@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 )
 
@@ -30,7 +32,7 @@ type Bucket struct {
 
 func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader string) *Bucket {
 	return &Bucket{
-		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", queryTmplFuncs()),
+		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Bucket),
 		Blocks:         "[]",
 		Label:          label,
 		externalPrefix: externalPrefix,
@@ -45,6 +47,15 @@ func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddle
 	}
 	r.WithPrefix(b.externalPrefix).Get("/", instrf("root", b.root))
 	r.WithPrefix(b.externalPrefix).Get("/static/*filepath", instrf("static", b.serveStaticAsset))
+	// Make sure that "<path-prefix>/new" is redirected to "<path-prefix>/new/" and
+	// not just the naked "/new/", which would be the default behavior of the router
+	// with the "RedirectTrailingSlash" option (https://godoc.org/github.com/julienschmidt/httprouter#Router.RedirectTrailingSlash),
+	// and which breaks users with a --web.route-prefix that deviates from the path derived
+	// from the external URL.
+	r.WithPrefix(b.externalPrefix).Get("/new", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), "new")+"/", http.StatusFound)
+	})
+	r.WithPrefix(b.externalPrefix).Get("/new/*filepath", instrf("react-static", b.serveReactUI))
 }
 
 // Handle / of bucket UIs.
