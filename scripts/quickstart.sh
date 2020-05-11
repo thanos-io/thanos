@@ -271,6 +271,7 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
     ${OBJSTORECFG} &
 fi
 
+sleep 0.5
 
 # Start Thanos Ruler.
 ${THANOS_EXECUTABLE} rule \
