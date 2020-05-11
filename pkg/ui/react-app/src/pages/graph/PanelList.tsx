@@ -64,7 +64,10 @@ export const PanelListContent: FC<PanelListProps> = ({
   };
 
   const addPanel = () => {
-    callAll(setPanels, updateURL)([
+    callAll(
+      setPanels,
+      updateURL
+    )([
       ...panels,
       {
         id: generateID(),
@@ -85,7 +88,10 @@ export const PanelListContent: FC<PanelListProps> = ({
             callAll(setPanels, updateURL)(panels.map(p => (id === p.id ? { ...p, options: opts } : p)))
           }
           removePanel={() =>
-            callAll(setPanels, updateURL)(
+            callAll(
+              setPanels,
+              updateURL
+            )(
               panels.reduce<PanelMeta[]>(
                 (acc, panel) => (panel.id !== id ? [...acc, { ...panel, key: `${acc.length}` }] : acc),
                 []
