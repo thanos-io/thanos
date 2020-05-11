@@ -235,7 +235,7 @@ func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error 
 			level.Info(logger).Log("msg", "caught signal. Reloading.", "signal", s)
 			select {
 			case r <- struct{}{}:
-				level.Info(logger).Log("msg", "relaod dispatched.")
+				level.Info(logger).Log("msg", "reload dispatched.")
 			default:
 			}
 		case <-cancel:
