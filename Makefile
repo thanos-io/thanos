@@ -147,6 +147,14 @@ build: check-git deps $(PROMU)
 	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
+.PHONY: development
+development: ## Bootstraps a docker-compose setup for local development/demo
+development: check-git deps $(PROMU)
+	@echo ">> building binaries for development env"
+	@GOOS=linux GOARCH=amd64 $(PROMU) build --prefix $(PREFIX)
+	cp thanos development/thanos
+	cd development && docker-compose up -d --build && cd ..
+
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
 crossbuild: $(PROMU)

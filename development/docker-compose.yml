@@ -1,0 +1,242 @@
+version: '3.2'
+services:
+  prometheus_one:
+    image: prom/prometheus:v2.17.0
+    container_name: prometheus_one
+    user: root
+    volumes:
+      - ./prometheus:/etc/config/
+      - ./data/prometheus/one:/data
+    command:
+      - '--config.file=/etc/config/prometheus_one.yml'
+      - '--storage.tsdb.path=/data'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=2h'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.listen-address=:9001'
+      - '--storage.tsdb.min-block-duration=2h'
+      - '--storage.tsdb.max-block-duration=2h'
+    restart: unless-stopped
+    expose:
+      - 9001
+
+  prometheus_two:
+    image: prom/prometheus:v2.17.0
+    container_name: prometheus_two
+    user: root
+    volumes:
+      - ./prometheus:/etc/config/
+      - ./data/prometheus/two:/data
+    command:
+      - '--config.file=/etc/config/prometheus_two.yml'
+      - '--storage.tsdb.path=/data'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=2h'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.listen-address=:9002'
+      - '--storage.tsdb.min-block-duration=2h'
+      - '--storage.tsdb.max-block-duration=2h'
+    restart: unless-stopped
+    expose:
+      - 9002
+
+  minio:
+    image: minio/minio:RELEASE.2020-04-23T00-58-49Z
+    volumes:
+      - ./data/minio:/data
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ACCESS_KEY: myaccesskey
+      MINIO_SECRET_KEY: mysecretkey
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:6.4.1
+    container_name: grafana
+    user: root
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
+  thanos_sidecar_one:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.thanos
+    container_name: thanos_sidecar_one
+    volumes:
+      - ./prometheus:/etc/config/
+      - ./data/prometheus/one:/data
+    command:
+      - "/thanos"
+      - "sidecar"
+      - "--log.level=debug"
+      - "--tsdb.path=/data"
+      - "--prometheus.url=http://prometheus_one:9001"
+      - "--reloader.config-file=/etc/config/prometheus_one.yml"
+      - |
+          --objstore.config=type: S3
+          config: 
+            bucket: thanos-data-bucket
+            access_key: myaccesskey
+            secret_key: mysecretkey
+            endpoint: minio:9000
+            insecure: true
+    expose:
+      - 10902
+      - 10901
+    depends_on:
+      - minio
+
+  thanos_sidecar_two:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.thanos
+    container_name: thanos_sidecar_two
+    volumes:
+      - ./prometheus:/etc/config/
+      - ./data/prometheus/two:/data
+    command:
+      - "/thanos"
+      - "sidecar"
+      - "--log.level=debug"
+      - "--tsdb.path=/data"
+      - "--prometheus.url=http://prometheus_two:9001"
+      - "--reloader.config-file=/etc/config/prometheus_two.yml"
+      - |
+          --objstore.config=type: S3
+          config: 
+            bucket: thanos-data-bucket
+            access_key: myaccesskey
+            secret_key: mysecretkey
+            endpoint: minio:9000
+            insecure: true
+    expose:
+      - 10902
+      - 10901
+    depends_on:
+      - minio
+
+  thanos_querier:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.thanos
+    container_name: thanos_querier
+    command:
+      - "/thanos"
+      - "query"
+      - "--log.level=debug"
+      - "--log.format=logfmt"
+      - "--store=thanos_sidecar_one:10901"
+      - "--store=thanos_sidecar_two:10901"
+      - "--store=thanos_store:10901"
+      - "--store.sd-interval=5m"
+    expose:
+      - 10902
+      - 10901
+    depends_on:
+      - minio
+
+  thanos_compactor:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.thanos
+    container_name: thanos_compactor
+    volumes:
+      - ./data/compactor:/data
+    command:
+      - "/thanos"
+      - "compact"
+      - "--log.level=debug"
+      - "--log.format=logfmt"
+      - |
+        --objstore.config=type: S3
+        config: 
+            bucket: thanos-data-bucket
+            access_key: myaccesskey
+            secret_key: mysecretkey
+            endpoint: minio:9000
+            insecure: true
+      - "--data-dir=/data"
+      - "--consistency-delay=30m"
+      - "--retention.resolution-raw=30d"
+      - "--retention.resolution-5m=120d"
+      - "--retention.resolution-1h=1y"
+      - "--block-sync-concurrency=20"
+      - "--compact.concurrency=1"
+      - "--delete-delay=15m"
+      - "--wait"
+      - "--wait-interval=3m"
+      - |
+        --objstore-retain-compacted-blocks-to-bucket.config=type: S3
+        config: 
+            bucket: thanos-backup
+            access_key: myaccesskey
+            secret_key: mysecretkey
+            endpoint: minio:9000
+            insecure: true
+    expose:
+      - 10902
+      - 10901
+    depends_on:
+      - minio
+
+
+  thanos_store:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.thanos
+    container_name: thanos_store
+    volumes:
+      - ./data/store:/data
+    command:
+      - "/thanos"
+      - "store"
+      - "--log.level=debug"
+      - |
+        --objstore.config=type: S3
+        config: 
+            bucket: thanos-data-bucket
+            access_key: myaccesskey
+            secret_key: mysecretkey
+            endpoint: minio:9000
+            insecure: true
+      - "--data-dir=/data"
+      - "--log.format=logfmt"
+      - "--index-cache-size=250MB"
+      - "--chunk-pool-size=1GB"
+      - "--store.grpc.series-max-concurrency=20"
+      - "--sync-block-duration=3m"
+      - "--block-sync-concurrency=20"
+    expose:
+      - 10902
+      - 10901
+    depends_on:
+      - minio
+
+  debug:
+    build:
+      context: thanos
+      dockerfile: Dockerfile.debug
+    container_name: debug
+    user: root
+    stdin_open: true
+    tty: true
+    expose:
+      - 10902
+      - 10901
+    ports:
+      - "10902:10902"
