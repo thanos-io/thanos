@@ -263,7 +263,7 @@ done
 sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
-  ${THANOS_EXECUTABLE} tools bucket web \
+  ${THANOS_EXECUTABLE} bucket web \
     --debug.name bucket-web \
     --log.level debug \
     --http-address 0.0.0.0:10933 \
