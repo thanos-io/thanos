@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
