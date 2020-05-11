@@ -9,6 +9,9 @@ import DataTable from './DataTable';
 import { GraphTabContent } from './GraphTabContent';
 
 const defaultProps = {
+  useLocalTime: false,
+  useDeduplication: true,
+  usePartialResponse: false,
   options: {
     expr: 'prometheus_engine',
     type: PanelType.Table,
@@ -17,24 +20,15 @@ const defaultProps = {
     resolution: 28,
     stacked: false,
   },
-  onOptionsChanged: (): void => {
-    // Do nothing.
-  },
+  onOptionsChanged: (): void => {},
   pastQueries: [],
   metricNames: [
     'prometheus_engine_queries',
     'prometheus_engine_queries_concurrent_max',
     'prometheus_engine_query_duration_seconds',
   ],
-  removePanel: (): void => {
-    // Do nothing.
-  },
-  onExecuteQuery: (): void => {
-    // Do nothing.
-  },
-  useLocalTime: false,
-  useDeduplication: true,
-  usePartialResponse: false,
+  removePanel: (): void => {},
+  onExecuteQuery: (): void => {},
 };
 
 describe('Panel', () => {
