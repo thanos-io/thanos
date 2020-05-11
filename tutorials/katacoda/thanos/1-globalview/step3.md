@@ -55,7 +55,7 @@ It's just enough to query Querier for <a href="https://[[HOST_SUBDOMAIN]]-29090-
 
 You should see the single value representing the number of series scraped in both clusters in the current mode.
 
-If we will query `prometheus_tsdb_head_series` we will see that we have complete info about all three Prometheus instances:
+If we query `prometheus_tsdb_head_series` we will see that we have complete info about all three Prometheus instances:
 
 ```
 prometheus_tsdb_head_series{cluster="eu1",instance="127.0.0.1:9090",job="prometheus"}
@@ -63,7 +63,7 @@ prometheus_tsdb_head_series{cluster="us1",instance="127.0.0.1:9091",job="prometh
 prometheus_tsdb_head_series{cluster="us1",instance="127.0.0.1:9092",job="prometheus"}
 ```
 
-## Handling of Highly Availabile Prometheus
+## Handling of Highly Available Prometheus
 
 Now, as you remember we configured Prometheus 0 US1 and Prometheus 1 US1 to scrape the same things. We also connect Querier
 to both, so how Querier knows what is an HA group?
