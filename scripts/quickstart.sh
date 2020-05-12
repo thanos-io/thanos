@@ -84,6 +84,9 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:909${i}"
+    - "localhost:5909${i}"
+    - "localhost:5909${i}"
+    - "localhost:5909${i}"
 - job_name: thanos-sidecar
   scrape_interval: 5s
   static_configs:
@@ -99,6 +102,8 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:10909"
+    - "localhost:11909"
+    - "localhost:12909"
 - job_name: thanos-query
   scrape_interval: 5s
   static_configs:
@@ -163,37 +168,57 @@ fi
 sleep 0.5
 
 if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
-  ${THANOS_EXECUTABLE} receive \
-    --debug.name receive \
-    --log.level debug \
-    --tsdb.path "./data/remote-write-receive-data" \
-    --grpc-address 0.0.0.0:10907 \
-    --grpc-grace-period 1s \
-    --http-address 0.0.0.0:10909 \
-    --http-grace-period 1s \
-    --label "receive=\"true\"" \
-    ${OBJSTORECFG} \
-    --remote-write.address 0.0.0.0:10908 &
 
-  mkdir -p "data/local-prometheus-data/"
-  cat <<EOF >data/local-prometheus-data/prometheus.yml
+cat <<-EOF > ./data/hashring.json
+[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]
+EOF
+
+for i in $(seq 0 1 2); do
+  ${THANOS_EXECUTABLE} receive \
+    --debug.name receive${i} \
+    --log.level debug \
+    --tsdb.path "./data/remote-write-receive-${i}-data" \
+    --grpc-address 0.0.0.0:1${i}907 \
+    --grpc-grace-period 1s \
+    --http-address 0.0.0.0:1${i}909 \
+    --http-grace-period 1s \
+    --receive.replication-factor 1 \
+    --tsdb.min-block-duration 5m \
+    --tsdb.max-block-duration 5m \
+    --label "receive_replica=\"${i}\"" \
+    --receive.local-endpoint 127.0.0.1:1${i}907 \
+    --receive.hashrings-file ./data/hashring.json \
+    ${OBJSTORECFG} \
+    --remote-write.address 0.0.0.0:1${i}908 &
+
+  STORES="${STORES} --store 127.0.0.1:1${i}907"
+done
+
+for i in $(seq 0 1 2); do
+  mkdir -p "data/local-prometheus-${i}-data/"
+  cat <<EOF >data/local-prometheus-${i}-data/prometheus.yml
+global:
+  external_labels:
+    prometheus: prom${i}
+    replica: 1
 # When the Thanos remote-write-receive component is started,
 # this is an example configuration of a Prometheus server that
 # would scrape a local node-exporter and replicate its data to
 # the remote write endpoint.
 scrape_configs:
-  - job_name: node
+  - job_name: test
     scrape_interval: 1s
     static_configs:
-    - targets: ['localhost:9100']
+    - targets:
+        - fake
 remote_write:
-- url: http://localhost:10908/api/v1/receive
+- url: http://localhost:1${i}908/api/v1/receive
 EOF
   ${PROMETHEUS_EXECUTABLE} \
-    --config.file data/local-prometheus-data/prometheus.yml \
-    --storage.tsdb.path "data/local-prometheus-data/" &
-
-  STORES="${STORES} --store 127.0.0.1:10907"
+    --web.listen-address ":5909${i}" \
+    --config.file data/local-prometheus-${i}-data/prometheus.yml \
+    --storage.tsdb.path "data/local-prometheus-${i}-data/" &
+done
 fi
 
 sleep 0.5
@@ -218,13 +243,14 @@ for i in $(seq 0 1); do
     --http-grace-period 1s \
     --query.replica-label prometheus \
     --tracing.config="${QUERIER_JAEGER_CONFIG}" \
+    --query.replica-label receive_replica \
     ${STORES} &
 done
 
 sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
-  ${THANOS_EXECUTABLE} bucket web \
+  ${THANOS_EXECUTABLE} tools bucket web \
     --debug.name bucket-web \
     --log.level debug \
     --http-address 0.0.0.0:10933 \

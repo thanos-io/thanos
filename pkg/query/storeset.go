@@ -41,13 +41,13 @@ type StoreSpec interface {
 }
 
 type StoreStatus struct {
-	Name      string
-	LastCheck time.Time
-	LastError error
-	LabelSets []storepb.LabelSet
-	StoreType component.StoreAPI
-	MinTime   int64
-	MaxTime   int64
+	Name      string             `json:"name"`
+	LastCheck time.Time          `json:"last_check"`
+	LastError error              `json:"last_error"`
+	LabelSets []storepb.LabelSet `json:"label_sets"`
+	StoreType component.StoreAPI `json:"store_type"`
+	MinTime   int64              `json:"min_time"`
+	MaxTime   int64              `json:"max_time"`
 }
 
 type grpcStoreSpec struct {
@@ -414,14 +414,15 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
 			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
 			if err != nil {
-				if !seenAlready {
-					// Close only if new. Unactive `s.stores` will be closed later on.
+				if !seenAlready && !spec.StrictStatic() {
+					// Close only if new and not a strict static node.
+					// Unactive `s.stores` will be closed later on.
 					st.Close()
 				}
 				s.updateStoreStatus(st, err)

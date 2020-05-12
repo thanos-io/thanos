@@ -175,8 +175,9 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 	}
 
 	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dataDir := filepath.Join(dir, "data")
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
 	b, err := json.Marshal(hashring)
@@ -199,7 +200,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--http-address":                            ":80",
 			"--remote-write.address":                    ":81",
 			"--label":                                   fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":                               container,
+			"--tsdb.path":                               filepath.Join(container, "data"),
 			"--log.level":                               logLevel,
 			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
 			"--receive.local-endpoint":                  localEndpoint,

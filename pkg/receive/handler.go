@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"google.golang.org/grpc"
@@ -40,6 +41,10 @@ import (
 const (
 	// DefaultTenantHeader is the default header used to designate the tenant making a write request.
 	DefaultTenantHeader = "THANOS-TENANT"
+	// DefaultTenant is the default value used for when no tenant is passed via the tenant header.
+	DefaultTenant = "default-tenant"
+	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
+	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
 )
@@ -55,6 +60,7 @@ type Options struct {
 	ListenAddress     string
 	Registry          prometheus.Registerer
 	TenantHeader      string
+	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
 	ReplicationFactor uint64
@@ -114,16 +120,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receiveHTTP)))
 
 	return h
-}
-
-// SetWriter sets the writer.
-// The writer must be set to a non-nil value in order for the
-// handler to be ready and usable.
-// If the writer is nil, then the handler is marked as not ready.
-func (h *Handler) SetWriter(w *Writer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
-	h.writer = w
 }
 
 // Hashring sets the hashring for the handler and marks the hashring as ready.
@@ -266,11 +262,16 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
+	if len(tenant) == 0 {
+		tenant = h.options.DefaultTenantID
+	}
 
 	err = h.handleRequest(r.Context(), rep, tenant, &wreq)
 	switch err {
 	case nil:
 		return
+	case tsdb.ErrNotReady:
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case conflictErr:
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
@@ -358,26 +359,22 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
 				var err error
-				h.mtx.RLock()
-				if h.writer == nil {
-					err = errors.New("storage is not ready")
-				} else {
-					// Create a span to track writing the request into TSDB.
-					tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
 
-						err = h.writer.Write(wreqs[endpoint])
-					})
-					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
-					// To avoid breaking the counting logic, we need to flatten the error.
-					if errs, ok := err.(terrors.MultiError); ok {
-						if countCause(errs, isConflict) > 0 {
-							err = errors.Wrap(conflictErr, errs.Error())
-						} else {
-							err = errors.New(errs.Error())
-						}
+				tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
+					err = h.writer.Write(tenant, wreqs[endpoint])
+				})
+
+				// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
+				// To avoid breaking the counting logic, we need to flatten the error.
+				if errs, ok := err.(terrors.MultiError); ok {
+					if countCause(errs, isConflict) > 0 {
+						err = errors.Wrap(conflictErr, errs.Error())
+					} else if countCause(errs, isNotReady) > 0 {
+						err = tsdb.ErrNotReady
+					} else {
+						err = errors.New(errs.Error())
 					}
 				}
-				h.mtx.RUnlock()
 				if err != nil {
 					level.Error(h.logger).Log("msg", "storing locally", "err", err, "endpoint", endpoint)
 				}
@@ -469,6 +466,9 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
+		if uint64(countCause(errs, isNotReady)) >= (h.options.ReplicationFactor+1)/2 {
+			return tsdb.ErrNotReady
+		}
 		if uint64(countCause(errs, isConflict)) >= (h.options.ReplicationFactor+1)/2 {
 			return errors.Wrap(conflictErr, "did not meet replication threshold")
 		}
@@ -486,6 +486,8 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	switch err {
 	case nil:
 		return &storepb.WriteResponse{}, nil
+	case tsdb.ErrNotReady:
+		return nil, status.Error(codes.Unavailable, err.Error())
 	case conflictErr:
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errBadReplica:
@@ -524,6 +526,12 @@ func isConflict(err error) bool {
 		err == storage.ErrOutOfBounds ||
 		err.Error() == strconv.Itoa(http.StatusConflict) ||
 		status.Code(err) == codes.AlreadyExists
+}
+
+// isNotReady returns whether or not the given error represents a not ready error.
+func isNotReady(err error) bool {
+	return err == tsdb.ErrNotReady ||
+		status.Code(err) == codes.Unavailable
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {

@@ -354,7 +354,7 @@ func runQuery(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
+		api := v1.NewAPI(logger, reg, stores, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 

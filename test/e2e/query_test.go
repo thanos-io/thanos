@@ -112,6 +112,7 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
 			"replica":    "1234",
+			"tenant_id":  "default-tenant",
 		},
 		{
 			"job":        "myself",
@@ -142,6 +143,7 @@ func TestQuery(t *testing.T) {
 			"job":        "myself",
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
+			"tenant_id":  "default-tenant",
 		},
 		{
 			"job":        "myself",

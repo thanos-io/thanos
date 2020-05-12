@@ -12,6 +12,7 @@ kube/.minikube
 
 # Ignore e2e working dirs.
 data/
+test/e2e/e2e_integration_test*
 
 # Ignore promu artifacts.
 /.build
@@ -24,6 +25,9 @@ data/
 website/public/
 website/docs-pre-processed/
 !website/data
+
+# React build assets
+pkg/ui/static/react
 
 tmp/bin
 examples/tmp/

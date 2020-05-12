@@ -16,7 +16,7 @@ Thanos Community Meeting is a **public** and **recorded** monthly meeting every 
 Thanos maintainers & the community meet to discuss open issues, features and other Thanos related things.
 Everyone is welcome to join & add items to the agenda. The meeting happens in Zoom. Right now meeting is in a Webinar format, where only small amount of people will have ability to speak and video share, due to recent [Zoombombing](https://en.wikipedia.org/wiki/Zoombombing) issues.
 
-* When: Monthly, every second Wednesday 12:00 UTC ([Time zone converter](https://      www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
+* When: Monthly, every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
 * Google Calendar: [Google Calendar](https://calendar.google.com/calendar/embed?src=go39q7eu71vvu3gfrkbup6b254%40group.calendar.google.com)
 * Agenda: [https://bit.ly/thanos-community-agenda](https://bit.ly/thanos-community-agenda)
 * Link to join zoom webinar: [https://zoom.us/j/96476403386](https://zoom.us/j/96476403386)

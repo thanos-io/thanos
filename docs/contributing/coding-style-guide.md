@@ -112,7 +112,7 @@ helper package, e.g.:
 
 ```go
 // Use `CloseWithErrCapture` if you want to close and fail the function or
-// method on a `f.Close` error (make sure thr `error` return argument is
+// method on a `f.Close` error (make sure the `error` return argument is
 // named as `err`). If the error is already present, `CloseWithErrCapture`
 // will append (not wrap) the `f.Close` error if any.
 defer runutil.CloseWithErrCapture(&err, f, "close file")
@@ -525,7 +525,7 @@ errors, ambiguity and maintenance burden.
 <tr><td>
 
 ```go
-// We have here SIX potential how caller can get an ID. Can you find all of them?
+// We have here SIX potential ways the caller can get an ID. Can you find all of them?
 
 type Block struct {
     // Things...
@@ -641,7 +641,7 @@ func OpenSomeFileAndDoSomeStuff() (f *os.File, err error) {
 </td></tr>
 </tbody></table>
 
-#### Explicitly Handled Returned Errors
+#### Explicitly Handle Returned Errors
 
 Always handle returned errors. It does not mean you cannot "ignore" the error for some reason, e.g. if we know implementation
 will not return anything meaningful. You can ignore the error, but do so explicitly:
@@ -755,7 +755,7 @@ level.Info(logger).Log(
 #### Control Structure: Prefer early returns and avoid `else`
 
 In most of the cases, you don't need `else`. You can usually use `continue`, `break` or `return` to end an `if` block.
-This enables having one less indent and netter consistency so code is more readable.
+This enables having one less indent and better consistency so code is more readable.
 
 <table>
 <tbody>
@@ -990,7 +990,7 @@ for _, tcase := range []struct{
 
 #### Tests for Packages / Structs That Involve `time` package.
 
-Avoid unit testing based on real-time. Always try to mock time that is used within struct by using for example `timeNow func() time.Time` field.
+Avoid unit testing based on real-time. Always try to mock time that is used within struct by using, for example, a `timeNow func() time.Time` field.
 For production code, you can initialize the field with `time.Now`. For test code, you can set a custom time that will be used by the struct.
 
 <table>
