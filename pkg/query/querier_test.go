@@ -1104,26 +1104,59 @@ func TestDedupSeriesSet(t *testing.T) {
 						{10000, 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
 						{20000, 9.0}, // Same. CurrValue = 9.0.
 						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
-						{50001, 9 + 1.0}}, // Next after 20000+1 has a bit higher than timestamp then in second series. Penalty 5000 will be added.
+						{50001, 9 + 1.0}, // Next after 20000+1 has a bit higher than timestamp then in second series. Penalty 5000 will be added.
+						{60000, 9 + 2.0},
+						{70000, 9 + 3.0},
+						{80000, 9 + 4.0},
+						{90000, 9 + 5.0}, // This should be now taken, and we expect 14 to be correct value now.
+						{100000, 9 + 6.0},
+					},
 				}, {
 					lset: labels.Labels{{Name: "replica", Value: "02"}},
 					samples: []sample{
 						{10001, 8.0}, // Penalty 5000 will be added.
 						// 20001 was app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator. Penalty 2 * (20000 - 10000) will be added.
 						// 30001 no sample. Within penalty, ignored.
-						{45001, 8.0 + 0.5}, // Smaller timestamp, this will be chosen. CurrValue = 8.5 which is smaller than last chosen value.
+						{45001, 8 + 0.5}, // Smaller timestamp, this will be chosen. CurrValue = 8.5 which is smaller than last chosen value.
+						{55001, 8 + 1.5},
+						{65001, 8 + 2.5},
+						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
 					},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.Labels{},
-					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}},
+					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}},
 				},
 			},
 			dedupLabels: map[string]struct{}{
 				"replica": {},
 			},
+		},
+		{
+			// Same thing but not for counter should not adjust antything.
+			isCounter: false,
+			input: []series{
+				{
+					lset: labels.Labels{{Name: "replica", Value: "01"}},
+					samples: []sample{
+						{10000, 8.0}, {20000, 9.0}, {50001, 9 + 1.0}, {60000, 9 + 2.0}, {70000, 9 + 3.0}, {80000, 9 + 4.0}, {90000, 9 + 5.0}, {100000, 9 + 6.0},
+					},
+				}, {
+					lset: labels.Labels{{Name: "replica", Value: "02"}},
+					samples: []sample{
+						{10001, 8.0}, {45001, 8 + 0.5}, {55001, 8 + 1.5}, {65001, 8 + 2.5},
+					},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.Labels{},
+					samples: []sample{{10000, 8}, {20000, 9}, {45001, 8.5}, {55001, 9.5}, {65001, 10.5}, {90000, 14}, {100000, 15}},
+				},
+			},
+			dedupLabels: map[string]struct{}{"replica": {}},
 		},
 		{
 			// Regression test on real data against https://github.com/thanos-io/thanos/issues/2401.
@@ -1253,10 +1286,10 @@ func TestDedupSeriesIterator(t *testing.T) {
 	for i, c := range cases {
 		t.Logf("case %d:", i)
 		it := newDedupSeriesIterator(
-			newMockedSeriesIterator(c.a),
-			newMockedSeriesIterator(c.b),
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.a)},
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(c.b)},
 		)
-		res := expandSeries(t, it)
+		res := expandSeries(t, noopAdjustableSeriesIterator{it})
 		testutil.Equals(t, c.exp, res)
 	}
 }
@@ -1264,8 +1297,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
 		it := newDedupSeriesIterator(
-			newMockedSeriesIterator(s1),
-			newMockedSeriesIterator(s2),
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(s1)},
+			noopAdjustableSeriesIterator{newMockedSeriesIterator(s2)},
 		)
 		b.ResetTimer()
 		var total int64

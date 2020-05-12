@@ -642,6 +642,7 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 }
 
 func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) bool {
+	// Don't use underlying Seek, but iterate over next to not miss counter resets.
 	for {
 		if t, _ := it.At(); t >= x {
 			return true
