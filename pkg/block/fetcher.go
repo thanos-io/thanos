@@ -670,12 +670,11 @@ type ReplicaLabelRemover struct {
 	logger log.Logger
 
 	replicaLabels []string
-	labelIfEmpty  []string
 }
 
 // NewReplicaLabelRemover creates a ReplicaLabelRemover.
-func NewReplicaLabelRemover(logger log.Logger, replicaLabels []string, labelIfEmpty []string) *ReplicaLabelRemover {
-	return &ReplicaLabelRemover{logger: logger, replicaLabels: replicaLabels, labelIfEmpty: labelIfEmpty}
+func NewReplicaLabelRemover(logger log.Logger, replicaLabels []string) *ReplicaLabelRemover {
+	return &ReplicaLabelRemover{logger: logger, replicaLabels: replicaLabels}
 }
 
 // Modify modifies external labels of existing blocks, it removes given replica labels from the metadata of blocks that have it.
@@ -689,8 +688,8 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 				modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
 		}
-		if len(l) == 0 && len(r.labelIfEmpty) == 2 {
-			l[r.labelIfEmpty[0]] = r.labelIfEmpty[1]
+		if len(l) == 0 {
+			l[r.replicaLabels[0]] = "deduped"
 		}
 		metas[u].Thanos.Labels = l
 	}

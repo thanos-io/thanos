@@ -23,7 +23,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2521](https://github.com/thanos-io/thanos/pull/2521) Sidecar: add `thanos_sidecar_reloader_reloads_failed_total`, `thanos_sidecar_reloader_reloads_total`, `thanos_sidecar_reloader_watch_errors_total`, `thanos_sidecar_reloader_watch_events_total` and `thanos_sidecar_reloader_watches` metrics.
 - [#2412](https://github.com/thanos-io/thanos/pull/2412) ui: add React UI from Prometheus upstream. Currently only accessible from Query component as only `/graph` endpoint is migrated.
 - [#2532](https://github.com/thanos-io/thanos/pull/2532) Store: Added hidden option for experimental caching bucket, that can cache chunks into shared memcached. This can speed up querying and reduce number of requests to object storage.
-- [#2526](https://github.com/thanos-io/thanos/pull/2526) Added new flag `--deduplication.label-if-empty=label=value` to handle situation, when there are no labels left after deduplication via `--deduplication.replica-label`
+- [#2526](https://github.com/thanos-io/thanos/pull/2526) Compact: In case there are no labels left after deduplication via `--deduplication.replica-label`, assign first `replica-label` with value `deduped`.
 
 ### Changed
 

@@ -880,7 +880,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 func TestReplicaLabelRemover_Modify(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	rm := NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"}, []string{})
+	rm := NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"})
 
 	for _, tcase := range []struct {
 		name     string
@@ -914,59 +914,9 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
+				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "deduped"}}},
 			},
 			modified: 5.0,
-		},
-	} {
-		m := newTestFetcherMetrics()
-		testutil.Ok(t, rm.Modify(ctx, tcase.input, m.modified))
-
-		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
-		testutil.Equals(t, tcase.expected, tcase.input)
-	}
-}
-
-func TestReplicaLabelRemover_ModifyEmpty(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-	rm := NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica"}, []string{"replica", "receive"})
-
-	for _, tcase := range []struct {
-		name     string
-		input    map[ulid.ULID]*metadata.Meta
-		expected map[ulid.ULID]*metadata.Meta
-		modified float64
-	}{
-		{
-			name: "without replica labels",
-			input: map[ulid.ULID]*metadata.Meta{
-				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
-			},
-			expected: map[ulid.ULID]*metadata.Meta{
-				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
-			},
-			modified: 0,
-		},
-		{
-			name: "with replica labels",
-			input: map[ulid.ULID]*metadata.Meta{
-				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "message": "something"}}},
-				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1", "message": "something"}}},
-				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "cluster1"}}},
-			},
-			expected: map[ulid.ULID]*metadata.Meta{
-				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "receive"}}},
-			},
-			modified: 3.0,
 		},
 	} {
 		m := newTestFetcherMetrics()
