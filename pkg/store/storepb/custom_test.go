@@ -87,7 +87,7 @@ func (errSeriesSet) At() ([]Label, []AggrChunk) { return nil, nil }
 
 func (e errSeriesSet) Err() error { return e.err }
 
-func TestMergeSeriesSet(t *testing.T) {
+func TestMergeSeriesSets(t *testing.T) {
 	for _, tcase := range []struct {
 		desc     string
 		in       [][]rawSeries
@@ -139,7 +139,7 @@ func TestMergeSeriesSet(t *testing.T) {
 			},
 		},
 		{
-			desc: "two seriesSets, {a=c} series to merge",
+			desc: "two seriesSets, {a=c} series to merge, sorted",
 			in: [][]rawSeries{
 				{
 					{
@@ -165,14 +165,12 @@ func TestMergeSeriesSet(t *testing.T) {
 					chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
 				}, {
 					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}, {{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
+					chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}, {{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
 				},
 			},
 		},
 		{
-			// SeriesSet can return same series within different iterations. MergeSeries should not try to merge those.
-			// We do it on last step possible: Querier promSet.
-			desc: "single seriesSets, {a=c} series to merge.",
+			desc: "single seriesSets, {a=c} series to merge, nothing merged",
 			in: [][]rawSeries{
 				{
 					{
@@ -203,18 +201,182 @@ func TestMergeSeriesSet(t *testing.T) {
 				},
 			},
 		},
+		{
+			// SeriesSet can return same series within different iterations. MergeSeries will merge those as long as there are more than one series sets.
+			desc: "single seriesSets, {a=c} series to merge, merged",
+			in: [][]rawSeries{
+				{
+					{
+						lset:   labels.FromStrings("a", "a"),
+						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
+					},
+					{
+						lset:   labels.FromStrings("a", "c"),
+						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
+					},
+					{
+						lset:   labels.FromStrings("a", "c"),
+						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+					},
+				},
+				{
+					{
+						lset:   labels.FromStrings("a", "d"),
+						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
+					},
+				},
+			},
+
+			expected: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "a"),
+					chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
+				}, {
+					lset:   labels.FromStrings("a", "c"),
+					chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}, {{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+				},
+				{
+					lset:   labels.FromStrings("a", "d"),
+					chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
+				},
+			},
+		},
+		{
+			desc: "four seriesSets, {a=c} series to merge AND deduplicate exactly the same chunks",
+			in: [][]rawSeries{
+				{
+					{
+						lset:   labels.FromStrings("a", "a"),
+						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
+					},
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}},
+							{{15, 15}, {16, 16}, {17, 17}, {18, 18}},
+						},
+					},
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{20, 20}, {21, 21}, {22, 22}, {24, 24}},
+						},
+					},
+				},
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}}, // Same chunk as in set 1.
+						},
+					},
+					{
+						lset:   labels.FromStrings("a", "d"),
+						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+					},
+				},
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}}, // Same chunk as in set 1.
+							{{20, 20}, {21, 21}, {22, 23}, {24, 24}}, // Almost same chunk as in set 1 (one value is different).
+						},
+					},
+				},
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{11, 11}, {12, 12}, {14, 14}},           // Almost same chunk as in set 1 (one sample is missing).
+							{{20, 20}, {21, 21}, {22, 22}, {24, 24}}, // Same chunk as in set 1.
+						},
+					},
+				},
+			},
+
+			expected: []rawSeries{
+				{
+					lset:   labels.Labels{labels.Label{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{t: 1, v: 1}, {t: 2, v: 2}}, {{t: 3, v: 3}, {t: 4, v: 4}}},
+				}, {
+					lset: labels.Labels{labels.Label{Name: "a", Value: "c"}},
+					chunks: [][]sample{
+						{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 14, v: 14}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
+						{{t: 15, v: 15}, {t: 16, v: 16}, {t: 17, v: 17}, {t: 18, v: 18}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 22}, {t: 24, v: 24}},
+					},
+				}, {
+					lset:   labels.Labels{labels.Label{Name: "a", Value: "d"}},
+					chunks: [][]sample{{{t: 11, v: 1}, {t: 12, v: 2}}, {{t: 13, v: 3}, {t: 14, v: 4}}},
+				},
+			},
+		},
+		{
+			desc: "four seriesSets, {a=c} series to merge, unsorted chunks, so dedup is expected to not be fully done",
+			in: [][]rawSeries{
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{20, 20}, {21, 21}, {22, 22}, {24, 24}},
+						},
+					},
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}},
+							{{15, 15}, {16, 16}, {17, 17}, {18, 18}},
+						},
+					},
+				},
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}}, // Same chunk as in set 1.
+							{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
+						},
+					},
+				},
+				{
+					{
+						lset: labels.FromStrings("a", "c"),
+						chunks: [][]sample{
+							{{20, 20}, {21, 21}, {22, 23}, {24, 24}}, // Almost same chunk as in set 1 (one value is different).
+							{{11, 11}, {12, 12}, {13, 13}, {14, 14}}, // Same chunk as in set 1.
+						},
+					},
+				},
+			},
+
+			expected: []rawSeries{
+				{
+					lset: labels.Labels{labels.Label{Name: "a", Value: "c"}},
+					chunks: [][]sample{
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
+						{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 22}, {t: 24, v: 24}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
+						{{t: 15, v: 15}, {t: 16, v: 16}, {t: 17, v: 17}, {t: 18, v: 18}},
+					},
+				},
+			},
+		},
 	} {
-		if ok := t.Run(tcase.desc, func(t *testing.T) {
+		t.Run(tcase.desc, func(t *testing.T) {
 			var input []SeriesSet
 			for _, iss := range tcase.in {
 				input = append(input, newListSeriesSet(t, iss))
 			}
-			ss := MergeSeriesSets(input...)
-			seriesEquals(t, tcase.expected, ss)
-			testutil.Ok(t, ss.Err())
-		}); !ok {
-			return
-		}
+			testutil.Equals(t, tcase.expected, expandSeriesSet(t, MergeSeriesSets(input...)))
+		})
 	}
 }
 
@@ -239,42 +401,40 @@ type rawSeries struct {
 	chunks [][]sample
 }
 
-func seriesEquals(t *testing.T, expected []rawSeries, gotSS SeriesSet) {
-	var got []Series
+func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 	for gotSS.Next() {
 		lset, chks := gotSS.At()
-		got = append(got, Series{Labels: lset, Chunks: chks})
-	}
 
-	testutil.Equals(t, len(expected), len(got), "got: %v", got)
-
-	for i, series := range got {
-		testutil.Equals(t, expected[i].lset, LabelsToPromLabels(series.Labels))
-		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks")
-
-		for k, chk := range series.Chunks {
+		r := rawSeries{lset: LabelsToPromLabels(lset), chunks: make([][]sample, len(chks))}
+		for i, chk := range chks {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
-			j := 0
 			iter := c.Iterator(nil)
 			for iter.Next() {
-				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %s chunk %d", series.Labels, k)
-
-				tv, v := iter.At()
-				testutil.Equals(t, expected[i].chunks[k][j], sample{tv, v})
-				j++
+				t, v := iter.At()
+				r.chunks[i] = append(r.chunks[i], sample{t: t, v: v})
 			}
 			testutil.Ok(t, iter.Err())
-			testutil.Equals(t, len(expected[i].chunks[k]), j)
 		}
+		ret = append(ret, r)
 	}
-
+	testutil.Ok(t, gotSS.Err())
+	return ret
 }
 
 // Test the cost of merging series sets for different number of merged sets and their size.
-// The subset are all equivalent so this does not capture merging of partial or non-overlapping sets well.
+// This tests cases with large number of series, with same chunks. Since the subset are unique, this does not capture
+// merging of partial or non-overlapping sets well.
 func BenchmarkMergedSeriesSet(b *testing.B) {
+	benchmarkMergedSeriesSet(testutil.NewTB(b))
+}
+
+func TestMergedSeriesSet_Labels(b *testing.T) {
+	benchmarkMergedSeriesSet(testutil.NewTB(b))
+}
+
+func benchmarkMergedSeriesSet(b testutil.TB) {
 	var sel func(sets []SeriesSet) SeriesSet
 	sel = func(sets []SeriesSet) SeriesSet {
 		if len(sets) == 0 {
@@ -295,7 +455,7 @@ func BenchmarkMergedSeriesSet(b *testing.B) {
 		20000,
 	} {
 		for _, j := range []int{1, 2, 4, 8, 16, 32} {
-			b.Run(fmt.Sprintf("series=%d,blocks=%d", k, j), func(b *testing.B) {
+			b.Run(fmt.Sprintf("series=%d,blocks=%d", k, j), func(b testutil.TB) {
 				lbls, err := labels.ReadLabels(filepath.Join("../../testutil/testdata", "20kseries.json"), k)
 				testutil.Ok(b, err)
 
@@ -311,7 +471,7 @@ func BenchmarkMergedSeriesSet(b *testing.B) {
 
 				b.ResetTimer()
 
-				for i := 0; i < b.N; i++ {
+				for i := 0; i < b.N(); i++ {
 					var sets []SeriesSet
 					for _, s := range in {
 						sets = append(sets, newListSeriesSet(b, s))
