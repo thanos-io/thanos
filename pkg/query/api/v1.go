@@ -532,7 +532,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		sets = append(sets, s)
 	}
 
-	set := storage.NewMergeSeriesSet(sets, nil)
+	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}

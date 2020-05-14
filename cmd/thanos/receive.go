@@ -61,7 +61,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
-	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention").Default("15d"))
+	retention := cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention").Default("15d").Int64()
 
 	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
 		PlaceHolder("<path>").String()
@@ -102,9 +102,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbMinBlockDuration,
-			MaxBlockDuration:  *tsdbMaxBlockDuration,
-			RetentionDuration: int64(*retention),
+			MinBlockDuration:  *tsdbMinBlockDuration / int64(time.Millisecond),
+			MaxBlockDuration:  *tsdbMaxBlockDuration / int64(time.Millisecond),
+			RetentionDuration: *retention / int64(time.Millisecond),
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
 		}

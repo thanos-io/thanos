@@ -23,7 +23,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/yaml.v2"
-	yamlv3 "gopkg.in/yaml.v3"
 )
 
 type nopAppendable struct{}
@@ -247,31 +246,23 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 	var input = RuleGroups{
 		Groups: []RuleGroup{
 			{
-				RuleGroup: rulefmt.RuleGroup{
+				PromRuleGroup: PromRuleGroup{
 					Name: "something1",
-					Rules: []rulefmt.RuleNode{
+					Rules: []rulefmt.Rule{
 						{
-							Alert: yamlv3.Node{
-								Value: "some",
-							},
-							Expr: yamlv3.Node{
-								Value: "up",
-							},
+							Alert: "some",
+							Expr:  "up",
 						},
 					},
 				},
 			},
 			{
-				RuleGroup: rulefmt.RuleGroup{
+				PromRuleGroup: PromRuleGroup{
 					Name: "something2",
-					Rules: []rulefmt.RuleNode{
+					Rules: []rulefmt.Rule{
 						{
-							Alert: yamlv3.Node{
-								Value: "some",
-							},
-							Expr: yamlv3.Node{
-								Value: "rate(some_metric[1h:5m] offset 1d)",
-							},
+							Alert: "some",
+							Expr:  "rate(some_metric[1h:5m] offset 1d)",
 						},
 					},
 				},

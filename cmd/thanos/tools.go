@@ -17,6 +17,9 @@ import (
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+	yamlv3 "gopkg.in/yaml.v3"
+
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 )
 
 func registerTools(m map[string]setupFunc, app *kingpin.Application) {
@@ -60,8 +63,8 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 }
 
 type ThanosRuleGroup struct {
-	PartialResponseStrategy string `yaml:"partial_response_strategy"`
-	rulefmt.RuleGroup       `yaml:",inline"`
+	PartialResponseStrategy  string `yaml:"partial_response_strategy"`
+	thanosrule.PromRuleGroup `yaml:",inline"`
 }
 
 type ThanosRuleGroups struct {
@@ -89,12 +92,20 @@ func (g *ThanosRuleGroups) Validate() (errs []error) {
 		set[g.Name] = struct{}{}
 
 		for i, r := range g.Rules {
-			for _, node := range r.Validate() {
+			ruleNode := rulefmt.RuleNode{
+				Record:      yamlv3.Node{Value: r.Record},
+				Alert:       yamlv3.Node{Value: r.Alert},
+				Expr:        yamlv3.Node{Value: r.Expr},
+				For:         r.For,
+				Labels:      r.Labels,
+				Annotations: r.Annotations,
+			}
+			for _, node := range ruleNode.Validate() {
 				var ruleName string
-				if r.Alert.Value != "" {
-					ruleName = r.Alert.Value
+				if r.Alert != "" {
+					ruleName = r.Alert
 				} else {
-					ruleName = r.Record.Value
+					ruleName = r.Record
 				}
 				errs = append(errs, &rulefmt.Error{
 					Group:    g.Name,

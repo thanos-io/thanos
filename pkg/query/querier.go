@@ -160,14 +160,21 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 }
 
-func (q *querier) Select(_ bool, _ *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
+func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
+	if hints == nil {
+		hints = &storage.SelectHints{
+			Start: q.mint,
+			End:   q.maxt,
+		}
+	}
+
 	matchers := make([]string, len(ms))
 	for i, m := range ms {
 		matchers[i] = m.String()
 	}
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select", opentracing.Tags{
-		"minTime":  q.mint,
-		"maxTime":  q.maxt,
+		"minTime":  hints.Start,
+		"maxTime":  hints.End,
 		"matchers": "{" + strings.Join(matchers, ",") + "}",
 	})
 	defer span.Finish()
@@ -177,12 +184,12 @@ func (q *querier) Select(_ bool, _ *storage.SelectHints, ms ...*labels.Matcher) 
 		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
-	aggrs := aggrsFromFunc("")
+	aggrs := aggrsFromFunc(hints.Func)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 q.mint,
-		MaxTime:                 q.maxt,
+		MinTime:                 hints.Start,
+		MaxTime:                 hints.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,
