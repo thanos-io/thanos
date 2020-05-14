@@ -222,9 +222,11 @@ func TestChunksCaching(t *testing.T) {
 				tc.init()
 			}
 
-			cachingBucket, err := NewCachingBucket(inmem, nil, nil)
+			cfg := NewCachingBucketConfig()
+			cfg.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, time.Hour, time.Hour, tc.maxGetRangeRequests)
+
+			cachingBucket, err := NewCachingBucket(inmem, cfg, nil, nil)
 			testutil.Ok(t, err)
-			cachingBucket.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, time.Hour, time.Hour, tc.maxGetRangeRequests)
 
 			verifyGetRange(t, cachingBucket, name, tc.offset, tc.length, tc.expectedLength)
 			testutil.Equals(t, tc.expectedCachedBytes, int64(promtest.ToFloat64(cachingBucket.fetchedGetRangeBytes.WithLabelValues(originCache, "chunks"))))
@@ -333,9 +335,12 @@ func TestMergeRanges(t *testing.T) {
 
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
-	c, err := NewCachingBucket(b, nil, nil)
+
+	cfg := NewCachingBucketConfig()
+	cfg.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, 10000, time.Hour, time.Hour, 3)
+
+	c, err := NewCachingBucket(b, cfg, nil, nil)
 	testutil.Ok(t, err)
-	c.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, 10000, time.Hour, time.Hour, 3)
 
 	r, err := c.GetRange(context.Background(), "test", -1, 1000)
 	testutil.Equals(t, nil, r)
@@ -374,10 +379,12 @@ func TestCachedIter(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cb, err := NewCachingBucket(inmem, nil, nil)
-	testutil.Ok(t, err)
 	const cfgName = "dirs"
-	cb.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute)
+	cfg := NewCachingBucketConfig()
+	cfg.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
 
 	verifyIter(t, cb, allFiles, false, cfgName)
 
@@ -435,11 +442,12 @@ func TestExists(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cb, err := NewCachingBucket(inmem, nil, nil)
-	testutil.Ok(t, err)
-
+	cfg := NewCachingBucketConfig()
 	const cfgName = "test"
-	cb.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
 
 	verifyExists(t, cb, testFilename, false, false, cfgName)
 
@@ -460,11 +468,12 @@ func TestExistsCachingDisabled(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cb, err := NewCachingBucket(inmem, nil, nil)
-	testutil.Ok(t, err)
-
+	cfg := NewCachingBucketConfig()
 	const cfgName = "test"
-	cb.CacheExists(cfgName, cache, func(string) bool { return false }, 10*time.Minute, 2*time.Minute)
+	cfg.CacheExists(cfgName, cache, func(string) bool { return false }, 10*time.Minute, 2*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
 
 	verifyExists(t, cb, testFilename, false, false, cfgName)
 
@@ -496,12 +505,13 @@ func TestGet(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cb, err := NewCachingBucket(inmem, nil, nil)
-	testutil.Ok(t, err)
-
+	cfg := NewCachingBucketConfig()
 	const cfgName = "metafile"
-	cb.CacheGet(cfgName, cache, matchAll, 10*time.Minute, 10*time.Minute, 2*time.Minute)
-	cb.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+	cfg.CacheGet(cfgName, cache, matchAll, 10*time.Minute, 10*time.Minute, 2*time.Minute)
+	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
 
 	verifyGet(t, cb, testFilename, nil, false, cfgName)
 	verifyExists(t, cb, testFilename, false, true, cfgName)
@@ -555,11 +565,12 @@ func TestObjectSize(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cb, err := NewCachingBucket(inmem, nil, nil)
-	testutil.Ok(t, err)
-
+	cfg := NewCachingBucketConfig()
 	const cfgName = "test"
-	cb.CacheObjectSize(cfgName, cache, matchAll, time.Minute)
+	cfg.CacheObjectSize(cfgName, cache, matchAll, time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
 
 	verifyObjectSize(t, cb, testFilename, -1, false, cfgName)
 	verifyObjectSize(t, cb, testFilename, -1, false, cfgName) // ObjectSize doesn't cache non-existent files.

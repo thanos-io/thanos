@@ -95,22 +95,24 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}
 
-	cb, err := NewCachingBucket(bucket, logger, reg)
+	cfg := NewCachingBucketConfig()
+
+	// Configure cache.
+	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
+	cfg.CacheExists("metafile", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cfg.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+
+	// Cache Iter requests for root.
+	cfg.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.RootIterTTL)
+
+	// Enabling index caching (example).
+	cfg.CacheObjectSize("index", c, isIndexFile, time.Hour)
+	cfg.CacheGetRange("index", c, isIndexFile, 32000, time.Hour, 24*time.Hour, 3)
+
+	cb, err := NewCachingBucket(bucket, cfg, logger, reg)
 	if err != nil {
 		return nil, err
 	}
-
-	// Configure cache.
-	cb.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
-	cb.CacheExists("metafile", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-	cb.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-
-	// Cache Iter requests for root.
-	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.RootIterTTL)
-
-	// Enabling index caching (example).
-	cb.CacheObjectSize("index", c, isIndexFile, time.Hour)
-	cb.CacheGetRange("index", c, isIndexFile, 32000, time.Hour, 24*time.Hour, 3)
 
 	return cb, nil
 }
