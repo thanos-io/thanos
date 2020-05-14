@@ -13,7 +13,9 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -180,6 +182,8 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 }
 
 func TestReceive(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)
+
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
