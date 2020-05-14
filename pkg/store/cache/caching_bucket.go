@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -143,7 +142,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	key := cachingKeyIter(dir)
 	data := cfg.cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
-		list, err := decodeIterResult(data[key])
+		list, err := cfg.codec.Decode(data[key])
 		if err == nil {
 			cb.operationHits.WithLabelValues(opIter, cfgName).Inc()
 			for _, n := range list {
@@ -167,32 +166,13 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 
 	remainingTTL := cfg.ttl - time.Since(iterTime)
 	if err == nil && remainingTTL > 0 {
-		if data := encodeIterResult(list); data != nil {
+		if data, err := cfg.codec.Encode(list); err == nil {
 			cfg.cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
+		} else {
+			level.Warn(cb.logger).Log("msg", "failed to encode Iter result", "err", err)
 		}
 	}
 	return err
-}
-
-// Iter results should compress nicely, especially in subdirectories.
-func encodeIterResult(files []string) []byte {
-	data, err := json.Marshal(files)
-	if err != nil {
-		return nil
-	}
-
-	return snappy.Encode(nil, data)
-}
-
-func decodeIterResult(data []byte) ([]string, error) {
-	decoded, err := snappy.Decode(nil, data)
-	if err != nil {
-		return nil, err
-	}
-
-	var list []string
-	err = json.Unmarshal(decoded, &list)
-	return list, err
 }
 
 func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) {
@@ -594,4 +574,17 @@ func (c *subrangesReader) subrangeAt(offset int64) ([]byte, error) {
 		return nil, errors.Errorf("subrange for offset %d not found", offset)
 	}
 	return b, nil
+}
+
+// JsonIterCodec encodes iter results into JSON. Suitable for root dir.
+type JsonIterCodec struct{}
+
+func (jic JsonIterCodec) Encode(files []string) ([]byte, error) {
+	return json.Marshal(files)
+}
+
+func (jic JsonIterCodec) Decode(data []byte) ([]string, error) {
+	var list []string
+	err := json.Unmarshal(data, &list)
+	return list, err
 }

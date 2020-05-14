@@ -6,6 +6,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/cache"
 )
 
+// Codec for encoding and decoding results of Iter call.
+type IterCodec interface {
+	Encode(files []string) ([]byte, error)
+	Decode(cachedData []byte) ([]string, error)
+}
+
 // CachingBucketConfig contains low-level configuration for individual bucket operations.
 // This is not exposed to the user, but it is expected that code sets up individual
 // operations based on user-provided configuration.
@@ -36,7 +42,8 @@ type operationConfig struct {
 // Operation-specific configs.
 type iterConfig struct {
 	operationConfig
-	ttl time.Duration
+	ttl   time.Duration
+	codec IterCodec
 }
 
 type existsConfig struct {
@@ -78,10 +85,11 @@ func newOperationConfig(cache cache.Cache, matcher func(string) bool) operationC
 }
 
 // CacheIter configures caching of "Iter" operation for matching directories.
-func (cfg *CachingBucketConfig) CacheIter(configName string, cache cache.Cache, matcher func(string) bool, ttl time.Duration) {
+func (cfg *CachingBucketConfig) CacheIter(configName string, cache cache.Cache, matcher func(string) bool, ttl time.Duration, codec IterCodec) {
 	cfg.iter[configName] = &iterConfig{
 		operationConfig: newOperationConfig(cache, matcher),
 		ttl:             ttl,
+		codec:           codec,
 	}
 }
 
