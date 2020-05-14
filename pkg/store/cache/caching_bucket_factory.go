@@ -46,7 +46,7 @@ type CachingWithBackendConfig struct {
 	ChunkSubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
 
 	// How long to cache result of Iter call in root directory.
-	RootIterTTL time.Duration `yaml:"root_iter_ttl"`
+	BlocksIterTTL time.Duration `yaml:"blocks_iter_ttl"`
 
 	// Config for Exists and Get operations for metadata files.
 	MetafileExistsTTL      time.Duration `yaml:"metafile_exists_ttl"`
@@ -59,10 +59,10 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 	cfg.ChunkObjectSizeTTL = 24 * time.Hour
 	cfg.ChunkSubrangeTTL = 24 * time.Hour
 	cfg.MaxChunksGetRangeRequests = 3
-	cfg.RootIterTTL = 5 * time.Minute
+	cfg.BlocksIterTTL = 5 * time.Minute
 	cfg.MetafileExistsTTL = 10 * time.Minute
 	cfg.MetafileDoesntExistTTL = 3 * time.Minute
-	cfg.MetafileContentTTL = 1 * time.Hour
+	cfg.MetafileContentTTL = 24 * time.Hour
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
@@ -103,7 +103,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	cfg.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cfg.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.RootIterTTL)
+	cfg.CacheIter("dir", c, isBlocksRootDir, config.BlocksIterTTL)
 
 	// Enabling index caching (example).
 	cfg.CacheObjectSize("index", c, isIndexFile, time.Hour)
@@ -127,4 +127,8 @@ func isMetaFile(name string) bool {
 
 func isIndexFile(name string) bool {
 	return strings.HasSuffix(name, "/index")
+}
+
+func isBlocksRootDir(name string) bool {
+	return name == ""
 }

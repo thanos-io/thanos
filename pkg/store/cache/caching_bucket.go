@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,9 +32,6 @@ import (
 const (
 	originCache  = "cache"
 	originBucket = "bucket"
-
-	existsTrue  = "true"
-	existsFalse = "false"
 
 	opGet        = "get"
 	opGetRange   = "getrange"
@@ -60,7 +58,8 @@ type CachingBucket struct {
 	operationHits     *prometheus.CounterVec
 }
 
-// NewCachingBucket creates new caching bucket with provided configuration.
+// NewCachingBucket creates new caching bucket with provided configuration. Configuration should not be
+// changed after creating caching bucket.
 func NewCachingBucket(b objstore.Bucket, cfg *CachingBucketConfig, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
 	if b == nil {
 		return nil, errors.New("bucket is nil")
@@ -142,24 +141,19 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	cb.operationRequests.WithLabelValues(opIter, cfgName).Inc()
 
 	key := cachingKeyIter(dir)
-
 	data := cfg.cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
 		list, err := decodeIterResult(data[key])
 		if err == nil {
 			cb.operationHits.WithLabelValues(opIter, cfgName).Inc()
-
 			for _, n := range list {
-				err = f(n)
-				if err != nil {
+				if err := f(n); err != nil {
 					return err
 				}
 			}
 			return nil
-		} else {
-			// This should not happen.
-			level.Warn(cb.logger).Log("msg", "failed to decode cached Iter result", "err", err)
 		}
+		level.Warn(cb.logger).Log("msg", "failed to decode cached Iter result", "err", err)
 	}
 
 	// Iteration can take a while (esp. since it calls function), and iterTTL is generally low.
@@ -173,8 +167,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 
 	remainingTTL := cfg.ttl - time.Since(iterTime)
 	if err == nil && remainingTTL > 0 {
-		data := encodeIterResult(list)
-		if data != nil {
+		if data := encodeIterResult(list); data != nil {
 			cfg.cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
 		}
 	}
@@ -214,16 +207,12 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 	hits := cfg.cache.Fetch(ctx, []string{key})
 
 	if ex := hits[key]; ex != nil {
-		switch string(ex) {
-		case existsTrue:
+		exists, err := strconv.ParseBool(string(ex))
+		if err == nil {
 			cb.operationHits.WithLabelValues(opExists, cfgName).Inc()
-			return true, nil
-		case existsFalse:
-			cb.operationHits.WithLabelValues(opExists, cfgName).Inc()
-			return false, nil
-		default:
-			level.Warn(cb.logger).Log("msg", "unexpected cached 'exists' value", "val", string(ex))
+			return exists, nil
 		}
+		level.Warn(cb.logger).Log("msg", "unexpected cached 'exists' value", "val", string(ex))
 	}
 
 	existsTime := time.Now()
@@ -236,20 +225,15 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 }
 
 func storeExistsCacheEntry(ctx context.Context, cachingKey string, exists bool, ts time.Time, cache cache.Cache, existsTTL, doesntExistTTL time.Duration) {
-	var (
-		data []byte
-		ttl  time.Duration
-	)
+	var ttl time.Duration
 	if exists {
 		ttl = existsTTL - time.Since(ts)
-		data = []byte(existsTrue)
 	} else {
 		ttl = doesntExistTTL - time.Since(ts)
-		data = []byte(existsFalse)
 	}
 
 	if ttl > 0 {
-		cache.Store(ctx, map[string][]byte{cachingKey: data}, ttl)
+		cache.Store(ctx, map[string][]byte{cachingKey: []byte(strconv.FormatBool(exists))}, ttl)
 	}
 }
 
@@ -261,19 +245,21 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 	cb.operationRequests.WithLabelValues(opGet, cfgName).Inc()
 
-	key := cachingKeyContent(name)
+	contentKey := cachingKeyContent(name)
 	existsKey := cachingKeyExists(name)
 
-	hits := cfg.cache.Fetch(ctx, []string{key, existsKey})
-	if hits[key] != nil {
+	hits := cfg.cache.Fetch(ctx, []string{contentKey, existsKey})
+	if hits[contentKey] != nil {
 		cb.operationHits.WithLabelValues(opGet, cfgName).Inc()
-		return ioutil.NopCloser(bytes.NewReader(hits[key])), nil
+		return ioutil.NopCloser(bytes.NewReader(hits[contentKey])), nil
 	}
 
 	// If we know that file doesn't exist, we can return that. Useful for deletion marks.
-	if ex := hits[existsKey]; ex != nil && string(ex) == existsFalse {
-		cb.operationHits.WithLabelValues(opGet, cfgName).Inc()
-		return nil, errObjNotFound
+	if ex := hits[existsKey]; ex != nil {
+		if exists, err := strconv.ParseBool(string(ex)); err == nil && !exists {
+			cb.operationHits.WithLabelValues(opGet, cfgName).Inc()
+			return nil, errObjNotFound
+		}
 	}
 
 	getTime := time.Now()
@@ -295,7 +281,7 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 	ttl := cfg.contentTTL - time.Since(getTime)
 	if ttl > 0 {
-		cfg.cache.Store(ctx, map[string][]byte{key: data}, ttl)
+		cfg.cache.Store(ctx, map[string][]byte{contentKey: data}, ttl)
 	}
 	storeExistsCacheEntry(ctx, existsKey, true, getTime, cfg.cache, cfg.existsTTL, cfg.doesntExistTTL)
 
@@ -410,8 +396,8 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 	hits := cfg.cache.Fetch(ctx, keys)
 	for _, b := range hits {
 		totalCachedBytes += int64(len(b))
-		cb.fetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(len(b)))
 	}
+	cb.fetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(totalCachedBytes))
 	cb.operationHits.WithLabelValues(opGetRange, cfgName).Add(float64(totalCachedBytes) / float64(totalRequestedBytes))
 
 	if len(hits) < len(keys) {
