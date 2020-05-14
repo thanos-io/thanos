@@ -402,12 +402,12 @@ func TestCachedIter(t *testing.T) {
 }
 
 func verifyIter(t *testing.T, cb *CachingBucket, expectedFiles []string, expectedCache bool, cfgName string) {
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationIter, cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opIter, cfgName)))
 
 	col := iterCollector{}
 	testutil.Ok(t, cb.Iter(context.Background(), "/", col.collect))
 
-	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationIter, cfgName)))
+	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opIter, cfgName)))
 
 	sort.Strings(col.items)
 	testutil.Equals(t, expectedFiles, col.items)
@@ -477,11 +477,11 @@ func TestExistsCachingDisabled(t *testing.T) {
 
 func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool, cfgName string) {
 	t.Helper()
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationExists, cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opExists, cfgName)))
 	ok, err := cb.Exists(context.Background(), file)
 	testutil.Ok(t, err)
 	testutil.Equals(t, exists, ok)
-	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationExists, cfgName)))
+	hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opExists, cfgName)))
 
 	if fromCache {
 		testutil.Equals(t, 1, hitsAfter-hitsBefore)
@@ -521,13 +521,13 @@ func TestGet(t *testing.T) {
 }
 
 func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, cfgName string) {
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opGet, cfgName)))
 
 	r, err := cb.Get(context.Background(), file)
 	if expectedData == nil {
 		testutil.Assert(t, cb.IsObjNotFoundErr(err))
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opGet, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
@@ -540,7 +540,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedData, data)
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationGet, cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opGet, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
@@ -573,7 +573,7 @@ func TestObjectSize(t *testing.T) {
 
 func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, cfgName string) {
 	t.Helper()
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationObjectSize, cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opObjectSize, cfgName)))
 
 	length, err := cb.ObjectSize(context.Background(), file)
 	if expectedLength < 0 {
@@ -582,7 +582,7 @@ func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLeng
 		testutil.Ok(t, err)
 		testutil.Equals(t, uint64(expectedLength), length)
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(operationObjectSize, cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opObjectSize, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {
