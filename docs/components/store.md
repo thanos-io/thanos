@@ -27,7 +27,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 ## Flags
 
-[embedmd]: # "flags/store.txt $"
+[embedmd]:# (flags/store.txt $)
 ```$
 usage: thanos store [<flags>]
 
@@ -137,11 +137,51 @@ Flags:
                                  Prometheus relabel-config syntax. See format
                                  details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --consistency-delay=30m    Minimum age of all blocks before they are being read.
+      --consistency-delay=0s     Minimum age of all blocks before they are being
+                                 read. Set it to safe value (e.g 30m) if your
+                                 object storage is eventually consistent. GCS
+                                 and S3 are (roughly) strongly consistent.
       --ignore-deletion-marks-delay=24h
-                                 Duration after which the blocks marked for deletion will be filtered out while fetching blocks.
-                                 The idea of ignore-deletion-marks-delay is to ignore blocks that are marked for deletion with some delay. This ensures store can still serve blocks that are meant to be deleted but do not have a replacement yet. If delete-delay duration is provided to compactor or bucket verify component, it will upload deletion-mark.json file to mark after what duration the block should be deleted rather than deleting the block straight away.
-		                             If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. Default is 24h, half of the default value for --delete-delay on compactor.
+                                 Duration after which the blocks marked for
+                                 deletion will be filtered out while fetching
+                                 blocks. The idea of ignore-deletion-marks-delay
+                                 is to ignore blocks that are marked for
+                                 deletion with some delay. This ensures store
+                                 can still serve blocks that are meant to be
+                                 deleted but do not have a replacement yet. If
+                                 delete-delay duration is provided to compactor
+                                 or bucket verify component, it will upload
+                                 deletion-mark.json file to mark after what
+                                 duration the block should be deleted rather
+                                 than deleting the block straight away. If
+                                 delete-delay is non-zero for compactor or
+                                 bucket verify component,
+                                 ignore-deletion-marks-delay should be set to
+                                 (delete-delay)/2 so that blocks marked for
+                                 deletion are filtered out while fetching blocks
+                                 before being deleted from bucket. Default is
+                                 24h, half of the default value for
+                                 --delete-delay on compactor.
+      --web.external-prefix=""   Static prefix for all HTML links and redirect
+                                 URLs in the bucket web UI interface. Actual
+                                 endpoints are still served on / or the
+                                 web.route-prefix. This allows thanos bucket web
+                                 UI to be served behind a reverse proxy that
+                                 strips a URL sub-path.
+      --web.prefix-header=""     Name of HTTP request header used for dynamic
+                                 prefixing of UI links and redirects. This
+                                 option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable this
+                                 option only if a reverse proxy in front of
+                                 thanos is resetting the header. The
+                                 --web.prefix-header=X-Forwarded-Prefix option
+                                 can be useful, for example, if Thanos UI is
+                                 served via Traefik reverse proxy with
+                                 PathPrefixStrip option enabled, which sends the
+                                 stripped prefix value in X-Forwarded-Prefix
+                                 header. This allows thanos UI to be served on a
+                                 sub-path.
+
 ```
 
 ## Time based partitioning

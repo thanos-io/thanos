@@ -1,4 +1,3 @@
-PREFIX            ?= $(shell pwd)
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
@@ -176,8 +175,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building binaries $(GOBIN)"
-	@$(PROMU) build --prefix $(PREFIX)
+	@echo ">> building Thanos binary in $(GOBIN)"
+	@$(PROMU) build --prefix $(GOBIN)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -193,8 +192,11 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 docker: build
+	@echo ">> copying Thanos from $(GOBIN) to ./thanos_tmp_for_docker"
+	@cp $(GOBIN)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
+	@rm ./thanos_tmp_for_docker
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
@@ -212,13 +214,13 @@ docker-push:
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(EMBEDMD) $(LICHE) build
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh check
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
 	@$(LICHE) --exclude "goreportcard.com" --document-root . *.md
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
