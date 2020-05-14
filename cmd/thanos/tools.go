@@ -150,32 +150,3 @@ func checkRules(logger log.Logger, filename string) (int, tsdb_errors.MultiError
 
 	return numRules, checkErrors
 }
-
-//func thanosRuleGroupsToPromRuleGroups(ruleGroups ThanosRuleGroups) rulefmt.RuleGroups {
-//	promRuleGroups := rulefmt.RuleGroups{Groups: []rulefmt.RuleGroup{}}
-//	for _, g := range ruleGroups.Groups {
-//		group := rulefmt.RuleGroup{
-//			Name:     g.Name,
-//			Interval: g.Interval,
-//			Rules:    []rulefmt.RuleNode{},
-//		}
-//		for _, r := range g.Rules {
-//			group.Rules = append(
-//				group.Rules,
-//				rulefmt.RuleNode{
-//					Record:      r.Record,
-//					Alert:       r.Alert,
-//					Expr:        r.Expr,
-//					For:         r.For,
-//					Labels:      r.Labels,
-//					Annotations: r.Annotations,
-//				},
-//			)
-//		}
-//		promRuleGroups.Groups = append(
-//			promRuleGroups.Groups,
-//			group,
-//		)
-//	}
-//	return promRuleGroups
-//}

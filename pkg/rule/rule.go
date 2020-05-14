@@ -43,7 +43,7 @@ type RuleGroups struct {
 	Groups []RuleGroup `yaml:"groups"`
 }
 
-// ruleGroup is a list of sequentially evaluated recording and alerting rules.
+// PromRuleGroup is a list of sequentially evaluated recording and alerting rules.
 // This is a modified version from Prometheus. In Prometheus they shifted to
 // using yaml.Node as elements which gives problems in marshal/unmarshal.
 // Hence this replaces the yaml.Node to strings.
@@ -51,6 +51,10 @@ type PromRuleGroup struct {
 	Name     string         `yaml:"name"`
 	Interval model.Duration `yaml:"interval,omitempty"`
 	Rules    []rulefmt.Rule `yaml:"rules"`
+}
+
+type PromRuleGroups struct {
+	Groups []PromRuleGroup `yaml:"groups"`
 }
 
 type RuleGroup struct {
@@ -183,18 +187,15 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 		// NOTE: This is very ugly, but we need to reparse it into tmp dir without the field to have to reuse
 		// rules.Manager. The problem is that it uses yaml.UnmarshalStrict for some reasons.
-		groupsByStrategy := map[storepb.PartialResponseStrategy]*RuleGroups{}
+		groupsByStrategy := map[storepb.PartialResponseStrategy]*PromRuleGroups{}
 		for _, rg := range rg.Groups {
 			if _, ok := groupsByStrategy[*rg.PartialResponseStrategy]; !ok {
-				groupsByStrategy[*rg.PartialResponseStrategy] = &RuleGroups{}
+				groupsByStrategy[*rg.PartialResponseStrategy] = &PromRuleGroups{}
 			}
 
 			groupsByStrategy[*rg.PartialResponseStrategy].Groups = append(
 				groupsByStrategy[*rg.PartialResponseStrategy].Groups,
-				RuleGroup{
-					PromRuleGroup:           rg.PromRuleGroup,
-					PartialResponseStrategy: rg.PartialResponseStrategy,
-				},
+				rg.PromRuleGroup,
 			)
 		}
 

@@ -696,9 +696,8 @@ func (it *AverageChunkIterator) Next() bool {
 }
 
 func (it *AverageChunkIterator) Seek(t int64) bool {
-	for it.t < t && it.Next() {
-	}
-	return true
+	it.err = errors.New("seek used, but not implemented")
+	return false
 }
 
 func (it *AverageChunkIterator) At() (int64, float64) {

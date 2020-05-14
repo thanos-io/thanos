@@ -73,10 +73,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("1m"))
 	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s"))
-	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h").Int64()
-	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h").Int64()
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h"))
+	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h"))
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
@@ -125,9 +125,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbBlockDuration / int64(time.Millisecond),
-			MaxBlockDuration:  *tsdbBlockDuration / int64(time.Millisecond),
-			RetentionDuration: *tsdbRetention / int64(time.Millisecond),
+			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
 		}

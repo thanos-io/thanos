@@ -82,7 +82,7 @@ type tenant struct {
 func newTenant(tsdbOpts *tsdb.Options) *tenant {
 	return &tenant{
 		tsdbOpts: tsdbOpts,
-		readyS:   &tsdb.ReadyStorage{},
+		readyS:   &ReadyStorage{},
 		mtx:      &sync.RWMutex{},
 	}
 }
@@ -310,6 +310,7 @@ var ErrNotReady = errors.New("TSDB not ready")
 
 // ReadyStorage implements the Storage interface while allowing to set the actual
 // storage at a later point in time.
+// TODO: Replace this with upstream Prometheus implementation when it is exposed.
 type ReadyStorage struct {
 	mtx sync.RWMutex
 	a   *adapter

@@ -71,6 +71,8 @@ require (
 replace (
 	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
+	// Make sure Cortex is not forcing us to some other Prometheus version.
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200407102557-cd73b3d33e06 // @cd73b3d33e064bbd846fc7a26dc8c313d46af382 (after v2.17.0 and before v2.18.0).
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
