@@ -499,7 +499,7 @@ func TestReceive(t *testing.T) {
 				}
 				for j, a := range tc.appendables {
 					var expected int
-					n := a.appender.(*fakeAppender).samples[lset.String()]
+					n := a.appender.(*fakeAppender).samples[lset.Hash()]
 					got := uint64(len(n))
 					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
 						// We have len(handlers) copies of each sample because the test case

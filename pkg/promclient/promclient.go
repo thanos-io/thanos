@@ -32,6 +32,7 @@ import (
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -377,11 +378,11 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	// Decode the Result depending on the ResultType
 	// Currently only `vector` and `scalar` types are supported.
 	switch m.Data.ResultType {
-	case promql.ValueTypeVector:
+	case parser.ValueTypeVector:
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
 			return nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
 		}
-	case promql.ValueTypeScalar:
+	case parser.ValueTypeScalar:
 		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")

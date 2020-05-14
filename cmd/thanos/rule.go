@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	tsdb "github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -73,10 +73,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("1m"))
 	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s"))
-	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h"))
-	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h"))
+	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h").Int64()
+	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h").Int64()
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
@@ -125,9 +125,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbBlockDuration,
-			MaxBlockDuration:  *tsdbBlockDuration,
-			RetentionDuration: *tsdbRetention,
+			MinBlockDuration:  *tsdbBlockDuration / int64(time.Millisecond),
+			MaxBlockDuration:  *tsdbBlockDuration / int64(time.Millisecond),
+			RetentionDuration: *tsdbRetention / int64(time.Millisecond),
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
 		}
@@ -425,7 +425,7 @@ func runRule(
 			}
 			alertQ.Push(res)
 		}
-		st := tsdb.Adapter(db, 0)
+		st := db
 
 		opts := rules.ManagerOptions{
 			NotifyFunc:  notify,

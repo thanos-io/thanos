@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/value"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -868,7 +869,7 @@ func (b *memBlock) Postings(name string, val ...string) (index.Postings, error) 
 
 func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
 	if id >= uint64(len(b.series)) {
-		return errors.Wrapf(tsdb.ErrNotFound, "series with ID %d does not exist", id)
+		return errors.Wrapf(storage.ErrNotFound, "series with ID %d does not exist", id)
 	}
 	s := b.series[id]
 
@@ -880,7 +881,7 @@ func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) e
 
 func (b *memBlock) Chunk(id uint64) (chunkenc.Chunk, error) {
 	if id >= b.numberOfChunks {
-		return nil, errors.Wrapf(tsdb.ErrNotFound, "chunk with ID %d does not exist", id)
+		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", id)
 	}
 
 	return b.chunks[id], nil

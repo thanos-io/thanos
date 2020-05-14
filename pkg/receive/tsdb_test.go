@@ -4,6 +4,7 @@
 package receive
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -11,9 +12,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -32,10 +32,10 @@ func TestFlushableStorage(t *testing.T) {
 		defer func() { testutil.Ok(t, os.RemoveAll(dbDir)) }()
 
 		tsdbCfg := &tsdb.Options{
-			RetentionDuration: model.Duration(time.Hour * 24 * 15),
+			RetentionDuration: int64(time.Hour * 24 * 15 / time.Millisecond),
 			NoLockfile:        true,
-			MinBlockDuration:  model.Duration(time.Hour * 2),
-			MaxBlockDuration:  model.Duration(time.Hour * 2),
+			MinBlockDuration:  int64(time.Hour * 2 / time.Millisecond),
+			MaxBlockDuration:  int64(time.Hour * 2 / time.Millisecond),
 			WALCompression:    true,
 		}
 
@@ -61,12 +61,12 @@ func TestFlushableStorage(t *testing.T) {
 		// Flush the WAL.
 		testutil.Ok(t, db.Flush())
 
-		querier, err := db.Querier(0, int64(maxt)-1)
+		querier, err := db.Querier(context.Background(), 0, int64(maxt)-1)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, querier.Close()) }()
 
 		// Sum the values.
-		seriesSet, err := querier.Select(&labels.Matcher{Type: labels.MatchEqual, Name: "thanos", Value: "flush"})
+		seriesSet, _, err := querier.Select(false, nil, &labels.Matcher{Type: labels.MatchEqual, Name: "thanos", Value: "flush"})
 		testutil.Ok(t, err)
 		sum := 0.0
 		for seriesSet.Next() {

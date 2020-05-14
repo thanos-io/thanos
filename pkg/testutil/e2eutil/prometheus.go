@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -89,10 +90,9 @@ func NewTSDB() (*tsdb.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tsdb.Open(dir, nil, nil, &tsdb.Options{
-		BlockRanges:       []int64{2 * 3600 * 1000},
-		RetentionDuration: math.MaxInt64,
-	})
+	opts := tsdb.DefaultOptions()
+	opts.RetentionDuration = math.MaxInt64
+	return tsdb.Open(dir, nil, nil, opts)
 }
 
 func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
@@ -275,7 +275,7 @@ func (p *Prometheus) cleanup() error {
 // Appender returns a new appender to populate the Prometheus instance with data.
 // All appenders must be closed before Start is called and no new ones must be opened
 // afterwards.
-func (p *Prometheus) Appender() tsdb.Appender {
+func (p *Prometheus) Appender() storage.Appender {
 	if p.running {
 		panic("Appender must not be called after start")
 	}
@@ -410,7 +410,7 @@ func createBlock(
 	resolution int64,
 	tombstones bool,
 ) (id ulid.ULID, err error) {
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000)
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, tsdb.DefaultStripeSize)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}

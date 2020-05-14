@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -140,7 +140,7 @@ func (f *fakeAppendable) Appender() (storage.Appender, error) {
 
 type fakeAppender struct {
 	sync.Mutex
-	samples     map[string][]prompb.Sample
+	samples     map[uint64][]prompb.Sample
 	addErr      func() error
 	addFastErr  func() error
 	commitErr   func() error
@@ -163,7 +163,7 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 		rollbackErr = nilErrFn
 	}
 	return &fakeAppender{
-		samples:     make(map[string][]prompb.Sample),
+		samples:     make(map[uint64][]prompb.Sample),
 		addErr:      addErr,
 		addFastErr:  addFastErr,
 		commitErr:   commitErr,
@@ -174,14 +174,15 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
 	f.Lock()
 	defer f.Unlock()
-	f.samples[l.String()] = append(f.samples[l.String()], prompb.Sample{Value: v, Timestamp: t})
-	return 0, f.addErr()
+	ref := l.Hash()
+	f.samples[ref] = append(f.samples[ref], prompb.Sample{Value: v, Timestamp: t})
+	return ref, f.addErr()
 }
 
-func (f *fakeAppender) AddFast(l labels.Labels, ref uint64, t int64, v float64) error {
+func (f *fakeAppender) AddFast(ref uint64, t int64, v float64) error {
 	f.Lock()
 	defer f.Unlock()
-	f.samples[l.String()] = append(f.samples[l.String()], prompb.Sample{Value: v, Timestamp: t})
+	f.samples[ref] = append(f.samples[ref], prompb.Sample{Value: v, Timestamp: t})
 	return f.addFastErr()
 }
 

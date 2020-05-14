@@ -100,13 +100,13 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	q, err := s.db.Querier(r.MinTime, r.MaxTime)
+	q, err := s.db.Querier(context.Background(), r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier series")
 
-	set, err := q.Select(matchers...)
+	set, _, err := q.Select(false, nil, matchers...)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -141,7 +141,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	return nil
 }
 
-func (s *TSDBStore) encodeChunks(it tsdb.SeriesIterator, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
+func (s *TSDBStore) encodeChunks(it chunkenc.Iterator, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
 	var (
 		chkMint int64
 		chk     *chunkenc.XORChunk
@@ -213,13 +213,13 @@ func (s *TSDBStore) translateAndExtendLabels(m, extend labels.Labels) []storepb.
 func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	q, err := s.db.Querier(math.MinInt64, math.MaxInt64)
+	q, err := s.db.Querier(context.Background(), math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	res, err := q.LabelNames()
+	res, _, err := q.LabelNames()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -230,13 +230,13 @@ func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest
 func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
-	q, err := s.db.Querier(math.MinInt64, math.MaxInt64)
+	q, err := s.db.Querier(context.Background(), math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label values")
 
-	res, err := q.LabelValues(r.Label)
+	res, _, err := q.LabelValues(r.Label)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

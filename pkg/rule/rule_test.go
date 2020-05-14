@@ -23,15 +23,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/yaml.v2"
+	yamlv3 "gopkg.in/yaml.v3"
 )
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Add(l labels.Labels, t int64, v float64) (uint64, error)       { return 0, nil }
-func (n nopAppendable) AddFast(l labels.Labels, ref uint64, t int64, v float64) error { return nil }
-func (n nopAppendable) Commit() error                                                 { return nil }
-func (n nopAppendable) Rollback() error                                               { return nil }
-func (n nopAppendable) Appender() (storage.Appender, error)                           { return n, nil }
+func (n nopAppendable) Appender() storage.Appender { return nopAppender{} }
+
+type nopAppender struct{}
+
+func (n nopAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) { return 0, nil }
+func (n nopAppender) AddFast(ref uint64, t int64, v float64) error            { return nil }
+func (n nopAppender) Commit() error                                           { return nil }
+func (n nopAppender) Rollback() error                                         { return nil }
+func (n nopAppender) Appender() (storage.Appender, error)                     { return n, nil }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
 func TestRun(t *testing.T) {
@@ -244,10 +249,14 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 			{
 				RuleGroup: rulefmt.RuleGroup{
 					Name: "something1",
-					Rules: []rulefmt.Rule{
+					Rules: []rulefmt.RuleNode{
 						{
-							Alert: "some",
-							Expr:  "up",
+							Alert: yamlv3.Node{
+								Value: "some",
+							},
+							Expr: yamlv3.Node{
+								Value: "up",
+							},
 						},
 					},
 				},
@@ -255,10 +264,14 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 			{
 				RuleGroup: rulefmt.RuleGroup{
 					Name: "something2",
-					Rules: []rulefmt.Rule{
+					Rules: []rulefmt.RuleNode{
 						{
-							Alert: "some",
-							Expr:  "rate(some_metric[1h:5m] offset 1d)",
+							Alert: yamlv3.Node{
+								Value: "some",
+							},
+							Expr: yamlv3.Node{
+								Value: "rate(some_metric[1h:5m] offset 1d)",
+							},
 						},
 					},
 				},

@@ -695,6 +695,12 @@ func (it *AverageChunkIterator) Next() bool {
 	return true
 }
 
+func (it *AverageChunkIterator) Seek(t int64) bool {
+	for it.t < t && it.Next() {
+	}
+	return true
+}
+
 func (it *AverageChunkIterator) At() (int64, float64) {
 	return it.t, it.v
 }
