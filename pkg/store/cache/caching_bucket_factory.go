@@ -30,15 +30,11 @@ const (
 	deletionMarkFilenameSuffix = "/" + metadata.DeletionMarkFilename
 )
 
-// CachingBucketWithBackendConfig is a configuration of caching bucket used by Store component.
-type CachingBucketWithBackendConfig struct {
+// CachingWithBackendConfig is a configuration of caching bucket used by Store component.
+type CachingWithBackendConfig struct {
 	Type          BucketCacheProvider `yaml:"backend"`
 	BackendConfig interface{}         `yaml:"backend_config"`
 
-	CachingBucketConfig CachingBucketConfig `yaml:"caching_config"`
-}
-
-type CachingBucketConfig struct {
 	// Basic unit used to cache chunks.
 	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`
 
@@ -58,27 +54,23 @@ type CachingBucketConfig struct {
 	MetafileContentTTL     time.Duration `yaml:"metafile_content_ttl"`
 }
 
-func DefaultCachingBucketConfig() CachingBucketConfig {
-	return CachingBucketConfig{
-		ChunkSubrangeSize:         16000, // Equal to max chunk size.
-		ChunkObjectSizeTTL:        24 * time.Hour,
-		ChunkSubrangeTTL:          24 * time.Hour,
-		MaxChunksGetRangeRequests: 3,
-
-		RootIterTTL: 5 * time.Minute,
-
-		MetafileExistsTTL:      10 * time.Minute,
-		MetafileDoesntExistTTL: 3 * time.Minute,
-		MetafileContentTTL:     1 * time.Hour,
-	}
+func (cfg *CachingWithBackendConfig) Defaults() {
+	cfg.ChunkSubrangeSize = 16000 // Equal to max chunk size.
+	cfg.ChunkObjectSizeTTL = 24 * time.Hour
+	cfg.ChunkSubrangeTTL = 24 * time.Hour
+	cfg.MaxChunksGetRangeRequests = 3
+	cfg.RootIterTTL = 5 * time.Minute
+	cfg.MetafileExistsTTL = 10 * time.Minute
+	cfg.MetafileDoesntExistTTL = 3 * time.Minute
+	cfg.MetafileContentTTL = 1 * time.Hour
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
 func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
-	config := &CachingBucketWithBackendConfig{}
-	config.CachingBucketConfig = DefaultCachingBucketConfig()
+	config := &CachingWithBackendConfig{}
+	config.Defaults()
 
 	if err := yaml.UnmarshalStrict(yamlContent, config); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
@@ -108,14 +100,13 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		return nil, err
 	}
 
-	cbc := config.CachingBucketConfig
 	// Configure cache.
-	cb.CacheGetRange("chunks", c, isTSDBChunkFile, cbc.ChunkSubrangeSize, cbc.ChunkObjectSizeTTL, cbc.ChunkSubrangeTTL, cbc.MaxChunksGetRangeRequests)
-	cb.CacheExists("metafile", c, isMetaFile, cbc.MetafileExistsTTL, cbc.MetafileDoesntExistTTL)
-	cb.CacheGet("metafile", c, isMetaFile, cbc.MetafileContentTTL, cbc.MetafileExistsTTL, cbc.MetafileDoesntExistTTL)
+	cb.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
+	cb.CacheExists("metafile", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cb.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, cbc.RootIterTTL)
+	cb.CacheIter("dir", c, func(dir string) bool { return dir == "" }, config.RootIterTTL)
 
 	// Enabling index caching (example).
 	cb.CacheObjectSize("index", c, isIndexFile, time.Hour)
