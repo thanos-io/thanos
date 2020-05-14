@@ -345,7 +345,7 @@ func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgN
 }
 
 func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset, length int64, cfgName string, cfg *getRangeConfig) (io.ReadCloser, error) {
-	cb.operationRequests.WithLabelValues(opGetRange, cfgName)
+	cb.operationRequests.WithLabelValues(opGetRange, cfgName).Inc()
 	cb.requestedGetRangeBytes.WithLabelValues(cfgName).Add(float64(length))
 
 	size, err := cb.cachedObjectSize(ctx, name, cfgName, cfg.cache, cfg.objectSizeTTL)
@@ -398,7 +398,7 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 		totalCachedBytes += int64(len(b))
 	}
 	cb.fetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(totalCachedBytes))
-	cb.operationHits.WithLabelValues(opGetRange, cfgName).Add(float64(totalCachedBytes) / float64(totalRequestedBytes))
+	cb.operationHits.WithLabelValues(opGetRange, cfgName).Add(float64(len(hits)) / float64(len(keys)))
 
 	if len(hits) < len(keys) {
 		if hits == nil {
