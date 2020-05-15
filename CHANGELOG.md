@@ -23,6 +23,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2521](https://github.com/thanos-io/thanos/pull/2521) Sidecar: add `thanos_sidecar_reloader_reloads_failed_total`, `thanos_sidecar_reloader_reloads_total`, `thanos_sidecar_reloader_watch_errors_total`, `thanos_sidecar_reloader_watch_events_total` and `thanos_sidecar_reloader_watches` metrics.
 - [#2412](https://github.com/thanos-io/thanos/pull/2412) ui: add React UI from Prometheus upstream. Currently only accessible from Query component as only `/graph` endpoint is migrated.
 - [#2532](https://github.com/thanos-io/thanos/pull/2532) Store: Added hidden option for experimental caching bucket, that can cache chunks into shared memcached. This can speed up querying and reduce number of requests to object storage.
+- [#2579](https://github.com/thanos-io/thanos/pull/2579) Store: Experimental caching bucket can now cache metadata as well. Config has changed from #2532.
 
 ### Changed
 

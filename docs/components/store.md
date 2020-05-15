@@ -274,7 +274,7 @@ While the remaining settings are **optional**:
 
 ## Caching Bucket
 
-Thanos Store Gateway supports a "caching bucket" with chunks caching to speed up loading of chunks from TSDB blocks. Currently only memcached "backend" is supported:
+Thanos Store Gateway supports a "caching bucket" with chunks and metadata caching to speed up loading of chunks from TSDB blocks. Currently only memcached "backend" is supported:
 
 ```yaml
 backend: memcached
@@ -282,21 +282,33 @@ backend_config:
   addresses:
     - localhost:11211
 
-caching_config:
-  chunk_subrange_size: 16000
-  max_chunks_get_range_requests: 3
-  chunk_object_size_ttl: 24h
-  chunk_subrange_ttl: 24h
+chunk_subrange_size: 16000
+max_chunks_get_range_requests: 3
+chunk_object_size_ttl: 24h
+chunk_subrange_ttl: 24h
+blocks_iter_ttl: 5m
+metafile_exists_ttl: 2h
+metafile_doesnt_exist_ttl: 15m
+metafile_content_ttl: 24h
+metafile_max_size: 1MiB
 ```
 
 `backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
-`caching_config` is a configuration for chunks cache and supports the following optional settings:
+`caching_config` is a configuration for cache and supports the following optional settings for chunks caching:
 
 - `chunk_subrange_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
 - `chunk_object_size_ttl`: how long to keep information about chunk file length in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
+
+Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
+
+- `blocks_iter_ttl`: how long to cache result of iterating blocks.
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist
+- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
+- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
 Note that chunks cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
