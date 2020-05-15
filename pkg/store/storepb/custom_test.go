@@ -170,7 +170,7 @@ func TestMergeSeriesSets(t *testing.T) {
 			},
 		},
 		{
-			desc: "single seriesSets, {a=c} series to merge, nothing merged",
+			desc: "single seriesSets, {a=c} series to merge, sorted",
 			in: [][]rawSeries{
 				{
 					{
@@ -184,45 +184,6 @@ func TestMergeSeriesSets(t *testing.T) {
 					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
-					},
-				},
-			},
-
-			expected: []rawSeries{
-				{
-					lset:   labels.FromStrings("a", "a"),
-					chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-				}, {
-					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
-				}, {
-					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
-				},
-			},
-		},
-		{
-			// SeriesSet can return same series within different iterations. MergeSeries will merge those as long as there are more than one series sets.
-			desc: "single seriesSets, {a=c} series to merge, merged",
-			in: [][]rawSeries{
-				{
-					{
-						lset:   labels.FromStrings("a", "a"),
-						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-					},
-					{
-						lset:   labels.FromStrings("a", "c"),
-						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
-					},
-					{
-						lset:   labels.FromStrings("a", "c"),
-						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
-					},
-				},
-				{
-					{
-						lset:   labels.FromStrings("a", "d"),
-						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
 					},
 				},
 			},
@@ -234,10 +195,6 @@ func TestMergeSeriesSets(t *testing.T) {
 				}, {
 					lset:   labels.FromStrings("a", "c"),
 					chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}, {{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
-				},
-				{
-					lset:   labels.FromStrings("a", "d"),
-					chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
 				},
 			},
 		},
