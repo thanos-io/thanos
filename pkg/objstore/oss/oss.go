@@ -131,22 +131,6 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	// refer to https://github.com/aliyun/aliyun-oss-go-sdk/blob/cee409f5b4d75d7ad077cacb7e6f4590a7f2e172/oss/bucket.go#L668.
-	m, err := b.bucket.GetObjectMeta(name)
-	if err != nil {
-		return 0, err
-	}
-
-	ret, err := clientutil.ParseContentLength(m)
-	if err != nil {
-		return 0, err
-	}
-
-	return uint64(ret), err
-}
-
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
 	m, err := b.bucket.GetObjectMeta(name)

@@ -70,9 +70,6 @@ type BucketReader interface {
 	// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 	IsObjNotFoundErr(err error) bool
 
-	// ObjectSize returns the size of the specified object.
-	ObjectSize(ctx context.Context, name string) (uint64, error)
-
 	// Attributes returns information about the specified object.
 	Attributes(ctx context.Context, name string) (ObjectAttributes, error)
 }
@@ -88,10 +85,10 @@ type InstrumentedBucketReader interface {
 
 type ObjectAttributes struct {
 	// Size is the object size in bytes.
-	Size int64
+	Size int64 `json:"size"`
 
 	// LastModified is the timestamp the object was last modified.
-	LastModified time.Time
+	LastModified time.Time `json:"last_modified"`
 }
 
 // TryToGetSize tries to get upfront size from reader.
@@ -223,7 +220,6 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 
 const (
 	iterOp       = "iter"
-	sizeOp       = "objectsize"
 	getOp        = "get"
 	getRangeOp   = "get_range"
 	existsOp     = "exists"
@@ -268,7 +264,6 @@ func BucketWithMetrics(name string, b Bucket, reg prometheus.Registerer) *metric
 	}
 	for _, op := range []string{
 		iterOp,
-		sizeOp,
 		getOp,
 		getRangeOp,
 		existsOp,
@@ -319,22 +314,6 @@ func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string)
 		b.opsFailures.WithLabelValues(op).Inc()
 	}
 	return err
-}
-
-func (b *metricBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	const op = sizeOp
-	b.ops.WithLabelValues(op).Inc()
-
-	start := time.Now()
-	rc, err := b.bkt.ObjectSize(ctx, name)
-	if err != nil {
-		if !b.isOpFailureExpected(err) {
-			b.opsFailures.WithLabelValues(op).Inc()
-		}
-		return 0, err
-	}
-	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
-	return rc, nil
 }
 
 func (b *metricBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {

@@ -149,19 +149,8 @@ func (b *InMemBucket) Exists(_ context.Context, name string) (bool, error) {
 	return ok, nil
 }
 
-// ObjectSize returns the size of the specified object.
-func (b *InMemBucket) ObjectSize(_ context.Context, name string) (uint64, error) {
-	b.mtx.RLock()
-	file, ok := b.objects[name]
-	b.mtx.RUnlock()
-	if !ok {
-		return 0, errNotFound
-	}
-	return uint64(len(file)), nil
-}
-
 // Attributes returns information about the specified object.
-func (b *InMemBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
+func (b *InMemBucket) Attributes(_ context.Context, name string) (ObjectAttributes, error) {
 	b.mtx.RLock()
 	attrs, ok := b.attrs[name]
 	b.mtx.RUnlock()

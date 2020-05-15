@@ -107,16 +107,6 @@ func (r *rangeReaderCloser) Close() error {
 	return r.f.Close()
 }
 
-// ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
-	file := filepath.Join(b.rootDir, name)
-	st, err := os.Stat(file)
-	if err != nil {
-		return 0, errors.Wrapf(err, "stat %s", file)
-	}
-	return uint64(st.Size()), nil
-}
-
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
 	file := filepath.Join(b.rootDir, name)

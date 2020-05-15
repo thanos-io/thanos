@@ -93,21 +93,6 @@ func (b *Bucket) Name() string {
 	return b.name
 }
 
-// ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	resp, err := b.client.Object.Head(ctx, name, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	ret, err := clientutil.ParseContentLength(resp.Header)
-	if err != nil {
-		return 0, err
-	}
-
-	return uint64(ret), err
-}
-
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
 	resp, err := b.client.Object.Head(ctx, name, nil)
