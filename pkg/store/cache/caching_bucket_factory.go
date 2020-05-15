@@ -103,7 +103,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	cfg.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cfg.CacheIter("dir", c, isBlocksRootDir, config.BlocksIterTTL, JsonIterCodec{})
+	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JsonIterCodec{})
 
 	// Enabling index caching (example).
 	cfg.CacheObjectSize("index", c, isIndexFile, time.Hour)
