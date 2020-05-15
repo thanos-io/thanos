@@ -68,7 +68,13 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --data-dir="./data"        Data directory in which to cache remote blocks.
+      --data-dir="./data"        Local data directory used for caching purposes
+                                 (index-header, in-mem cache items and
+                                 meta.jsons). If removed, no data will be lost,
+                                 just store will have to rebuild the cache.
+                                 NOTE: Putting raw blocks here will not cause
+                                 the store to read them. For such use cases use
+                                 Prometheus + sidecar.
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.
