@@ -554,6 +554,35 @@ func TestGetTooBigObject(t *testing.T) {
 	verifyExists(t, cb, testFilename, true, true, cfgName)
 }
 
+func TestGetPartialRead(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	cache := newMockCache()
+
+	cfg := NewCachingBucketConfig()
+	const cfgName = "metafile"
+	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
+	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
+
+	data := []byte("hello world")
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
+
+	// Read only few bytes from data.
+	r, err := cb.Get(context.Background(), testFilename)
+	testutil.Ok(t, err)
+	_, err = r.Read(make([]byte, 1))
+	testutil.Ok(t, err)
+	testutil.Ok(t, r.Close())
+
+	// Object wasn't cached as it wasn't fully read.
+	verifyGet(t, cb, testFilename, data, false, cfgName)
+	// VerifyGet read object, so now it's cached.
+	verifyGet(t, cb, testFilename, data, true, cfgName)
+}
+
 func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, cfgName string) {
 	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opGet, cfgName)))
 
