@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"bytes"
 	"strings"
 	"unsafe"
 
@@ -195,27 +196,18 @@ Outer:
 				break Outer
 			}
 
-			if chksA[a].MinTime < chksB[b].MinTime {
+			cmp := chksA[a].Compare(chksB[b])
+			if cmp > 0 {
 				s.chunks = append(s.chunks, chksA[a])
 				break
 			}
-
-			if chksA[a].MinTime > chksB[b].MinTime {
+			if cmp < 0 {
 				s.chunks = append(s.chunks, chksB[b])
 				b++
 				continue
 			}
 
-			// TODO(bwplotka): This is expensive.
-			//fmt.Println("check strings")
-			if strings.Compare(chksA[a].String(), chksB[b].String()) == 0 {
-				// Exact duplicated chunks, discard one from b.
-				b++
-				continue
-			}
-
-			// Same min Time, but not duplicate, so it does not matter. Take b (since lower for loop).
-			s.chunks = append(s.chunks, chksB[b])
+			// Exact duplicated chunks, discard one from b.
 			b++
 		}
 	}
@@ -272,7 +264,6 @@ func (s *uniqueSeriesSet) Next() bool {
 		// We assume non-overlapping, sorted chunks. This is best effort only, if it's otherwise it
 		// will just be duplicated, but well handled by StoreAPI consumers.
 		s.peek.Chunks = append(s.peek.Chunks, chks...)
-
 	}
 
 	if s.peek == nil {
@@ -282,6 +273,64 @@ func (s *uniqueSeriesSet) Next() bool {
 	s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
 	s.peek = nil
 	return true
+}
+
+// Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.
+// It returns 0 if chunks are exactly the same.
+func (m AggrChunk) Compare(b AggrChunk) int {
+	if m.MinTime < b.MinTime {
+		return 1
+	}
+	if m.MinTime > b.MinTime {
+		return -1
+	}
+
+	// Same min time.
+	if m.MaxTime < b.MaxTime {
+		return 1
+	}
+	if m.MaxTime > b.MaxTime {
+		return -1
+	}
+
+	// We could use proto.Equal, but we need ordering as well.
+	for _, cmp := range []func() int{
+		func() int { return m.Raw.Compare(b.Raw) },
+		func() int { return m.Count.Compare(b.Count) },
+		func() int { return m.Sum.Compare(b.Sum) },
+		func() int { return m.Min.Compare(b.Min) },
+		func() int { return m.Max.Compare(b.Max) },
+		func() int { return m.Counter.Compare(b.Counter) },
+	} {
+		if c := cmp(); c == 0 {
+			continue
+		} else {
+			return c
+		}
+	}
+	return 0
+}
+
+// Compare returns positive 1 if chunk is smaller -1 if larger.
+// It returns 0 if chunks are exactly the same.
+func (m *Chunk) Compare(b *Chunk) int {
+	if m == nil && b == nil {
+		return 0
+	}
+	if b == nil {
+		return 1
+	}
+	if m == nil {
+		return -1
+	}
+
+	if m.Type < b.Type {
+		return 1
+	}
+	if m.Type > b.Type {
+		return -1
+	}
+	return bytes.Compare(m.Data, b.Data)
 }
 
 // LabelsToPromLabels converts Thanos proto labels to Prometheus labels in type safe manner.
