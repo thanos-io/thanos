@@ -1,4 +1,3 @@
 (
-  (import 'mixin.libsonnet') +
-  (import 'defaults.libsonnet')
+  import 'mixin.libsonnet'
 ).prometheusRules

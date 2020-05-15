@@ -7,7 +7,8 @@
           "subdir": "grafonnet"
         }
       },
-      "version": "master"
+      "version": "69bc267211790a1c3f4ea6e6211f3e8ffe22f987",
+      "sum": "BjHfWzqSAgtAKEVD6ipoYOkb8XT5wSBIboY4ZLwhlOU="
     },
     {
       "source": {
@@ -16,17 +17,9 @@
           "subdir": "grafana-builder"
         }
       },
-      "version": "master"
-    },
-    {
-      "source": {
-        "local": {
-          "directory": "thanos"
-        }
-      },
-      "version": ".",
-      "name": "thanos-mixin"
+      "version": "f4c59f64f80442f871a06c91edf74d014b82acaf",
+      "sum": "ELsYwK+kGdzX1mee2Yy+/b2mdO4Y503BOCDkFzwmGbE="
     }
   ],
-  "legacyImports": true
+  "legacyImports": false
 }

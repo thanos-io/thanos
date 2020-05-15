@@ -1,7 +1,7 @@
-local dashboards = (
-  (import 'mixin.libsonnet') +
-  (import 'defaults.libsonnet')
-).grafanaDashboards;
+local dashboards =
+  (
+    import 'mixin.libsonnet'
+  ).grafanaDashboards;
 
 {
   [name]: dashboards[name]
