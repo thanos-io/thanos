@@ -17,6 +17,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2501](https://github.com/thanos-io/thanos/pull/2501) Query: gracefully handle additional fields in `SeriesResponse` protobuf message that may be added in the future.
 - [#2568](https://github.com/thanos-io/thanos/pull/2568) Query: does not close the connection of strict, static nodes if establishing a connection had succeeded but Info() call failed
 - [#2615](https://github.com/thanos-io/thanos/pull/2615) Rule: Fix bugs where rules were out of sync.
+- [#2614](https://github.com/thanos-io/thanos/pull/2614) Tracing: Disable Elastic APM Go Agent default tracer on initialization to disable the default metric gatherer
 
 ### Added
 
