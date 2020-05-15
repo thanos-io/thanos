@@ -70,17 +70,17 @@ func (m *Manager) SetRuleManager(s storepb.PartialResponseStrategy, mgr *rules.M
 func (m *Manager) RuleGroups() []Group {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
-	var res []Group
+	var groups []Group
 	for s, r := range m.mgrs {
 		for _, group := range r.RuleGroups() {
-			res = append(res, Group{
+			groups = append(groups, Group{
 				Group:                   group,
 				PartialResponseStrategy: s,
 				originalFile:            m.ruleFiles[group.File()],
 			})
 		}
 	}
-	return res
+	return groups
 }
 
 func (m *Manager) AlertingRules() []AlertingRule {
@@ -214,6 +214,21 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 		if err := mgr.Update(evalInterval, fs, nil); err != nil {
 			errs = append(errs, errors.Wrapf(err, "strategy %s", s))
 			continue
+		}
+	}
+
+	// Removes the rules from a manager when a strategy has no more rule.
+	for s, mgr := range m.mgrs {
+		if _, ok := filesByStrategy[s]; ok {
+			continue
+		}
+
+		if len(mgr.RuleGroups()) == 0 {
+			continue
+		}
+
+		if err := mgr.Update(evalInterval, []string{}, nil); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	m.ruleFiles = ruleFiles
