@@ -60,8 +60,8 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 	cfg.ChunkSubrangeTTL = 24 * time.Hour
 	cfg.MaxChunksGetRangeRequests = 3
 	cfg.BlocksIterTTL = 5 * time.Minute
-	cfg.MetafileExistsTTL = 10 * time.Minute
-	cfg.MetafileDoesntExistTTL = 3 * time.Minute
+	cfg.MetafileExistsTTL = 2 * time.Hour
+	cfg.MetafileDoesntExistTTL = 15 * time.Minute
 	cfg.MetafileContentTTL = 24 * time.Hour
 }
 
