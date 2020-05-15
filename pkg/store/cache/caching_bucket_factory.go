@@ -105,10 +105,6 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	// Cache Iter requests for root.
 	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JsonIterCodec{})
 
-	// Enabling index caching (example).
-	cfg.CacheObjectSize("index", c, isIndexFile, time.Hour)
-	cfg.CacheGetRange("index", c, isIndexFile, 32000, time.Hour, 24*time.Hour, 3)
-
 	cb, err := NewCachingBucket(bucket, cfg, logger, reg)
 	if err != nil {
 		return nil, err
