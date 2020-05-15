@@ -261,11 +261,11 @@ func TestMergeSeriesSets(t *testing.T) {
 					lset: labels.Labels{labels.Label{Name: "a", Value: "c"}},
 					chunks: [][]sample{
 						{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
-						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 14, v: 14}},
 						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 14, v: 14}},
 						{{t: 15, v: 15}, {t: 16, v: 16}, {t: 17, v: 17}, {t: 18, v: 18}},
-						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
 						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 22}, {t: 24, v: 24}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
 					},
 				}, {
 					lset:   labels.Labels{labels.Label{Name: "a", Value: "d"}},
@@ -317,11 +317,11 @@ func TestMergeSeriesSets(t *testing.T) {
 					chunks: [][]sample{
 						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
 						{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
-						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
-						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
 						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 22}, {t: 24, v: 24}},
 						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
 						{{t: 15, v: 15}, {t: 16, v: 16}, {t: 17, v: 17}, {t: 18, v: 18}},
+						{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
+						{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
 					},
 				},
 			},
@@ -381,17 +381,25 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 }
 
 // Test the cost of merging series sets for different number of merged sets and their size.
-// This tests cases with large number of series, with same chunks. Since the subset are unique, this does not capture
-// merging of partial or non-overlapping sets well.
 func BenchmarkMergedSeriesSet(b *testing.B) {
-	benchmarkMergedSeriesSet(testutil.NewTB(b))
+	b.Run("overlapping chunks", func(b *testing.B) {
+		benchmarkMergedSeriesSet(testutil.NewTB(b), true)
+	})
+	b.Run("non-overlapping chunks", func(b *testing.B) {
+		benchmarkMergedSeriesSet(testutil.NewTB(b), false)
+	})
 }
 
-func TestMergedSeriesSet_Labels(b *testing.T) {
-	benchmarkMergedSeriesSet(testutil.NewTB(b))
+func TestMergedSeriesSet_Labels(t *testing.T) {
+	t.Run("overlapping chunks", func(t *testing.T) {
+		benchmarkMergedSeriesSet(testutil.NewTB(t), true)
+	})
+	t.Run("non-overlapping chunks", func(t *testing.T) {
+		benchmarkMergedSeriesSet(testutil.NewTB(t), false)
+	})
 }
 
-func benchmarkMergedSeriesSet(b testutil.TB) {
+func benchmarkMergedSeriesSet(b testutil.TB, overlappingChunks bool) {
 	var sel func(sets []SeriesSet) SeriesSet
 	sel = func(sets []SeriesSet) SeriesSet {
 		if len(sets) == 0 {
@@ -418,11 +426,20 @@ func benchmarkMergedSeriesSet(b testutil.TB) {
 
 				sort.Sort(labels.Slice(lbls))
 
-				in := make([][]rawSeries, j)
-
+				blocks := make([][]rawSeries, j)
 				for _, l := range lbls {
-					for j := range in {
-						in[j] = append(in[j], rawSeries{lset: l, chunks: chunks})
+					for j := range blocks {
+						if overlappingChunks {
+							blocks[j] = append(blocks[j], rawSeries{lset: l, chunks: chunks})
+							continue
+						}
+						blocks[j] = append(blocks[j], rawSeries{
+							lset: l,
+							chunks: [][]sample{
+								{{int64(4*j) + 1, 1}, {int64(4*j) + 2, 2}},
+								{{int64(4*j) + 3, 3}, {int64(4*j) + 4, 4}},
+							},
+						})
 					}
 				}
 
@@ -430,7 +447,7 @@ func benchmarkMergedSeriesSet(b testutil.TB) {
 
 				for i := 0; i < b.N(); i++ {
 					var sets []SeriesSet
-					for _, s := range in {
+					for _, s := range blocks {
 						sets = append(sets, newListSeriesSet(b, s))
 					}
 					ms := sel(sets)
