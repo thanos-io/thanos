@@ -58,8 +58,8 @@ PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 # systems gsed won't be installed, so will use sed as expected.
 SED ?= $(shell which gsed 2>/dev/null || which sed)
 
-THANOS_MIXIN            ?= mixin/thanos
-JSONNET_VENDOR_DIR      ?= mixin/thanos/vendor
+THANOS_MIXIN            ?= mixin
+JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
