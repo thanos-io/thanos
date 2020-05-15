@@ -23,12 +23,7 @@ import (
 // BucketCacheProvider is a type used to evaluate all bucket cache providers.
 type BucketCacheProvider string
 
-const (
-	MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
-
-	metaFilenameSuffix         = "/" + metadata.MetaFilename
-	deletionMarkFilenameSuffix = "/" + metadata.DeletionMarkFilename
-)
+const MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
@@ -99,11 +94,11 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	// Configure cache.
 	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
-	cfg.CacheExists("metafile", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-	cfg.CacheGet("metafile", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cfg.CacheGet("meta.jsons", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
-	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JsonIterCodec{})
+	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
 
 	cb, err := NewCachingBucket(bucket, cfg, logger, reg)
 	if err != nil {
@@ -118,7 +113,7 @@ var chunksMatcher = regexp.MustCompile(`^.*/chunks/\d+$`)
 func isTSDBChunkFile(name string) bool { return chunksMatcher.MatchString(name) }
 
 func isMetaFile(name string) bool {
-	return strings.HasSuffix(name, metaFilenameSuffix) || strings.HasSuffix(name, deletionMarkFilenameSuffix)
+	return strings.HasSuffix(name, "/"+metadata.MetaFilename) || strings.HasSuffix(name, "/"+metadata.DeletionMarkFilename)
 }
 
 func isIndexFile(name string) bool {

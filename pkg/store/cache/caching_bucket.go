@@ -41,7 +41,7 @@ const (
 
 var errObjNotFound = errors.Errorf("object not found")
 
-// Bucket implementation that provides some caching features, based on passed configuration.
+// CachingBucket implementation that provides some caching features, based on passed configuration.
 type CachingBucket struct {
 	objstore.Bucket
 
@@ -152,7 +152,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 			}
 			return nil
 		}
-		level.Warn(cb.logger).Log("msg", "failed to decode cached Iter result", "err", err)
+		level.Warn(cb.logger).Log("msg", "failed to decode cached Iter result", "key", key, "err", err)
 	}
 
 	// Iteration can take a while (esp. since it calls function), and iterTTL is generally low.
@@ -166,11 +166,12 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 
 	remainingTTL := cfg.ttl - time.Since(iterTime)
 	if err == nil && remainingTTL > 0 {
-		if data, err := cfg.codec.Encode(list); err == nil {
+		data, encErr := cfg.codec.Encode(list)
+		if encErr == nil {
 			cfg.cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
-		} else {
-			level.Warn(cb.logger).Log("msg", "failed to encode Iter result", "err", err)
+			return nil
 		}
+		level.Warn(cb.logger).Log("msg", "failed to encode Iter result", "key", key, "err", encErr)
 	}
 	return err
 }
@@ -192,7 +193,7 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 			cb.operationHits.WithLabelValues(opExists, cfgName).Inc()
 			return exists, nil
 		}
-		level.Warn(cb.logger).Log("msg", "unexpected cached 'exists' value", "val", string(ex))
+		level.Warn(cb.logger).Log("msg", "unexpected cached 'exists' value", "key", key, "val", string(ex))
 	}
 
 	existsTime := time.Now()
@@ -254,6 +255,7 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 	}
 	defer runutil.CloseWithLogOnErr(cb.logger, reader, "CachingBucket.Get(%q)", name)
 
+	// TODO: Returned reader should use streaming, and have limit for how big items can be cached.
 	data, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return nil, err
@@ -576,14 +578,14 @@ func (c *subrangesReader) subrangeAt(offset int64) ([]byte, error) {
 	return b, nil
 }
 
-// JsonIterCodec encodes iter results into JSON. Suitable for root dir.
-type JsonIterCodec struct{}
+// JSONIterCodec encodes iter results into JSON. Suitable for root dir.
+type JSONIterCodec struct{}
 
-func (jic JsonIterCodec) Encode(files []string) ([]byte, error) {
+func (jic JSONIterCodec) Encode(files []string) ([]byte, error) {
 	return json.Marshal(files)
 }
 
-func (jic JsonIterCodec) Decode(data []byte) ([]string, error) {
+func (jic JSONIterCodec) Decode(data []byte) ([]string, error) {
 	var list []string
 	err := json.Unmarshal(data, &list)
 	return list, err
