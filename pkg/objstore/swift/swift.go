@@ -138,6 +138,20 @@ func (c *Container) ObjectSize(ctx context.Context, name string) (uint64, error)
 	return uint64(headers.ContentLength), nil
 }
 
+// Attributes returns information about the specified object.
+func (c *Container) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	response := objects.Get(c.client, c.name, name, nil)
+	headers, err := response.Extract()
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
+	}
+
+	return objstore.ObjectAttributes{
+		Size:         headers.ContentLength,
+		LastModified: headers.LastModified,
+	}, nil
+}
+
 // Exists checks if the given object exists.
 func (c *Container) Exists(ctx context.Context, name string) (bool, error) {
 	err := objects.Get(c.client, c.name, name, nil).Err

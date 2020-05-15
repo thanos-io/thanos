@@ -13,9 +13,9 @@ import (
 func TestMetricBucket_Close(t *testing.T) {
 	bkt := BucketWithMetrics("abc", NewInMemBucket(), nil)
 	// Expected initialized metrics.
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.ops))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsFailures))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsDuration))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.ops))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsFailures))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsDuration))
 
 	AcceptanceTest(t, bkt.WithExpectedErrs(bkt.IsObjNotFoundErr))
 	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(iterOp)))
@@ -25,7 +25,7 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, float64(2), promtest.ToFloat64(bkt.ops.WithLabelValues(existsOp)))
 	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(uploadOp)))
 	testutil.Equals(t, float64(2), promtest.ToFloat64(bkt.ops.WithLabelValues(deleteOp)))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.ops))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.ops))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(iterOp)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(sizeOp)))
 	testutil.Equals(t, float64(1), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(getOp)))
@@ -33,8 +33,8 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(existsOp)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(uploadOp)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(deleteOp)))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsFailures))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsDuration))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsFailures))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsDuration))
 	lastUpload := promtest.ToFloat64(bkt.lastSuccessfulUploadTime)
 	testutil.Assert(t, lastUpload > 0, "last upload not greater than 0, val: %f", lastUpload)
 
@@ -48,7 +48,7 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, float64(4), promtest.ToFloat64(bkt.ops.WithLabelValues(existsOp)))
 	testutil.Equals(t, float64(12), promtest.ToFloat64(bkt.ops.WithLabelValues(uploadOp)))
 	testutil.Equals(t, float64(4), promtest.ToFloat64(bkt.ops.WithLabelValues(deleteOp)))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.ops))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.ops))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(iterOp)))
 	// Not expected not found error here.
 	testutil.Equals(t, float64(1), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(sizeOp)))
@@ -58,7 +58,7 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(existsOp)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(uploadOp)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(deleteOp)))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsFailures))
-	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsDuration))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsFailures))
+	testutil.Equals(t, 8, promtest.CollectAndCount(bkt.opsDuration))
 	testutil.Assert(t, promtest.ToFloat64(bkt.lastSuccessfulUploadTime) > lastUpload)
 }

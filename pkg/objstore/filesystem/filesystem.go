@@ -117,6 +117,20 @@ func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
 	return uint64(st.Size()), nil
 }
 
+// Attributes returns information about the specified object.
+func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	file := filepath.Join(b.rootDir, name)
+	stat, err := os.Stat(file)
+	if err != nil {
+		return objstore.ObjectAttributes{}, errors.Wrapf(err, "stat %s", file)
+	}
+
+	return objstore.ObjectAttributes{
+		Size:         stat.Size(),
+		LastModified: stat.ModTime(),
+	}, nil
+}
+
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {

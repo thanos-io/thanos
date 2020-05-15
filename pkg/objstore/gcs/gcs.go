@@ -134,6 +134,19 @@ func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	return uint64(obj.Size), nil
 }
 
+// Attributes returns information about the specified object.
+func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	attrs, err := b.bkt.Object(name).Attrs(ctx)
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
+	}
+
+	return objstore.ObjectAttributes{
+		Size:         attrs.Size,
+		LastModified: attrs.Updated,
+	}, nil
+}
+
 // Handle returns the underlying GCS bucket handle.
 // Used for testing purposes (we return handle, so it is not instrumented).
 func (b *Bucket) Handle() *storage.BucketHandle {

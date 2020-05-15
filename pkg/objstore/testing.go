@@ -98,6 +98,10 @@ func AcceptanceTest(t *testing.T, bkt Bucket) {
 	testutil.NotOk(t, err)
 	testutil.Assert(t, bkt.IsObjNotFoundErr(err), "expected not found error but got %s", err)
 
+	_, err = bkt.Attributes(ctx, "id1/obj_1.some")
+	testutil.NotOk(t, err)
+	testutil.Assert(t, bkt.IsObjNotFoundErr(err), "expected not found error but got %s", err)
+
 	// Upload first object.
 	testutil.Ok(t, bkt.Upload(ctx, "id1/obj_1.some", strings.NewReader("@test-data@")))
 

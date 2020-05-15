@@ -341,6 +341,19 @@ func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
 	return uint64(objInfo.Size), nil
 }
 
+// Attributes returns information about the specified object.
+func (b *Bucket) Attributes(_ context.Context, name string) (objstore.ObjectAttributes, error) {
+	objInfo, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
+	}
+
+	return objstore.ObjectAttributes{
+		Size:         objInfo.Size,
+		LastModified: objInfo.LastModified,
+	}, nil
+}
+
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(_ context.Context, name string) error {
 	return b.client.RemoveObject(b.name, name)
