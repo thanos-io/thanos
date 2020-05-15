@@ -119,10 +119,6 @@ func isMetaFile(name string) bool {
 	return strings.HasSuffix(name, "/"+metadata.MetaFilename) || strings.HasSuffix(name, "/"+metadata.DeletionMarkFilename)
 }
 
-func isIndexFile(name string) bool {
-	return strings.HasSuffix(name, "/index")
-}
-
 func isBlocksRootDir(name string) bool {
 	return name == ""
 }
