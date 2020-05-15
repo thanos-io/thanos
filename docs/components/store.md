@@ -274,7 +274,9 @@ While the remaining settings are **optional**:
 
 ## Caching Bucket
 
-Thanos Store Gateway supports a "caching bucket" with chunks and metadata caching to speed up loading of chunks from TSDB blocks. Currently only memcached "backend" is supported:
+Thanos Store Gateway supports a "caching bucket" with chunks and metadata caching to speed up loading of chunks from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
+
+Currently only memcached "backend" is supported:
 
 ```yaml
 backend: memcached
