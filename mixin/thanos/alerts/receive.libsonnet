@@ -93,6 +93,17 @@
               severity: 'warning',
             },
           },
+          {
+            alert: 'ThanosReceiveNoUpload',
+            annotations: {
+              message: 'Thanos Receive {{$labels.job}} has not uploaded latest data to object storage.',
+            },
+            expr: 'increase(thanos_shipper_uploads_total{%(selector)s}[2h]) == 0' % thanos.receive,
+            'for': '30m',
+            labels: {
+              severity: 'warning',
+            },
+          },
         ],
       },
     ],
