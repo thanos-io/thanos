@@ -253,21 +253,18 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 		return nil, err
 	}
-	defer runutil.CloseWithLogOnErr(cb.logger, reader, "CachingBucket.Get(%q)", name)
 
-	// TODO: Returned reader should use streaming, and have limit for how big items can be cached.
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	ttl := cfg.contentTTL - time.Since(getTime)
-	if ttl > 0 {
-		cfg.cache.Store(ctx, map[string][]byte{contentKey: data}, ttl)
-	}
 	storeExistsCacheEntry(ctx, existsKey, true, getTime, cfg.cache, cfg.existsTTL, cfg.doesntExistTTL)
-
-	return ioutil.NopCloser(bytes.NewReader(data)), nil
+	return &getReader{
+		c:         cfg.cache,
+		ctx:       ctx,
+		r:         reader,
+		buf:       new(bytes.Buffer),
+		startTime: getTime,
+		ttl:       cfg.contentTTL,
+		cacheKey:  contentKey,
+		maxSize:   cfg.maxCacheableSize,
+	}, nil
 }
 
 func (cb *CachingBucket) IsObjNotFoundErr(err error) bool {
@@ -576,6 +573,46 @@ func (c *subrangesReader) subrangeAt(offset int64) ([]byte, error) {
 		return nil, errors.Errorf("subrange for offset %d not found", offset)
 	}
 	return b, nil
+}
+
+type getReader struct {
+	c         cache.Cache
+	ctx       context.Context
+	r         io.ReadCloser
+	buf       *bytes.Buffer
+	startTime time.Time
+	ttl       time.Duration
+	cacheKey  string
+	maxSize   int
+}
+
+func (g *getReader) Close() error {
+	// We don't know if entire object was read, don't store it here.
+	g.buf = nil
+	return g.r.Close()
+}
+
+func (g *getReader) Read(p []byte) (n int, err error) {
+	n, err = g.r.Read(p)
+	if n > 0 && g.buf != nil {
+		if g.buf.Len()+n <= g.maxSize {
+			g.buf.Write(p[:n])
+		} else {
+			// Object is larger than max size, stop caching.
+			g.buf = nil
+		}
+	}
+
+	if err == io.EOF && g.buf != nil {
+		remainingTTL := g.ttl - time.Since(g.startTime)
+		if remainingTTL > 0 {
+			g.c.Store(g.ctx, map[string][]byte{g.cacheKey: g.buf.Bytes()}, remainingTTL)
+		}
+		// Clear reference, to avoid doing another Store on next read.
+		g.buf = nil
+	}
+
+	return n, err
 }
 
 // JSONIterCodec encodes iter results into JSON. Suitable for root dir.

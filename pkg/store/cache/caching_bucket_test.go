@@ -507,7 +507,7 @@ func TestGet(t *testing.T) {
 
 	cfg := NewCachingBucketConfig()
 	const cfgName = "metafile"
-	cfg.CacheGet(cfgName, cache, matchAll, 10*time.Minute, 10*time.Minute, 2*time.Minute)
+	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
 
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
@@ -530,6 +530,30 @@ func TestGet(t *testing.T) {
 	verifyExists(t, cb, testFilename, true, true, cfgName)
 }
 
+func TestGetTooBigObject(t *testing.T) {
+	inmem := objstore.NewInMemBucket()
+
+	// We reuse cache between tests (!)
+	cache := newMockCache()
+
+	cfg := NewCachingBucketConfig()
+	const cfgName = "metafile"
+	// Only allow 5 bytes to be cached.
+	cfg.CacheGet(cfgName, cache, matchAll, 5, 10*time.Minute, 10*time.Minute, 2*time.Minute)
+	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
+
+	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
+	testutil.Ok(t, err)
+
+	data := []byte("hello world")
+	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
+
+	// Object is too big, so it will not be stored to cache on first read.
+	verifyGet(t, cb, testFilename, data, false, cfgName)
+	verifyGet(t, cb, testFilename, data, false, cfgName)
+	verifyExists(t, cb, testFilename, true, true, cfgName)
+}
+
 func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte, cacheUsed bool, cfgName string) {
 	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opGet, cfgName)))
 
@@ -545,7 +569,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 		}
 	} else {
 		testutil.Ok(t, err)
-		runutil.CloseWithLogOnErr(nil, r, "verifyGet")
+		defer runutil.CloseWithLogOnErr(nil, r, "verifyGet")
 		data, err := ioutil.ReadAll(r)
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedData, data)

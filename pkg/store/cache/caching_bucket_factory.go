@@ -17,6 +17,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	cache "github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -47,6 +48,7 @@ type CachingWithBackendConfig struct {
 	MetafileExistsTTL      time.Duration `yaml:"metafile_exists_ttl"`
 	MetafileDoesntExistTTL time.Duration `yaml:"metafile_doesnt_exist_ttl"`
 	MetafileContentTTL     time.Duration `yaml:"metafile_content_ttl"`
+	MetafileMaxSize        model.Bytes   `yaml:"metafile_max_size"`
 }
 
 func (cfg *CachingWithBackendConfig) Defaults() {
@@ -58,6 +60,7 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 	cfg.MetafileExistsTTL = 2 * time.Hour
 	cfg.MetafileDoesntExistTTL = 15 * time.Minute
 	cfg.MetafileContentTTL = 24 * time.Hour
+	cfg.MetafileMaxSize = 1024 * 1024 // Equal to default MaxItemSize in memcached client.
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
@@ -95,7 +98,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	// Configure cache.
 	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
 	cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-	cfg.CacheGet("meta.jsons", c, isMetaFile, config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 
 	// Cache Iter requests for root.
 	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
