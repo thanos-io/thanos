@@ -11,7 +11,7 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 const sep = '\xff'

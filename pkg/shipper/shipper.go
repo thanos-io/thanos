@@ -20,6 +20,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -37,40 +38,33 @@ type metrics struct {
 	uploadedCompacted prometheus.Gauge
 }
 
-func newMetrics(r prometheus.Registerer, uploadCompacted bool) *metrics {
+func newMetrics(reg prometheus.Registerer, uploadCompacted bool) *metrics {
 	var m metrics
 
-	m.dirSyncs = prometheus.NewCounter(prometheus.CounterOpts{
+	m.dirSyncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_dir_syncs_total",
 		Help: "Total number of dir syncs",
 	})
-	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	m.dirSyncFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_dir_sync_failures_total",
 		Help: "Total number of failed dir syncs",
 	})
-	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
+	m.uploads = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_uploads_total",
 		Help: "Total number of uploaded blocks",
 	})
-	m.uploadFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	m.uploadFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_upload_failures_total",
 		Help: "Total number of block upload failures",
 	})
-	m.uploadedCompacted = prometheus.NewGauge(prometheus.GaugeOpts{
+	uploadCompactedGaugeOpts := prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",
 		Help: "If 1 it means shipper uploaded all compacted blocks from the filesystem.",
-	})
-
-	if r != nil {
-		r.MustRegister(
-			m.dirSyncs,
-			m.dirSyncFailures,
-			m.uploads,
-			m.uploadFailures,
-		)
-		if uploadCompacted {
-			r.MustRegister(m.uploadedCompacted)
-		}
+	}
+	if uploadCompacted {
+		m.uploadedCompacted = promauto.With(reg).NewGauge(uploadCompactedGaugeOpts)
+	} else {
+		m.uploadedCompacted = promauto.With(nil).NewGauge(uploadCompactedGaugeOpts)
 	}
 	return &m
 }
@@ -348,6 +342,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 }
 
 // sync uploads the block if not exists in remote storage.
+// TODO(khyatisoneji): Double check if block does not have deletion-mark.json for some reason, otherwise log it or return error.
 func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	level.Info(s.logger).Log("msg", "upload new block", "id", meta.ULID)
 

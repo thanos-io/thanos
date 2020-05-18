@@ -6,6 +6,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,11 +15,13 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -87,7 +90,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
-		return errors.Errorf("empty external labels are not allowed for Thanos block.")
+		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
@@ -126,6 +129,35 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 	return err
 }
 
+// MarkForDeletion creates a file which stores information about when the block was marked for deletion.
+func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, markedForDeletion prometheus.Counter) error {
+	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
+	if err != nil {
+		return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
+	}
+	if deletionMarkExists {
+		level.Warn(logger).Log("msg", "requested to mark for deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", deletionMarkFile))
+		return nil
+	}
+
+	deletionMark, err := json.Marshal(metadata.DeletionMark{
+		ID:           id,
+		DeletionTime: time.Now().Unix(),
+		Version:      metadata.DeletionMarkVersion1,
+	})
+	if err != nil {
+		return errors.Wrap(err, "json encode deletion mark")
+	}
+
+	if err := bkt.Upload(ctx, deletionMarkFile, bytes.NewBuffer(deletionMark)); err != nil {
+		return errors.Wrapf(err, "upload file %s to bucket", deletionMarkFile)
+	}
+	markedForDeletion.Inc()
+	level.Info(logger).Log("msg", "block has been marked for deletion", "block", id)
+	return nil
+}
+
 // Delete removes directory that is meant to be block directory.
 // NOTE: Always prefer this method for deleting blocks.
 //  * We have to delete block's files in the certain order (meta.json first)
@@ -138,6 +170,7 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 	if err != nil {
 		return errors.Wrapf(err, "stat %s", metaFile)
 	}
+
 	if ok {
 		if err := bkt.Delete(ctx, metaFile); err != nil {
 			return errors.Wrapf(err, "delete %s", metaFile)
@@ -145,16 +178,22 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 		level.Debug(logger).Log("msg", "deleted file", "file", metaFile, "bucket", bkt.Name())
 	}
 
-	return deleteDir(ctx, logger, bkt, id.String())
+	// Delete the bucket, but skip the metaFile as we just deleted that. This is required for eventual object storages (list after write).
+	return deleteDirRec(ctx, logger, bkt, id.String(), func(name string) bool {
+		return name == metaFile
+	})
 }
 
-// deleteDir removes all objects prefixed with dir from the bucket.
+// deleteDirRec removes all objects prefixed with dir from the bucket. It skips objects that return true for the passed keep function.
 // NOTE: For objects removal use `block.Delete` strictly.
-func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string) error {
+func deleteDirRec(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string, keep func(name string) bool) error {
 	return bkt.Iter(ctx, dir, func(name string) error {
 		// If we hit a directory, call DeleteDir recursively.
 		if strings.HasSuffix(name, objstore.DirDelim) {
-			return deleteDir(ctx, logger, bkt, name)
+			return deleteDirRec(ctx, logger, bkt, name, keep)
+		}
+		if keep(name) {
+			return nil
 		}
 		if err := bkt.Delete(ctx, name); err != nil {
 			return err

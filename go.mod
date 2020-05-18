@@ -10,7 +10,8 @@ require (
 	github.com/armon/go-metrics v0.3.0
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
-	github.com/cortexproject/cortex v0.6.1-0.20200212080622-5292538418b1
+	github.com/cortexproject/cortex v0.6.1-0.20200228110116-92ab6cbe0995
+	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
 	github.com/fortytw2/leaktest v1.3.0
@@ -19,6 +20,7 @@ require (
 	github.com/go-openapi/strfmt v0.19.2
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.0.3
+	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gophercloud/gophercloud v0.6.0
@@ -29,7 +31,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.18.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.22
-	github.com/minio/minio-go/v6 v6.0.45
+	github.com/minio/minio-go/v6 v6.0.53
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.0.0
@@ -38,11 +40,12 @@ require (
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.1.1-0.20200124165624-2876d2018785
 	github.com/pkg/errors v0.9.1
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/alertmanager v0.20.0
-	github.com/prometheus/client_golang v1.4.2-0.20200214154132-b25ce2693a6d
+	github.com/prometheus/client_golang v1.5.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
-	github.com/prometheus/prometheus v1.8.2-0.20200110114423-1e64d757f711 // master ~ v2.15.2
+	github.com/prometheus/prometheus v1.8.2-0.20200213233353-b90be6f32a33
 	github.com/uber/jaeger-client-go v2.20.1+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0
@@ -52,13 +55,13 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/text v0.3.2
-	golang.org/x/tools v0.0.0-20200221224223-e1da425f72fd // indirect
+	golang.org/x/tools v0.0.0-20200306191617-51e69f71924f // indirect
 	google.golang.org/api v0.14.0
 	google.golang.org/genproto v0.0.0-20191115194625-c23dd37a84c9
 	google.golang.org/grpc v1.25.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
-	gopkg.in/yaml.v2 v2.2.5
+	gopkg.in/yaml.v2 v2.2.7
 )
 
 // We want to replace the client-go version with a specific commit hash,
@@ -67,8 +70,8 @@ require (
 replace (
 	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
-	// TODO(bwplotka): Update once https://github.com/cortexproject/cortex/pull/2146 is merged.
-	github.com/cortexproject/cortex => github.com/bwplotka/cortex v0.0.0-20200218165228-c04fa1c09090
+	// Make sure Cortex is not forcing us to some other Prometheus version.
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200110114423-1e64d757f711 // master ~ v2.15.2
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719

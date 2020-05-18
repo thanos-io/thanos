@@ -13,16 +13,19 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	yaml "gopkg.in/yaml.v2"
 )
 
 const (
-	opSet      = "set"
-	opGetMulti = "getmulti"
+	opSet             = "set"
+	opGetMulti        = "getmulti"
+	reasonMaxItemSize = "max-item-size"
 )
 
 var (
@@ -34,6 +37,7 @@ var (
 		MaxIdleConnections:        100,
 		MaxAsyncConcurrency:       20,
 		MaxAsyncBufferSize:        10000,
+		MaxItemSize:               model.Bytes(1024 * 1024),
 		MaxGetMultiConcurrency:    100,
 		MaxGetMultiBatchSize:      0,
 		DNSProviderUpdateInterval: 10 * time.Second,
@@ -87,6 +91,11 @@ type MemcachedClientConfig struct {
 	// running GetMulti() operations. If set to 0, concurrency is unlimited.
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
 
+	// MaxItemSize specifies the maximum size of an item stored in memcached. Bigger
+	// items are skipped to be stored by the client. If set to 0, no maximum size is
+	// enforced.
+	MaxItemSize model.Bytes `yaml:"max_item_size"`
+
 	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
 	// GetMulti() should run. If more keys are specified, internally keys are splitted
 	// into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency
@@ -139,6 +148,7 @@ type memcachedClient struct {
 	// Tracked metrics.
 	operations *prometheus.CounterVec
 	failures   *prometheus.CounterVec
+	skipped    *prometheus.CounterVec
 	duration   *prometheus.HistogramVec
 }
 
@@ -202,28 +212,38 @@ func newMemcachedClient(
 		),
 	}
 
-	c.operations = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operations_total",
 		Help:        "Total number of operations against memcached.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
+	c.operations.WithLabelValues(opGetMulti)
+	c.operations.WithLabelValues(opSet)
 
-	c.failures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.failures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name:        "thanos_memcached_operation_failures_total",
 		Help:        "Total number of operations against memcached that failed.",
 		ConstLabels: prometheus.Labels{"name": name},
 	}, []string{"operation"})
+	c.failures.WithLabelValues(opGetMulti)
+	c.failures.WithLabelValues(opSet)
 
-	c.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name:        "thanos_memcached_operation_skipped_total",
+		Help:        "Total number of operations against memcached that have been skipped.",
+		ConstLabels: prometheus.Labels{"name": name},
+	}, []string{"operation", "reason"})
+	c.skipped.WithLabelValues(opGetMulti, reasonMaxItemSize)
+	c.skipped.WithLabelValues(opSet, reasonMaxItemSize)
+
+	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:        "thanos_memcached_operation_duration_seconds",
 		Help:        "Duration of operations against memcached.",
 		ConstLabels: prometheus.Labels{"name": name},
-		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1},
+		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
 	}, []string{"operation"})
-
-	if reg != nil {
-		reg.MustRegister(c.operations, c.failures, c.duration)
-	}
+	c.duration.WithLabelValues(opGetMulti)
+	c.duration.WithLabelValues(opSet)
 
 	// As soon as the client is created it must ensure that memcached server
 	// addresses are resolved, so we're going to trigger an initial addresses
@@ -252,21 +272,27 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) (err error) {
+	// Skip hitting memcached at all if the item is bigger than the max allowed size.
+	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
+		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
+		return nil
+	}
+
 	return c.enqueueAsync(func() {
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		span, _ := tracing.StartSpan(ctx, "memcached_set")
-		err := c.client.Set(&memcache.Item{
-			Key:        key,
-			Value:      value,
-			Expiration: int32(time.Now().Add(ttl).Unix()),
+		tracing.DoInSpan(ctx, "memcached_set", func(ctx context.Context) {
+			err = c.client.Set(&memcache.Item{
+				Key:        key,
+				Value:      value,
+				Expiration: int32(time.Now().Add(ttl).Unix()),
+			})
 		})
-		span.Finish()
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
 			return
 		}
 
@@ -275,9 +301,13 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 }
 
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	if len(keys) == 0 {
+		return nil
+	}
+
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "err", err)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
@@ -358,13 +388,14 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	return items, lastErr
 }
 
-func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (map[string]*memcache.Item, error) {
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
 	// Wait until we get a free slot from the gate, if the max
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
-		span, _ := tracing.StartSpan(ctx, "memcached_getmulti_gate_ismyturn")
-		err := c.getMultiGate.IsMyTurn(ctx)
-		span.Finish()
+		tracing.DoInSpan(ctx, "memcached_getmulti_gate_ismyturn", func(ctx context.Context) {
+			// TODO(bwplotka): Consider putting span directly in gate.
+			err = c.getMultiGate.IsMyTurn(ctx)
+		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to wait for turn")
 		}
@@ -373,10 +404,9 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (ma
 
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-
-	span, _ := tracing.StartSpan(ctx, "memcached_getmulti")
-	items, err := c.client.GetMulti(keys)
-	span.Finish()
+	tracing.DoInSpan(ctx, "memcached_getmulti", func(ctx context.Context) {
+		items, err = c.client.GetMulti(keys)
+	})
 	if err != nil {
 		c.failures.WithLabelValues(opGetMulti).Inc()
 	} else {

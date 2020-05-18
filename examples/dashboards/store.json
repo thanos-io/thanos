@@ -865,7 +865,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, grpc_code)",
+                     "expr": "sum(rate(grpc_server_handled_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, grpc_code)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -942,7 +942,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{grpc_code!=\"OK\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, grpc_code)\n",
+                     "expr": "sum(rate(grpc_server_handled_total{grpc_code!=\"OK\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, grpc_code)\n",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -1019,7 +1019,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(grpc_client_handling_seconds_bucket{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, le)) * 1",
+                     "expr": "histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, le)) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99 {{job}} {{grpc_method}}",
@@ -1027,7 +1027,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(grpc_client_handling_seconds_sum{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job) * 1\n/\nsum(rate(grpc_client_handling_seconds_count{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job)\n",
+                     "expr": "sum(rate(grpc_server_handling_seconds_sum{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job) * 1\n/\nsum(rate(grpc_server_handling_seconds_count{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job)\n",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "mean {{job}} {{grpc_method}}",
@@ -1035,7 +1035,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum(rate(grpc_client_handling_seconds_bucket{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, le)) * 1",
+                     "expr": "histogram_quantile(0.50, sum(rate(grpc_server_handling_seconds_bucket{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, le)) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50 {{job}} {{grpc_method}}",
@@ -2002,7 +2002,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows size of chunks that have sent to the bucket, in bytes.",
+               "description": "Shows size of chunks that have sent to the bucket.",
                "fill": 1,
                "id": 24,
                "legend": {
@@ -2072,7 +2072,7 @@
                },
                "yaxes": [
                   {
-                     "format": "short",
+                     "format": "bytes",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2095,25 +2095,7 @@
          "repeatRowId": null,
          "showTitle": true,
          "title": "Store Sent",
-         "titleSize": "h6",
-         "yaxes": [
-            {
-               "format": "decbytes",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": false
-            }
-         ]
+         "titleSize": "h6"
       },
       {
          "collapse": false,
@@ -2217,6 +2199,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
+               "description": "Show the size of data fetched",
                "fill": 1,
                "id": 26,
                "legend": {
@@ -2286,7 +2269,7 @@
                },
                "yaxes": [
                   {
-                     "format": "short",
+                     "format": "bytes",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -2797,7 +2780,7 @@
                },
                "yaxes": [
                   {
-                     "format": "short",
+                     "format": "bytes",
                      "label": null,
                      "logBase": 1,
                      "max": null,

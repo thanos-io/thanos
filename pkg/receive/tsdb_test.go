@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -19,6 +20,8 @@ import (
 )
 
 func TestFlushableStorage(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)
+
 	{
 		// Ensure that flushing storage does not cause data loss.
 		// This test:

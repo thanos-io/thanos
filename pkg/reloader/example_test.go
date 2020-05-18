@@ -21,6 +21,7 @@ func ExampleReloader() {
 	}
 	rl := reloader.New(
 		nil,
+		nil,
 		reloader.ReloadURLFromBase(u),
 		"/path/to/cfg",
 		"/path/to/cfg.out",

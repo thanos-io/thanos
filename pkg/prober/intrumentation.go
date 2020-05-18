@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 )
@@ -30,19 +31,14 @@ func NewInstrumentation(component component.Component, logger log.Logger, reg pr
 	p := InstrumentationProbe{
 		component: component,
 		logger:    logger,
-		status: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		status: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name:        "status",
-			Help:        "Represents status (0 indicates success, 1 indicates failure) of the component.",
+			Help:        "Represents status (0 indicates failure, 1 indicates success) of the component.",
 			ConstLabels: map[string]string{"component": component.String()},
 		},
 			[]string{"check"},
 		),
 	}
-
-	if reg != nil {
-		reg.MustRegister(p.status)
-	}
-
 	return &p
 }
 

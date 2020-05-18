@@ -3,8 +3,8 @@ adopters:
 - name: Monzo
   url: https://www.monzo.com
   logo: monzo.png
-- name: Utility Warehouse
-  url: https://www.utilitywarehouse.co.uk
+- name: UW
+  url: https://uw.co.uk/
   logo: utilitywarehouse.png
 - name: Adform
   url: https://site.adform.com
@@ -15,7 +15,7 @@ adopters:
 - name: tiket.com
   url: https://www.tiket.com
   logo: tiket.png
-- name: uSwitch
+- name: Uswitch
   url: https://www.uswitch.com
   logo: uswitch.png
 - name: Qonto
@@ -90,3 +90,12 @@ adopters:
 - name: Ozon
   url: https://www.ozon.ru
   logo: ozon.png
+- name: MALL Group
+  url: https://www.mallgroup.com/
+  logo: mallgroup.png
+- name: leboncoin
+  url: https://www.leboncoin.fr/
+  logo: leboncoin.png
+- name: Workfront
+  url: https://www.workfront.com/
+  logo: workfront.png

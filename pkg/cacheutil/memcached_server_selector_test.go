@@ -12,6 +12,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/facette/natsort"
 	"github.com/fortytw2/leaktest"
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -144,7 +145,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 
 	for addr, count := range distribution {
 		if count < minKeysPerServer {
-			testutil.Ok(t, fmt.Errorf("expected %s to have received at least %d keys instead it received %d", addr, minKeysPerServer, count))
+			testutil.Ok(t, errors.Errorf("expected %s to have received at least %d keys instead it received %d", addr, minKeysPerServer, count))
 		}
 	}
 }
@@ -199,7 +200,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 	maxExpectedMovedPerc := (1.0 / float64(len(servers))) + 0.02
 	maxExpectedMoved := int(float64(numKeys) * maxExpectedMovedPerc)
 	if moved > maxExpectedMoved {
-		testutil.Ok(t, fmt.Errorf("expected resharding moved no more then %d keys while %d have been moved", maxExpectedMoved, moved))
+		testutil.Ok(t, errors.Errorf("expected resharding moved no more then %d keys while %d have been moved", maxExpectedMoved, moved))
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"gopkg.in/fsnotify.v1"
 )
@@ -58,7 +59,7 @@ type ConfigWatcher struct {
 }
 
 // NewConfigWatcher creates a new ConfigWatcher.
-func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, interval model.Duration) (*ConfigWatcher, error) {
+func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string, interval model.Duration) (*ConfigWatcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -77,63 +78,49 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 		interval: time.Duration(interval),
 		logger:   logger,
 		watcher:  watcher,
-		hashGauge: prometheus.NewGauge(
+		hashGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_config_hash",
 				Help: "Hash of the currently loaded hashring configuration file.",
 			}),
-		successGauge: prometheus.NewGauge(
+		successGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_config_last_reload_successful",
 				Help: "Whether the last hashring configuration file reload attempt was successful.",
 			}),
-		lastSuccessTimeGauge: prometheus.NewGauge(
+		lastSuccessTimeGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_config_last_reload_success_timestamp_seconds",
 				Help: "Timestamp of the last successful hashring configuration file reload.",
 			}),
-		changesCounter: prometheus.NewCounter(
+		changesCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_hashrings_file_changes_total",
 				Help: "The number of times the hashrings configuration file has changed.",
 			}),
-		errorCounter: prometheus.NewCounter(
+		errorCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_hashrings_file_errors_total",
 				Help: "The number of errors watching the hashrings configuration file.",
 			}),
-		refreshCounter: prometheus.NewCounter(
+		refreshCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_hashrings_file_refreshes_total",
 				Help: "The number of refreshes of the hashrings configuration file.",
 			}),
-		hashringNodesGauge: prometheus.NewGaugeVec(
+		hashringNodesGauge: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_hashring_nodes",
 				Help: "The number of nodes per hashring.",
 			},
 			[]string{"name"}),
-		hashringTenantsGauge: prometheus.NewGaugeVec(
+		hashringTenantsGauge: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_hashring_tenants",
 				Help: "The number of tenants per hashring.",
 			},
 			[]string{"name"}),
 	}
-
-	if r != nil {
-		r.MustRegister(
-			c.hashGauge,
-			c.successGauge,
-			c.lastSuccessTimeGauge,
-			c.changesCounter,
-			c.errorCounter,
-			c.refreshCounter,
-			c.hashringNodesGauge,
-			c.hashringTenantsGauge,
-		)
-	}
-
 	return c, nil
 }
 

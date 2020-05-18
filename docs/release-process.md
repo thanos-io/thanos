@@ -32,7 +32,9 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.12.0   | (planned) 2020.04.01     | TBD                      |
+| v0.14.0   | (planned) 2020.06.24     | TBA                      |
+| v0.13.0   | (planned) 2020.05.13     | `@bwplotka`              |
+| v0.12.0   | 2020.04.15               | `@squat`                 |
 | v0.11.0   | 2020.02.19               | `@metalmatze`            |
 | v0.10.0   | 2020.01.08               | `@GiedriusS`             |
 | v0.9.0    | 2019.11.26               | `@bwplotka`              |
@@ -88,9 +90,9 @@ Release is happening on separate `release-<major>.<minor>` branch.
 1. After review, merge the PR and immediately after this tag a version:
 
     ```bash
-    $ tag=$(cat VERSION)
-    $ git tag -s "v${tag}" -m "v${tag}"
-    $ git push origin "v${tag}"
+    tag=$(cat VERSION)
+    git tag -s "v${tag}" -m "v${tag}"
+    git push origin "v${tag}"
     ```
 
     Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.

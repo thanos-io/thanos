@@ -71,3 +71,35 @@ pre {
 
 .header-anchor { font-size: 100%; visibility: hidden;}
 h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
+
+/* SideMenu Collapse */
+.menuinput {
+    display: none;
+}
+
+.menulabel-thanos {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.caret-expand {
+    width: 16px;
+    margin-left: 8px;
+    margin-bottom: 0.2rem;
+    transition: transform 0.2s ease-out;
+}
+
+.menuinput:checked + label .caret-expand {
+    transform: rotateX(180deg);
+}
+
+.sidemenu-thanos .list-group {
+    transform: scaleY(0);
+    height: 0;
+}
+
+.menuinput:checked ~ .list-group {
+    transform: scaleY(1);
+    height: auto;
+}

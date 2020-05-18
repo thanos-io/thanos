@@ -1,24 +1,5 @@
-// The MIT License (MIT)
-
-// Copyright (c) 2014 Ben Johnson
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
 
 package testutil
 
@@ -29,50 +10,125 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
 
 // Assert fails the test if the condition is false.
-func Assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
-	if !condition {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: "+msg+"\033[39m\n\n", append([]interface{}{filepath.Base(file), line}, v...)...)
-		tb.FailNow()
+func Assert(tb testing.TB, condition bool, v ...interface{}) {
+	tb.Helper()
+	if condition {
+		return
 	}
+	_, file, line, _ := runtime.Caller(1)
+
+	var msg string
+	if len(v) > 0 {
+		msg = fmt.Sprintf(v[0].(string), v[1:]...)
+	}
+	tb.Fatalf("\033[31m%s:%d: "+msg+"\033[39m\n\n", filepath.Base(file), line)
 }
 
 // Ok fails the test if an err is not nil.
-func Ok(tb testing.TB, err error) {
-	if err != nil {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
-		tb.FailNow()
+func Ok(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
+	if err == nil {
+		return
 	}
+	_, file, line, _ := runtime.Caller(1)
+
+	var msg string
+	if len(v) > 0 {
+		msg = fmt.Sprintf(v[0].(string), v[1:]...)
+	}
+	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
 }
 
 // NotOk fails the test if an err is nil.
-func NotOk(tb testing.TB, err error) {
-	if err == nil {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: expected error, got nothing \033[39m\n\n", filepath.Base(file), line)
-		tb.FailNow()
+func NotOk(tb testing.TB, err error, v ...interface{}) {
+	tb.Helper()
+	if err != nil {
+		return
 	}
+	_, file, line, _ := runtime.Caller(1)
+
+	var msg string
+	if len(v) > 0 {
+		msg = fmt.Sprintf(v[0].(string), v[1:]...)
+	}
+	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n expected error, got nothing \033[39m\n\n", filepath.Base(file), line)
 }
 
 // Equals fails the test if exp is not equal to act.
 func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
-	if !reflect.DeepEqual(exp, act) {
-		_, file, line, _ := runtime.Caller(1)
-
-		var msg string
-		if len(v) > 0 {
-			msg = fmt.Sprintf(v[0].(string), v[1:]...)
-		}
-
-		fmt.Printf("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, exp, act)
-		tb.FailNow()
+	tb.Helper()
+	if reflect.DeepEqual(exp, act) {
+		return
 	}
+	_, file, line, _ := runtime.Caller(1)
+
+	var msg string
+	if len(v) > 0 {
+		msg = fmt.Sprintf(v[0].(string), v[1:]...)
+	}
+	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v%s\033[39m\n\n", filepath.Base(file), line, exp, act, diff(exp, act))
+}
+
+func typeAndKind(v interface{}) (reflect.Type, reflect.Kind) {
+	t := reflect.TypeOf(v)
+	k := t.Kind()
+
+	if k == reflect.Ptr {
+		t = t.Elem()
+		k = t.Kind()
+	}
+	return t, k
+}
+
+// diff returns a diff of both values as long as both are of the same type and
+// are a struct, map, slice, array or string. Otherwise it returns an empty string.
+func diff(expected interface{}, actual interface{}) string {
+	if expected == nil || actual == nil {
+		return ""
+	}
+
+	et, ek := typeAndKind(expected)
+	at, _ := typeAndKind(actual)
+	if et != at {
+		return ""
+	}
+
+	if ek != reflect.Struct && ek != reflect.Map && ek != reflect.Slice && ek != reflect.Array && ek != reflect.String {
+		return ""
+	}
+
+	var e, a string
+	c := spew.ConfigState{
+		Indent:                  " ",
+		DisablePointerAddresses: true,
+		DisableCapacities:       true,
+		SortKeys:                true,
+	}
+	if et != reflect.TypeOf("") {
+		e = c.Sdump(expected)
+		a = c.Sdump(actual)
+	} else {
+		e = reflect.ValueOf(expected).String()
+		a = reflect.ValueOf(actual).String()
+	}
+
+	diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(e),
+		B:        difflib.SplitLines(a),
+		FromFile: "Expected",
+		FromDate: "",
+		ToFile:   "Actual",
+		ToDate:   "",
+		Context:  1,
+	})
+	return "\n\nDiff:\n" + diff
 }
 
 // GatherAndCompare compares the metrics of a Gatherers pair.

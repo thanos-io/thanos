@@ -4,7 +4,9 @@
 package block
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"path"
@@ -14,8 +16,12 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
@@ -77,7 +83,7 @@ func TestUpload(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
@@ -181,7 +187,7 @@ func TestDelete(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.NewInMemBucket()
 	{
 		b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
@@ -216,5 +222,62 @@ func TestDelete(t *testing.T) {
 		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b2))
 		// Still 2 debug meta entries are expected.
 		testutil.Equals(t, 2, len(bkt.Objects()))
+	}
+}
+
+func TestMarkForDeletion(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx := context.Background()
+
+	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-delete")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	for _, tcase := range []struct {
+		name      string
+		preUpload func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
+
+		blocksMarked int
+	}{
+		{
+			name:         "block marked for deletion",
+			preUpload:    func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksMarked: 1,
+		},
+		{
+			name: "block with deletion mark already, expected log and no metric increment",
+			preUpload: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				deletionMark, err := json.Marshal(metadata.DeletionMark{
+					ID:           id,
+					DeletionTime: time.Now().Unix(),
+					Version:      metadata.DeletionMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), bytes.NewReader(deletionMark)))
+			},
+			blocksMarked: 0,
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "a", Value: "1"}},
+				{{Name: "a", Value: "2"}},
+				{{Name: "a", Value: "3"}},
+				{{Name: "a", Value: "4"}},
+				{{Name: "b", Value: "1"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+			testutil.Ok(t, err)
+
+			tcase.preUpload(t, id, bkt)
+
+			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String())))
+
+			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, c)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
+		})
 	}
 }

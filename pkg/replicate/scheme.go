@@ -6,7 +6,6 @@ package replicate
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"path"
@@ -17,6 +16,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -101,10 +101,11 @@ type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
-	fromBkt objstore.BucketReader
+	fromBkt objstore.InstrumentedBucketReader
 	toBkt   objstore.Bucket
 
 	blockFilter blockFilterFunc
+	fetcher     thanosblock.MetadataFetcher
 
 	logger  log.Logger
 	metrics *replicationMetrics
@@ -124,45 +125,43 @@ type replicationMetrics struct {
 
 func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	m := &replicationMetrics{
-		originIterations: prometheus.NewCounter(prometheus.CounterOpts{
+		originIterations: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_origin_iterations_total",
 			Help: "Total number of objects iterated over in the origin bucket.",
 		}),
-		originMetaLoads: prometheus.NewCounter(prometheus.CounterOpts{
+		originMetaLoads: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_origin_meta_loads_total",
 			Help: "Total number of meta.json reads in the origin bucket.",
 		}),
-		originPartialMeta: prometheus.NewCounter(prometheus.CounterOpts{
+		originPartialMeta: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_origin_partial_meta_reads_total",
 			Help: "Total number of partial meta reads encountered.",
 		}),
-		blocksAlreadyReplicated: prometheus.NewCounter(prometheus.CounterOpts{
+		blocksAlreadyReplicated: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_blocks_already_replicated_total",
 			Help: "Total number of blocks skipped due to already being replicated.",
 		}),
-		blocksReplicated: prometheus.NewCounter(prometheus.CounterOpts{
+		blocksReplicated: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_blocks_replicated_total",
 			Help: "Total number of blocks replicated.",
 		}),
-		objectsReplicated: prometheus.NewCounter(prometheus.CounterOpts{
+		objectsReplicated: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_objects_replicated_total",
 			Help: "Total number of objects replicated.",
 		}),
 	}
-
-	if reg != nil {
-		reg.MustRegister(m.originIterations)
-		reg.MustRegister(m.originMetaLoads)
-		reg.MustRegister(m.originPartialMeta)
-		reg.MustRegister(m.blocksAlreadyReplicated)
-		reg.MustRegister(m.blocksReplicated)
-		reg.MustRegister(m.objectsReplicated)
-	}
-
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, from objstore.BucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
+func newReplicationScheme(
+	logger log.Logger,
+	metrics *replicationMetrics,
+	blockFilter blockFilterFunc,
+	fetcher thanosblock.MetadataFetcher,
+	from objstore.InstrumentedBucketReader,
+	to objstore.Bucket,
+	reg prometheus.Registerer,
+) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -170,6 +169,7 @@ func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockF
 	return &replicationScheme{
 		logger:      logger,
 		blockFilter: blockFilter,
+		fetcher:     fetcher,
 		fromBkt:     from,
 		toBkt:       to,
 		metrics:     metrics,
@@ -202,7 +202,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("load meta for block %v from origin bucket: %w", id.String(), err)
+			return errors.Wrapf(err, "load meta for block %v from origin bucket", id.String())
 		}
 
 		if len(meta.Thanos.Labels) == 0 {
@@ -217,7 +217,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 		return nil
 	}); err != nil {
-		return fmt.Errorf("iterate over origin bucket: %w", err)
+		return errors.Wrap(err, "iterate over origin bucket")
 	}
 
 	candidateBlocks := []*metadata.Meta{}
@@ -237,7 +237,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	for _, b := range candidateBlocks {
 		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return fmt.Errorf("ensure block %v is replicated: %w", b.BlockMeta.ULID.String(), err)
+			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 		}
 	}
 
@@ -254,9 +254,9 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	level.Debug(rs.logger).Log("msg", "ensuring block is replicated", "block_uuid", blockID)
 
-	originMetaFile, err := rs.fromBkt.Get(ctx, metaFile)
+	originMetaFile, err := rs.fromBkt.ReaderWithExpectedErrs(rs.fromBkt.IsObjNotFoundErr).Get(ctx, metaFile)
 	if err != nil {
-		return fmt.Errorf("get meta file from origin bucket: %w", err)
+		return errors.Wrap(err, "get meta file from origin bucket")
 	}
 
 	defer runutil.CloseWithLogOnErr(rs.logger, originMetaFile, "close original meta file")
@@ -268,18 +268,18 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err != nil && !rs.toBkt.IsObjNotFoundErr(err) && err != io.EOF {
-		return fmt.Errorf("get meta file from target bucket: %w", err)
+		return errors.Wrap(err, "get meta file from target bucket")
 	}
 
 	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
 	if err != nil {
-		return fmt.Errorf("read origin meta file: %w", err)
+		return errors.Wrap(err, "read origin meta file")
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
 		targetMetaFileContent, err := ioutil.ReadAll(targetMetaFile)
 		if err != nil {
-			return fmt.Errorf("read target meta file: %w", err)
+			return errors.Wrap(err, "read target meta file")
 		}
 
 		if bytes.Equal(originMetaFileContent, targetMetaFileContent) {
@@ -296,7 +296,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	if err := rs.fromBkt.Iter(ctx, chunksDir, func(objectName string) error {
 		err := rs.ensureObjectReplicated(ctx, objectName)
 		if err != nil {
-			return fmt.Errorf("replicate object %v: %w", objectName, err)
+			return errors.Wrapf(err, "replicate object %v", objectName)
 		}
 
 		return nil
@@ -305,13 +305,13 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err := rs.ensureObjectReplicated(ctx, indexFile); err != nil {
-		return fmt.Errorf("replicate index file: %w", err)
+		return errors.Wrap(err, "replicate index file")
 	}
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
 	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewReader(originMetaFileContent)); err != nil {
-		return fmt.Errorf("upload meta file: %w", err)
+		return errors.Wrap(err, "upload meta file")
 	}
 
 	rs.metrics.blocksReplicated.Inc()
@@ -326,7 +326,7 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 
 	exists, err := rs.toBkt.Exists(ctx, objectName)
 	if err != nil {
-		return fmt.Errorf("check if %v exists in target bucket: %w", objectName, err)
+		return errors.Wrapf(err, "check if %v exists in target bucket", objectName)
 	}
 
 	// skip if already exists.
@@ -339,13 +339,13 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 
 	r, err := rs.fromBkt.Get(ctx, objectName)
 	if err != nil {
-		return fmt.Errorf("get %v from origin bucket: %w", objectName, err)
+		return errors.Wrapf(err, "get %v from origin bucket", objectName)
 	}
 
 	defer r.Close()
 
 	if err = rs.toBkt.Upload(ctx, objectName, r); err != nil {
-		return fmt.Errorf("upload %v to target bucket: %w", objectName, err)
+		return errors.Wrapf(err, "upload %v to target bucket", objectName)
 	}
 
 	level.Info(rs.logger).Log("msg", "object replicated", "object", objectName)
@@ -360,24 +360,19 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 // partial, this is just a temporary failure, as the block is still being
 // uploaded to the origin bucket.
 func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metadata.Meta, bool, error) {
-	fetcher, err := thanosblock.NewMetaFetcher(rs.logger, 32, rs.fromBkt, "", rs.reg)
-	if err != nil {
-		return nil, false, fmt.Errorf("create meta fetcher with buecket %v: %w", rs.fromBkt, err)
-	}
-
-	metas, _, err := fetcher.Fetch(ctx)
+	metas, _, err := rs.fetcher.Fetch(ctx)
 	if err != nil {
 		switch errors.Cause(err) {
 		default:
-			return nil, false, fmt.Errorf("fetch meta: %w", err)
+			return nil, false, errors.Wrap(err, "fetch meta")
 		case thanosblock.ErrorSyncMetaNotFound:
-			return nil, true, fmt.Errorf("fetch meta: %w", err)
+			return nil, true, errors.Wrap(err, "fetch meta")
 		}
 	}
 
 	m, ok := metas[id]
 	if !ok {
-		return nil, true, fmt.Errorf("fetch meta: %w", err)
+		return nil, true, errors.Wrap(err, "fetch meta")
 	}
 
 	return m, false, nil

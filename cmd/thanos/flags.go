@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -60,7 +59,7 @@ func regCommonTracingFlags(app *kingpin.Application) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
 		"tracing.config",
-		fmt.Sprintf("YAML file with tracing configuration. See format details: https://thanos.io/tracing.md/#configuration "),
+		"YAML file with tracing configuration. See format details: https://thanos.io/tracing.md/#configuration ",
 		false,
 	)
 }

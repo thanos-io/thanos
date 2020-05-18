@@ -13,9 +13,9 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -30,24 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
-
-func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Downsample
-	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
-
-	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
-
-	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
-		Default("./data").String()
-
-	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
-	}
-}
 
 type DownsampleMetrics struct {
 	downsamples        *prometheus.CounterVec
@@ -57,22 +40,19 @@ type DownsampleMetrics struct {
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	m := new(DownsampleMetrics)
 
-	m.downsamples = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.downsamples = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_total",
 		Help: "Total number of downsampling attempts.",
 	}, []string{"group"})
-	m.downsampleFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.downsampleFailures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_downsample_failures_total",
 		Help: "Total number of failed downsampling attempts.",
 	}, []string{"group"})
 
-	reg.MustRegister(m.downsamples)
-	reg.MustRegister(m.downsampleFailures)
-
 	return m
 }
 
-func runDownsample(
+func RunDownsample(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -92,7 +72,9 @@ func runDownsample(
 		return err
 	}
 
-	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+		block.NewDeduplicateFilter(),
+	}, nil)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
@@ -107,7 +89,7 @@ func runDownsample(
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
 		httpProbe,
-		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	metrics := newDownsampleMetrics(reg)
@@ -120,14 +102,20 @@ func runDownsample(
 			statusProber.Ready()
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
+			metas, _, err := metaFetcher.Fetch(ctx)
+			if err != nil {
+				return errors.Wrap(err, "sync before first pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
-
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
+			metas, _, err = metaFetcher.Fetch(ctx)
+			if err != nil {
+				return errors.Wrap(err, "sync before second pass of downsampling")
+			}
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -162,7 +150,7 @@ func downsampleBucket(
 	logger log.Logger,
 	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
-	fetcher block.MetadataFetcher,
+	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
 ) error {
 	if err := os.RemoveAll(dir); err != nil {
@@ -177,11 +165,6 @@ func downsampleBucket(
 			level.Error(logger).Log("msg", "failed to remove downsample cache directory", "path", dir, "err", err)
 		}
 	}()
-
-	metas, _, err := fetcher.Fetch(ctx)
-	if err != nil {
-		return errors.Wrap(err, "downsampling meta fetch")
-	}
 
 	// mapping from a hash over all source IDs to blocks. We don't need to downsample a block
 	// if a downsampled version with the same hash already exists.
