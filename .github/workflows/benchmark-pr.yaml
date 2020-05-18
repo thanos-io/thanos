@@ -1,4 +1,4 @@
-name: benchmark
+name: benchmark-pr
 
 on:
   push:

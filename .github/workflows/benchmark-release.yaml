@@ -1,4 +1,4 @@
-name: benchmark
+name: benchmark-release
 
 on:
   push:
