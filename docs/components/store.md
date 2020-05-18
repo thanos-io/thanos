@@ -307,8 +307,8 @@ Additional options to configure various aspects of chunks cache are available:
 Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
 
 - `blocks_iter_ttl`: how long to cache result of iterating blocks.
-- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists
-- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
 - `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
