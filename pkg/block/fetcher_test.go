@@ -914,7 +914,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
-				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{}}},
+				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "deduped"}}},
 			},
 			modified: 5.0,
 		},
