@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 )
@@ -107,8 +108,10 @@ func GetQTypeName(addr string) (qtype string, name string) {
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // defaultPort is used for non-SRV records when a port is not supplied.
-func (p *Provider) Resolve(ctx context.Context, addrs []string) {
+func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	resolvedAddrs := map[string][]string{}
+	errs := tsdberrors.MultiError{}
+
 	for _, addr := range addrs {
 		var resolved []string
 		qtype, name := GetQTypeName(addr)
@@ -120,9 +123,10 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 		resolved, err := p.resolver.Resolve(ctx, name, QType(qtype))
 		p.resolverLookupsCount.Inc()
 		if err != nil {
+			// Append all the failed dns resolution in the error list.
+			errs.Add(err)
 			// The DNS resolution failed. Continue without modifying the old records.
 			p.resolverFailuresCount.Inc()
-			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
 			// Use cached values.
 			p.RLock()
 			resolved = p.resolved[addr]
@@ -143,6 +147,8 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	p.resolverAddrs.Submit()
 
 	p.resolved = resolvedAddrs
+
+	return errs.Err()
 }
 
 // Addresses returns the latest addresses present in the Provider.

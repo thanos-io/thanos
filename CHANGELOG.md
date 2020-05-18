@@ -19,6 +19,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2615](https://github.com/thanos-io/thanos/pull/2615) Rule: Fix bugs where rules were out of sync.
 - [#2614](https://github.com/thanos-io/thanos/pull/2614) Tracing: Disable Elastic APM Go Agent default tracer on initialization to disable the default metric gatherer
 - [#2548](https://github.com/thanos-io/thanos/pull/2548) Query: Fixed rare cases of double counter reset accounting when querying `rate` with deduplication enabled.
+- [#2525](https://github.com/thanos-io/thanos/pull/2525) Query: Fixed logging for dns resolution error in the `Query` component.
 
 ### Added
 

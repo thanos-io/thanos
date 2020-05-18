@@ -748,8 +748,7 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 
 	g.Add(func() error {
 		return runutil.Repeat(interval, ctx.Done(), func() error {
-			c.Resolve(ctx)
-			return nil
+			return c.Resolve(ctx)
 		})
 	}, func(error) {
 		cancel()

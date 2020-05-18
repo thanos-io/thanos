@@ -163,7 +163,7 @@ func (c FileSDConfig) convert() (file.SDConfig, error) {
 }
 
 type AddressProvider interface {
-	Resolve(context.Context, []string)
+	Resolve(context.Context, []string) error
 	Addresses() []string
 }
 
@@ -259,6 +259,6 @@ func (c *Client) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (c *Client) Resolve(ctx context.Context) {
-	c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+func (c *Client) Resolve(ctx context.Context) error {
+	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
 }
