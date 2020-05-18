@@ -27,11 +27,15 @@ import (
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Add(l labels.Labels, t int64, v float64) (uint64, error)       { return 0, nil }
-func (n nopAppendable) AddFast(l labels.Labels, ref uint64, t int64, v float64) error { return nil }
-func (n nopAppendable) Commit() error                                                 { return nil }
-func (n nopAppendable) Rollback() error                                               { return nil }
-func (n nopAppendable) Appender() (storage.Appender, error)                           { return n, nil }
+func (n nopAppendable) Appender() storage.Appender { return nopAppender{} }
+
+type nopAppender struct{}
+
+func (n nopAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) { return 0, nil }
+func (n nopAppender) AddFast(ref uint64, t int64, v float64) error            { return nil }
+func (n nopAppender) Commit() error                                           { return nil }
+func (n nopAppender) Rollback() error                                         { return nil }
+func (n nopAppender) Appender() (storage.Appender, error)                     { return n, nil }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
 func TestRun(t *testing.T) {
@@ -283,7 +287,7 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 	var input = RuleGroups{
 		Groups: []RuleGroup{
 			{
-				RuleGroup: rulefmt.RuleGroup{
+				PromRuleGroup: PromRuleGroup{
 					Name: "something1",
 					Rules: []rulefmt.Rule{
 						{
@@ -294,7 +298,7 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 				},
 			},
 			{
-				RuleGroup: rulefmt.RuleGroup{
+				PromRuleGroup: PromRuleGroup{
 					Name: "something2",
 					Rules: []rulefmt.Rule{
 						{

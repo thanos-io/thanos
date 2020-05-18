@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -42,8 +43,22 @@ type RuleGroups struct {
 	Groups []RuleGroup `yaml:"groups"`
 }
 
+// PromRuleGroup is a list of sequentially evaluated recording and alerting rules.
+// This is a modified version from Prometheus. In Prometheus they shifted to
+// using yaml.Node as elements which gives problems in marshal/unmarshal.
+// Hence this replaces the yaml.Node to strings.
+type PromRuleGroup struct {
+	Name     string         `yaml:"name"`
+	Interval model.Duration `yaml:"interval,omitempty"`
+	Rules    []rulefmt.Rule `yaml:"rules"`
+}
+
+type PromRuleGroups struct {
+	Groups []PromRuleGroup `yaml:"groups"`
+}
+
 type RuleGroup struct {
-	rulefmt.RuleGroup
+	PromRuleGroup
 	PartialResponseStrategy *storepb.PartialResponseStrategy
 }
 
@@ -103,7 +118,7 @@ func (r *RuleGroup) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return errors.Wrap(err, errMsg)
 	}
 
-	rg := rulefmt.RuleGroup{}
+	rg := PromRuleGroup{}
 	if err := unmarshal(&rg); err != nil {
 		return errors.Wrap(err, "failed to unmarshal rulefmt.RuleGroup")
 	}
@@ -119,7 +134,7 @@ func (r *RuleGroup) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	ps := storepb.PartialResponseStrategy(p)
-	r.RuleGroup = rg
+	r.PromRuleGroup = rg
 	r.PartialResponseStrategy = &ps
 	return nil
 }
@@ -132,10 +147,10 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 	}
 
 	rs := struct {
-		RuleGroup               rulefmt.RuleGroup `yaml:",inline"`
-		PartialResponseStrategy *string           `yaml:"partial_response_strategy,omitempty"`
+		RuleGroup               PromRuleGroup `yaml:",inline"`
+		PartialResponseStrategy *string       `yaml:"partial_response_strategy,omitempty"`
 	}{
-		RuleGroup:               r.RuleGroup,
+		RuleGroup:               r.PromRuleGroup,
 		PartialResponseStrategy: ps,
 	}
 	return rs, nil
@@ -172,15 +187,15 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 		// NOTE: This is very ugly, but we need to reparse it into tmp dir without the field to have to reuse
 		// rules.Manager. The problem is that it uses yaml.UnmarshalStrict for some reasons.
-		groupsByStrategy := map[storepb.PartialResponseStrategy]*rulefmt.RuleGroups{}
+		groupsByStrategy := map[storepb.PartialResponseStrategy]*PromRuleGroups{}
 		for _, rg := range rg.Groups {
 			if _, ok := groupsByStrategy[*rg.PartialResponseStrategy]; !ok {
-				groupsByStrategy[*rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
+				groupsByStrategy[*rg.PartialResponseStrategy] = &PromRuleGroups{}
 			}
 
 			groupsByStrategy[*rg.PartialResponseStrategy].Groups = append(
 				groupsByStrategy[*rg.PartialResponseStrategy].Groups,
-				rg.RuleGroup,
+				rg.PromRuleGroup,
 			)
 		}
 

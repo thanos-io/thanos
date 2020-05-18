@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -103,11 +104,10 @@ func TestEndpoints(t *testing.T) {
 	api := &API{
 		queryableCreate: query.NewQueryableCreator(nil, store.NewTSDBStore(nil, nil, db, component.Query, nil)),
 		queryEngine: promql.NewEngine(promql.EngineOpts{
-			Logger:        nil,
-			Reg:           nil,
-			MaxConcurrent: 20,
-			MaxSamples:    10000,
-			Timeout:       100 * time.Second,
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    100 * time.Second,
 		}),
 		now: func() time.Time { return now },
 	}
@@ -129,7 +129,7 @@ func TestEndpoints(t *testing.T) {
 				"time":  []string{"123.4"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeScalar,
+				ResultType: parser.ValueTypeScalar,
 				Result: promql.Scalar{
 					V: 2,
 					T: timestamp.FromTime(start.Add(123*time.Second + 400*time.Millisecond)),
@@ -143,7 +143,7 @@ func TestEndpoints(t *testing.T) {
 				"time":  []string{"1970-01-01T00:02:03Z"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeScalar,
+				ResultType: parser.ValueTypeScalar,
 				Result: promql.Scalar{
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
@@ -157,7 +157,7 @@ func TestEndpoints(t *testing.T) {
 				"time":  []string{"1970-01-01T01:02:03+01:00"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeScalar,
+				ResultType: parser.ValueTypeScalar,
 				Result: promql.Scalar{
 					V: 0.333,
 					T: timestamp.FromTime(start.Add(123 * time.Second)),
@@ -172,7 +172,7 @@ func TestEndpoints(t *testing.T) {
 				"time":  []string{"1970-01-01T01:02:03+01:00"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeVector,
+				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
 						Metric: labels.Labels{
@@ -266,7 +266,7 @@ func TestEndpoints(t *testing.T) {
 				"replicaLabels[]": []string{"replica"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeVector,
+				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
 						Metric: labels.Labels{
@@ -332,7 +332,7 @@ func TestEndpoints(t *testing.T) {
 				"replicaLabels[]": []string{"replica", "replica1"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeVector,
+				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
 						Metric: labels.Labels{
@@ -375,7 +375,7 @@ func TestEndpoints(t *testing.T) {
 				"query": []string{"0.333"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeScalar,
+				ResultType: parser.ValueTypeScalar,
 				Result: promql.Scalar{
 					V: 0.333,
 					T: timestamp.FromTime(now),
@@ -400,7 +400,7 @@ func TestEndpoints(t *testing.T) {
 				"step":  []string{"1"},
 			},
 			response: &queryData{
-				ResultType: promql.ValueTypeMatrix,
+				ResultType: parser.ValueTypeMatrix,
 				Result: promql.Matrix{
 					promql.Series{
 						Points: []promql.Point{
@@ -1075,7 +1075,7 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 		})
 	}
 	input := &queryData{
-		ResultType: promql.ValueTypeMatrix,
+		ResultType: parser.ValueTypeMatrix,
 		Result:     mat,
 	}
 	b.ResetTimer()

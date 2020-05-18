@@ -30,7 +30,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
-	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -425,9 +424,13 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	names, err := fileutil.ReadDir(s.dir)
+	fis, err := ioutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
+	}
+	names := make([]string, 0, len(fis))
+	for _, fi := range fis {
+		names = append(names, fi.Name())
 	}
 	for _, n := range names {
 		id, ok := block.IsBlockDir(n)
@@ -2049,6 +2052,7 @@ func (b rawChunk) Encoding() chunkenc.Encoding {
 func (b rawChunk) Bytes() []byte {
 	return b[1:]
 }
+func (b rawChunk) Compact() {}
 
 func (b rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	panic("invalid call")

@@ -15,8 +15,10 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -69,7 +71,7 @@ func NewMultiTSDB(
 type tenant struct {
 	tsdbOpts *tsdb.Options
 
-	readyS *tsdb.ReadyStorage
+	readyS *ReadyStorage
 	fs     *FlushableStorage
 	s      *store.TSDBStore
 	ship   *shipper.Shipper
@@ -80,12 +82,12 @@ type tenant struct {
 func newTenant(tsdbOpts *tsdb.Options) *tenant {
 	return &tenant{
 		tsdbOpts: tsdbOpts,
-		readyS:   &tsdb.ReadyStorage{},
+		readyS:   &ReadyStorage{},
 		mtx:      &sync.RWMutex{},
 	}
 }
 
-func (t *tenant) readyStorage() *tsdb.ReadyStorage {
+func (t *tenant) readyStorage() *ReadyStorage {
 	return t.readyS
 }
 
@@ -301,4 +303,108 @@ func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
 		return nil, err
 	}
 	return tenant.readyStorage(), nil
+}
+
+// ErrNotReady is returned if the underlying storage is not ready yet.
+var ErrNotReady = errors.New("TSDB not ready")
+
+// ReadyStorage implements the Storage interface while allowing to set the actual
+// storage at a later point in time.
+// TODO: Replace this with upstream Prometheus implementation when it is exposed.
+type ReadyStorage struct {
+	mtx sync.RWMutex
+	a   *adapter
+}
+
+// Set the storage.
+func (s *ReadyStorage) Set(db *tsdb.DB, startTimeMargin int64) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.a = &adapter{db: db, startTimeMargin: startTimeMargin}
+}
+
+// Get the storage.
+func (s *ReadyStorage) Get() *tsdb.DB {
+	if x := s.get(); x != nil {
+		return x.db
+	}
+	return nil
+}
+
+func (s *ReadyStorage) get() *adapter {
+	s.mtx.RLock()
+	x := s.a
+	s.mtx.RUnlock()
+	return x
+}
+
+// StartTime implements the Storage interface.
+func (s *ReadyStorage) StartTime() (int64, error) {
+	if x := s.get(); x != nil {
+		return x.StartTime()
+	}
+	return int64(model.Latest), ErrNotReady
+}
+
+// Querier implements the Storage interface.
+func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+	if x := s.get(); x != nil {
+		return x.Querier(ctx, mint, maxt)
+	}
+	return nil, ErrNotReady
+}
+
+// Appender implements the Storage interface.
+func (s *ReadyStorage) Appender() (storage.Appender, error) {
+	if x := s.get(); x != nil {
+		return x.Appender()
+	}
+	return nil, ErrNotReady
+}
+
+// Close implements the Storage interface.
+func (s *ReadyStorage) Close() error {
+	if x := s.Get(); x != nil {
+		return x.Close()
+	}
+	return nil
+}
+
+// adapter implements a storage.Storage around TSDB.
+type adapter struct {
+	db              *tsdb.DB
+	startTimeMargin int64
+}
+
+// StartTime implements the Storage interface.
+func (a adapter) StartTime() (int64, error) {
+	var startTime int64
+
+	if len(a.db.Blocks()) > 0 {
+		startTime = a.db.Blocks()[0].Meta().MinTime
+	} else {
+		startTime = time.Now().Unix() * 1000
+	}
+
+	// Add a safety margin as it may take a few minutes for everything to spin up.
+	return startTime + a.startTimeMargin, nil
+}
+
+func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+	q, err := a.db.Querier(ctx, mint, maxt)
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// Appender returns a new appender against the storage.
+func (a adapter) Appender() (storage.Appender, error) {
+	return a.db.Appender(), nil
+}
+
+// Close closes the storage and all its underlying resources.
+func (a adapter) Close() error {
+	return a.db.Close()
 }

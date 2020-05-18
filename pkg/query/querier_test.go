@@ -73,9 +73,8 @@ func TestQuerier_DownsampledData(t *testing.T) {
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
-			MaxConcurrent: 10,
-			MaxSamples:    math.MaxInt32,
-			Timeout:       10 * time.Second,
+			MaxSamples: math.MaxInt32,
+			Timeout:    10 * time.Second,
 		},
 	)
 
@@ -290,7 +289,7 @@ type series struct {
 }
 
 func (s series) Labels() labels.Labels { return s.lset }
-func (s series) Iterator() storage.SeriesIterator {
+func (s series) Iterator() chunkenc.Iterator {
 	return newMockedSeriesIterator(s.samples)
 }
 
@@ -304,7 +303,7 @@ func TestQuerier_Select(t *testing.T) {
 		mint, maxt      int64
 		matchers        []*labels.Matcher
 		replicaLabels   []string
-		hints           *storage.SelectParams
+		hints           *storage.SelectHints
 		equivalentQuery string
 
 		expected           []series
@@ -406,7 +405,7 @@ func TestQuerier_Select(t *testing.T) {
 				Name:  "__name__",
 				Type:  labels.MatchEqual,
 			}},
-			hints: &storage.SelectParams{
+			hints: &storage.SelectHints{
 				Start: realSeriesWithStaleMarkerMint,
 				End:   realSeriesWithStaleMarkerMaxt,
 				Step:  100000, // Should not matter.
@@ -457,7 +456,7 @@ func TestQuerier_Select(t *testing.T) {
 				Name:  "__name__",
 				Type:  labels.MatchEqual,
 			}},
-			hints: &storage.SelectParams{
+			hints: &storage.SelectHints{
 				Start: realSeriesWithStaleMarkerMint,
 				End:   realSeriesWithStaleMarkerMaxt,
 				// Rate triggers special case of extra downsample.CounterSeriesIterator.
@@ -494,10 +493,9 @@ func TestQuerier_Select(t *testing.T) {
 		},
 	} {
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:        logger,
-			MaxConcurrent: 1,
-			Timeout:       5 * time.Second,
-			MaxSamples:    math.MaxInt64,
+			Logger:     logger,
+			Timeout:    5 * time.Second,
+			MaxSamples: math.MaxInt64,
 		})
 
 		t.Run(tcase.name, func(t *testing.T) {
@@ -516,7 +514,7 @@ func TestQuerier_Select(t *testing.T) {
 						defer leaktest.CheckTimeout(t, 10*time.Second)()
 						defer func() { testutil.Ok(t, q.Close()) }()
 
-						res, w, err := q.Select(tcase.hints, tcase.matchers...)
+						res, w, err := q.Select(false, tcase.hints, tcase.matchers...)
 						testutil.Ok(t, err)
 						if tcase.expectedWarning != "" {
 							testutil.Equals(t, 1, len(w))
@@ -596,8 +594,8 @@ type querierResponseCatcher struct {
 	warns []storage.Warnings
 }
 
-func (q *querierResponseCatcher) Select(p *storage.SelectParams, m ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
-	s, w, err := q.Querier.Select(p, m...)
+func (q *querierResponseCatcher) Select(selectSorted bool, p *storage.SelectHints, m ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
+	s, w, err := q.Querier.Select(selectSorted, p, m...)
 	testutil.Ok(q.t, err)
 
 	q.resp = append(q.resp, s)
@@ -672,10 +670,9 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 		defer func() { testutil.Ok(t, q.Close()) }()
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:        logger,
-			MaxConcurrent: 1,
-			Timeout:       5 * time.Second,
-			MaxSamples:    math.MaxInt64,
+			Logger:     logger,
+			Timeout:    5 * time.Second,
+			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
@@ -740,10 +737,9 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 		defer func() { testutil.Ok(t, q.Close()) }()
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:        logger,
-			MaxConcurrent: 1,
-			Timeout:       5 * time.Second,
-			MaxSamples:    math.MaxInt64,
+			Logger:     logger,
+			Timeout:    5 * time.Second,
+			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
@@ -933,7 +929,7 @@ func TestSortReplicaLabel(t *testing.T) {
 
 const hackyStaleMarker = float64(-99999999)
 
-func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
+func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	for it.Next() {
 		t, v := it.At()
 		// Nan != Nan, so substitute for another value.

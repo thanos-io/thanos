@@ -180,8 +180,8 @@ func (s *chunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *chunkSeries) Iterator() storage.SeriesIterator {
-	var sit storage.SeriesIterator
+func (s *chunkSeries) Iterator() chunkenc.Iterator {
+	var sit chunkenc.Iterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
 	if len(s.aggrs) == 1 {
@@ -274,11 +274,11 @@ func (it errSeriesIterator) Err() error        { return it.err }
 // boundedSeriesIterator wraps a series iterator and ensures that it only emits
 // samples within a fixed time range.
 type boundedSeriesIterator struct {
-	it         storage.SeriesIterator
+	it         chunkenc.Iterator
 	mint, maxt int64
 }
 
-func newBoundedSeriesIterator(it storage.SeriesIterator, mint, maxt int64) *boundedSeriesIterator {
+func newBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
 	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
 }
 
@@ -324,7 +324,7 @@ type chunkSeriesIterator struct {
 	i      int
 }
 
-func newChunkSeriesIterator(cs []chunkenc.Iterator) storage.SeriesIterator {
+func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
 		return errSeriesIterator{}
@@ -477,20 +477,20 @@ func (s *dedupSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *dedupSeries) Iterator() storage.SeriesIterator {
+func (s *dedupSeries) Iterator() chunkenc.Iterator {
 	var it adjustableSeriesIterator
 	if s.isCounter {
-		it = &counterErrAdjustSeriesIterator{SeriesIterator: s.replicas[0].Iterator()}
+		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator()}
 	} else {
-		it = noopAdjustableSeriesIterator{SeriesIterator: s.replicas[0].Iterator()}
+		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator()}
 	}
 
 	for _, o := range s.replicas[1:] {
 		var replicaIter adjustableSeriesIterator
 		if s.isCounter {
-			replicaIter = &counterErrAdjustSeriesIterator{SeriesIterator: o.Iterator()}
+			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
 		} else {
-			replicaIter = noopAdjustableSeriesIterator{SeriesIterator: o.Iterator()}
+			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
 		}
 		it = newDedupSeriesIterator(it, replicaIter)
 	}
@@ -500,7 +500,7 @@ func (s *dedupSeries) Iterator() storage.SeriesIterator {
 // adjustableSeriesIterator iterates over the data of a time series and allows to adjust current value based on
 // given lastValue iterated.
 type adjustableSeriesIterator interface {
-	storage.SeriesIterator
+	chunkenc.Iterator
 
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
@@ -508,7 +508,7 @@ type adjustableSeriesIterator interface {
 }
 
 type noopAdjustableSeriesIterator struct {
-	storage.SeriesIterator
+	chunkenc.Iterator
 }
 
 func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
@@ -535,7 +535,7 @@ func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
 // TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given
 // series is counter or not: https://github.com/thanos-io/thanos/issues/2547.
 type counterErrAdjustSeriesIterator struct {
-	storage.SeriesIterator
+	chunkenc.Iterator
 
 	errAdjust float64
 }
@@ -549,7 +549,7 @@ func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastValue float64) {
 }
 
 func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
-	t, v := it.SeriesIterator.At()
+	t, v := it.Iterator.At()
 	return t, v + it.errAdjust
 }
 

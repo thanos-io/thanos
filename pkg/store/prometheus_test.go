@@ -14,7 +14,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
@@ -450,7 +450,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(456), resp.MaxTime)
 }
 
-func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appender tsdb.Appender, newStore func() storepb.StoreServer) {
+func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
 	baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
 
 	offset := int64(2*math.MaxUint16 + 5)

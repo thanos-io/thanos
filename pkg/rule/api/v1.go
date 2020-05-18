@@ -92,7 +92,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 				enrichedRule = alertingRule{
 					Name:                    rule.Name(),
 					Query:                   rule.Query().String(),
-					Duration:                rule.Duration().Seconds(),
+					Duration:                rule.HoldDuration().Seconds(),
 					Labels:                  rule.Labels(),
 					Annotations:             rule.Annotations(),
 					Alerts:                  rulesAlertsToAPIAlerts(grp.PartialResponseStrategy, rule.ActiveAlerts()),

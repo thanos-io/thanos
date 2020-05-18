@@ -19,7 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -102,9 +102,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbMinBlockDuration,
-			MaxBlockDuration:  *tsdbMaxBlockDuration,
-			RetentionDuration: *retention,
+			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
 		}
@@ -213,7 +213,7 @@ func runReceive(
 	if upload {
 		if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
 			if !ignoreBlockSize {
-				return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+				return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
 					"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
 			}
 			level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")

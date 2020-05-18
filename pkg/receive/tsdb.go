@@ -12,12 +12,11 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/storage/tsdb"
-	promtsdb "github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 )
 
 type FlushableStorage struct {
-	*promtsdb.DB
+	*tsdb.DB
 
 	path string
 	l    log.Logger
@@ -40,7 +39,7 @@ func NewFlushableStorage(path string, l log.Logger, r prometheus.Registerer, opt
 }
 
 // Get returns a reference to the underlying storage.
-func (f *FlushableStorage) Get() *promtsdb.DB {
+func (f *FlushableStorage) Get() *tsdb.DB {
 	return f.DB
 }
 
@@ -91,7 +90,7 @@ func (f *FlushableStorage) Flush() error {
 		}
 		f.stopped = true
 	}
-	ro, err := promtsdb.OpenDBReadOnly(f.path, f.l)
+	ro, err := tsdb.OpenDBReadOnly(f.path, f.l)
 	if err != nil {
 		return errors.Wrap(err, "opening read-only DB")
 	}

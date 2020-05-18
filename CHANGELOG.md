@@ -35,6 +35,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 moved `thanos check rules` to `thanos tools rules-check`. `thanos tools rules-check` also takes rules by `--rules` repeated flag not argument
 anymore.
 - [#2548](https://github.com/thanos-io/thanos/pull/2548/commits/53e69bd89b2b08c18df298eed7d90cb7179cc0ec) Store, Querier: remove duplicated chunks on StoreAPI.
+- [#2596](https://github.com/thanos-io/thanos/pull/2596) Update to Prometheus [@cd73b3d33e064bbd846fc7a26dc8c313d46af382](https://github.com/prometheus/prometheus/commit/cd73b3d33e064bbd846fc7a26dc8c313d46af382) which falls in between v2.17.0 and v2.18.0.
+    - TSDB now supports isolation of append and queries.
+    - TSDB now holds less WAL files after Head Truncation.
 
 ## [v0.12.2](https://github.com/thanos-io/thanos/releases/tag/v0.12.2) - 2020.04.30
 

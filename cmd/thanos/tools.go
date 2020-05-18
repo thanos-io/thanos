@@ -4,17 +4,22 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
-	"github.com/prometheus/prometheus/tsdb/errors"
+	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+	yamlv3 "gopkg.in/yaml.v3"
+
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 )
 
 func registerTools(m map[string]setupFunc, app *kingpin.Application) {
@@ -36,7 +41,7 @@ func registerCheckRules(m map[string]setupFunc, app *kingpin.CmdClause, pre stri
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
-	failed := errors.MultiError{}
+	failed := tsdb_errors.MultiError{}
 
 	for _, f := range *files {
 		n, errs := checkRules(logger, f)
@@ -58,17 +63,66 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 }
 
 type ThanosRuleGroup struct {
-	PartialResponseStrategy string `yaml:"partial_response_strategy"`
-	rulefmt.RuleGroup       `yaml:",inline"`
+	PartialResponseStrategy  string `yaml:"partial_response_strategy"`
+	thanosrule.PromRuleGroup `yaml:",inline"`
 }
 
 type ThanosRuleGroups struct {
 	Groups []ThanosRuleGroup `yaml:"groups"`
 }
 
-func checkRules(logger log.Logger, filename string) (int, errors.MultiError) {
+// Validate validates all rules in the rule groups.
+// This is copied from Prometheus.
+// TODO: Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
+func (g *ThanosRuleGroups) Validate() (errs []error) {
+	set := map[string]struct{}{}
+
+	for _, g := range g.Groups {
+		if g.Name == "" {
+			errs = append(errs, errors.New("Groupname should not be empty"))
+		}
+
+		if _, ok := set[g.Name]; ok {
+			errs = append(
+				errs,
+				fmt.Errorf("groupname: %q is repeated in the same file", g.Name),
+			)
+		}
+
+		set[g.Name] = struct{}{}
+
+		for i, r := range g.Rules {
+			ruleNode := rulefmt.RuleNode{
+				Record:      yamlv3.Node{Value: r.Record},
+				Alert:       yamlv3.Node{Value: r.Alert},
+				Expr:        yamlv3.Node{Value: r.Expr},
+				For:         r.For,
+				Labels:      r.Labels,
+				Annotations: r.Annotations,
+			}
+			for _, node := range ruleNode.Validate() {
+				var ruleName string
+				if r.Alert != "" {
+					ruleName = r.Alert
+				} else {
+					ruleName = r.Record
+				}
+				errs = append(errs, &rulefmt.Error{
+					Group:    g.Name,
+					Rule:     i,
+					RuleName: ruleName,
+					Err:      node,
+				})
+			}
+		}
+	}
+
+	return errs
+}
+
+func checkRules(logger log.Logger, filename string) (int, tsdb_errors.MultiError) {
 	level.Info(logger).Log("msg", "checking", "filename", filename)
-	checkErrors := errors.MultiError{}
+	checkErrors := tsdb_errors.MultiError{}
 
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -82,9 +136,7 @@ func checkRules(logger log.Logger, filename string) (int, errors.MultiError) {
 		return 0, checkErrors
 	}
 
-	// We need to convert Thanos rules to Prometheus rules so we can use their validation.
-	promRgs := thanosRuleGroupsToPromRuleGroups(rgs)
-	if errs := promRgs.Validate(); errs != nil {
+	if errs := rgs.Validate(); errs != nil {
 		for _, e := range errs {
 			checkErrors.Add(e)
 		}
@@ -97,33 +149,4 @@ func checkRules(logger log.Logger, filename string) (int, errors.MultiError) {
 	}
 
 	return numRules, checkErrors
-}
-
-func thanosRuleGroupsToPromRuleGroups(ruleGroups ThanosRuleGroups) rulefmt.RuleGroups {
-	promRuleGroups := rulefmt.RuleGroups{Groups: []rulefmt.RuleGroup{}}
-	for _, g := range ruleGroups.Groups {
-		group := rulefmt.RuleGroup{
-			Name:     g.Name,
-			Interval: g.Interval,
-			Rules:    []rulefmt.Rule{},
-		}
-		for _, r := range g.Rules {
-			group.Rules = append(
-				group.Rules,
-				rulefmt.Rule{
-					Record:      r.Record,
-					Alert:       r.Alert,
-					Expr:        r.Expr,
-					For:         r.For,
-					Labels:      r.Labels,
-					Annotations: r.Annotations,
-				},
-			)
-		}
-		promRuleGroups.Groups = append(
-			promRuleGroups.Groups,
-			group,
-		)
-	}
-	return promRuleGroups
 }

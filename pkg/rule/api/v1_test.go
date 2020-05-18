@@ -17,13 +17,13 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -40,13 +40,13 @@ func newStorage(t *testing.T) storage.Storage {
 	// Tests just load data for a series sequentially. Thus we
 	// need a long appendable window.
 	db, err := tsdb.Open(dir, nil, nil, &tsdb.Options{
-		MinBlockDuration: model.Duration(24 * time.Hour),
-		MaxBlockDuration: model.Duration(24 * time.Hour),
+		MinBlockDuration: int64(24 * time.Hour / time.Millisecond),
+		MaxBlockDuration: int64(24 * time.Hour / time.Millisecond),
 	})
 	if err != nil {
 		t.Fatalf("Opening test storage failed: %s", err)
 	}
-	return testStorage{Storage: tsdb.Adapter(db, int64(0)), dir: dir}
+	return testStorage{Storage: db, dir: dir}
 }
 
 type testStorage struct {
@@ -69,11 +69,10 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	storage := newStorage(m.testing)
 
 	engineOpts := promql.EngineOpts{
-		Logger:        nil,
-		Reg:           nil,
-		MaxConcurrent: 10,
-		MaxSamples:    10,
-		Timeout:       100 * time.Second,
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10,
+		Timeout:    100 * time.Second,
 	}
 
 	engine := promql.NewEngine(engineOpts)
@@ -89,7 +88,7 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 		r = append(r, ar)
 	}
 
-	recordingExpr, err := promql.ParseExpr(`vector(1)`)
+	recordingExpr, err := parser.ParseExpr(`vector(1)`)
 	if err != nil {
 		m.testing.Fatalf("unable to parse alert expression: %s", err)
 	}
@@ -98,7 +97,14 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 
 	return []thanosrule.Group{
 		{
-			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
+			Group: rules.NewGroup(rules.GroupOptions{
+				Name:          "grp",
+				File:          "/path/to/file",
+				Interval:      time.Second,
+				Rules:         r,
+				ShouldRestore: false,
+				Opts:          opts,
+			}),
 			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		},
 	}
@@ -113,11 +119,11 @@ func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 }
 
 func alertingRules(t *testing.T) []*rules.AlertingRule {
-	expr1, err := promql.ParseExpr(`absent(test_metric3) != 1`)
+	expr1, err := parser.ParseExpr(`absent(test_metric3) != 1`)
 	if err != nil {
 		t.Fatalf("unable to parse alert expression: %s", err)
 	}
-	expr2, err := promql.ParseExpr(`up == 1`)
+	expr2, err := parser.ParseExpr(`up == 1`)
 	if err != nil {
 		t.Fatalf("unable to parse alert expression: %s", err)
 	}

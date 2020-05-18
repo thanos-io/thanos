@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	tsdb "github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -125,9 +125,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbBlockDuration,
-			MaxBlockDuration:  *tsdbBlockDuration,
-			RetentionDuration: *tsdbRetention,
+			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
 		}
@@ -425,7 +425,7 @@ func runRule(
 			}
 			alertQ.Push(res)
 		}
-		st := tsdb.Adapter(db, 0)
+		st := db
 
 		opts := rules.ManagerOptions{
 			NotifyFunc:  notify,

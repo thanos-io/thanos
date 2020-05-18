@@ -257,9 +257,8 @@ func runQuery(
 		queryableCreator = query.NewQueryableCreator(logger, proxy)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
-				Logger:        logger,
-				Reg:           reg,
-				MaxConcurrent: maxConcurrentQueries,
+				Logger: logger,
+				Reg:    reg,
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,

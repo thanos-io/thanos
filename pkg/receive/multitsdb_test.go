@@ -15,10 +15,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -36,9 +35,9 @@ func TestMultiTSDB(t *testing.T) {
 	t.Run("run fresh", func(t *testing.T) {
 		m := NewMultiTSDB(
 			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  model.Duration(2 * time.Hour),
-				MaxBlockDuration:  model.Duration(2 * time.Hour),
-				RetentionDuration: model.Duration(6 * time.Hour),
+				MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+				MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+				RetentionDuration: int64(6 * time.Hour / time.Millisecond),
 				NoLockfile:        true,
 			},
 			labels.FromStrings("replica", "01"),
@@ -102,9 +101,9 @@ func TestMultiTSDB(t *testing.T) {
 	t.Run("run on existing storage", func(t *testing.T) {
 		m := NewMultiTSDB(
 			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  model.Duration(2 * time.Hour),
-				MaxBlockDuration:  model.Duration(2 * time.Hour),
-				RetentionDuration: model.Duration(6 * time.Hour),
+				MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+				MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+				RetentionDuration: int64(6 * time.Hour / time.Millisecond),
 				NoLockfile:        true,
 			},
 			labels.FromStrings("replica", "01"),

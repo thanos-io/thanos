@@ -33,6 +33,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -931,7 +932,7 @@ const (
 )
 
 func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series int) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000)
+	h, err := tsdb.NewHead(nil, nil, nil, 1000, tsdb.DefaultStripeSize)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -955,7 +956,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	return id
 }
 
-func appendTestData(t testing.TB, app tsdb.Appender, series int) {
+func appendTestData(t testing.TB, app storage.Appender, series int) {
 	addSeries := func(l labels.Labels) {
 		_, err := app.Add(l, 0, 0)
 		testutil.Ok(t, err)
@@ -1112,7 +1113,7 @@ func createBlockWithOneSample(t testutil.TB, dir string, blockIndex int, totalSe
 	fmt.Println("Building block with numSeries:", totalSeries)
 
 	var series []storepb.Series
-	h, err := tsdb.NewHead(nil, nil, nil, 1)
+	h, err := tsdb.NewHead(nil, nil, nil, 1, tsdb.DefaultStripeSize)
 	testutil.Ok(t, err)
 	defer testutil.Ok(t, h.Close())
 
@@ -1134,7 +1135,7 @@ func createBlockWithOneSample(t testutil.TB, dir string, blockIndex int, totalSe
 func createBlockWithOneSeries(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand) ulid.ULID {
 	fmt.Println("Building block with one series with numSamples:", totalSamples)
 
-	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples))
+	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples), tsdb.DefaultStripeSize)
 	testutil.Ok(t, err)
 	defer testutil.Ok(t, h.Close())
 
@@ -1494,7 +1495,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, 1)
+		h, err := tsdb.NewHead(nil, nil, nil, 1, tsdb.DefaultStripeSize)
 		testutil.Ok(t, err)
 		defer testutil.Ok(t, h.Close())
 
@@ -1532,7 +1533,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, 1)
+		h, err := tsdb.NewHead(nil, nil, nil, 1, tsdb.DefaultStripeSize)
 		testutil.Ok(t, err)
 		defer testutil.Ok(t, h.Close())
 
