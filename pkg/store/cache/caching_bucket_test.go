@@ -620,7 +620,7 @@ func TestObjectSize(t *testing.T) {
 
 	cfg := NewCachingBucketConfig()
 	const cfgName = "test"
-	cfg.CacheObjectSize(cfgName, cache, matchAll, time.Minute)
+	cfg.CacheAttributes(cfgName, cache, matchAll, time.Minute)
 
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
 	testutil.Ok(t, err)
@@ -637,16 +637,16 @@ func TestObjectSize(t *testing.T) {
 
 func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, cfgName string) {
 	t.Helper()
-	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opObjectSize, cfgName)))
+	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opAttributes, cfgName)))
 
-	length, err := cb.ObjectSize(context.Background(), file)
+	attrs, err := cb.Attributes(context.Background(), file)
 	if expectedLength < 0 {
 		testutil.Assert(t, cb.IsObjNotFoundErr(err))
 	} else {
 		testutil.Ok(t, err)
-		testutil.Equals(t, uint64(expectedLength), length)
+		testutil.Equals(t, int64(expectedLength), attrs.Size)
 
-		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opObjectSize, cfgName)))
+		hitsAfter := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opAttributes, cfgName)))
 		if cacheUsed {
 			testutil.Equals(t, 1, hitsAfter-hitsBefore)
 		} else {

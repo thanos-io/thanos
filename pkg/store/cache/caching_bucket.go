@@ -6,7 +6,6 @@ package storecache
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +35,7 @@ const (
 	opGetRange   = "getrange"
 	opIter       = "iter"
 	opExists     = "exists"
-	opObjectSize = "objectsize"
+	opAttributes = "attributes"
 )
 
 var errObjNotFound = errors.Errorf("object not found")
@@ -291,50 +290,58 @@ func (cb *CachingBucket) GetRange(ctx context.Context, name string, off, length 
 	return r, err
 }
 
-func (cb *CachingBucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	cfgName, cfg := cb.cfg.findObjectSizeConfig(name)
+func (cb *CachingBucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	cfgName, cfg := cb.cfg.findAttributesConfig(name)
 	if cfg == nil {
-		return cb.Bucket.ObjectSize(ctx, name)
+		return cb.Bucket.Attributes(ctx, name)
 	}
 
-	return cb.cachedObjectSize(ctx, name, cfgName, cfg.cache, cfg.ttl)
+	return cb.cachedAttributes(ctx, name, cfgName, cfg.cache, cfg.ttl)
 }
 
-func (cb *CachingBucket) cachedObjectSize(ctx context.Context, name string, cfgName string, cache cache.Cache, ttl time.Duration) (uint64, error) {
-	key := cachingKeyObjectSize(name)
+func (cb *CachingBucket) cachedAttributes(ctx context.Context, name string, cfgName string, cache cache.Cache, ttl time.Duration) (objstore.ObjectAttributes, error) {
+	key := cachingKeyAttributes(name)
 
-	cb.operationRequests.WithLabelValues(opObjectSize, cfgName).Inc()
+	cb.operationRequests.WithLabelValues(opAttributes, cfgName).Inc()
 
 	hits := cache.Fetch(ctx, []string{key})
-	if s := hits[key]; len(s) == 8 {
-		cb.operationHits.WithLabelValues(opObjectSize, cfgName).Inc()
-		return binary.BigEndian.Uint64(s), nil
+	if raw, ok := hits[key]; ok {
+		var attrs objstore.ObjectAttributes
+		err := json.Unmarshal(raw, &attrs)
+		if err == nil {
+			cb.operationHits.WithLabelValues(opAttributes, cfgName).Inc()
+			return attrs, nil
+		}
+
+		level.Warn(cb.logger).Log("msg", "failed to decode cached Attributes result", "key", key, "err", err)
 	}
 
-	size, err := cb.Bucket.ObjectSize(ctx, name)
+	attrs, err := cb.Bucket.Attributes(ctx, name)
 	if err != nil {
-		return 0, err
+		return objstore.ObjectAttributes{}, err
 	}
 
-	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], size)
-	cache.Store(ctx, map[string][]byte{key: buf[:]}, ttl)
+	if raw, err := json.Marshal(attrs); err == nil {
+		cache.Store(ctx, map[string][]byte{key: raw}, ttl)
+	} else {
+		level.Warn(cb.logger).Log("msg", "failed to encode cached Attributes result", "key", key, "err", err)
+	}
 
-	return size, nil
+	return attrs, nil
 }
 
 func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset, length int64, cfgName string, cfg *getRangeConfig) (io.ReadCloser, error) {
 	cb.operationRequests.WithLabelValues(opGetRange, cfgName).Inc()
 	cb.requestedGetRangeBytes.WithLabelValues(cfgName).Add(float64(length))
 
-	size, err := cb.cachedObjectSize(ctx, name, cfgName, cfg.cache, cfg.objectSizeTTL)
+	attrs, err := cb.cachedAttributes(ctx, name, cfgName, cfg.cache, cfg.attributesTTL)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get size of object: %s", name)
+		return nil, errors.Wrapf(err, "failed to get object attributes: %s", name)
 	}
 
 	// If length goes over object size, adjust length. We use it later to limit number of read bytes.
-	if uint64(offset+length) > size {
-		length = int64(size - uint64(offset))
+	if offset+length > attrs.Size {
+		length = attrs.Size - offset
 	}
 
 	// Start and end range are subrange-aligned offsets into object, that we're going to read.
@@ -347,9 +354,9 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 	// The very last subrange in the object may have length that is not divisible by subrange size.
 	lastSubrangeOffset := endRange - cfg.subrangeSize
 	lastSubrangeLength := int(cfg.subrangeSize)
-	if uint64(endRange) > size {
-		lastSubrangeOffset = (int64(size) / cfg.subrangeSize) * cfg.subrangeSize
-		lastSubrangeLength = int(int64(size) - lastSubrangeOffset)
+	if endRange > attrs.Size {
+		lastSubrangeOffset = (attrs.Size / cfg.subrangeSize) * cfg.subrangeSize
+		lastSubrangeLength = int(attrs.Size - lastSubrangeOffset)
 	}
 
 	numSubranges := (endRange - startRange) / cfg.subrangeSize
@@ -360,8 +367,8 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 	totalRequestedBytes := int64(0)
 	for off := startRange; off < endRange; off += cfg.subrangeSize {
 		end := off + cfg.subrangeSize
-		if end > int64(size) {
-			end = int64(size)
+		if end > attrs.Size {
+			end = attrs.Size
 		}
 		totalRequestedBytes += (end - off)
 
@@ -489,8 +496,8 @@ func mergeRanges(input []rng, limit int64) []rng {
 	return input[:last+1]
 }
 
-func cachingKeyObjectSize(name string) string {
-	return fmt.Sprintf("size:%s", name)
+func cachingKeyAttributes(name string) string {
+	return fmt.Sprintf("attrs:%s", name)
 }
 
 func cachingKeyObjectSubrange(name string, start int64, end int64) string {

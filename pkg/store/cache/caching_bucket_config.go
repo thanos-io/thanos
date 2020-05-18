@@ -23,7 +23,7 @@ type CachingBucketConfig struct {
 	iter       map[string]*iterConfig
 	exists     map[string]*existsConfig
 	getRange   map[string]*getRangeConfig
-	objectSize map[string]*objectSizeConfig
+	attributes map[string]*attributesConfig
 }
 
 func NewCachingBucketConfig() *CachingBucketConfig {
@@ -32,7 +32,7 @@ func NewCachingBucketConfig() *CachingBucketConfig {
 		iter:       map[string]*iterConfig{},
 		exists:     map[string]*existsConfig{},
 		getRange:   map[string]*getRangeConfig{},
-		objectSize: map[string]*objectSizeConfig{},
+		attributes: map[string]*attributesConfig{},
 	}
 }
 
@@ -65,11 +65,11 @@ type getRangeConfig struct {
 	operationConfig
 	subrangeSize   int64
 	maxSubRequests int
-	objectSizeTTL  time.Duration
+	attributesTTL  time.Duration
 	subrangeTTL    time.Duration
 }
 
-type objectSizeConfig struct {
+type attributesConfig struct {
 	operationConfig
 	ttl time.Duration
 }
@@ -124,19 +124,19 @@ func (cfg *CachingBucketConfig) CacheExists(configName string, cache cache.Cache
 // Single "GetRange" requests can result in multiple smaller GetRange sub-requests issued on the underlying bucket.
 // MaxSubRequests specifies how many such subrequests may be issued. Values <= 0 mean there is no limit (requests
 // for adjacent missing subranges are still merged).
-func (cfg *CachingBucketConfig) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, subrangeSize int64, objectSizeTTL, subrangeTTL time.Duration, maxSubRequests int) {
+func (cfg *CachingBucketConfig) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, subrangeSize int64, attributesTTL, subrangeTTL time.Duration, maxSubRequests int) {
 	cfg.getRange[configName] = &getRangeConfig{
 		operationConfig: newOperationConfig(cache, matcher),
 		subrangeSize:    subrangeSize,
-		objectSizeTTL:   objectSizeTTL,
+		attributesTTL:   attributesTTL,
 		subrangeTTL:     subrangeTTL,
 		maxSubRequests:  maxSubRequests,
 	}
 }
 
-// CacheObjectSize configures caching of "ObjectSize" operation for matching files.
-func (cfg *CachingBucketConfig) CacheObjectSize(configName string, cache cache.Cache, matcher func(name string) bool, ttl time.Duration) {
-	cfg.objectSize[configName] = &objectSizeConfig{
+// CacheAttributes configures caching of "Attributes" operation for matching files.
+func (cfg *CachingBucketConfig) CacheAttributes(configName string, cache cache.Cache, matcher func(name string) bool, ttl time.Duration) {
+	cfg.attributes[configName] = &attributesConfig{
 		operationConfig: newOperationConfig(cache, matcher),
 		ttl:             ttl,
 	}
@@ -156,8 +156,8 @@ func (cfg *CachingBucketConfig) allConfigNames() map[string][]string {
 	for n := range cfg.getRange {
 		result[opGetRange] = append(result[opGetRange], n)
 	}
-	for n := range cfg.objectSize {
-		result[opObjectSize] = append(result[opObjectSize], n)
+	for n := range cfg.attributes {
+		result[opAttributes] = append(result[opAttributes], n)
 	}
 	return result
 }
@@ -198,8 +198,8 @@ func (cfg *CachingBucketConfig) findGetRangeConfig(name string) (string, *getRan
 	return "", nil
 }
 
-func (cfg *CachingBucketConfig) findObjectSizeConfig(name string) (string, *objectSizeConfig) {
-	for n, cfg := range cfg.objectSize {
+func (cfg *CachingBucketConfig) findAttributesConfig(name string) (string, *attributesConfig) {
+	for n, cfg := range cfg.attributes {
 		if cfg.matcher(name) {
 			return n, cfg
 		}
