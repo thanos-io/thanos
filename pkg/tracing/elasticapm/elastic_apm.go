@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+func init() {
+	apm.DefaultTracer.Close()
+}
+
 type Config struct {
 	ServiceName        string  `yaml:"service_name"`
 	ServiceVersion     string  `yaml:"service_version"`
