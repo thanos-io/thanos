@@ -58,7 +58,7 @@
               )
               >
               (
-                max by (job) ((thanos_receive_replication_factor+1) / 2)
+                max by (job) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
               /
                 max by (job) (thanos_receive_hashring_nodes{%(selector)s})
               )
