@@ -16,7 +16,7 @@ export GO111MODULE
 GOPROXY           ?= https://proxy.golang.org
 export GOPROXY
 
-GOTEST_OPTS ?= -failfast -timeout 10m -v
+GOTEST_OPTS ?= -failfast -timeout 300m -v
 
 # Tools.
 EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
