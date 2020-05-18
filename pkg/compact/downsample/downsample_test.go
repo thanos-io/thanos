@@ -61,7 +61,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 			iters = append(iters, chk.Iterator(nil))
 		}
 
-		citer := NewCounterSeriesIterator(iters...)
+		citer := NewApplyCounterResetsIterator(iters...)
 		for citer.Next() {
 			t, v := citer.At()
 			res = append(res, sample{t: t, v: v})
@@ -593,7 +593,7 @@ var (
 	}
 )
 
-func TestCounterAggegationIterator(t *testing.T) {
+func TestApplyCounterResetsIterator(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	for _, tcase := range []struct {
@@ -658,7 +658,7 @@ func TestCounterAggegationIterator(t *testing.T) {
 				its = append(its, newSampleIterator(c))
 			}
 
-			x := NewCounterSeriesIterator(its...)
+			x := NewApplyCounterResetsIterator(its...)
 
 			var res []sample
 			for x.Next() {
@@ -692,7 +692,7 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 	}
 
 	var res []sample
-	x := NewCounterSeriesIterator(its...)
+	x := NewApplyCounterResetsIterator(its...)
 
 	ok := x.Seek(150)
 	testutil.Assert(t, ok, "Seek should return true")
@@ -719,7 +719,7 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 		its = append(its, newSampleIterator(c))
 	}
 
-	x := NewCounterSeriesIterator(its...)
+	x := NewApplyCounterResetsIterator(its...)
 
 	ok := x.Seek(500)
 	testutil.Assert(t, !ok, "Seek should return false")
@@ -739,7 +739,7 @@ func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 	}
 
 	var res []sample
-	x := NewCounterSeriesIterator(its...)
+	x := NewApplyCounterResetsIterator(its...)
 
 	x.Next()
 

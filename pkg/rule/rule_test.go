@@ -70,14 +70,17 @@ groups:
 		Appendable: nopAppendable{},
 	}
 	thanosRuleMgr := NewManager(dir)
-	ruleMgr := rules.NewManager(&opts)
-	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgr)
-	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgr)
+	ruleMgrAbort := rules.NewManager(&opts)
+	ruleMgrWarn := rules.NewManager(&opts)
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgrAbort)
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgrWarn)
+
+	ruleMgrAbort.Run()
+	ruleMgrWarn.Run()
+	defer ruleMgrAbort.Stop()
+	defer ruleMgrWarn.Stop()
 
 	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
-
-	ruleMgr.Run()
-	defer ruleMgr.Stop()
 
 	select {
 	case <-time.After(2 * time.Minute):
@@ -227,6 +230,44 @@ groups:
 			testutil.Equals(t, exp[i].file, g[i].OriginalFile())
 		})
 	}
+}
+
+func TestUpdateAfterClear(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
+groups:
+- name: "something1"
+  rules:
+  - alert: "some"
+    expr: "up"
+`), os.ModePerm))
+
+	opts := rules.ManagerOptions{
+		Logger: log.NewLogfmtLogger(os.Stderr),
+	}
+	m := NewManager(dir)
+	ruleMgrAbort := rules.NewManager(&opts)
+	ruleMgrWarn := rules.NewManager(&opts)
+	m.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgrAbort)
+	m.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgrWarn)
+
+	ruleMgrAbort.Run()
+	ruleMgrWarn.Run()
+	defer ruleMgrAbort.Stop()
+	defer ruleMgrWarn.Stop()
+
+	err = m.Update(1*time.Second, []string{
+		filepath.Join(dir, "no_strategy.yaml"),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, len(m.RuleGroups()))
+
+	err = m.Update(1*time.Second, []string{})
+	testutil.Ok(t, err)
+	testutil.Equals(t, 0, len(m.RuleGroups()))
 }
 
 func TestRuleGroupMarshalYAML(t *testing.T) {

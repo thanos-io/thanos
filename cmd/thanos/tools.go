@@ -85,7 +85,7 @@ func (g *ThanosRuleGroups) Validate() (errs []error) {
 		if _, ok := set[g.Name]; ok {
 			errs = append(
 				errs,
-				fmt.Errorf("groupname: \"%s\" is repeated in the same file", g.Name),
+				fmt.Errorf("groupname: %q is repeated in the same file", g.Name),
 			)
 		}
 

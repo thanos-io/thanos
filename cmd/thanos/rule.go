@@ -763,8 +763,9 @@ func reloadRules(logger log.Logger,
 	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 	var (
-		errs  tsdberrors.MultiError
-		files []string
+		errs      tsdberrors.MultiError
+		files     []string
+		seenFiles = make(map[string]struct{})
 	)
 	for _, pat := range ruleFiles {
 		fs, err := filepath.Glob(pat)
@@ -774,7 +775,13 @@ func reloadRules(logger log.Logger,
 			continue
 		}
 
-		files = append(files, fs...)
+		for _, fp := range fs {
+			if _, ok := seenFiles[fp]; ok {
+				continue
+			}
+			files = append(files, fp)
+			seenFiles[fp] = struct{}{}
+		}
 	}
 
 	level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
