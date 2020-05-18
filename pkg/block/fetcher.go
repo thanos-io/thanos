@@ -689,6 +689,7 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 			}
 		}
 		if len(l) == 0 {
+			level.Warn(r.logger).Log("msg", "block has no labels left, creating one", r.replicaLabels[0], "deduped")
 			l[r.replicaLabels[0]] = "deduped"
 		}
 		metas[u].Thanos.Labels = l
