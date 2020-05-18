@@ -297,7 +297,7 @@ metafile_max_size: 1MiB
 
 `backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
-`caching_config` is a configuration for cache and supports the following optional settings for chunks caching:
+Additional options to configure various aspects of chunks cache are available:
 
 - `chunk_subrange_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
@@ -312,7 +312,7 @@ Following options are used for metadata caching (meta.json files, deletion mark 
 - `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
-Note that chunks cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 ## Index Header
 
