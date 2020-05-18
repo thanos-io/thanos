@@ -28,8 +28,8 @@ const MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcache
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
-	Type          BucketCacheProvider `yaml:"backend"`
-	BackendConfig interface{}         `yaml:"backend_config"`
+	Type          BucketCacheProvider `yaml:"type"`
+	BackendConfig interface{}         `yaml:"config"`
 
 	// Basic unit used to cache chunks.
 	ChunkSubrangeSize int64 `yaml:"chunk_subrange_size"`
