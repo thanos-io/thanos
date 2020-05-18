@@ -125,6 +125,7 @@ define fetch_go_bin_version_mod
 	@echo ">> fetching $(1)@$(2) revision/version"
 	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
     GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
+    GOPATH='$(TMP_GOPATH)' GO111MODULE='on' go get -d -u '$(1)/..'; \
   else \
     CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
   fi
