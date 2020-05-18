@@ -83,6 +83,7 @@ type Handler struct {
 
 	// Metrics.
 	forwardRequestsTotal *prometheus.CounterVec
+	replicationFactor    prometheus.Gauge
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -102,6 +103,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
+		replicationFactor: promauto.With(o.Registry).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_replication_factor",
+				Help: "The number of times to replicate incoming write requests.",
+			},
+		),
+	}
+
+	if o.ReplicationFactor >= 1 {
+		h.replicationFactor.Set(float64(o.ReplicationFactor))
+	} else {
+		h.replicationFactor.Set(1)
 	}
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()

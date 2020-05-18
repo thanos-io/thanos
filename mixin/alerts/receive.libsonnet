@@ -3,7 +3,6 @@
   receive+:: {
     selector: error 'must provide selector for Thanos Receive alerts',
     httpErrorThreshold: 5,
-    forwardErrorThreshold: 5,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
   },
@@ -56,10 +55,10 @@
                 sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
-              * 100 > %(forwardErrorThreshold)s
-              )
+              ) > (((thanos_receive_replication_factor+1) / 2) / count(up{job=~"observatorium-thanos-receive-default.*"}))
             ||| % thanos.receive,
-            'for': '5m',
+            # 'for': '5m',
+            # 1 / count(sum by (pod) (thanos_receive_forward_requests_total{%(selector)s}))
             labels: {
               severity: 'warning',
             },
