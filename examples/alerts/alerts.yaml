@@ -182,9 +182,13 @@ groups:
         sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
       /
         sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
-      * 100 > 5
       )
-    for: 5m
+      >
+      (
+        max by (job) ((thanos_receive_replication_factor+1) / 2)
+      /
+        max by (job) (thanos_receive_hashring_nodes{job=~"thanos-receive.*"})
+      )
     labels:
       severity: warning
   - alert: ThanosReceiveHighHashringFileRefreshFailures

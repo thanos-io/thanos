@@ -55,10 +55,14 @@
                 sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
-              ) > (((thanos_receive_replication_factor+1) / 2) / count(up{job=~"observatorium-thanos-receive-default.*"}))
+              )
+              >
+              (
+                max by (job) ((thanos_receive_replication_factor+1) / 2)
+              /
+                max by (job) (thanos_receive_hashring_nodes{%(selector)s})
+              )
             ||| % thanos.receive,
-            # 'for': '5m',
-            # 1 / count(sum by (pod) (thanos_receive_forward_requests_total{%(selector)s}))
             labels: {
               severity: 'warning',
             },
