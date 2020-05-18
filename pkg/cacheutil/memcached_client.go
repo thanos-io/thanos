@@ -464,7 +464,7 @@ func (c *memcachedClient) resolveAddrs() error {
 
 	// If some of the dns resolution fails, log the error.
 	if err := c.dnsProvider.Resolve(ctx, c.config.Addresses); err != nil {
-		level.Error(c.logger).Log("msg", "failed to resolve addresses for storeAPIs", "addresses", strings.Join(c.config.Addresses,","), "err", err)
+		level.Error(c.logger).Log("msg", "failed to resolve addresses for storeAPIs", "addresses", strings.Join(c.config.Addresses, ","), "err", err)
 	}
 	// Fail in case no server address is resolved.
 	servers := c.dnsProvider.Addresses()
