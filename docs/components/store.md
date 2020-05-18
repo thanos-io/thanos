@@ -285,8 +285,8 @@ Thanos Store Gateway supports a "caching bucket" with chunks and metadata cachin
 Currently only memcached "backend" is supported:
 
 ```yaml
-backend: memcached
-backend_config:
+type: memcached
+config:
   addresses:
     - localhost:11211
 
@@ -301,7 +301,7 @@ metafile_content_ttl: 24h
 metafile_max_size: 1MiB
 ```
 
-`backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
+`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
 Additional options to configure various aspects of chunks cache are available:
 
