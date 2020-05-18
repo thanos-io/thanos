@@ -612,7 +612,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 	}
 }
 
-func TestObjectSize(t *testing.T) {
+func TestAttributes(t *testing.T) {
 	inmem := objstore.NewInMemBucket()
 
 	// We reuse cache between tests (!)
@@ -625,17 +625,17 @@ func TestObjectSize(t *testing.T) {
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
 	testutil.Ok(t, err)
 
-	verifyObjectSize(t, cb, testFilename, -1, false, cfgName)
-	verifyObjectSize(t, cb, testFilename, -1, false, cfgName) // ObjectSize doesn't cache non-existent files.
+	verifyObjectAttrs(t, cb, testFilename, -1, false, cfgName)
+	verifyObjectAttrs(t, cb, testFilename, -1, false, cfgName) // Attributes doesn't cache non-existent files.
 
 	data := []byte("hello world")
 	testutil.Ok(t, inmem.Upload(context.Background(), testFilename, bytes.NewBuffer(data)))
 
-	verifyObjectSize(t, cb, testFilename, len(data), false, cfgName)
-	verifyObjectSize(t, cb, testFilename, len(data), true, cfgName)
+	verifyObjectAttrs(t, cb, testFilename, len(data), false, cfgName)
+	verifyObjectAttrs(t, cb, testFilename, len(data), true, cfgName)
 }
 
-func verifyObjectSize(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, cfgName string) {
+func verifyObjectAttrs(t *testing.T, cb *CachingBucket, file string, expectedLength int, cacheUsed bool, cfgName string) {
 	t.Helper()
 	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(opAttributes, cfgName)))
 
