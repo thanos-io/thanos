@@ -111,7 +111,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
-	if o.ReplicationFactor >= 1 {
+	if o.ReplicationFactor > 1 {
 		h.replicationFactor.Set(float64(o.ReplicationFactor))
 	} else {
 		h.replicationFactor.Set(1)
