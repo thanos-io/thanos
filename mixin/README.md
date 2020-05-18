@@ -54,9 +54,9 @@ $ jb update
 
 #### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](../../examples). Default parameters are collected in [defaults.libsonnet](defaults.libsonnet), feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](../../examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
 
-[embedmd]:# (defaults.libsonnet)
+[embedmd]:# (config.libsonnet)
 ```libsonnet
 {
   query+:: {

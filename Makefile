@@ -58,8 +58,7 @@ PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 # systems gsed won't be installed, so will use sed as expected.
 SED ?= $(shell which gsed 2>/dev/null || which sed)
 
-MIXIN_ROOT              ?= mixin
-THANOS_MIXIN            ?= mixin/thanos
+THANOS_MIXIN            ?= mixin
 JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
@@ -404,20 +403,20 @@ examples/tmp:
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
 .PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
-examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/dashboards/*
+examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/dashboards/*
 	-rm -rf examples/dashboards/*.json
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${THANOS_MIXIN}/dashboards.jsonnet
 
-examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/alerts/*
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/alerts/*
 	$(JSONNET) ${THANOS_MIXIN}/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/rules/*
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/rules/*
 	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: $(JSONNET_BUNDLER) $(MIXIN_ROOT)/jsonnetfile.json $(MIXIN_ROOT)/jsonnetfile.lock.json
+jsonnet-vendor: $(JSONNET_BUNDLER) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
-	cd ${MIXIN_ROOT} && $(JSONNET_BUNDLER) install
+	cd ${THANOS_MIXIN} && $(JSONNET_BUNDLER) install
 
 JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s
 
