@@ -147,11 +147,8 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	p.resolverAddrs.Submit()
 
 	p.resolved = resolvedAddrs
-	if len(errs) > 0 {
-		return errs
-	}
 
-	return nil
+	return errs.Err()
 }
 
 // Addresses returns the latest addresses present in the Provider.
