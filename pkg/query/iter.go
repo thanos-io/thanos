@@ -210,7 +210,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 			for _, c := range s.chunks {
 				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
-			sit = downsample.NewCounterSeriesIterator(its...)
+			sit = downsample.NewApplyCounterResetsIterator(its...)
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
@@ -376,6 +376,7 @@ func (it *chunkSeriesIterator) Err() error {
 type dedupSeriesSet struct {
 	set           storage.SeriesSet
 	replicaLabels map[string]struct{}
+	isCounter     bool
 
 	replicas []storage.Series
 	lset     labels.Labels
@@ -383,8 +384,8 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, isCounter bool) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels, isCounter: isCounter}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -447,7 +448,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
-	return newDedupSeries(s.lset, repl...)
+	return newDedupSeries(s.lset, repl, s.isCounter)
 }
 
 func (s *dedupSeriesSet) Err() error {
@@ -464,44 +465,130 @@ func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
 type dedupSeries struct {
 	lset     labels.Labels
 	replicas []storage.Series
+
+	isCounter bool
 }
 
-func newDedupSeries(lset labels.Labels, replicas ...storage.Series) *dedupSeries {
-	return &dedupSeries{lset: lset, replicas: replicas}
+func newDedupSeries(lset labels.Labels, replicas []storage.Series, isCounter bool) *dedupSeries {
+	return &dedupSeries{lset: lset, isCounter: isCounter, replicas: replicas}
 }
 
 func (s *dedupSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
-	it = s.replicas[0].Iterator()
+func (s *dedupSeries) Iterator() storage.SeriesIterator {
+	var it adjustableSeriesIterator
+	if s.isCounter {
+		it = &counterErrAdjustSeriesIterator{SeriesIterator: s.replicas[0].Iterator()}
+	} else {
+		it = noopAdjustableSeriesIterator{SeriesIterator: s.replicas[0].Iterator()}
+	}
+
 	for _, o := range s.replicas[1:] {
-		it = newDedupSeriesIterator(it, o.Iterator())
+		var replicaIter adjustableSeriesIterator
+		if s.isCounter {
+			replicaIter = &counterErrAdjustSeriesIterator{SeriesIterator: o.Iterator()}
+		} else {
+			replicaIter = noopAdjustableSeriesIterator{SeriesIterator: o.Iterator()}
+		}
+		it = newDedupSeriesIterator(it, replicaIter)
 	}
 	return it
 }
 
-type dedupSeriesIterator struct {
-	a, b storage.SeriesIterator
+// adjustableSeriesIterator iterates over the data of a time series and allows to adjust current value based on
+// given lastValue iterated.
+type adjustableSeriesIterator interface {
+	storage.SeriesIterator
 
-	aok, bok   bool
-	lastT      int64
+	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
+	// implementation which can adjust for obsolete counter value.
+	adjustAtValue(lastValue float64)
+}
+
+type noopAdjustableSeriesIterator struct {
+	storage.SeriesIterator
+}
+
+func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
+
+// counterErrAdjustSeriesIterator is extendedSeriesIterator used when we deduplicate counter.
+// It makes sure we always adjust for the latest seen last counter value for all replicas.
+// Let's consider following example:
+//
+// Replica 1 counter scrapes: 20    30    40    Nan      -     0     5
+// Replica 2 counter scrapes:    25    35    45     Nan     -     2
+//
+// Now for downsampling purposes we are accounting the resets so our replicas before going to dedup iterator looks like this:
+//
+// Replica 1 counter total: 20    30    40   -      -     40     45
+// Replica 2 counter total:    25    35    45    -     -     47
+//
+// Now if at any point we will switch our focus from replica 2 to replica 1 we will experience lower value than previous,
+// which will trigger false positive counter reset in PromQL.
+//
+// We mitigate this by taking allowing invoking AdjustAtValue which adjust the value in case of last value being larger than current at.
+// (Counter cannot go down)
+//
+// This is to mitigate https://github.com/thanos-io/thanos/issues/2401.
+// TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given
+// series is counter or not: https://github.com/thanos-io/thanos/issues/2547.
+type counterErrAdjustSeriesIterator struct {
+	storage.SeriesIterator
+
+	errAdjust float64
+}
+
+func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastValue float64) {
+	_, v := it.At()
+	if lastValue > v {
+		// This replica has obsolete value (did not see the correct "end" of counter value before app restart). Adjust.
+		it.errAdjust += lastValue - v
+	}
+}
+
+func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
+	t, v := it.SeriesIterator.At()
+	return t, v + it.errAdjust
+}
+
+type dedupSeriesIterator struct {
+	a, b adjustableSeriesIterator
+
+	aok, bok bool
+
+	// TODO(bwplotka): Don't base on LastT, but on detected scrape interval. This will allow us to be more
+	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
+	lastT int64
+	lastV float64
+
 	penA, penB int64
 	useA       bool
 }
 
-func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
+func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
 		a:     a,
 		b:     b,
 		lastT: math.MinInt64,
+		lastV: float64(math.MinInt64),
 		aok:   a.Next(),
 		bok:   b.Next(),
 	}
 }
 
 func (it *dedupSeriesIterator) Next() bool {
+	lastValue := it.lastV
+	lastUseA := it.useA
+	defer func() {
+		if it.useA != lastUseA {
+			// We switched replicas.
+			// Ensure values are correct bases on value before At.
+			it.adjustAtValue(lastValue)
+		}
+	}()
+
 	// Advance both iterators to at least the next highest timestamp plus the potential penalty.
 	if it.aok {
 		it.aok = it.a.Seek(it.lastT + 1 + it.penA)
@@ -509,18 +596,19 @@ func (it *dedupSeriesIterator) Next() bool {
 	if it.bok {
 		it.bok = it.b.Seek(it.lastT + 1 + it.penB)
 	}
+
 	// Handle basic cases where one iterator is exhausted before the other.
 	if !it.aok {
 		it.useA = false
 		if it.bok {
-			it.lastT, _ = it.b.At()
+			it.lastT, it.lastV = it.b.At()
 			it.penB = 0
 		}
 		return it.bok
 	}
 	if !it.bok {
 		it.useA = true
-		it.lastT, _ = it.a.At()
+		it.lastT, it.lastV = it.a.At()
 		it.penA = 0
 		return true
 	}
@@ -528,8 +616,8 @@ func (it *dedupSeriesIterator) Next() bool {
 	// with the smaller timestamp.
 	// The applied penalty potentially already skipped potential samples already
 	// that would have resulted in exaggerated sampling frequency.
-	ta, _ := it.a.At()
-	tb, _ := it.b.At()
+	ta, va := it.a.At()
+	tb, vb := it.b.At()
 
 	it.useA = ta <= tb
 
@@ -540,29 +628,41 @@ func (it *dedupSeriesIterator) Next() bool {
 	// timestamp assignment.
 	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
 	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenality = 5000
+	const initialPenalty = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
 			it.penB = 2 * (ta - it.lastT)
 		} else {
-			it.penB = initialPenality
+			it.penB = initialPenalty
 		}
 		it.penA = 0
 		it.lastT = ta
+		it.lastV = va
 		return true
 	}
 	if it.lastT != math.MinInt64 {
 		it.penA = 2 * (tb - it.lastT)
 	} else {
-		it.penA = initialPenality
+		it.penA = initialPenalty
 	}
 	it.penB = 0
 	it.lastT = tb
+	it.lastV = vb
 	return true
 }
 
+func (it *dedupSeriesIterator) adjustAtValue(lastValue float64) {
+	if it.aok {
+		it.a.adjustAtValue(lastValue)
+	}
+	if it.bok {
+		it.b.adjustAtValue(lastValue)
+	}
+}
+
 func (it *dedupSeriesIterator) Seek(t int64) bool {
+	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for {
 		ts, _ := it.At()
 		if ts > 0 && ts >= t {

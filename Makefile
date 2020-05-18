@@ -1,4 +1,3 @@
-PREFIX            ?= $(shell pwd)
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
@@ -59,8 +58,7 @@ PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 # systems gsed won't be installed, so will use sed as expected.
 SED ?= $(shell which gsed 2>/dev/null || which sed)
 
-MIXIN_ROOT              ?= mixin
-THANOS_MIXIN            ?= mixin/thanos
+THANOS_MIXIN            ?= mixin
 JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
@@ -176,8 +174,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building binaries $(GOBIN)"
-	@$(PROMU) build --prefix $(PREFIX)
+	@echo ">> building Thanos binary in $(GOBIN)"
+	@$(PROMU) build --prefix $(GOBIN)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -193,8 +191,11 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 docker: build
+	@echo ">> copying Thanos from $(GOBIN) to ./thanos_tmp_for_docker"
+	@cp $(GOBIN)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
+	@rm ./thanos_tmp_for_docker
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
@@ -212,13 +213,13 @@ docker-push:
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(EMBEDMD) $(LICHE) build
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh check
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
 	@$(LICHE) --exclude "goreportcard.com" --document-root . *.md
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
@@ -402,20 +403,20 @@ examples/tmp:
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
 .PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
-examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/dashboards/*
+examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/dashboards/*
 	-rm -rf examples/dashboards/*.json
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${THANOS_MIXIN}/dashboards.jsonnet
 
-examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/alerts/*
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/alerts/*
 	$(JSONNET) ${THANOS_MIXIN}/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/rules/*
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/rules/*
 	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: $(JSONNET_BUNDLER) $(MIXIN_ROOT)/jsonnetfile.json $(MIXIN_ROOT)/jsonnetfile.lock.json
+jsonnet-vendor: $(JSONNET_BUNDLER) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
-	cd ${MIXIN_ROOT} && $(JSONNET_BUNDLER) install
+	cd ${THANOS_MIXIN} && $(JSONNET_BUNDLER) install
 
 JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s
 

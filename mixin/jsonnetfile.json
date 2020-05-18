@@ -17,15 +17,6 @@
         }
       },
       "version": "master"
-    },
-    {
-      "source": {
-        "local": {
-          "directory": "thanos"
-        }
-      },
-      "version": ".",
-      "name": "thanos-mixin"
     }
   ],
   "legacyImports": true

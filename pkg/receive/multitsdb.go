@@ -31,7 +31,7 @@ type MultiTSDB struct {
 	dataDir         string
 	logger          log.Logger
 	reg             prometheus.Registerer
-	tsdbCfg         *tsdb.Options
+	tsdbOpts        *tsdb.Options
 	tenantLabelName string
 	labels          labels.Labels
 	bucket          objstore.Bucket
@@ -40,8 +40,34 @@ type MultiTSDB struct {
 	tenants map[string]*tenant
 }
 
+func NewMultiTSDB(
+	dataDir string,
+	l log.Logger,
+	reg prometheus.Registerer,
+	tsdbOpts *tsdb.Options,
+	labels labels.Labels,
+	tenantLabelName string,
+	bucket objstore.Bucket,
+) *MultiTSDB {
+	if l == nil {
+		l = log.NewNopLogger()
+	}
+
+	return &MultiTSDB{
+		dataDir:         dataDir,
+		logger:          l,
+		reg:             reg,
+		tsdbOpts:        tsdbOpts,
+		mtx:             &sync.RWMutex{},
+		tenants:         map[string]*tenant{},
+		labels:          labels,
+		tenantLabelName: tenantLabelName,
+		bucket:          bucket,
+	}
+}
+
 type tenant struct {
-	tsdbCfg *tsdb.Options
+	tsdbOpts *tsdb.Options
 
 	readyS *tsdb.ReadyStorage
 	fs     *FlushableStorage
@@ -51,11 +77,11 @@ type tenant struct {
 	mtx *sync.RWMutex
 }
 
-func newTenant(tsdbCfg *tsdb.Options) *tenant {
+func newTenant(tsdbOpts *tsdb.Options) *tenant {
 	return &tenant{
-		tsdbCfg: tsdbCfg,
-		readyS:  &tsdb.ReadyStorage{},
-		mtx:     &sync.RWMutex{},
+		tsdbOpts: tsdbOpts,
+		readyS:   &tsdb.ReadyStorage{},
+		mtx:      &sync.RWMutex{},
 	}
 }
 
@@ -82,38 +108,12 @@ func (t *tenant) flushableStorage() *FlushableStorage {
 }
 
 func (t *tenant) set(tstore *store.TSDBStore, fs *FlushableStorage, ship *shipper.Shipper) {
-	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbCfg.MinBlockDuration).Seconds()*1000))
+	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
 	t.mtx.Lock()
 	t.fs = fs
 	t.s = tstore
 	t.ship = ship
 	t.mtx.Unlock()
-}
-
-func NewMultiTSDB(
-	dataDir string,
-	l log.Logger,
-	reg prometheus.Registerer,
-	tsdbCfg *tsdb.Options,
-	labels labels.Labels,
-	tenantLabelName string,
-	bucket objstore.Bucket,
-) *MultiTSDB {
-	if l == nil {
-		l = log.NewNopLogger()
-	}
-
-	return &MultiTSDB{
-		dataDir:         dataDir,
-		logger:          l,
-		reg:             reg,
-		tsdbCfg:         tsdbCfg,
-		mtx:             &sync.RWMutex{},
-		tenants:         map[string]*tenant{},
-		labels:          labels,
-		tenantLabelName: tenantLabelName,
-		bucket:          bucket,
-	}
 }
 
 func (t *MultiTSDB) Open() error {
@@ -232,7 +232,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		return tenant, nil
 	}
 
-	tenant = newTenant(t.tsdbCfg)
+	tenant = newTenant(t.tsdbOpts)
 	t.tenants[tenantID] = tenant
 	t.mtx.Unlock()
 
@@ -261,7 +261,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 			dataDir,
 			logger,
 			reg,
-			t.tsdbCfg,
+			t.tsdbOpts,
 		)
 
 		// Assign to outer error to report in blocking case.

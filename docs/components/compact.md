@@ -74,8 +74,7 @@ In order to achieve this co-ordination, blocks are not deleted directly. Instead
 
 ## Flags
 
-[embedmd]: # "flags/compact.txt $"
-
+[embedmd]:# (flags/compact.txt $)
 ```$
 usage: thanos compact [<flags>]
 

@@ -27,7 +27,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 ## Flags
 
-[embedmd]: # "flags/store.txt $"
+[embedmd]:# (flags/store.txt $)
 ```$
 usage: thanos store [<flags>]
 
@@ -68,7 +68,13 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --data-dir="./data"        Data directory in which to cache remote blocks.
+      --data-dir="./data"        Local data directory used for caching purposes
+                                 (index-header, in-mem cache items and
+                                 meta.jsons). If removed, no data will be lost,
+                                 just store will have to rebuild the cache.
+                                 NOTE: Putting raw blocks here will not cause
+                                 the store to read them. For such use cases use
+                                 Prometheus + sidecar.
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.
@@ -137,11 +143,51 @@ Flags:
                                  Prometheus relabel-config syntax. See format
                                  details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --consistency-delay=30m    Minimum age of all blocks before they are being read.
+      --consistency-delay=0s     Minimum age of all blocks before they are being
+                                 read. Set it to safe value (e.g 30m) if your
+                                 object storage is eventually consistent. GCS
+                                 and S3 are (roughly) strongly consistent.
       --ignore-deletion-marks-delay=24h
-                                 Duration after which the blocks marked for deletion will be filtered out while fetching blocks.
-                                 The idea of ignore-deletion-marks-delay is to ignore blocks that are marked for deletion with some delay. This ensures store can still serve blocks that are meant to be deleted but do not have a replacement yet. If delete-delay duration is provided to compactor or bucket verify component, it will upload deletion-mark.json file to mark after what duration the block should be deleted rather than deleting the block straight away.
-		                             If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. Default is 24h, half of the default value for --delete-delay on compactor.
+                                 Duration after which the blocks marked for
+                                 deletion will be filtered out while fetching
+                                 blocks. The idea of ignore-deletion-marks-delay
+                                 is to ignore blocks that are marked for
+                                 deletion with some delay. This ensures store
+                                 can still serve blocks that are meant to be
+                                 deleted but do not have a replacement yet. If
+                                 delete-delay duration is provided to compactor
+                                 or bucket verify component, it will upload
+                                 deletion-mark.json file to mark after what
+                                 duration the block should be deleted rather
+                                 than deleting the block straight away. If
+                                 delete-delay is non-zero for compactor or
+                                 bucket verify component,
+                                 ignore-deletion-marks-delay should be set to
+                                 (delete-delay)/2 so that blocks marked for
+                                 deletion are filtered out while fetching blocks
+                                 before being deleted from bucket. Default is
+                                 24h, half of the default value for
+                                 --delete-delay on compactor.
+      --web.external-prefix=""   Static prefix for all HTML links and redirect
+                                 URLs in the bucket web UI interface. Actual
+                                 endpoints are still served on / or the
+                                 web.route-prefix. This allows thanos bucket web
+                                 UI to be served behind a reverse proxy that
+                                 strips a URL sub-path.
+      --web.prefix-header=""     Name of HTTP request header used for dynamic
+                                 prefixing of UI links and redirects. This
+                                 option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable this
+                                 option only if a reverse proxy in front of
+                                 thanos is resetting the header. The
+                                 --web.prefix-header=X-Forwarded-Prefix option
+                                 can be useful, for example, if Thanos UI is
+                                 served via Traefik reverse proxy with
+                                 PathPrefixStrip option enabled, which sends the
+                                 stripped prefix value in X-Forwarded-Prefix
+                                 header. This allows thanos UI to be served on a
+                                 sub-path.
+
 ```
 
 ## Time based partitioning
@@ -234,7 +280,9 @@ While the remaining settings are **optional**:
 
 ## Caching Bucket
 
-Thanos Store Gateway supports a "caching bucket" with chunks caching to speed up loading of chunks from TSDB blocks. Currently only memcached "backend" is supported:
+Thanos Store Gateway supports a "caching bucket" with chunks and metadata caching to speed up loading of chunks from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
+
+Currently only memcached "backend" is supported:
 
 ```yaml
 backend: memcached
@@ -242,23 +290,35 @@ backend_config:
   addresses:
     - localhost:11211
 
-caching_config:
-  chunk_subrange_size: 16000
-  max_chunks_get_range_requests: 3
-  chunk_object_size_ttl: 24h
-  chunk_subrange_ttl: 24h
+chunk_subrange_size: 16000
+max_chunks_get_range_requests: 3
+chunk_object_size_ttl: 24h
+chunk_subrange_ttl: 24h
+blocks_iter_ttl: 5m
+metafile_exists_ttl: 2h
+metafile_doesnt_exist_ttl: 15m
+metafile_content_ttl: 24h
+metafile_max_size: 1MiB
 ```
 
 `backend_config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
-`caching_config` is a configuration for chunks cache and supports the following optional settings:
+Additional options to configure various aspects of chunks cache are available:
 
 - `chunk_subrange_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
 - `chunk_object_size_ttl`: how long to keep information about chunk file length in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
-Note that chunks cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
+
+- `blocks_iter_ttl`: how long to cache result of iterating blocks.
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
+- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
+- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 ## Index Header
 
