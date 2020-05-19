@@ -288,6 +288,46 @@ in future. There was even Go 2 proposal for [disabling this in the language itse
 
 Similar to this problem is the package name shadowing. While it is less dangerous, it can cause similar issues, so avoid package shadowing if you can.
 
+#### Avoid Wrapping nil With Error Message; Avoid Passing nil to MultiError
+
+It's very tempting to use "magic" functionality of e.g errors.Wrap that returns nil if wrapped error equals nil as it created more compacted code.
+Avoid that. Consider following case:
+
+<table>
+<tbody>
+<tr><th>Avoid 🔥</th></tr>
+<tr><td>
+
+```go
+    return errors.Wrapf(doSomethingOrReturnError(var1), "do something for %v", var1)
+```
+
+</td></tr>
+<tr><th>Better 🤓</th></tr>
+<tr><td>
+
+```go
+    if err := doSomethingOrReturnError(var1); err != nil {
+    	return errors.Wrapf(err, "do something for %v", var1)
+    }
+    return nil
+```
+
+</td></tr>
+</tbody></table>
+
+This can cause pain in long term maintenance because of several reasons:
+
+* If project or even consumer of library will swap to different errors package, the implementation might NOT handle nil in a way
+we expect it, because wrapping nil does not make sense.
+* It creates some overhead, depending on implementation. For example in `pkg/error` library this is a quick path. However, because
+of dynamic argument to `Wrapf` the `fmt.Sprintf` is performed, in a critical path that relies on `ms` executions, this is a significant overhead.
+* It's surprising. Reader expects err to always be non nil, because, this only when you need to wrap `err` variable. Passing hidden nil there
+will only give quick, false assumption to human code reader and create confusion.
+
+On similar note when using `tsdb.MultiError` adding `m.Add(err)` when `err` is `nil` is a noop, however it surprises reader a lot. Avoid that when
+possible.
+
 ### Performance
 
 After all, Thanos system is a database that has to perform queries over terabytes of data within human friendly response times.
