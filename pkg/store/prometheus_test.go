@@ -427,14 +427,14 @@ rule_files:
 				{
 					Name:                              "thanos-receive.rules",
 					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
+					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
 					Interval:                          60,
 					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 				},
 				{
 					Name:                              "thanos-rule.rules",
 					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
 					Interval:                          60,
 					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 				},
