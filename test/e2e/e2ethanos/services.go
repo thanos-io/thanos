@@ -36,11 +36,13 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.16.0"
+	// Alternative to "quay.io/prom/prometheus".
+	return "prom/prometheus:v2.16.0"
 }
 
 func DefaultAlertmanagerImage() string {
-	return "quay.io/prometheus/alertmanager:v0.20.0"
+	// Alternative to "quay.io/prom/alertmanager".
+	return "prom/alertmanager:v0.20.0"
 }
 
 // DefaultImage returns the local docker image to use to run Thanos.

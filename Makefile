@@ -2,7 +2,8 @@ FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
-DOCKER_CI_TAG     ?= test
+DOCKER_CI_IMAGE_REPO ?= quay.io/thanos/thanos-ci
+DOCKER_CI_IMAGE_TAG  ?= test
 
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
@@ -297,15 +298,15 @@ install-deps: $(ALERTMANAGER) $(MINIO_SERVER) $(PROMS)
 
 .PHONY: docker-ci
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
-docker-ci: install-deps
+docker-ci:
 	# Copy all to tmp local dir as this is required by docker.
 	@rm -rf ./tmp/bin
 	@mkdir -p ./tmp/bin
 	@cp -r $(GOBIN)/* ./tmp/bin
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
-	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
-	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
+	@docker tag "thanos-ci" "$(DOCKER_CI_IMAGE_REPO):$(DOCKER_CI_IMAGE_TAG)"
+	@docker push "$(DOCKER_CI_IMAGE_REPO):$(DOCKER_CI_IMAGE_TAG)"
 
 .PHONY: check-git
 check-git:
