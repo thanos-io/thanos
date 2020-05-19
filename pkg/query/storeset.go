@@ -212,7 +212,7 @@ func NewStoreSet(
 	return ss
 }
 
-// TODO(bwplotka): Consider moving out of this package and renam as it also supports rules API.
+// TODO(bwplotka): Consider moving storeRef out of this package and renaming it, as it also supports rules API.
 type storeRef struct {
 	storepb.StoreClient
 

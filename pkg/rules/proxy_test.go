@@ -4,10 +4,10 @@
 package rules
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestDedupGroups(t *testing.T) {
@@ -148,10 +148,7 @@ func TestDedupGroups(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := dedupGroups(tc.groups)
-			if !reflect.DeepEqual(tc.want, got) {
-				t.Errorf("want groups %v, got %v", tc.want, got)
-			}
+			testutil.Equals(t, tc.want, dedupGroups(tc.groups))
 		})
 	}
 }

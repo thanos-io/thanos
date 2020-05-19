@@ -112,9 +112,11 @@ func (stream *rulesStream) receive(ctx context.Context) error {
 			return err
 		}
 
-		if err := stream.server.Send(rulespb.NewWarningRulesResponse(err)); err != nil {
-			return err
+		if serr := stream.server.Send(rulespb.NewWarningRulesResponse(err)); serr != nil {
+			return serr
 		}
+		// Not an error if response strategy is warning.
+		return nil
 	}
 
 	for {

@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -421,7 +422,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
-	preq.Header.Set("User-Agent", promclient.ThanosUserAgent)
+	preq.Header.Set("User-Agent", thanoshttp.ThanosUserAgent)
 	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request", opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
 	preq = preq.WithContext(ctx)
 	presp, err := p.client.Do(preq)
