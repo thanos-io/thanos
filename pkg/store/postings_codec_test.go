@@ -14,7 +14,7 @@ import (
 )
 
 func TestDiffVarintCodec(t *testing.T) {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000, tsdb.DefaultStripeSize)
+	h, err := tsdb.NewHead(nil, nil, nil, 1000, "", nil, tsdb.DefaultStripeSize)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())

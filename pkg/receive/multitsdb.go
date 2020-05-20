@@ -72,7 +72,7 @@ type tenant struct {
 	tsdbOpts *tsdb.Options
 
 	readyS *ReadyStorage
-	fs     *FlushableStorage
+	fs     *tsdb.DB
 	s      *store.TSDBStore
 	ship   *shipper.Shipper
 
@@ -103,14 +103,14 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) flushableStorage() *FlushableStorage {
+func (t *tenant) flushableStorage() *tsdb.DB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.fs
 }
 
-func (t *tenant) set(tstore *store.TSDBStore, fs *FlushableStorage, ship *shipper.Shipper) {
-	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
+func (t *tenant) set(tstore *store.TSDBStore, fs *tsdb.DB, ship *shipper.Shipper) {
+	t.readyS.Set(fs, int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
 	t.mtx.Lock()
 	t.fs = fs
 	t.s = tstore
@@ -159,7 +159,8 @@ func (t *MultiTSDB) Flush() error {
 
 		wg.Add(1)
 		go func() {
-			if err := s.Flush(); err != nil {
+			mint, maxt := s.Head().MinTime(), s.Head().MaxTime()
+			if err := s.CompactHead(tsdb.NewRangeHead(s.Head(), mint, maxt-1), mint, maxt); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -259,7 +260,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 			)
 		}
 
-		s := NewFlushableStorage(
+		s, err := tsdb.Open(
 			dataDir,
 			logger,
 			reg,
@@ -267,7 +268,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		)
 
 		// Assign to outer error to report in blocking case.
-		if err = s.Open(); err != nil {
+		if err != nil {
 			level.Error(logger).Log("msg", "failed to open tsdb", "err", err)
 			t.mtx.Lock()
 			delete(t.tenants, tenantID)
@@ -280,7 +281,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 			store.NewTSDBStore(
 				logger,
 				reg,
-				s.Get(),
+				s,
 				component.Receive,
 				lbls,
 			),

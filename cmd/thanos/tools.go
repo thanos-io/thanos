@@ -4,7 +4,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
@@ -85,7 +84,7 @@ func (g *ThanosRuleGroups) Validate() (errs []error) {
 		if _, ok := set[g.Name]; ok {
 			errs = append(
 				errs,
-				fmt.Errorf("groupname: %q is repeated in the same file", g.Name),
+				errors.Errorf("groupname: %q is repeated in the same file", g.Name),
 			)
 		}
 
