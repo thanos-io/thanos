@@ -16,6 +16,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -111,7 +112,7 @@ func TestQuery(t *testing.T) {
 
 	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(5), "thanos_store_nodes_grpc_connections"))
 
-	queryAndAssert(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -124,6 +125,7 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
 			"replica":    "1234",
+			"tenant_id":  "default-tenant",
 		},
 		{
 			"job":        "myself",
@@ -143,7 +145,7 @@ func TestQuery(t *testing.T) {
 	})
 
 	// With deduplication.
-	queryAndAssert(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 		Deduplicate: true,
 	}, []model.Metric{
 		{
@@ -154,6 +156,7 @@ func TestQuery(t *testing.T) {
 			"job":        "myself",
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
+			"tenant_id":  "default-tenant",
 		},
 		{
 			"job":        "myself",
@@ -206,34 +209,37 @@ func urlParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-func queryAndAssert(t *testing.T, ctx context.Context, addr string, query string, opts promclient.QueryOptions, expected []model.Metric) {
+func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
-	fmt.Println("queryAndAssert: Waiting for", len(expected), "results for query", query)
+	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
 	var result model.Vector
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), query, time.Now(), opts)
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q, time.Now(), opts)
 		if err != nil {
 			return err
 		}
 
 		if len(warnings) > 0 {
-			// we don't expect warnings.
 			return errors.Errorf("unexpected warnings %s", warnings)
 		}
 
-		if len(result) != len(res) {
-			fmt.Println("queryAndAssert: New result:", res)
-		}
-
-		if len(res) != len(expected) {
-			return errors.Errorf("unexpected result size, expected %d; result: %v", len(expected), res)
+		if len(res) != expectedSeriesLen {
+			return errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 		}
 		result = res
 		return nil
 	}))
-
 	sortResults(result)
+	return result
+}
+
+func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric) {
+	t.Helper()
+
+	result := instantQuery(t, ctx, addr, q, opts, len(expected))
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -260,4 +266,15 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, e
 		result = res
 		return nil
 	}))
+}
+
+func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected model.Vector) {
+	t.Helper()
+
+	sortResults(expected)
+	result := instantQuery(t, ctx, addr, q, opts, len(expected))
+	for _, r := range result {
+		r.Timestamp = 0 // Does not matter for us.
+	}
+	testutil.Equals(t, expected, result)
 }

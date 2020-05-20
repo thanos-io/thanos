@@ -52,7 +52,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse, q.skipChunks), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks), nil
 }
 
 type querier struct {
@@ -124,10 +124,12 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 		return nil
 	}
 
-	if r.GetSeries() == nil {
-		return errors.New("no seriesSet")
+	if r.GetSeries() != nil {
+		s.seriesSet = append(s.seriesSet, *r.GetSeries())
+		return nil
 	}
-	s.seriesSet = append(s.seriesSet, *r.GetSeries())
+
+	// Unsupported field, skip.
 	return nil
 }
 
@@ -135,38 +137,27 @@ func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
 
-type resAggr int
-
-const (
-	resAggrAvg resAggr = iota
-	resAggrCount
-	resAggrSum
-	resAggrMin
-	resAggrMax
-	resAggrCounter
-)
-
 // aggrsFromFunc infers aggregates of the underlying data based on the wrapping
 // function of a series selection.
-func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
+func aggrsFromFunc(f string) []storepb.Aggr {
 	if f == "min" || strings.HasPrefix(f, "min_") {
-		return []storepb.Aggr{storepb.Aggr_MIN}, resAggrMin
+		return []storepb.Aggr{storepb.Aggr_MIN}
 	}
 	if f == "max" || strings.HasPrefix(f, "max_") {
-		return []storepb.Aggr{storepb.Aggr_MAX}, resAggrMax
+		return []storepb.Aggr{storepb.Aggr_MAX}
 	}
 	if f == "count" || strings.HasPrefix(f, "count_") {
-		return []storepb.Aggr{storepb.Aggr_COUNT}, resAggrCount
+		return []storepb.Aggr{storepb.Aggr_COUNT}
 	}
 	// f == "sum" falls through here since we want the actual samples.
 	if strings.HasPrefix(f, "sum_") {
-		return []storepb.Aggr{storepb.Aggr_SUM}, resAggrSum
+		return []storepb.Aggr{storepb.Aggr_SUM}
 	}
 	if f == "increase" || f == "rate" {
-		return []storepb.Aggr{storepb.Aggr_COUNTER}, resAggrCounter
+		return []storepb.Aggr{storepb.Aggr_COUNTER}
 	}
 	// In the default case, we retrieve count and sum to compute an average.
-	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}, resAggrAvg
+	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 }
 
 func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
@@ -193,7 +184,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
-	queryAggrs, resAggr := aggrsFromFunc(params.Func)
+	aggrs := aggrsFromFunc(params.Func)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
@@ -201,7 +192,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MaxTime:                 params.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
-		Aggregates:              queryAggrs,
+		Aggregates:              aggrs,
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
 	}, resp); err != nil {
@@ -216,10 +207,10 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
 		return &promSeriesSet{
-			mint: q.mint,
-			maxt: q.maxt,
-			set:  newStoreSeriesSet(resp.seriesSet),
-			aggr: resAggr,
+			mint:  q.mint,
+			maxt:  q.maxt,
+			set:   newStoreSeriesSet(resp.seriesSet),
+			aggrs: aggrs,
 		}, warns, nil
 	}
 
@@ -228,16 +219,16 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	sortDedupLabels(resp.seriesSet, q.replicaLabels)
 
 	set := &promSeriesSet{
-		mint: q.mint,
-		maxt: q.maxt,
-		set:  newStoreSeriesSet(resp.seriesSet),
-		aggr: resAggr,
+		mint:  q.mint,
+		maxt:  q.maxt,
+		set:   newStoreSeriesSet(resp.seriesSet),
+		aggrs: aggrs,
 	}
 
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabels), warns, nil
+	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), warns, nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica

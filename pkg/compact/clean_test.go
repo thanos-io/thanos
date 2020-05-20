@@ -14,10 +14,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -25,10 +26,10 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	bkt := inmem.NewBucket()
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	logger := log.NewNopLogger()
 
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil, nil)
 	testutil.Ok(t, err)
 
 	// 1. No meta, old block, should be removed.
@@ -57,9 +58,16 @@ func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {
 
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnoreID2.String(), "chunks", "000001"), &fakeChunk))
 
-	deleteAttempts := prometheus.NewCounter(prometheus.CounterOpts{})
-	BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, deleteAttempts)
+	deleteAttempts := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+	blockCleanups := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+	blockCleanupFailures := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+	_, partial, err := metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+
+	BestEffortCleanAbortedPartialUploads(ctx, logger, partial, bkt, deleteAttempts, blockCleanups, blockCleanupFailures)
 	testutil.Equals(t, 1.0, promtest.ToFloat64(deleteAttempts))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(blockCleanups))
+	testutil.Equals(t, 0.0, promtest.ToFloat64(blockCleanupFailures))
 
 	exists, err := bkt.Exists(ctx, path.Join(shouldDeleteID.String(), "chunks", "000001"))
 	testutil.Ok(t, err)

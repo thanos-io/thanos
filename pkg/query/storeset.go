@@ -36,6 +36,8 @@ type StoreSpec interface {
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
 	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, Type component.StoreAPI, err error)
+	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
+	StrictStatic() bool
 }
 
 type RuleSpec interface {
@@ -44,23 +46,29 @@ type RuleSpec interface {
 }
 
 type StoreStatus struct {
-	Name      string
-	LastCheck time.Time
-	LastError error
-	LabelSets []storepb.LabelSet
-	StoreType component.StoreAPI
-	MinTime   int64
-	MaxTime   int64
+	Name      string             `json:"name"`
+	LastCheck time.Time          `json:"last_check"`
+	LastError error              `json:"last_error"`
+	LabelSets []storepb.LabelSet `json:"label_sets"`
+	StoreType component.StoreAPI `json:"store_type"`
+	MinTime   int64              `json:"min_time"`
+	MaxTime   int64              `json:"max_time"`
 }
 
 type grpcStoreSpec struct {
-	addr string
+	addr         string
+	strictstatic bool
 }
 
 // NewGRPCStoreSpec creates store pure gRPC spec.
 // It uses Info gRPC call to get Metadata.
-func NewGRPCStoreSpec(addr string) *grpcStoreSpec {
-	return &grpcStoreSpec{addr: addr}
+func NewGRPCStoreSpec(addr string, strictstatic bool) *grpcStoreSpec {
+	return &grpcStoreSpec{addr: addr, strictstatic: strictstatic}
+}
+
+// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
+func (s *grpcStoreSpec) StrictStatic() bool {
+	return s.strictstatic
 }
 
 func (s *grpcStoreSpec) Addr() string {
@@ -82,15 +90,14 @@ func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient
 	return resp.LabelSets, resp.MinTime, resp.MaxTime, component.FromProto(resp.StoreType), nil
 }
 
-// storeSetNodeCollector is metric collector for Guge indicated number of available storeAPIs for Querier.
-// Collector is requires as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
+// storeSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
+// A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
 type storeSetNodeCollector struct {
 	mtx             sync.Mutex
 	storeNodes      map[component.StoreAPI]map[string]int
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
-	nodeInfoDesc    *prometheus.Desc
 }
 
 func newStoreSetNodeCollector() *storeSetNodeCollector {
@@ -100,13 +107,6 @@ func newStoreSetNodeCollector() *storeSetNodeCollector {
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
 			[]string{"external_labels", "store_type"}, nil,
-		),
-		// TODO(bwplotka): Obsolete; Replaced by thanos_store_nodes_grpc_connections.
-		// Remove in next minor release.
-		nodeInfoDesc: prometheus.NewDesc(
-			"thanos_store_node_info",
-			"Deprecated, use thanos_store_nodes_grpc_connections instead.",
-			[]string{"external_labels"}, nil,
 		),
 	}
 }
@@ -131,7 +131,6 @@ func (c *storeSetNodeCollector) Update(nodes map[component.StoreAPI]map[string]i
 
 func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
-	ch <- c.nodeInfoDesc
 }
 
 func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
@@ -146,9 +145,6 @@ func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
 		}
-	}
-	for externalLabels, occur := range c.storePerExtLset {
-		ch <- prometheus.MustNewConstMetric(c.nodeInfoDesc, prometheus.GaugeValue, float64(occur), externalLabels)
 	}
 }
 
@@ -340,7 +336,7 @@ func newStoreAPIStats() map[component.StoreAPI]map[string]int {
 }
 
 // Update updates the store set. It fetches current list of store specs from function and updates the fresh metadata
-// from all stores.
+// from all stores. Keeps around statically defined nodes that were defined with the strict mode.
 func (s *StoreSet) Update(ctx context.Context) {
 	s.updateMtx.Lock()
 	defer s.updateMtx.Unlock()
@@ -354,14 +350,14 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	level.Debug(s.logger).Log("msg", "starting updating storeAPIs", "cachedStores", len(stores))
 
-	healthyStores := s.getHealthyStores(ctx, stores)
-	level.Debug(s.logger).Log("msg", "checked requested storeAPIs", "healthyStores", len(healthyStores), "cachedStores", len(stores))
+	activeStores := s.getActiveStores(ctx, stores)
+	level.Debug(s.logger).Log("msg", "checked requested storeAPIs", "activeStores", len(activeStores), "cachedStores", len(stores))
 
 	stats := newStoreAPIStats()
 
-	// Close stores that where not healthy this time (are not in healthy stores map).
+	// Close stores that where not active this time (are not in active stores map).
 	for addr, st := range stores {
-		if _, ok := healthyStores[addr]; ok {
+		if _, ok := activeStores[addr]; ok {
 			stats[st.StoreType()][st.LabelSetsString()]++
 			continue
 		}
@@ -373,7 +369,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 
 	// Add stores that are not yet in stores.
-	for addr, st := range healthyStores {
+	for addr, st := range activeStores {
 		if _, ok := stores[addr]; ok {
 			continue
 		}
@@ -409,20 +405,20 @@ func (s *StoreSet) Update(ctx context.Context) {
 	s.cleanUpStoreStatuses(stores)
 }
 
-func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*storeRef) map[string]*storeRef {
+func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*storeRef) map[string]*storeRef {
 	var (
-		storeAddrSet  = make(map[string]struct{})
-		ruleAddrSet   = make(map[string]struct{})
-		healthyStores = make(map[string]*storeRef, len(stores))
-		mtx           sync.Mutex
-		wg            sync.WaitGroup
+		storeAddrSet = make(map[string]struct{})
+		ruleAddrSet  = make(map[string]struct{})
+		activeStores = make(map[string]*storeRef, len(stores))
+		mtx          sync.Mutex
+		wg           sync.WaitGroup
 	)
 
 	for _, ruleSpec := range s.ruleSpecs() {
 		ruleAddrSet[ruleSpec.Addr()] = struct{}{}
 	}
 
-	// Gather healthy stores map concurrently. Build new store if does not exist already.
+	// Gather active stores map concurrently. Build new store if does not exist already.
 	for _, storeSpec := range s.storeSpecs() {
 		if _, ok := storeAddrSet[storeSpec.Addr()]; ok {
 			level.Warn(s.logger).Log("msg", "duplicated address in store nodes", "address", storeSpec.Addr())
@@ -441,41 +437,52 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 
 			st, seenAlready := stores[addr]
 			if !seenAlready {
-				// New store or was unhealthy and was removed in the past - create new one.
+				// New store or was unactive and was removed in the past - create new one.
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
 				if err != nil {
 					s.updateStoreStatus(&storeRef{addr: addr}, err)
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-
 				var rule storepb.RulesClient
 
 				if _, ok := ruleAddrSet[addr]; ok {
 					rule = storepb.NewRulesClient(conn)
 				}
 
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), rule: rule, cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), rule: rule, storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
 			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
 			if err != nil {
-				if !seenAlready {
-					// Close only if new. Unhealthy `s.stores` will be closed later on.
+				if !seenAlready && !spec.StrictStatic() {
+					// Close only if new and not a strict static node.
+					// Unactive `s.stores` will be closed later on.
 					st.Close()
 				}
 				s.updateStoreStatus(st, err)
 				level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr)
+
+				if !spec.StrictStatic() {
+					return
+				}
+
+				// Still keep it around if static & strict mode enabled.
+				mtx.Lock()
+				defer mtx.Unlock()
+
+				activeStores[addr] = st
 				return
 			}
+
 			s.updateStoreStatus(st, nil)
 			st.Update(labelSets, minTime, maxTime, storeType)
 
 			mtx.Lock()
 			defer mtx.Unlock()
 
-			healthyStores[addr] = st
+			activeStores[addr] = st
 		}(storeSpec)
 	}
 	wg.Wait()
@@ -486,7 +493,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 		}
 	}
 
-	return healthyStores
+	return activeStores
 }
 
 func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
@@ -500,10 +507,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	}
 
 	status.LastError = err
-	status.LastCheck = time.Now()
 
 	if err == nil {
-
+		status.LastCheck = time.Now()
 		mint, maxt := store.TimeRange()
 		status.LabelSets = store.LabelSets()
 		status.StoreType = store.StoreType()

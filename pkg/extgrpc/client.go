@@ -43,7 +43,6 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 			),
 		),
 	}
-
 	if reg != nil {
 		reg.MustRegister(grpcMets)
 	}

@@ -19,10 +19,10 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -65,20 +65,20 @@ func TestReplicationSchemeAll(t *testing.T) {
 	var cases = []struct {
 		name     string
 		selector labels.Selector
-		prepare  func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket)
-		assert   func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket)
+		prepare  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		assert   func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
 		{
 			name:    "EmptyOrigin",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {},
-			assert:  func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {},
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {},
+			assert:  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {},
 		},
 		{
 			name: "NoMeta",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				_ = originBucket.Upload(ctx, path.Join(testULID(0).String(), "chunks", "000001"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				if len(targetBucket.Objects()) != 0 {
 					t.Fatal("TargetBucket should have been empty but is not.")
 				}
@@ -86,10 +86,10 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "PartialMeta",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				_ = originBucket.Upload(ctx, path.Join(testULID(0).String(), "meta.json"), bytes.NewReader([]byte("{")))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				if len(targetBucket.Objects()) != 0 {
 					t.Fatal("TargetBucket should have been empty but is not.")
 				}
@@ -97,7 +97,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "FullBlock",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 
@@ -107,7 +107,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				if len(targetBucket.Objects()) != 3 {
 					t.Fatal("TargetBucket should have one block made up of three objects replicated.")
 				}
@@ -115,7 +115,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "PreviousPartialUpload",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 
@@ -129,7 +129,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = targetBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = targetBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				for k := range originBucket.Objects() {
 					if !bytes.Equal(originBucket.Objects()[k], targetBucket.Objects()[k]) {
 						t.Fatalf("Object %s not equal in origin and target bucket.", k)
@@ -139,7 +139,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "OnlyUploadsRaw",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 
@@ -159,7 +159,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				expected := 3
 				got := len(targetBucket.Objects())
 				if got != expected {
@@ -169,7 +169,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "UploadMultipleCandidatesWhenPresent",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 
@@ -188,7 +188,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				expected := 6
 				got := len(targetBucket.Objects())
 				if got != expected {
@@ -198,7 +198,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "LabelSelector",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 
@@ -218,7 +218,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				expected := 3
 				got := len(targetBucket.Objects())
 				if got != expected {
@@ -228,7 +228,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name: "NonZeroCompaction",
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
 				meta.BlockMeta.Compaction.Level = 2
@@ -239,7 +239,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				if len(targetBucket.Objects()) != 0 {
 					t.Fatal("TargetBucket should have been empty but is not.")
 				}
@@ -248,7 +248,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		{
 			name:     "Regression",
 			selector: labels.Selector{},
-			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket objstore.Bucket) {
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				b := []byte(`{
         "ulid": "01DQYXMK8G108CEBQ79Y84DYVY",
         "minTime": 1571911200000,
@@ -281,7 +281,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join("01DQYXMK8G108CEBQ79Y84DYVY", "chunks", "000001"), bytes.NewReader(nil))
 				_ = originBucket.Upload(ctx, path.Join("01DQYXMK8G108CEBQ79Y84DYVY", "index"), bytes.NewReader(nil))
 			},
-			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *inmem.Bucket) {
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				if len(targetBucket.Objects()) != 3 {
 					t.Fatal("TargetBucket should have one block does not.")
 				}
@@ -295,16 +295,14 @@ func TestReplicationSchemeAll(t *testing.T) {
 
 	for _, c := range cases {
 		ctx := context.Background()
-		originBucket := inmem.NewBucket()
-		targetBucket := inmem.NewBucket()
+		originBucket := objstore.NewInMemBucket()
+		targetBucket := objstore.NewInMemBucket()
 		logger := testLogger(t.Name() + "/" + c.name)
 
 		c.prepare(ctx, t, originBucket, targetBucket)
 
 		matcher, err := labels.NewMatcher(labels.MatchEqual, "test-labelname", "test-labelvalue")
-		if err != nil {
-			t.Fatal("Failed to create a matcher.")
-		}
+		testutil.Ok(t, err)
 
 		selector := labels.Selector{
 			matcher,
@@ -314,12 +312,15 @@ func TestReplicationSchemeAll(t *testing.T) {
 		}
 
 		filter := NewBlockFilter(logger, selector, compact.ResolutionLevelRaw, 1).Filter
+		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil, nil)
+		testutil.Ok(t, err)
 
 		r := newReplicationScheme(
 			logger,
 			newReplicationMetrics(nil),
 			filter,
-			originBucket,
+			fetcher,
+			objstore.WithNoopInstr(originBucket),
 			targetBucket,
 			nil,
 		)

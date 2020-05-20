@@ -6,7 +6,7 @@ menu: components
 
 # Querier/Query
 
-The Querier component (also known as "Query") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
+The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
 In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
@@ -15,7 +15,7 @@ Querier is fully stateless and horizontally scalable.
 Example command to run Querier:
 
 ```bash
-$ thanos query \
+thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
     --store            "<store-api2>:<grpc-port>"
@@ -81,7 +81,7 @@ This also hides gaps in collection of a single data source.
 If we configure Querier like this:
 
 ```
-$ thanos query \
+thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --store               "<store-api>:<grpc-port>" \
@@ -106,7 +106,7 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 * Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
 
 ```
-$ thanos query \
+thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --query.replica-label "replicaX" \
@@ -228,7 +228,7 @@ Additionally, Thanos supports dynamic prefix configuration, which
 [is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156).
 Dynamic prefixing simplifies setup when `thanos query` is exposed on a sub-path behind
 a reverse proxy, for example, via a Kubernetes ingress controller
-[Traefik](https://docs.traefik.io/basics/#frontends)
+[Traefik](https://docs.traefik.io/routing/routers/)
 or [nginx](https://github.com/kubernetes/ingress-nginx/pull/1805).
 If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPrefixStrip`
 Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header.
@@ -333,6 +333,11 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  rule API servers through respective DNS
                                  lookups.
+      --store-strict=<staticstore> ...
+                                 Addresses of only statically configured store
+                                 API servers that are always used, even if the
+                                 health check fails. Useful if you have a
+                                 caching layer on top.
       --store.sd-files=<path> ...
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern

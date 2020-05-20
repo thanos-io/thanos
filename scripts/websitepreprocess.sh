@@ -94,5 +94,8 @@ perl -pi -e 's/]\(\//]\(https:\/\/github.com\/thanos-io\/thanos\/tree\/'${COMMIT
 perl -pi -e 's/]\((?!http)/]\(..\//g' ${ALL_DOC_CONTENT_FILES}
 # All the relative links in src= needs to have ../ as well.
 perl -pi -e 's/src=\"(?!http)/src=\"..\//g' ${ALL_DOC_CONTENT_FILES}
+# "Mask" bug in blackfriday that does not generate code snippets in tables.
+perl -pi -e 's/```([a-z]+)/{{< highlight $1 >}}/g' ${OUTPUT_CONTENT_DIR}/contributing/coding-style-guide.md
+perl -pi -e 's/```/{{< \/highlight >}}/g' ${OUTPUT_CONTENT_DIR}/contributing/coding-style-guide.md
 
 

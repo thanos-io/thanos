@@ -15,6 +15,11 @@
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
+                    <a href="{{ "community.md" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-comments"></i> Community
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
                         <i class="mr-1 fas fa-fw fa-download"></i> Download
                     </a>
@@ -102,9 +107,14 @@
 <div class="container-fluid bg-light">
     <div class="row py-5">
         <div class="col text-center">
-            <h3 class="color-purple">Join the community !</h3>
+            <h3 class="color-purple"><a href="{{ "community.md" | relURL }}">Join the community !</a></h3>
             <p>Join users and companies that are using Thanos in production.</p>
             <ul class="list-inline">
+                <li class="list-inline-item">
+                    <a href="{{ "community.md" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-comments"></i> Community Meetings
+                    </a>
+                </li>
                 <li class="list-inline-item">
                     <a href="{{ .Site.Params.SlackInvite }}" class="btn btn-outline-secondary">
                         <i class="fab fa-fw fa-slack"></i> Slack

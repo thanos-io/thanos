@@ -16,13 +16,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -427,14 +427,14 @@ rule_files:
 				{
 					Name:                              "thanos-receive.rules",
 					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
+					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
 					Interval:                          60,
 					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 				},
 				{
 					Name:                              "thanos-rule.rules",
 					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
 					Interval:                          60,
 					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 				},

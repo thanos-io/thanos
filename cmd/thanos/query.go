@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"path"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -17,6 +17,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -78,6 +79,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	rules := cmd.Flag("rule", "Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
 		PlaceHolder("<rule>").Strings()
+
+	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
+		PlaceHolder("<staticstore>").Strings()
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
@@ -163,6 +167,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			*strictStores,
 			component.Query,
 		)
 	}
@@ -204,14 +209,14 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	strictStores []string,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
-	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
+	duplicatedStores := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_query_duplicated_store_addresses_total",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
-	reg.MustRegister(duplicatedStores)
 
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
@@ -231,14 +236,24 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	for _, store := range strictStores {
+		if dns.IsDynamicNode(store) {
+			return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
+		}
+	}
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add DNS resolved addresses from static flags and file SD.
+				// Add DNS resolved addresses.
 				for _, addr := range dnsStoreProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+				}
+				// Add strict & static nodes.
+				for _, addr := range strictStores {
+					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
@@ -247,7 +262,7 @@ func runQuery(
 			},
 			func() (specs []query.RuleSpec) {
 				for _, addr := range dnsRuleProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
 				}
 
 				// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
@@ -339,32 +354,31 @@ func runQuery(
 	statusProber := prober.Combine(
 		httpProbe,
 		grpcProbe,
-		prober.NewInstrumentation(comp, logger, reg),
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
 
+		// RoutePrefix must always start with '/'.
+		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+
 		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "" {
+		if webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
 			})
-		}
-
-		flagsMap := map[string]string{
-			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-			"web.external-prefix": webExternalPrefix,
-			"web.prefix-header":   webPrefixHeaderName,
+			router = router.WithPrefix(webRoutePrefix)
 		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, queryReplicaLabels, instantDefaultMaxSourceResolution, query.NewRulesRetriever(proxy))
+		api := v1.NewAPI(logger, reg, stores, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, queryReplicaLabels, instantDefaultMaxSourceResolution, query.NewRulesRetriever(proxy))
 
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),

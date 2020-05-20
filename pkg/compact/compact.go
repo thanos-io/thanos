@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -45,11 +46,13 @@ type Syncer struct {
 	fetcher                  block.MetadataFetcher
 	mtx                      sync.Mutex
 	blocks                   map[ulid.ULID]*metadata.Meta
+	partial                  map[ulid.ULID]error
 	blockSyncConcurrency     int
 	metrics                  *syncerMetrics
 	acceptMalformedIndex     bool
 	enableVerticalCompaction bool
 	duplicateBlocksFilter    *block.DeduplicateFilter
+	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
 }
 
 type syncerMetrics struct {
@@ -62,82 +65,72 @@ type syncerMetrics struct {
 	compactionRunsCompleted   *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
 	verticalCompactions       *prometheus.CounterVec
+	blocksMarkedForDeletion   prometheus.Counter
 }
 
-func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
+func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometheus.Counter) *syncerMetrics {
 	var m syncerMetrics
 
-	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollectedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
-		Help: "Total number of deleted blocks by compactor.",
+		Help: "Total number of blocks marked for deletion by compactor.",
 	})
-	m.garbageCollections = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollections = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
 		Help: "Total number of garbage collection operations.",
 	})
-	m.garbageCollectionFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	m.garbageCollectionFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_failures_total",
 		Help: "Total number of failed garbage collection operations.",
 	})
-	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+	m.garbageCollectionDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_compact_garbage_collection_duration_seconds",
 		Help:    "Time it took to perform garbage collection iteration.",
 		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 	})
 
-	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
 		Help: "Total number of group compaction attempts that resulted in a new block.",
 	}, []string{"group"})
-	m.compactionRunsStarted = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionRunsStarted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_started_total",
 		Help: "Total number of group compaction attempts.",
 	}, []string{"group"})
-	m.compactionRunsCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionRunsCompleted = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_completed_total",
 		Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
-	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.compactionFailures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
 	}, []string{"group"})
-	m.verticalCompactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+	m.verticalCompactions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_vertical_compactions_total",
 		Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 	}, []string{"group"})
+	m.blocksMarkedForDeletion = blocksMarkedForDeletion
 
-	if reg != nil {
-		reg.MustRegister(
-			m.garbageCollectedBlocks,
-			m.garbageCollections,
-			m.garbageCollectionFailures,
-			m.garbageCollectionDuration,
-			m.compactions,
-			m.compactionRunsStarted,
-			m.compactionRunsCompleted,
-			m.compactionFailures,
-			m.verticalCompactions,
-		)
-	}
 	return &m
 }
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
-		logger:                logger,
-		reg:                   reg,
-		bkt:                   bkt,
-		fetcher:               fetcher,
-		blocks:                map[ulid.ULID]*metadata.Meta{},
-		metrics:               newSyncerMetrics(reg),
-		duplicateBlocksFilter: duplicateBlocksFilter,
-		blockSyncConcurrency:  blockSyncConcurrency,
-		acceptMalformedIndex:  acceptMalformedIndex,
+		logger:                   logger,
+		reg:                      reg,
+		bkt:                      bkt,
+		fetcher:                  fetcher,
+		blocks:                   map[ulid.ULID]*metadata.Meta{},
+		metrics:                  newSyncerMetrics(reg, blocksMarkedForDeletion),
+		duplicateBlocksFilter:    duplicateBlocksFilter,
+		ignoreDeletionMarkFilter: ignoreDeletionMarkFilter,
+		blockSyncConcurrency:     blockSyncConcurrency,
+		acceptMalformedIndex:     acceptMalformedIndex,
 		// The syncer offers an option to enable vertical compaction, even if it's
 		// not currently used by Thanos, because the compactor is also used by Cortex
 		// which needs vertical compaction.
@@ -157,21 +150,38 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	case downsample.ResLevel0:
 		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
 	default:
-		panic(fmt.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
+		panic(errors.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
 	}
 }
 
+// SyncMetas synchronises local state of block metas with what we have in the bucket.
 func (s *Syncer) SyncMetas(ctx context.Context) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	metas, _, err := s.fetcher.Fetch(ctx)
+	metas, partial, err := s.fetcher.Fetch(ctx)
 	if err != nil {
 		return retry(err)
 	}
 	s.blocks = metas
-
+	s.partial = partial
 	return nil
+}
+
+// Partial returns partial blocks since last sync.
+func (s *Syncer) Partial() map[ulid.ULID]error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.partial
+}
+
+// Metas returns loaded metadata blocks since last sync.
+func (s *Syncer) Metas() map[ulid.ULID]*metadata.Meta {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.blocks
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
@@ -195,10 +205,11 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 		groupKey := GroupKey(m.Thanos)
 		g, ok := groups[groupKey]
 		if !ok {
+			lbls := labels.FromMap(m.Thanos.Labels)
 			g, err = newGroup(
-				log.With(s.logger, "compactionGroup", groupKey),
+				log.With(s.logger, "group", fmt.Sprintf("%d@%v", m.Thanos.Downsample.Resolution, lbls.String()), "groupKey", groupKey),
 				s.bkt,
-				labels.FromMap(m.Thanos.Labels),
+				lbls,
 				m.Thanos.Downsample.Resolution,
 				s.acceptMalformedIndex,
 				s.enableVerticalCompaction,
@@ -208,6 +219,7 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 				s.metrics.compactionFailures.WithLabelValues(groupKey),
 				s.metrics.verticalCompactions.WithLabelValues(groupKey),
 				s.metrics.garbageCollectedBlocks,
+				s.metrics.blocksMarkedForDeletion,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -225,7 +237,7 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 	return res, nil
 }
 
-// GarbageCollect deletes blocks from the bucket if their data is available as part of a
+// GarbageCollect marks blocks for deletion from bucket if their data is available as part of a
 // block with a higher compaction level.
 // Call to SyncMetas function is required to populate duplicateIDs in duplicateBlocksFilter.
 func (s *Syncer) GarbageCollect(ctx context.Context) error {
@@ -234,22 +246,34 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 
 	begin := time.Now()
 
-	garbageIds := s.duplicateBlocksFilter.DuplicateIDs()
-	for _, id := range garbageIds {
+	// Ignore filter exists before deduplicate filter.
+	deletionMarkMap := s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
+	duplicateIDs := s.duplicateBlocksFilter.DuplicateIDs()
+
+	// GarbageIDs contains the duplicateIDs, since these blocks can be replaced with other blocks.
+	// We also remove ids present in deletionMarkMap since these blocks are already marked for deletion.
+	garbageIDs := []ulid.ULID{}
+	for _, id := range duplicateIDs {
+		if _, exists := deletionMarkMap[id]; exists {
+			continue
+		}
+		garbageIDs = append(garbageIDs, id)
+	}
+
+	for _, id := range garbageIDs {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		// Spawn a new context so we always delete a block in full on shutdown.
+		// Spawn a new context so we always mark a block for deletion in full on shutdown.
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
-		level.Info(s.logger).Log("msg", "deleting outdated block", "block", id)
-
-		err := block.Delete(delCtx, s.logger, s.bkt, id)
+		level.Info(s.logger).Log("msg", "marking outdated block for deletion", "block", id)
+		err := block.MarkForDeletion(delCtx, s.logger, s.bkt, id, s.metrics.blocksMarkedForDeletion)
 		cancel()
 		if err != nil {
 			s.metrics.garbageCollectionFailures.Inc()
-			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
+			return retry(errors.Wrapf(err, "mark block %s for deletion", id))
 		}
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
@@ -279,6 +303,7 @@ type Group struct {
 	compactionFailures          prometheus.Counter
 	verticalCompactions         prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
+	blocksMarkedForDeletion     prometheus.Counter
 }
 
 // newGroup returns a new compaction group.
@@ -295,6 +320,7 @@ func newGroup(
 	compactionFailures prometheus.Counter,
 	verticalCompactions prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
+	blocksMarkedForDeletion prometheus.Counter,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -313,6 +339,7 @@ func newGroup(
 		compactionFailures:          compactionFailures,
 		verticalCompactions:         verticalCompactions,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
+		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 	}
 	return g, nil
 }
@@ -427,7 +454,7 @@ func (e HaltError) Error() string {
 // IsHaltError returns true if the base error is a HaltError.
 // If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
-	if multiErr, ok := err.(terrors.MultiError); ok {
+	if multiErr, ok := errors.Cause(err).(terrors.MultiError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(HaltError); ok {
 				return true
@@ -508,7 +535,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, excludeDirs ...str
 }
 
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
-func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, issue347Err error) error {
+func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
 	if !ok {
 		return errors.Errorf("Given error is not an issue347 error: %v", issue347Err)
@@ -554,15 +581,14 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 
 	level.Info(logger).Log("msg", "deleting broken block", "id", ie.id)
 
-	// Spawn a new context so we always delete a block in full on shutdown.
+	// Spawn a new context so we always mark a block for deletion in full on shutdown.
 	delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	// TODO(bplotka): Issue with this will introduce overlap that will halt compactor. Automate that (fix duplicate overlaps caused by this).
-	if err := block.Delete(delCtx, logger, bkt, ie.id); err != nil {
-		return errors.Wrapf(err, "deleting old block %s failed. You need to delete this block manually", ie.id)
+	if err := block.MarkForDeletion(delCtx, logger, bkt, ie.id, blocksMarkedForDeletion); err != nil {
+		return errors.Wrapf(err, "marking old block %s for deletion has failed", ie.id)
 	}
-
 	return nil
 }
 
@@ -573,6 +599,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Check for overlapped blocks.
 	overlappingBlocks := false
 	if err := cg.areBlocksOverlapping(nil); err != nil {
+		// TODO(bwplotka): It would really nice if we could still check for other overlaps than replica. In fact this should be checked
+		// in syncer itself. Otherwise with vertical compaction enabled we will sacrifice this important check.
 		if !cg.enableVerticalCompaction {
 			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
 		}
@@ -601,6 +629,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		// Nothing to do.
 		return false, ulid.ULID{}, nil
 	}
+
+	level.Info(cg.logger).Log("msg", "compaction available and planned; downloading blocks", "plan", fmt.Sprintf("%v", plan))
 
 	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
 	// This is one potential source of how we could end up with duplicated chunks.
@@ -659,8 +689,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				"block id %s, try running with --debug.accept-malformed-index", id)
 		}
 	}
-	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
-		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
+	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	begin = time.Now()
 
@@ -679,7 +708,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			}
 			if meta.Stats.NumSamples == 0 {
 				if err := cg.deleteBlock(block); err != nil {
-					level.Warn(cg.logger).Log("msg", "failed to delete empty block found during compaction", "block", block)
+					level.Warn(cg.logger).Log("msg", "failed to mark for deletion an empty block found during compaction", "block", block)
 				}
 			}
 		}
@@ -690,7 +719,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if overlappingBlocks {
 		cg.verticalCompactions.Inc()
 	}
-	level.Info(cg.logger).Log("msg", "compacted blocks",
+	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
@@ -734,12 +763,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
-	// Delete the blocks we just compacted from the group and bucket so they do not get included
+	// Mark for deletion the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, b := range plan {
 		if err := cg.deleteBlock(b); err != nil {
-			return false, ulid.ULID{}, retry(errors.Wrapf(err, "delete old block from bucket"))
+			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
@@ -757,12 +786,12 @@ func (cg *Group) deleteBlock(b string) error {
 		return errors.Wrapf(err, "remove old block dir %s", id)
 	}
 
-	// Spawn a new context so we always delete a block in full on shutdown.
+	// Spawn a new context so we always mark a block for deletion in full on shutdown.
 	delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	level.Info(cg.logger).Log("msg", "deleting compacted block", "old_block", id)
-	if err := block.Delete(delCtx, cg.logger, cg.bkt, id); err != nil {
-		return errors.Wrapf(err, "delete block %s from bucket", id)
+	level.Info(cg.logger).Log("msg", "marking compacted block for deletion", "old_block", id)
+	if err := block.MarkForDeletion(delCtx, cg.logger, cg.bkt, id, cg.blocksMarkedForDeletion); err != nil {
+		return errors.Wrapf(err, "mark block %s for deletion from bucket", id)
 	}
 	return nil
 }
@@ -837,14 +866,14 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(workCtx, c.logger, c.bkt, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()
 							continue
 						}
 					}
-					errChan <- errors.Wrap(err, fmt.Sprintf("compaction failed for group %s", g.Key()))
+					errChan <- errors.Wrapf(err, "group %s", g.Key())
 					return
 				}
 			}()
@@ -856,29 +885,26 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
-
 		if err := c.sy.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
-
 		// Blocks that were compacted are garbage collected after each Compaction.
 		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
 		}
 
-		level.Info(c.logger).Log("msg", "start of compaction")
-
 		groups, err := c.sy.Groups()
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
 
+		level.Info(c.logger).Log("msg", "start of compactions")
+
 		// Send all groups found during this pass to the compaction workers.
 		var groupErrs terrors.MultiError
-
 	groupLoop:
 		for _, g := range groups {
 			select {

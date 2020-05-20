@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 )
@@ -36,23 +37,19 @@ func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClie
 		memcached: memcached,
 	}
 
-	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.requests = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_requests_total",
 		Help: "Total number of items requests to the cache.",
 	}, []string{"item_type"})
 	c.requests.WithLabelValues(cacheTypePostings)
 	c.requests.WithLabelValues(cacheTypeSeries)
 
-	c.hits = prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.hits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_hits_total",
 		Help: "Total number of items requests to the cache that were a hit.",
 	}, []string{"item_type"})
 	c.hits.WithLabelValues(cacheTypePostings)
 	c.hits.WithLabelValues(cacheTypeSeries)
-
-	if reg != nil {
-		reg.MustRegister(c.requests, c.hits)
-	}
 
 	level.Info(logger).Log("msg", "created memcached index cache")
 

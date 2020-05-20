@@ -1,0 +1,21 @@
+{{ define "main" }}
+    <div class="container">
+        <div class="row py-5">
+            <div class="col col-3">
+                {{ partial "_default/sidemenu.html" . }}
+            </div>
+            <div class="col col-9">
+                <h1>{{ .Title }}</h1>
+                <ul class="list-group list-group-flush">
+                  <!-- Ranges through docs-pre-processed/**/*.md -->
+                  {{ range .Pages }}
+                      <li class="list-group-item list-group-item-action list-group-item-thanos">
+                        <h4><a href="{{.Permalink}}">{{.Title}}</a></h4>
+                      </li>
+                  {{ end }}
+                </ul>
+                {{ replace .Content "<table>" "<table class='table table-striped'>" | safeHTML }}
+            </div>
+        </div>
+    </div>
+{{ end }}

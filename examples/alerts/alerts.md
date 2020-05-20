@@ -97,7 +97,7 @@ rules:
     )
   for: 5m
   labels:
-    severity: warning
+    severity: critical
 - alert: ThanosRuleHighRuleEvaluationWarnings
   annotations:
     message: Thanos Rule {{$labels.job}} {{$labels.pod}} has high number of evaluation
@@ -144,8 +144,8 @@ rules:
     severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
-    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
-      DNS queries for query endpoints.
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS
+      queries for query endpoints.
   expr: |
     (
       sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
@@ -158,8 +158,8 @@ rules:
     severity: warning
 - alert: ThanosRuleAlertmanagerHighDNSFailures
   annotations:
-    message: Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing
-      DNS queries for Alertmanager endpoints.
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% of failing DNS
+      queries for Alertmanager endpoints.
   expr: |
     (
       sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
@@ -170,6 +170,27 @@ rules:
   for: 15m
   labels:
     severity: warning
+- alert: ThanosRuleNoEvaluationFor10Intervals
+  annotations:
+    message: Thanos Rule {{$labels.job}} has {{ $value | humanize }}% rule groups
+      that did not evaluate for at least 10x of their expected interval.
+  expr: |
+    time() -  max by (job, group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"})
+    >
+    10 * max by (job, group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
+  for: 5m
+  labels:
+    severity: info
+- alert: ThanosNoRuleEvaluations
+  annotations:
+    message: Thanos Rule {{$labels.job}} did not perform any rule evaluations in the
+      past 2 minutes.
+  expr: |
+    sum(rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[2m])) <= 0
+      and
+    sum(thanos_rule_loaded_rules{job=~"thanos-rule.*"}) > 0
+  labels:
+    severity: critical
 ```
 
 ## Store Gateway
@@ -198,7 +219,7 @@ rules:
       }} seconds for store series gate requests.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"})) > 2
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_bucket_store_series_gate_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -225,7 +246,7 @@ rules:
       {{ $value }} seconds for the bucket operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"})) > 15
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_objstore_bucket_operation_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -336,7 +357,7 @@ rules:
       }} seconds for instant queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 90
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m]))) > 40
     and
       sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) > 0
     )
@@ -349,7 +370,7 @@ rules:
       }} seconds for range queries.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 90
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"}[5m]))) > 90
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-query.*", handler="query_range"}[5m])) > 0
     )
@@ -383,7 +404,7 @@ rules:
       }} seconds for requests.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-receive.*", handler="receive"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~"thanos-receive.*", handler="receive"}[5m]))) > 10
     and
       sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-receive.*", handler="receive"}[5m])) > 0
     )
@@ -426,6 +447,14 @@ rules:
   for: 5m
   labels:
     severity: warning
+- alert: ThanosReceiveNoUpload
+  annotations:
+    message: Thanos Receive {{$labels.job}} has not uploaded latest data to object
+      storage.
+  expr: increase(thanos_shipper_uploads_total{job=~"thanos-receive.*"}[2h]) == 0
+  for: 30m
+  labels:
+    severity: warning
 ```
 
 ## Replicate
@@ -461,7 +490,7 @@ rules:
       $value }} seconds for the replicate operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"})) > 120
+      histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m]))) > 20
     and
       sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m])) > 0
     )

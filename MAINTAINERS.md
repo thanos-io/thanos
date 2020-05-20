@@ -5,12 +5,13 @@
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
 | Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Red Hat           |
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
+| Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
 | Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
+| Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
-| Lucas Servén Marín    | lserven@gmail.com      |  `@squat`                | [@squat](https://github.com/squat)          | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
-We are from different parts of Europe: Germany, Lithuania, Poland and UK.
+We are from different parts of Europe: Germany, Italy, Lithuania, Poland and UK.
 We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
@@ -32,6 +33,8 @@ Full list of triage persons is displayed below:
 | Ben Ye                | `@yeya24`                | [@yeya24](https://github.com/yeya24)                       |
 | Martin Chodur         | `@FUSAKLA`               | [@fusakla](https://github.com/fusakla)                     |
 | Michael Dai           | `@jojohappy`             | [@jojohappy](https://github.com/jojohappy)                 |
+| Kemal Akkoyun         | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)                   |
+| Xiang Dai             | `@daixiang0`             | [@daixiang0](https://github.com/daixiang0)                 |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 

@@ -39,9 +39,9 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Sidecar: connects to Prometheus, reads its data for query and/or uploads it to cloud storage.
 * Store Gateway: serves metrics inside of a cloud storage bucket.
 * Compactor: compacts, downsamples and applies retention on the data stored in cloud storage bucket.
-* Receiver: receives data from Prometheus' remote-write WAL, exposes it and/or upload it to cloud storage.
+* Receiver: receives data from Prometheus's remote-write WAL, exposes it and/or upload it to cloud storage.
 * Ruler/Rule: evaluates recording and alerting rules against data in Thanos for exposition and/or upload.
-* Querier/Query: implements Prometheus' v1 API to aggregate data from the underlying components.
+* Querier/Query: implements Prometheus's v1 API to aggregate data from the underlying components.
 
 See those components on this diagram:
 
@@ -57,7 +57,7 @@ The Sidecar makes use of the `reload` Prometheus endpoint. Make sure it's enable
 
 #### External storage
 
-The following configures the sidecar to write Prometheus' data into a configured object storage:
+The following configures the sidecar to write Prometheus's data into a configured object storage:
 
 ```bash
 thanos sidecar \
@@ -163,7 +163,7 @@ thanos query \
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
-* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-querier-deployment.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-query-deployment.yaml)_
 
 #### Communication Between Components
 
@@ -208,7 +208,7 @@ The store gateway occupies small amounts of disk space for caching basic informa
 
 A local Prometheus installation periodically compacts older data to improve query efficiency. Since the sidecar backs up data as soon as possible, we need a way to apply the same process to data in the object storage.
 
-The compactor component simple scans the object storage and processes compaction where required. At the same time it is responsible for creating downsampled copies of data to speed up queries.
+The compactor component simply scans the object storage and processes compaction where required. At the same time it is responsible for creating downsampled copies of data to speed up queries.
 
 ```bash
 thanos compact \
@@ -221,7 +221,7 @@ The compactor is not in the critical path of querying or data backup. It can eit
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
 
-* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compactor-statefulSet.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compact-statefulSet.yaml)_
 
 ### [Ruler/Rule](components/rule.md)
 

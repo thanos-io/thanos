@@ -60,15 +60,41 @@ groups:
     annotations:
       summary: "I always complain and allow partial response in query."
 `
+	testAlertRuleAddedLaterWebHandler = `
+groups:
+- name: example
+  partial_response_strategy: "WARN"
+  rules:
+  - alert: TestAlert_HasBeenLoadedViaWebHandler
+    # It must be based on actual metric, otherwise call to StoreAPI would be not involved.
+    expr: absent(some_metric)
+    labels:
+      severity: page
+    annotations:
+      summary: "I always complain and I have been loaded via /-/reload."
+`
 )
+
+func createRuleFile(t *testing.T, path, content string) {
+	t.Helper()
+	err := ioutil.WriteFile(path, []byte(content), 0666)
+	testutil.Ok(t, err)
+}
 
 func createRuleFiles(t *testing.T, dir string) {
 	t.Helper()
 
 	for i, rule := range []string{testAlertRuleAbortOnPartialResponse, testAlertRuleWarnOnPartialResponse} {
-		err := ioutil.WriteFile(filepath.Join(dir, fmt.Sprintf("rules-%d.yaml", i)), []byte(rule), 0666)
-		testutil.Ok(t, err)
+		createRuleFile(t, filepath.Join(dir, fmt.Sprintf("rules-%d.yaml", i)), rule)
 	}
+}
+
+func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", ioutil.NopCloser(bytes.NewReader(nil)))
+	testutil.Ok(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 200, resp.StatusCode)
 }
 
 func writeTargets(t *testing.T, path string, addrs ...string) {
@@ -179,8 +205,6 @@ func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request
 func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 
-	t.Parallel()
-
 	s, err := e2e.NewScenario("e2e_test_rule_am_http_client")
 	testutil.Ok(t, err)
 	defer s.Close()
@@ -271,10 +295,14 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	defer s.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
 	// Prepare work dirs.
 	rulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(s.SharedDir(), rulesSubDir))
+	rulesPath := filepath.Join(s.SharedDir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFiles(t, rulesPath)
 	amTargetsSubDir := filepath.Join("rules_am_targets")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), amTargetsSubDir), os.ModePerm))
 	queryTargetsSubDir := filepath.Join("rules_query_targets")
@@ -312,7 +340,7 @@ func TestRule(t *testing.T) {
 					{
 						// FileSD which will be used to register discover dynamically q.
 						Files:           []string{filepath.Join(e2e.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Hour),
+						RefreshInterval: model.Duration(time.Second),
 					},
 				},
 				Scheme: "http",
@@ -435,16 +463,28 @@ func TestRule(t *testing.T) {
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
+	t.Run("reload works", func(t *testing.T) {
+		// Add a new rule via /-/reload.
+		// TODO(GiedriusS): add a test for reloading via SIGHUP. Need to extend e2e framework to expose PIDs.
 
-	queryAndAssert(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
+		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
+		reloadRulesHTTP(t, ctx, r.HTTPEndpoint())
+	})
+
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
 			"__name__":   "ALERTS",
 			"severity":   "page",
 			"alertname":  "TestAlert_AbortOnPartialResponse",
+			"alertstate": "firing",
+			"replica":    "1",
+		},
+		{
+			"__name__":   "ALERTS",
+			"severity":   "page",
+			"alertname":  "TestAlert_HasBeenLoadedViaWebHandler",
 			"alertstate": "firing",
 			"replica":    "1",
 		},
@@ -461,6 +501,11 @@ func TestRule(t *testing.T) {
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_AbortOnPartialResponse",
+			"replica":   "1",
+		},
+		{
+			"severity":  "page",
+			"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
 			"replica":   "1",
 		},
 		{

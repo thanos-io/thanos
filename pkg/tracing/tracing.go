@@ -37,8 +37,8 @@ func tracerFromContext(ctx context.Context) opentracing.Tracer {
 	return nil
 }
 
-// StartSpan starts and returns span with `operationName` using any Span found within given context.
-// It uses traces propagated in context.
+// StartSpan starts and returns span with `operationName` and hooking as child to a span found within given context if any.
+// It uses opentracing.Tracer propagated in context. If no found, it uses noop tracer without notification.
 func StartSpan(ctx context.Context, operationName string, opts ...opentracing.StartSpanOption) (opentracing.Span, context.Context) {
 	tracer := tracerFromContext(ctx)
 	if tracer == nil {
@@ -52,4 +52,12 @@ func StartSpan(ctx context.Context, operationName string, opts ...opentracing.St
 	}
 	span = tracer.StartSpan(operationName, opts...)
 	return span, opentracing.ContextWithSpan(ctx, span)
+}
+
+// DoInSpan executes function doFn inside new span with `operationName` name and hooking as child to a span found within given context if any.
+// It uses opentracing.Tracer propagated in context. If no found, it uses noop tracer notification.
+func DoInSpan(ctx context.Context, operationName string, doFn func(context.Context), opts ...opentracing.StartSpanOption) {
+	span, newCtx := StartSpan(ctx, operationName, opts...)
+	defer doFn(newCtx)
+	defer span.Finish()
 }
