@@ -171,6 +171,15 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 	}
 }
 
+func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
+	f.Lock()
+	defer f.Unlock()
+	s := f.samples[l.Hash()]
+	res := make([]prompb.Sample, len(s))
+	copy(res, s)
+	return res
+}
+
 func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
 	f.Lock()
 	defer f.Unlock()
