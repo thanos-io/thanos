@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -249,7 +248,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, e
 	t.Helper()
 
 	fmt.Println("ruleAndAssert: Waiting for", expectedLen, "results for rules type", typ)
-	var result []*storepb.RuleGroup
+	var result []*rulespb.RuleGroup
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, urlParse(t, "http://"+addr), typ)
 		if err != nil {

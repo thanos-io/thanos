@@ -73,10 +73,8 @@ replace (
 	// Make sure Cortex is not forcing us to some other Prometheus version.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200110114423-1e64d757f711 // master ~ v2.15.2
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
 	k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
-	k8s.io/code-generator => k8s.io/code-generator v0.0.0-20190612205613-18da4a14b22b
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
 )

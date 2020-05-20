@@ -24,7 +24,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/storage/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
-	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/rules/manager"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
@@ -66,7 +66,7 @@ type rulesRetrieverMock struct {
 	testing *testing.T
 }
 
-func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
+func (m rulesRetrieverMock) RuleGroups() []manager.Group {
 	storage := newStorage(m.testing)
 
 	engineOpts := promql.EngineOpts{
@@ -97,7 +97,7 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	recordingRule := rules.NewRecordingRule("recording-rule-1", recordingExpr, labels.Labels{})
 	r = append(r, recordingRule)
 
-	return []thanosrule.Group{
+	return []manager.Group{
 		{
 			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
 			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
@@ -105,10 +105,10 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	}
 }
 
-func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
-	var ars []thanosrule.AlertingRule
+func (m rulesRetrieverMock) AlertingRules() []manager.AlertingRule {
+	var ars []manager.AlertingRule
 	for _, ar := range alertingRules(m.testing) {
-		ars = append(ars, thanosrule.AlertingRule{AlertingRule: ar})
+		ars = append(ars, manager.AlertingRule{AlertingRule: ar})
 	}
 	return ars
 }

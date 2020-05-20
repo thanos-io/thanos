@@ -42,8 +42,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -99,7 +99,7 @@ func SetCORS(w http.ResponseWriter) {
 type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 
 type rulesRetriever interface {
-	RuleGroups(context.Context) ([]*storepb.RuleGroup, storage.Warnings, error)
+	RuleGroups(context.Context) ([]*rulespb.RuleGroup, storage.Warnings, error)
 }
 
 // API can register a set of endpoints in a router and handle
@@ -645,7 +645,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 
 func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
 	var (
-		res       = &storepb.RuleGroups{}
+		res       = &rulespb.RuleGroups{}
 		typeParam = strings.ToLower(r.URL.Query().Get("type"))
 	)
 
@@ -662,7 +662,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	for _, grp := range groups {
-		apiRuleGroup := &storepb.RuleGroup{
+		apiRuleGroup := &rulespb.RuleGroup{
 			Name:                              grp.Name,
 			File:                              grp.File,
 			Interval:                          grp.Interval,
@@ -672,7 +672,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *ApiError) {
 			PartialResponseStrategy:           grp.PartialResponseStrategy,
 		}
 
-		apiRuleGroup.Rules = make([]*storepb.Rule, 0, len(grp.Rules))
+		apiRuleGroup.Rules = make([]*rulespb.Rule, 0, len(grp.Rules))
 
 		for _, r := range grp.Rules {
 			switch {

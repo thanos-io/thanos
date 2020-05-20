@@ -29,6 +29,7 @@ import (
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -609,7 +610,7 @@ func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label str
 
 // RulesInGRPC returns the rules from Prometheus rules API. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules string) ([]*storepb.RuleGroup, error) {
+func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules string) ([]*rulespb.RuleGroup, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/rules")
 
@@ -620,7 +621,7 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 	}
 
 	var m struct {
-		Data *storepb.RuleGroups `json:"data"`
+		Data *rulespb.RuleGroups `json:"data"`
 	}
 
 	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_rules HTTP[client]", &u, &m); err != nil {

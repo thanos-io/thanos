@@ -4,10 +4,12 @@
 package storepb
 
 import (
+	"strconv"
 	"strings"
 	"unsafe"
 
 	"github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -33,28 +35,6 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 		Result: &SeriesResponse_Series{
 			Series: series,
 		},
-	}
-}
-
-func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
-	return &RulesResponse{
-		Result: &RulesResponse_Group{
-			Group: rg,
-		},
-	}
-}
-
-func NewWarningRulesResponse(warning error) *RulesResponse {
-	return &RulesResponse{
-		Result: &RulesResponse_Warning{
-			Warning: warning.Error(),
-		},
-	}
-}
-
-func NewRecordingRule(r *RecordingRule) *Rule {
-	return &Rule{
-		Result: &Rule_Recording{Recording: r},
 	}
 }
 
@@ -264,4 +244,28 @@ func LabelSetsToString(lsets []LabelSet) string {
 		s = append(s, LabelsToString(ls.Labels))
 	}
 	return strings.Join(s, "")
+}
+
+func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
+	fieldStr, err := strconv.Unquote(string(entry))
+	if err != nil {
+		return errors.Wrapf(err, "partialResponseStrategy: unquote %v", string(entry))
+	}
+
+	if len(fieldStr) == 0 {
+		// Default.
+		*x = PartialResponseStrategy_WARN
+		return nil
+	}
+
+	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
+	if !ok {
+		return errors.Errorf("unknown partialResponseStrategy: %v", string(entry))
+	}
+	*x = PartialResponseStrategy(strategy)
+	return nil
+}
+
+func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
+	return []byte(strconv.Quote(x.String())), nil
 }

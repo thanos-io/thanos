@@ -11,6 +11,7 @@ import (
 	"github.com/NYTimes/gziphandler"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 
 	"github.com/go-kit/kit/log"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -18,7 +19,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
-	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/rules/manager"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -63,14 +64,14 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 }
 
 type RulesRetriever interface {
-	RuleGroups() []thanosrule.Group
-	AlertingRules() []thanosrule.AlertingRule
+	RuleGroups() []manager.Group
+	AlertingRules() []manager.AlertingRule
 }
 
 func (api *API) rules(*http.Request) (interface{}, []error, *qapi.ApiError) {
-	res := &storepb.RuleGroups{}
+	res := &rulespb.RuleGroups{}
 	for _, grp := range api.ruleRetriever.RuleGroups() {
-		apiRuleGroup := &storepb.RuleGroup{
+		apiRuleGroup := &rulespb.RuleGroup{
 			Name:                    grp.Name(),
 			File:                    grp.OriginalFile(),
 			Interval:                grp.Interval().Seconds(),
@@ -85,14 +86,14 @@ func (api *API) rules(*http.Request) (interface{}, []error, *qapi.ApiError) {
 
 			switch rule := r.(type) {
 			case *rules.AlertingRule:
-				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &storepb.Rule{
-					Result: &storepb.Rule_Alert{Alert: &storepb.Alert{
-						State:                     storepb.AlertState(rule.State()),
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &rulespb.Rule{
+					Result: &rulespb.Rule_Alert{Alert: &rulespb.Alert{
+						State:                     rulespb.AlertState(rule.State()),
 						Name:                      rule.Name(),
 						Query:                     rule.Query().String(),
 						DurationSeconds:           rule.Duration().Seconds(),
-						Labels:                    &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
-						Annotations:               &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
+						Labels:                    &rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+						Annotations:               &rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
 						Alerts:                    rulesAlertsToAPIAlerts(grp.PartialResponseStrategy, rule.ActiveAlerts()),
 						Health:                    string(rule.Health()),
 						LastError:                 lastError,
@@ -100,11 +101,11 @@ func (api *API) rules(*http.Request) (interface{}, []error, *qapi.ApiError) {
 						LastEvaluation:            rule.GetEvaluationTimestamp(),
 					}}})
 			case *rules.RecordingRule:
-				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &storepb.Rule{
-					Result: &storepb.Rule_Recording{Recording: &storepb.RecordingRule{
+				apiRuleGroup.Rules = append(apiRuleGroup.Rules, &rulespb.Rule{
+					Result: &rulespb.Rule_Recording{Recording: &rulespb.RecordingRule{
 						Name:                      rule.Name(),
 						Query:                     rule.Query().String(),
-						Labels:                    &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+						Labels:                    &rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
 						Health:                    string(rule.Health()),
 						LastError:                 lastError,
 						EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
@@ -122,24 +123,24 @@ func (api *API) rules(*http.Request) (interface{}, []error, *qapi.ApiError) {
 }
 
 func (api *API) alerts(*http.Request) (interface{}, []error, *qapi.ApiError) {
-	var alerts []*storepb.AlertInstance
+	var alerts []*rulespb.AlertInstance
 	for _, alertingRule := range api.ruleRetriever.AlertingRules() {
 		alerts = append(
 			alerts,
 			rulesAlertsToAPIAlerts(alertingRule.PartialResponseStrategy, alertingRule.ActiveAlerts())...,
 		)
 	}
-	return struct{ Alerts []*storepb.AlertInstance }{Alerts: alerts}, nil, nil
+	return struct{ Alerts []*rulespb.AlertInstance }{Alerts: alerts}, nil, nil
 }
 
-func rulesAlertsToAPIAlerts(s storepb.PartialResponseStrategy, rulesAlerts []*rules.Alert) []*storepb.AlertInstance {
-	apiAlerts := make([]*storepb.AlertInstance, len(rulesAlerts))
+func rulesAlertsToAPIAlerts(s storepb.PartialResponseStrategy, rulesAlerts []*rules.Alert) []*rulespb.AlertInstance {
+	apiAlerts := make([]*rulespb.AlertInstance, len(rulesAlerts))
 	for i, ruleAlert := range rulesAlerts {
-		apiAlerts[i] = &storepb.AlertInstance{
+		apiAlerts[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
-			Labels:                  &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
-			Annotations:             &storepb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
-			State:                   storepb.AlertState(ruleAlert.State),
+			Labels:                  &rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
+			Annotations:             &rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
+			State:                   rulespb.AlertState(ruleAlert.State),
 			ActiveAt:                &ruleAlert.ActiveAt,
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}

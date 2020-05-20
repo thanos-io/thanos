@@ -24,22 +24,26 @@ GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="pkg/store/storepb pkg/store/storepb/prompb pkg/store/hintspb"
-
+DIRS="store/storepb/ store/storepb/prompb/ rules/rulespb store/hintspb"
 echo "generating code"
-for dir in ${DIRS}; do
-	pushd ${dir}
-		${PROTOC_BIN} --gogofast_out=\
+pushd "pkg"
+  for dir in ${DIRS}; do
+    ${PROTOC_BIN} --gogofast_out=\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,\
-Mprompb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb/prompb,\
 plugins=grpc:. \
 		  -I=. \
 			-I="${GOGOPROTO_PATH}" \
-			*.proto
+			${dir}/*.proto
 
-		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
-		sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
-		rm -f *.bak
-		${GOIMPORTS_BIN} -w *.pb.go
-	popd
-done
+    pushd ${dir}
+      sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
+      sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
+      # We cannot do Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb,\ due to protobuf v1 bug.
+      # TODO(bwplotka): Consider removing in v2.
+      sed -i.bak -E 's/\"store\/storepb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\"/g' *.pb.go
+      sed -i.bak -E 's/\"store\/storepb\/prompb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
+      rm -f *.bak
+      ${GOIMPORTS_BIN} -w *.pb.go
+    popd
+  done
+popd

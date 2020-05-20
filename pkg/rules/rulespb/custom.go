@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package storepb
+package rulespb
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 const (
@@ -18,28 +19,26 @@ const (
 	RuleAlertingType  = "alerting"
 )
 
-func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
-	fieldStr, err := strconv.Unquote(string(entry))
-	if err != nil {
-		return errors.Wrapf(err, "partialResponseStrategy: unquote %v", string(entry))
+func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
+	return &RulesResponse{
+		Result: &RulesResponse_Group{
+			Group: rg,
+		},
 	}
-
-	if len(fieldStr) == 0 {
-		// Default.
-		*x = PartialResponseStrategy_WARN
-		return nil
-	}
-
-	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
-	if !ok {
-		return errors.Errorf("unknown partialResponseStrategy: %v", string(entry))
-	}
-	*x = PartialResponseStrategy(strategy)
-	return nil
 }
 
-func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(x.String())), nil
+func NewWarningRulesResponse(warning error) *RulesResponse {
+	return &RulesResponse{
+		Result: &RulesResponse_Warning{
+			Warning: warning.Error(),
+		},
+	}
+}
+
+func NewRecordingRule(r *RecordingRule) *Rule {
+	return &Rule{
+		Result: &Rule_Recording{Recording: r},
+	}
 }
 
 func (m *Rule) UnmarshalJSON(entry []byte) error {
@@ -120,7 +119,7 @@ func (m *PromLabels) UnmarshalJSON(entry []byte) error {
 	if err := lbls.UnmarshalJSON(entry); err != nil {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
-	m.Labels = PromLabelsToLabels(lbls)
+	m.Labels = storepb.PromLabelsToLabels(lbls)
 	sort.Slice(m.Labels, func(i, j int) bool {
 		return m.Labels[i].Name < m.Labels[j].Name
 	})
@@ -128,5 +127,5 @@ func (m *PromLabels) UnmarshalJSON(entry []byte) error {
 }
 
 func (m *PromLabels) MarshalJSON() ([]byte, error) {
-	return LabelsToPromLabels(m.Labels).MarshalJSON()
+	return storepb.LabelsToPromLabels(m.Labels).MarshalJSON()
 }

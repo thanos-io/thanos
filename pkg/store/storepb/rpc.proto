@@ -4,10 +4,9 @@
 syntax = "proto3";
 package thanos;
 
-import "types.proto";
-import "rules.proto";
+import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
-import "prompb/types.proto";
+import "store/storepb/prompb/types.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "storepb";
@@ -155,32 +154,4 @@ message LabelValuesRequest {
 message LabelValuesResponse {
   repeated string values   = 1;
   repeated string warnings = 2;
-}
-
-/// Rules represents API that is responsible for gathering rules and their statuses.
-service Rules {
-  /// Rules has info for all rules.
-  /// Returned rules are expected to include external labels.
-  rpc Rules(RulesRequest) returns (stream RulesResponse);
-}
-
-message RulesRequest {
-  enum Type {
-    ALL       = 0;
-    ALERTING  = 1;
-    RECORDING = 2;
-  }
-  Type type = 1;
-  PartialResponseStrategy partial_response_strategy = 2;
-}
-
-message RulesResponse {
-  oneof result {
-    // It is up to server implementation to decide how many of those to put here.
-    RuleGroup group = 1;
-
-    /// warning is considered an information piece in place of series for warning purposes.
-    /// It is used to warn rule API users about suspicious cases or partial response (if enabled).
-    string warning = 2;
-  }
 }
