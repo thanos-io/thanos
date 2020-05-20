@@ -103,12 +103,6 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) flushableStorage() *tsdb.DB {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	return t.fs
-}
-
 func (t *tenant) set(tstore *store.TSDBStore, fs *tsdb.DB, ship *shipper.Shipper) {
 	t.readyS.Set(fs, int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
 	t.mtx.Lock()
@@ -152,7 +146,7 @@ func (t *MultiTSDB) Flush() error {
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
 	for _, tenant := range t.tenants {
-		s := tenant.flushableStorage()
+		s := tenant.fs
 		if s == nil {
 			continue
 		}
