@@ -3,7 +3,6 @@
   receive+:: {
     selector: error 'must provide selector for Thanos Receive alerts',
     httpErrorThreshold: 5,
-    forwardErrorThreshold: 5,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
   },
@@ -56,10 +55,14 @@
                 sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
                 sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
-              * 100 > %(forwardErrorThreshold)s
+              )
+              >
+              (
+                max by (job) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
+              /
+                max by (job) (thanos_receive_hashring_nodes{%(selector)s})
               )
             ||| % thanos.receive,
-            'for': '5m',
             labels: {
               severity: 'warning',
             },
