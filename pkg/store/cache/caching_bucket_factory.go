@@ -24,7 +24,7 @@ import (
 // BucketCacheProvider is a type used to evaluate all bucket cache providers.
 type BucketCacheProvider string
 
-const MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
+const MemcachedBucketCacheProvider BucketCacheProvider = "MEMCACHED" // Memcached cache-provider for caching bucket.
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
@@ -81,8 +81,8 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	var c cache.Cache
 
-	switch config.Type {
-	case MemcachedBucketCacheProvider:
+	switch strings.ToUpper(string(config.Type)) {
+	case string(MemcachedBucketCacheProvider):
 		var memcached cacheutil.MemcachedClient
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
