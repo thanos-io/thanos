@@ -647,7 +647,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 		cgKey, groupKey := cg.Key(), GroupKey(meta.Thanos)
 		if cgKey != groupKey {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cgKey, groupKey))
+			return false, ulid.ULID{}, halt(errors.Errorf("compact planned compaction for mixed groups. group: %s, planned block's group: %s", cgKey, groupKey))
 		}
 
 		for _, s := range meta.Compaction.Sources {
