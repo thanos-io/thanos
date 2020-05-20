@@ -6,7 +6,7 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
-import "prompb/types.proto";
+import "store/storepb/prompb/types.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "storepb";
