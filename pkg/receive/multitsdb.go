@@ -71,10 +71,10 @@ func NewMultiTSDB(
 type tenant struct {
 	tsdbOpts *tsdb.Options
 
-	readyS *ReadyStorage
-	fs     *tsdb.DB
-	s      *store.TSDBStore
-	ship   *shipper.Shipper
+	readyS    *ReadyStorage
+	tsdb      *tsdb.DB
+	storeTSDB *store.TSDBStore
+	ship      *shipper.Shipper
 
 	mtx *sync.RWMutex
 }
@@ -94,7 +94,7 @@ func (t *tenant) readyStorage() *ReadyStorage {
 func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	return t.s
+	return t.storeTSDB
 }
 
 func (t *tenant) shipper() *shipper.Shipper {
@@ -103,11 +103,17 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) set(tstore *store.TSDBStore, fs *tsdb.DB, ship *shipper.Shipper) {
-	t.readyS.Set(fs, int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
+func (t *tenant) db() *tsdb.DB {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.tsdb
+}
+
+func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
+	t.readyS.Set(tenantTSDB, int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
 	t.mtx.Lock()
-	t.fs = fs
-	t.s = tstore
+	t.tsdb = tenantTSDB
+	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.mtx.Unlock()
 }
@@ -146,15 +152,16 @@ func (t *MultiTSDB) Flush() error {
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
 	for _, tenant := range t.tenants {
-		s := tenant.fs
-		if s == nil {
+		db := tenant.db()
+		if db == nil {
 			continue
 		}
 
 		wg.Add(1)
 		go func() {
-			mint, maxt := s.Head().MinTime(), s.Head().MaxTime()
-			if err := s.CompactHead(tsdb.NewRangeHead(s.Head(), mint, maxt-1), mint, maxt); err != nil {
+			head := db.Head()
+			mint, maxt := head.MinTime(), head.MaxTime()
+			if err := db.CompactHead(tsdb.NewRangeHead(head, mint, maxt-1), mint, maxt); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
