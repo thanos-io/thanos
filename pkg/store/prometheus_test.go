@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -18,12 +17,12 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestPrometheusStore_Series_e2e(t *testing.T) {
@@ -64,7 +63,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	testutil.Ok(t, err)
 
 	limitMinT := int64(0)
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return limitMinT, -1 }) // Maxt does not matter.
 	testutil.Ok(t, err)
@@ -199,7 +198,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	promStore, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+	promStore, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
 	testutil.Ok(t, err)
@@ -352,168 +351,6 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		})
 	}
 }
-
-func TestPrometheusStore_Rules_e2e(t *testing.T) {
-	t.Helper()
-
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	p, err := e2eutil.NewPrometheus()
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, p.Stop()) }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	curr, err := os.Getwd()
-	testutil.Ok(t, err)
-	testutil.Ok(t, p.SetConfig(fmt.Sprintf(`
-global:
-  external_labels:
-    region: eu-west
-
-rule_files:
-  - %s/../../examples/alerts/alerts.yaml
-  - %s/../../examples/alerts/rules.yaml
-`, curr, curr)))
-	testutil.Ok(t, p.Start())
-
-	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
-	testutil.Ok(t, err)
-
-	promStore, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
-		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
-	testutil.Ok(t, err)
-
-	someAlert := &storepb.Rule{Result: &storepb.Rule_Alert{Alert: &storepb.Alert{Name: "some"}}}
-	someRecording := &storepb.Rule{Result: &storepb.Rule_Recording{Recording: &storepb.RecordingRule{Name: "some"}}}
-	for _, tcase := range []struct {
-		req         *storepb.RulesRequest
-		expected    []storepb.RuleGroup
-		expectedErr error
-	}{
-		{
-			req: &storepb.RulesRequest{},
-			expected: []storepb.RuleGroup{
-				{
-					Name:                              "thanos-bucket-replicate.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-compact.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-component-absent.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-query.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-receive.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-rule.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-sidecar.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-store.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/alerts.yaml", curr),
-					Rules:                             []*storepb.Rule{someAlert, someAlert, someAlert, someAlert},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-bucket-replicate.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/rules.yaml", curr),
-					Rules:                             []*storepb.Rule{},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-query.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/rules.yaml", curr),
-					Rules:                             []*storepb.Rule{someRecording, someRecording, someRecording, someRecording, someRecording},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name: "thanos-receive.rules", File: fmt.Sprintf("%s/../../examples/alerts/rules.yaml", curr),
-					Rules:                             []*storepb.Rule{someRecording, someRecording, someRecording, someRecording, someRecording, someRecording},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-				{
-					Name:                              "thanos-store.rules",
-					File:                              fmt.Sprintf("%s/../../examples/alerts/rules.yaml", curr),
-					Rules:                             []*storepb.Rule{someRecording, someRecording, someRecording, someRecording},
-					Interval:                          60,
-					DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-				},
-			},
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			srv := newRulesServer(ctx)
-			err = promStore.Rules(tcase.req, srv)
-			if tcase.expectedErr != nil {
-				testutil.NotOk(t, err)
-				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())
-				return
-			}
-
-			// We don't want to be picky, just check what number and types of rules within group are.
-			got := srv.Groups
-			for i, g := range got {
-				for j, r := range g.Rules {
-					if r.GetAlert() != nil {
-						got[i].Rules[j] = someAlert
-						continue
-					}
-					if r.GetRecording() != nil {
-						got[i].Rules[j] = someRecording
-						continue
-					}
-					t.Fatalf("Found rule in group %s that is neither recording not alert.", g.Name)
-				}
-			}
-
-			testutil.Ok(t, err)
-			testutil.Equals(t, []string(nil), srv.Warnings)
-			testutil.Equals(t, tcase.expected, srv.Groups)
-		})
-	}
-}
-
 func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -538,7 +375,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{})
@@ -571,7 +408,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -605,7 +442,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -649,7 +486,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return 0, math.MaxInt64 })
 	testutil.Ok(t, err)
@@ -694,7 +531,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	proxy, err := NewPrometheusStore(nil, nil, nil, component.Sidecar,
+	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), nil, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 		func() (int64, int64) { return 123, 456 })
 	testutil.Ok(t, err)
@@ -772,7 +609,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+		proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
 			func() (int64, int64) { return 0, math.MaxInt64 })
 		testutil.Ok(t, err)

@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
@@ -42,7 +43,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv storepb.RulesServer, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv rulespb.RulesServer, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -86,7 +87,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	s := grpc.NewServer(grpcOpts...)
 
 	if rulesSrv != nil {
-		storepb.RegisterRulesServer(s, rulesSrv)
+		rulespb.RegisterRulesServer(s, rulesSrv)
 		storepb.RegisterStoreServer(s, storeSrv)
 		level.Info(logger).Log("msg", "registering as gRPC StoreAPI and RulesAPI")
 	} else {
