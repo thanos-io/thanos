@@ -41,7 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
 	v1 "github.com/thanos-io/thanos/pkg/rules/api"
-	thanosmanager "github.com/thanos-io/thanos/pkg/rules/manager"
+	rulesmanager "github.com/thanos-io/thanos/pkg/rules/manager"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -400,7 +400,7 @@ func runRule(
 	// Run rule evaluation and alert notifications.
 	var (
 		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgr = thanosmanager.NewManager(dataDir)
+		ruleMgr = rulesmanager.NewManager(dataDir)
 	)
 	{
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -759,7 +759,7 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 
 func reloadRules(logger log.Logger,
 	ruleFiles []string,
-	ruleMgr *thanosmanager.Manager,
+	ruleMgr *rulesmanager.Manager,
 	evalInterval time.Duration,
 	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
