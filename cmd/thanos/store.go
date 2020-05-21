@@ -17,7 +17,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -35,7 +34,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const fetcherConcurrency = 32
@@ -233,7 +231,7 @@ func runStore(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
 	if err != nil {
 		return err
 	}
@@ -373,20 +371,4 @@ func runStore(
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
-}
-
-func parseRelabelConfig(contentYaml []byte) ([]*relabel.Config, error) {
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
-		return nil, errors.Wrap(err, "parsing relabel configuration")
-	}
-	supportedActions := map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
-
-	for _, cfg := range relabelConfig {
-		if _, ok := supportedActions[cfg.Action]; !ok {
-			return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
-		}
-	}
-
-	return relabelConfig, nil
 }
