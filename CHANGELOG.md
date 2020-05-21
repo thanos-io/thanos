@@ -11,8 +11,6 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-TODO: Add rules API, also now StoreAPI consistently solves clashes in external labels vs metrics - by choosing external always.
-
 ### Fixed
 
 * [#2637](https://github.com/thanos-io/thanos/pull/2637) Compact: detect retryable errors that are inside of a wrapped `tsdb.MultiError`
