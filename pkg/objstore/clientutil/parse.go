@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ParseContentLength returns the content length (in bytes) parsed from the Content-Length
+// HTTP header in input.
 func ParseContentLength(m http.Header) (int64, error) {
-	name := "Content-Length"
+	const name = "Content-Length"
 
 	v, ok := m[name]
 	if !ok {
@@ -31,8 +33,10 @@ func ParseContentLength(m http.Header) (int64, error) {
 	return ret, nil
 }
 
+// ParseLastModified returns the timestamp parsed from the Last-Modified
+// HTTP header in input (expected to be in the RFC3339 format).
 func ParseLastModified(m http.Header) (time.Time, error) {
-	name := "Last-Modified"
+	const name = "Last-Modified"
 
 	v, ok := m[name]
 	if !ok {

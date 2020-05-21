@@ -307,7 +307,7 @@ Additional options to configure various aspects of chunks cache are available:
 
 - `chunk_subrange_size`: size of segment of chunks object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
-- `chunk_object_attrs_ttl`: how long to keep information about chunk file attributes (ie. size) in the cache.
+- `chunk_object_attrs_ttl`: how long to keep information about chunk file attributes (e.g. size) in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
 Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
