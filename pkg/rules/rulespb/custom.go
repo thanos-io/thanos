@@ -41,6 +41,12 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 	}
 }
 
+func NewAlertingRule(a *Alert) *Rule {
+	return &Rule{
+		Result: &Rule_Alert{Alert: a},
+	}
+}
+
 func (m *Rule) UnmarshalJSON(entry []byte) error {
 	decider := struct {
 		Type string `json:"type"`
