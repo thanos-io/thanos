@@ -21,7 +21,6 @@ import (
 )
 
 func TestRulesAPI_Fanout(t *testing.T) {
-	t.Skip("Fix in next PR")
 	t.Parallel()
 
 	netName := "e2e_test_rules_fanout"

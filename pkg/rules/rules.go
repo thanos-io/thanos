@@ -30,6 +30,10 @@ type GRPCClient struct {
 	enablePartialResponse bool
 }
 
+func NewGRPCClient(rs rulespb.RulesServer) *GRPCClient {
+	return NewGRPCClientWithDedup(rs, nil)
+}
+
 func NewGRPCClientWithDedup(rs rulespb.RulesServer, replicaLabels []string) *GRPCClient {
 	c := &GRPCClient{
 		proxy:         rs,
@@ -39,7 +43,6 @@ func NewGRPCClientWithDedup(rs rulespb.RulesServer, replicaLabels []string) *GRP
 	for _, label := range replicaLabels {
 		c.replicaLabels[label] = struct{}{}
 	}
-
 	return c
 }
 

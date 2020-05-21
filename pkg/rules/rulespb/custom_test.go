@@ -393,7 +393,7 @@ func TestRulesComparator(t *testing.T) {
 			r1:   NewAlertingRule(&Alert{Name: "a"}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
 			want: -1,
@@ -402,12 +402,12 @@ func TestRulesComparator(t *testing.T) {
 			name: "label ordering",
 			r1: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "2"},
 				}}}),
 			want: -1,
@@ -416,12 +416,12 @@ func TestRulesComparator(t *testing.T) {
 			name: "multiple label ordering",
 			r1: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name: "a",
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "1"},
 				}}}),
@@ -432,22 +432,20 @@ func TestRulesComparator(t *testing.T) {
 			r1: NewAlertingRule(&Alert{
 				Name:            "a",
 				DurationSeconds: 0.0,
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
 			r2: NewAlertingRule(&Alert{
 				Name:            "a",
 				DurationSeconds: 1.0,
-				Labels: &PromLabels{Labels: []storepb.Label{
+				Labels: PromLabels{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 				}}}),
 			want: -1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.r1.Cmp(tc.r2); got != tc.want {
-				t.Errorf("want %d, got %d", tc.want, got)
-			}
+			testutil.Equals(t, tc.want, tc.r1.Cmp(tc.r2))
 		})
 	}
 }
