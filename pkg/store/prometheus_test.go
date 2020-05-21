@@ -226,7 +226,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT - 10000000000,
 				MaxTime: baseT + 10000000000,
 			},
-			expectedErr: errors.New("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"parse error at char 7: unexpected character inside braces: '-'\"}"),
+			expectedErr: errors.New("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"1:7: parse error: unexpected character inside braces: '-'\"}"),
 		},
 		{
 			req: &storepb.SeriesRequest{

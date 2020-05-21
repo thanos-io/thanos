@@ -18,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -168,39 +167,6 @@ func TestQuery(t *testing.T) {
 	})
 }
 
-func TestRulesFanout(t *testing.T) {
-	t.Parallel()
-
-	netName := "e2e_test_rules_fanout"
-
-	s, err := e2e.NewScenario(netName)
-	testutil.Ok(t, err)
-	defer s.Close()
-
-	rulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(s.SharedDir(), rulesSubDir))
-
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), netName, "alone", defaultPromConfig("prom-alone", 0, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1))
-
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1",
-		[]string{sidecar1.GRPCNetworkEndpoint()},
-		nil,
-		[]string{sidecar1.GRPCNetworkEndpoint()},
-	)
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
-
-	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(1), "thanos_store_nodes_grpc_connections"))
-
-	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", 1)
-}
-
 func urlParse(t *testing.T, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
@@ -242,29 +208,6 @@ func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q stri
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
-}
-
-func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, expectedLen int) {
-	t.Helper()
-
-	fmt.Println("ruleAndAssert: Waiting for", expectedLen, "results for rules type", typ)
-	var result []*rulespb.RuleGroup
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, urlParse(t, "http://"+addr), typ)
-		if err != nil {
-			return err
-		}
-
-		if len(result) != len(res) {
-			fmt.Println("ruleAndAssert: New result:", res)
-		}
-
-		if len(res) != expectedLen {
-			return errors.Errorf("unexpected result size, expected %d; result: %v", expectedLen, res)
-		}
-		result = res
-		return nil
-	}))
 }
 
 func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected model.Vector) {

@@ -5,6 +5,7 @@ package rulespb
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -71,13 +72,13 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 			expectedProto: &RuleGroups{
 				Groups: []*RuleGroup{
 					{
-						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-						PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
 					},
 				},
 			},
 			// Different than input due to default enum fields.
-			expectedJSONOutput: `{"groups":[{"name":"","file":"","rules":null,"interval":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","partial_response_strategy":"WARN","partialResponseStrategy":"WARN"}]}`,
+			expectedJSONOutput: `{"groups":[{"name":"","file":"","rules":null,"interval":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","partial_response_strategy":"ABORT","partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 with no rule type",
@@ -162,7 +163,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("unknown partialResponseStrategy: \"asdfsdfsdfsd\""),
+			expectedErr: errors.New("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,WARN"),
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",
@@ -250,76 +251,66 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					{
 						Name: "group1",
 						Rules: []*Rule{
-							{
-								Result: &Rule_Recording{
-									Recording: &RecordingRule{
-										Query: "up",
-										Name:  "recording1",
-										Labels: &PromLabels{
-											Labels: []storepb.Label{
-												{Name: "a", Value: "b"},
-												{Name: "c", Value: "d"},
-											},
-										},
-										LastError:                 "2",
-										Health:                    "health",
-										LastEvaluation:            now.Add(-2 * time.Minute),
-										EvaluationDurationSeconds: 2.6,
+							NewRecordingRule(&RecordingRule{
+								Query: "up",
+								Name:  "recording1",
+								Labels: PromLabels{
+									Labels: []storepb.Label{
+										{Name: "a", Value: "b"},
+										{Name: "c", Value: "d"},
 									},
 								},
-							},
-							{
-								Result: &Rule_Alert{
-									Alert: &Alert{
-										Name:  "alert1",
-										Query: "up == 0",
-										Labels: &PromLabels{
-											Labels: []storepb.Label{
-												{Name: "a2", Value: "b2"},
-												{Name: "c2", Value: "d2"},
-											},
-										},
-										Annotations: &PromLabels{
-											Labels: []storepb.Label{
-												{Name: "ann1", Value: "ann44"},
-												{Name: "ann2", Value: "ann33"},
-											},
-										},
-										Alerts: []*AlertInstance{
-											{
-												Labels: &PromLabels{
-													Labels: []storepb.Label{
-														{Name: "instance1", Value: "1"},
-													},
-												},
-												Annotations: &PromLabels{
-													Labels: []storepb.Label{
-														{Name: "annotation1", Value: "2"},
-													},
-												},
-												State:                   AlertState_INACTIVE,
-												ActiveAt:                nil,
-												Value:                   "1",
-												PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-											},
-											{
-												Labels:                  &PromLabels{},
-												Annotations:             &PromLabels{},
-												State:                   AlertState_FIRING,
-												ActiveAt:                &twoHoursAgo,
-												Value:                   "2143",
-												PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-											},
-										},
-										DurationSeconds:           60,
-										State:                     AlertState_PENDING,
-										LastError:                 "1",
-										Health:                    "health2",
-										LastEvaluation:            now.Add(-1 * time.Minute),
-										EvaluationDurationSeconds: 1.1,
+								LastError:                 "2",
+								Health:                    "health",
+								LastEvaluation:            now.Add(-2 * time.Minute),
+								EvaluationDurationSeconds: 2.6,
+							}),
+							NewAlertingRule(&Alert{
+								Name:  "alert1",
+								Query: "up == 0",
+								Labels: PromLabels{
+									Labels: []storepb.Label{
+										{Name: "a2", Value: "b2"},
+										{Name: "c2", Value: "d2"},
 									},
 								},
-							},
+								Annotations: PromLabels{
+									Labels: []storepb.Label{
+										{Name: "ann1", Value: "ann44"},
+										{Name: "ann2", Value: "ann33"},
+									},
+								},
+								Alerts: []*AlertInstance{
+									{
+										Labels: PromLabels{
+											Labels: []storepb.Label{
+												{Name: "instance1", Value: "1"},
+											},
+										},
+										Annotations: PromLabels{
+											Labels: []storepb.Label{
+												{Name: "annotation1", Value: "2"},
+											},
+										},
+										State:                   AlertState_INACTIVE,
+										ActiveAt:                nil,
+										Value:                   "1",
+										PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+									},
+									{
+										State:                   AlertState_FIRING,
+										ActiveAt:                &twoHoursAgo,
+										Value:                   "2143",
+										PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+									},
+								},
+								DurationSeconds:           60,
+								State:                     AlertState_PENDING,
+								LastError:                 "1",
+								Health:                    "health2",
+								LastEvaluation:            now.Add(-1 * time.Minute),
+								EvaluationDurationSeconds: 1.1,
+							}),
 						},
 						File:                              "file1.yml",
 						Interval:                          2442,
@@ -341,7 +332,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 			},
 		},
 	} {
-		if ok := t.Run(tcase.name, func(t *testing.T) {
+		t.Run(tcase.name, func(t *testing.T) {
 			jsonInput, err := json.Marshal(tcase.input)
 			testutil.Ok(t, err)
 
@@ -353,6 +344,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				return
 			}
 			testutil.Ok(t, err)
+			fmt.Println(proto.String())
 			testutil.Equals(t, tcase.expectedProto.String(), proto.String())
 
 			jsonProto, err := json.Marshal(proto)
@@ -362,8 +354,6 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				return
 			}
 			testutil.Equals(t, jsonInput, jsonProto)
-		}); !ok {
-			return
-		}
+		})
 	}
 }

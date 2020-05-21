@@ -36,7 +36,7 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.16.0"
+	return "quay.io/prometheus/prometheus:v2.18.1"
 }
 
 func DefaultAlertmanagerImage() string {

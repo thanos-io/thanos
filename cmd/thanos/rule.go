@@ -40,8 +40,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
+	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	v1 "github.com/thanos-io/thanos/pkg/rules/api"
-	rulesmanager "github.com/thanos-io/thanos/pkg/rules/manager"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -397,13 +397,13 @@ func runRule(
 		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
 
-	// Run rule evaluation and alert notifications.
 	var (
+		ruleMgr *thanosrules.Manager
 		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgr = rulesmanager.NewManager(dataDir)
 	)
 	{
-		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
+		// Run rule evaluation and alert notifications.
+		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*alert.Alert, 0, len(alerts))
 			for _, alrt := range alerts {
 				// Only send actually firing alerts.
@@ -425,41 +425,37 @@ func runRule(
 			}
 			alertQ.Push(res)
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+
 		st := tsdb.Adapter(db, 0)
+		logger = log.With(logger, "component", "rules")
+		ruleMgr = thanosrules.NewManager(
+			tracing.ContextWithTracer(ctx, tracer),
+			reg,
+			dataDir,
+			rules.ManagerOptions{
+				NotifyFunc:  notifyFunc,
+				Logger:      logger,
+				Appendable:  st,
+				ExternalURL: nil,
+				TSDB:        st,
+				ResendDelay: resendDelay,
+			},
+			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings),
+			lset,
+		)
 
-		opts := rules.ManagerOptions{
-			NotifyFunc:  notify,
-			Logger:      log.With(logger, "component", "rules"),
-			Appendable:  st,
-			ExternalURL: nil,
-			TSDB:        st,
-			ResendDelay: resendDelay,
-		}
+		// Schedule rule manager that evaluates rules.
+		g.Add(func() error {
+			ruleMgr.Run()
+			<-ctx.Done()
 
-		// TODO(bwplotka): Hide this behind thanos rules.Manager.
-		for _, strategy := range storepb.PartialResponseStrategy_value {
-			s := storepb.PartialResponseStrategy(strategy)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			ctx = tracing.ContextWithTracer(ctx, tracer)
-
-			opts := opts
-			opts.Registerer = extprom.WrapRegistererWith(prometheus.Labels{"strategy": strings.ToLower(s.String())}, reg)
-			opts.Context = ctx
-			opts.QueryFunc = queryFunc(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, s)
-
-			mgr := rules.NewManager(&opts)
-			ruleMgr.SetRuleManager(s, mgr)
-			g.Add(func() error {
-				mgr.Run()
-				<-ctx.Done()
-
-				return nil
-			}, func(error) {
-				cancel()
-				mgr.Stop()
-			})
-		}
+			return nil
+		}, func(err error) {
+			cancel()
+			ruleMgr.Stop()
+		})
 	}
 	// Run the alert sender.
 	{
@@ -533,7 +529,7 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store, nil,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store, ruleMgr,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -575,7 +571,7 @@ func runRule(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, ruleMgr)
+		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
@@ -684,57 +680,59 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 	return deduplicated
 }
 
-// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
-// back or the context get canceled.
-func queryFunc(
+func queryFuncCreator(
 	logger log.Logger,
 	queriers []*http_util.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
-	partialResponseStrategy storepb.PartialResponseStrategy,
-) rules.QueryFunc {
-	var spanID string
+) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
-	switch partialResponseStrategy {
-	case storepb.PartialResponseStrategy_WARN:
-		spanID = "/rule_instant_query HTTP[client]"
-	case storepb.PartialResponseStrategy_ABORT:
-		spanID = "/rule_instant_query_part_resp_abort HTTP[client]"
-	default:
-		// Programming error will be caught by tests.
-		panic(errors.Errorf("unknown partial response strategy %v", partialResponseStrategy).Error())
-	}
+	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
+	// back or the context get canceled.
+	return func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
+		var spanID string
 
-	promClients := make([]*promclient.Client, 0, len(queriers))
-	for _, q := range queriers {
-		promClients = append(promClients, promclient.NewClient(q, logger, "thanos-rule"))
-	}
+		switch partialResponseStrategy {
+		case storepb.PartialResponseStrategy_WARN:
+			spanID = "/rule_instant_query HTTP[client]"
+		case storepb.PartialResponseStrategy_ABORT:
+			spanID = "/rule_instant_query_part_resp_abort HTTP[client]"
+		default:
+			// Programming error will be caught by tests.
+			panic(errors.Errorf("unknown partial response strategy %v", partialResponseStrategy).Error())
+		}
 
-	return func(ctx context.Context, q string, t time.Time) (v promql.Vector, err error) {
-		for _, i := range rand.Perm(len(queriers)) {
-			promClient := promClients[i]
-			endpoints := removeDuplicateQueryEndpoints(logger, duplicatedQuery, queriers[i].Endpoints())
-			for _, i := range rand.Perm(len(endpoints)) {
-				var warns []string
-				tracing.DoInSpan(ctx, spanID, func(ctx context.Context) {
-					v, warns, err = promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
+		promClients := make([]*promclient.Client, 0, len(queriers))
+		for _, q := range queriers {
+			promClients = append(promClients, promclient.NewClient(q, logger, "thanos-rule"))
+		}
+
+		return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+			for _, i := range rand.Perm(len(queriers)) {
+				promClient := promClients[i]
+				endpoints := removeDuplicateQueryEndpoints(logger, duplicatedQuery, queriers[i].Endpoints())
+				for _, i := range rand.Perm(len(endpoints)) {
+					span, ctx := tracing.StartSpan(ctx, spanID)
+					v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
 					})
-				})
-				if err != nil {
-					level.Error(logger).Log("err", err, "query", q)
-					continue
+					span.Finish()
+
+					if err != nil {
+						level.Error(logger).Log("err", err, "query", q)
+						continue
+					}
+					if len(warns) > 0 {
+						ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+						// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
+						level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+					}
+					return v, nil
 				}
-				if len(warns) > 0 {
-					ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
-					// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-					level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
-				}
-				return v, nil
 			}
+			return nil, errors.Errorf("no query API server reachable")
 		}
-		return nil, errors.New("no query API server reachable")
 	}
 }
 
@@ -759,7 +757,7 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 
 func reloadRules(logger log.Logger,
 	ruleFiles []string,
-	ruleMgr *rulesmanager.Manager,
+	ruleMgr *thanosrules.Manager,
 	evalInterval time.Duration,
 	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
