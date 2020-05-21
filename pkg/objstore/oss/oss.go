@@ -21,6 +21,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
 	"gopkg.in/yaml.v2"
 )
 
@@ -130,24 +131,27 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// ObjectSize returns the size of the specified object.
-func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
-	// refer to https://github.com/aliyun/aliyun-oss-go-sdk/blob/cee409f5b4d75d7ad077cacb7e6f4590a7f2e172/oss/bucket.go#L668.
+// Attributes returns information about the specified object.
+func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
 	m, err := b.bucket.GetObjectMeta(name)
 	if err != nil {
-		return 0, err
+		return objstore.ObjectAttributes{}, err
 	}
-	if v, ok := m["Content-Length"]; ok {
-		if len(v) == 0 {
-			return 0, errors.New("content-length header has no values")
-		}
-		ret, err := strconv.ParseUint(v[0], 10, 64)
-		if err != nil {
-			return 0, errors.Wrap(err, "convert content-length")
-		}
-		return ret, nil
+
+	size, err := clientutil.ParseContentLength(m)
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
 	}
-	return 0, errors.New("content-length header not found")
+
+	mod, err := clientutil.ParseLastModified(m)
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
+	}
+
+	return objstore.ObjectAttributes{
+		Size:         size,
+		LastModified: mod,
+	}, nil
 }
 
 // NewBucket returns a new Bucket using the provided oss config values.
