@@ -1,3 +1,5 @@
+# Build by default has to build in root, current directory. Only then promu crossbuild will work as expected.
+PROMU_TARGET_DIR  ?= $(shell pwd)
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
@@ -10,6 +12,7 @@ GOPATH            ?= $(shell go env GOPATH)
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+
 GO111MODULE       ?= on
 export GO111MODULE
 GOPROXY           ?= https://proxy.golang.org
@@ -174,8 +177,9 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building Thanos binary in $(GOBIN)"
-	@$(PROMU) build --prefix $(GOBIN)
+	@echo ">> building Thanos binary in $(PROMU_TARGET_DIR) and $(GOBIN)"
+	@$(PROMU) build --prefix $(PROMU_TARGET_DIR)
+	@cp ${PROMU_TARGET_DIR}/thanos $(GOBIN)/thanos
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
