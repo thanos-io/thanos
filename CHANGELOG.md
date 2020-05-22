@@ -14,6 +14,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 * [#2637](https://github.com/thanos-io/thanos/pull/2637) Compact: detect retryable errors that are inside of a wrapped `tsdb.MultiError`
+* [#2648](https://github.com/thanos-io/thanos/pull/2648) Store: allow index cache and caching bucket to be configured at the same time.
 
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 
