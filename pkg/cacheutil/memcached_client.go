@@ -273,7 +273,7 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) (err error) {
+func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
@@ -284,6 +284,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
+		var err error
 		tracing.DoInSpan(ctx, "memcached_set", func(ctx context.Context) {
 			err = c.client.Set(&memcache.Item{
 				Key:        key,
