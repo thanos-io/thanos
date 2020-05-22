@@ -182,6 +182,9 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 	client.Timeout = config.Timeout
 	client.MaxIdleConns = config.MaxIdleConnections
 
+	if reg != nil {
+		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
+	}
 	return newMemcachedClient(logger, name, client, selector, config, reg)
 }
 
@@ -196,7 +199,7 @@ func newMemcachedClient(
 	dnsProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_memcached_", reg),
-		dns.ResolverType(dns.GolangResolverType),
+		dns.GolangResolverType,
 	)
 
 	c := &memcachedClient{
@@ -214,34 +217,30 @@ func newMemcachedClient(
 	}
 
 	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name:        "thanos_memcached_operations_total",
-		Help:        "Total number of operations against memcached.",
-		ConstLabels: prometheus.Labels{"name": name},
+		Name: "thanos_memcached_operations_total",
+		Help: "Total number of operations against memcached.",
 	}, []string{"operation"})
 	c.operations.WithLabelValues(opGetMulti)
 	c.operations.WithLabelValues(opSet)
 
 	c.failures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name:        "thanos_memcached_operation_failures_total",
-		Help:        "Total number of operations against memcached that failed.",
-		ConstLabels: prometheus.Labels{"name": name},
+		Name: "thanos_memcached_operation_failures_total",
+		Help: "Total number of operations against memcached that failed.",
 	}, []string{"operation"})
 	c.failures.WithLabelValues(opGetMulti)
 	c.failures.WithLabelValues(opSet)
 
 	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name:        "thanos_memcached_operation_skipped_total",
-		Help:        "Total number of operations against memcached that have been skipped.",
-		ConstLabels: prometheus.Labels{"name": name},
+		Name: "thanos_memcached_operation_skipped_total",
+		Help: "Total number of operations against memcached that have been skipped.",
 	}, []string{"operation", "reason"})
 	c.skipped.WithLabelValues(opGetMulti, reasonMaxItemSize)
 	c.skipped.WithLabelValues(opSet, reasonMaxItemSize)
 
 	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name:        "thanos_memcached_operation_duration_seconds",
-		Help:        "Duration of operations against memcached.",
-		ConstLabels: prometheus.Labels{"name": name},
-		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
+		Name:    "thanos_memcached_operation_duration_seconds",
+		Help:    "Duration of operations against memcached.",
+		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
 	}, []string{"operation"})
 	c.duration.WithLabelValues(opGetMulti)
 	c.duration.WithLabelValues(opSet)
