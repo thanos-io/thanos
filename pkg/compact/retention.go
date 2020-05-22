@@ -18,6 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+// RetentionPolicy is a map of retention durations by resolution level
 type RetentionPolicy map[ResolutionLevel]time.Duration
 
 // ApplyRetentionPolicyByResolution removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
@@ -68,4 +69,5 @@ func (rp RetentionPolicy) InitialRetentionPolicy() RetentionPolicy {
 		ResolutionLevel5m:  retention,
 		ResolutionLevel1h:  retention,
 	}
+
 }
