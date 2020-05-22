@@ -100,36 +100,6 @@ func (s *promSeriesSet) Err() error {
 	return s.set.Err()
 }
 
-func translateMatcher(m *labels.Matcher) (storepb.LabelMatcher, error) {
-	var t storepb.LabelMatcher_Type
-
-	switch m.Type {
-	case labels.MatchEqual:
-		t = storepb.LabelMatcher_EQ
-	case labels.MatchNotEqual:
-		t = storepb.LabelMatcher_NEQ
-	case labels.MatchRegexp:
-		t = storepb.LabelMatcher_RE
-	case labels.MatchNotRegexp:
-		t = storepb.LabelMatcher_NRE
-	default:
-		return storepb.LabelMatcher{}, errors.Errorf("unrecognized matcher type %d", m.Type)
-	}
-	return storepb.LabelMatcher{Type: t, Name: m.Name, Value: m.Value}, nil
-}
-
-func translateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
-	res := make([]storepb.LabelMatcher, 0, len(ms))
-	for _, m := range ms {
-		r, err := translateMatcher(m)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, r)
-	}
-	return res, nil
-}
-
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
 type storeSeriesSet struct {
 	// TODO(bwplotka): Don't buffer all, we have to buffer single series (to sort and dedup chunks), but nothing more.

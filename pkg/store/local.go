@@ -159,7 +159,8 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	if len(newMatchers) == 0 {
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
-	matchers, err := translateMatchers(newMatchers)
+
+	matchers, err := storepb.TranslateFromPromMatchers(newMatchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

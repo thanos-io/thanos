@@ -179,7 +179,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 	})
 	defer span.Finish()
 
-	sms, err := translateMatchers(ms...)
+	sms, err := storepb.TranslatePromMatchers(ms...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "convert matchers")
 	}

@@ -17,13 +17,12 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type nopAppendable struct{}
@@ -245,52 +244,32 @@ groups:
 	}
 }
 
-func TestRuleGroupMarshalYAML(t *testing.T) {
-	const expected = `groups:
+func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
+	c := configGroups{}
+	testutil.Ok(t, yaml.Unmarshal([]byte(`groups:
 - name: something1
   rules:
   - alert: some
     expr: up
+  partial_response_strategy: ABORT
 - name: something2
   rules:
   - alert: some
     expr: rate(some_metric[1h:5m] offset 1d)
-  partial_response_strategy: ABORT
-`
-
-	a := storepb.PartialResponseStrategy_ABORT
-	var input = configRuleGroups{
-		Groups: []configRuleGroup{
-			{
-				PromRuleGroup: PromRuleGroup{
-					Name: "something1",
-					Rules: []rulefmt.Rule{
-						{
-							Alert: "some",
-							Expr:  "up",
-						},
-					},
-				},
-			},
-			{
-				PromRuleGroup: PromRuleGroup{
-					Name: "something2",
-					Rules: []rulefmt.Rule{
-						{
-							Alert: "some",
-							Expr:  "rate(some_metric[1h:5m] offset 1d)",
-						},
-					},
-				},
-				PartialResponseStrategy: &a,
-			},
-		},
-	}
-
-	b, err := yaml.Marshal(input)
+  partial_response_strategy: WARN
+`), &c))
+	b, err := yaml.Marshal(c)
 	testutil.Ok(t, err)
-
-	testutil.Equals(t, expected, string(b))
+	testutil.Equals(t, `groups:
+  - name: something1
+    rules:
+      - alert: some
+        expr: up
+  - name: something2
+    rules:
+      - alert: some
+        expr: rate(some_metric[1h:5m] offset 1d)
+`, string(b))
 }
 
 func TestManager_Rules(t *testing.T) {

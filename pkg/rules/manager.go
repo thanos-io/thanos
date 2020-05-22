@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -57,7 +58,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					State:                     rulespb.AlertState(rule.State()),
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
-					DurationSeconds:           rule.Duration().Seconds(),
+					DurationSeconds:           rule.HoldDuration().Seconds(),
 					Labels:                    rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
 					Annotations:               rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
 					Alerts:                    ActiveAlertsToProto(g.PartialResponseStrategy, rule),
@@ -99,16 +100,6 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 		}
 	}
 	return ret
-}
-
-// configRuleGroups is what is parsed from config.
-type configRuleGroups struct {
-	Groups []configRuleGroup `yaml:"groups"`
-}
-
-type configRuleGroup struct {
-	rulefmt.RuleGroup
-	PartialResponseStrategy *storepb.PartialResponseStrategy
 }
 
 // Manager is a partial response strategy and proto compatible Manager.
@@ -199,49 +190,116 @@ func (m *Manager) Active() []*rulespb.AlertInstance {
 	return res
 }
 
-func (r *configRuleGroup) UnmarshalYAML(unmarshal func(interface{}) error) error {
+type configRuleAdapter struct {
+	PartialResponseStrategy *storepb.PartialResponseStrategy
+
+	group           rulefmt.RuleGroup
+	nativeRuleGroup map[string]interface{}
+}
+
+func (g *configRuleAdapter) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	rs := struct {
-		Strategy string `yaml:"partial_response_strategy"`
+		RuleGroup rulefmt.RuleGroup `yaml:",inline"`
+		Strategy  string            `yaml:"partial_response_strategy"`
 	}{}
 
 	if err := unmarshal(&rs); err != nil {
 		return err
 	}
 
-	r.PartialResponseStrategy = new(storepb.PartialResponseStrategy)
-
+	g.PartialResponseStrategy = new(storepb.PartialResponseStrategy)
 	// Same as YAMl. Quote as JSON unmarshal expects raw JSON field.
-	if err := r.PartialResponseStrategy.UnmarshalJSON([]byte("\"" + rs.Strategy + "\"")); err != nil {
+	if err := g.PartialResponseStrategy.UnmarshalJSON([]byte("\"" + rs.Strategy + "\"")); err != nil {
 		return err
 	}
+	g.group = rs.RuleGroup
 
-	rg := rulefmt.RuleGroup{}
-	if err := unmarshal(&rg); err != nil {
-		return errors.Wrap(err, "failed to unmarshal rulefmt.configRuleGroup")
+	var native map[string]interface{}
+	if err := unmarshal(&native); err != nil {
+		return errors.Wrap(err, "failed to unmarshal rulefmt.configRuleAdapter")
 	}
-	r.RuleGroup = rg
+	delete(native, "partial_response_strategy")
+
+	g.nativeRuleGroup = native
 	return nil
 }
 
-func (r configRuleGroup) MarshalYAML() (interface{}, error) {
-	var ps *string
-	if r.PartialResponseStrategy != nil {
-		str := r.PartialResponseStrategy.String()
-		ps = &str
+func (g configRuleAdapter) MarshalYAML() (interface{}, error) {
+	return struct {
+		RuleGroup map[string]interface{} `yaml:",inline"`
+	}{
+		RuleGroup: g.nativeRuleGroup,
+	}, nil
+}
+
+// TODO(bwplotka): Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
+func (g configRuleAdapter) validate() (errs []error) {
+	set := map[string]struct{}{}
+	if g.group.Name == "" {
+		errs = append(errs, errors.New("Groupname should not be empty"))
 	}
 
-	rs := struct {
-		RuleGroup               rulefmt.RuleGroup `yaml:",inline"`
-		PartialResponseStrategy *string           `yaml:"partial_response_strategy,omitempty"`
-	}{
-		RuleGroup:               r.RuleGroup,
-		PartialResponseStrategy: ps,
+	if _, ok := set[g.group.Name]; ok {
+		errs = append(
+			errs,
+			fmt.Errorf("groupname: %q is repeated in the same file", g.group.Name),
+		)
 	}
-	return rs, nil
+
+	set[g.group.Name] = struct{}{}
+
+	for i, r := range g.group.Rules {
+		for _, node := range r.Validate() {
+			var ruleName string
+			if r.Alert.Value != "" {
+				ruleName = r.Alert.Value
+			} else {
+				ruleName = r.Record.Value
+			}
+			errs = append(errs, &rulefmt.Error{
+				Group:    g.group.Name,
+				Rule:     i,
+				RuleName: ruleName,
+				Err:      node,
+			})
+		}
+	}
+
+	return errs
+}
+
+// ValidateAndCount validates all rules in the rule groups and return overal number of rules in all groups.
+// TODO(bwplotka): Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
+func ValidateAndCount(group io.Reader) (numRules int, errs tsdberrors.MultiError) {
+	var rgs configGroups
+	d := yaml.NewDecoder(group)
+	d.KnownFields(true)
+	if err := d.Decode(&rgs); err != nil {
+		errs.Add(err)
+		return 0, errs
+	}
+
+	for _, g := range rgs.Groups {
+		if err := g.validate(); err != nil {
+			for _, e := range err {
+				errs.Add(e)
+			}
+			return 0, errs
+		}
+	}
+
+	for _, rg := range rgs.Groups {
+		numRules += len(rg.group.Rules)
+	}
+	return numRules, errs
+}
+
+type configGroups struct {
+	Groups []configRuleAdapter `yaml:"groups"`
 }
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
-// special field in configRuleGroup file.
+// special field in configRuleAdapter file.
 func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
 		errs            tsdberrors.MultiError
@@ -250,41 +308,34 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	)
 
 	if err := os.RemoveAll(m.workDir); err != nil {
-		return errors.Wrapf(err, "failed to remove %s", m.workDir)
+		return errors.Wrapf(err, "remove %s", m.workDir)
 	}
 	if err := os.MkdirAll(m.workDir, os.ModePerm); err != nil {
-		return errors.Wrapf(err, "failed to create %s", m.workDir)
+		return errors.Wrapf(err, "create %s", m.workDir)
 	}
 
 	for _, fn := range files {
 		b, err := ioutil.ReadFile(fn)
 		if err != nil {
-			errs = append(errs, err)
+			errs.Add(err)
 			continue
 		}
 
-		var rg configRuleGroups
+		var rg configGroups
 		if err := yaml.Unmarshal(b, &rg); err != nil {
-			errs = append(errs, errors.Wrap(err, fn))
+			errs.Add(errors.Wrap(err, fn))
 			continue
 		}
 
-		// NOTE: This is very ugly, but we need to reparse it into tmp dir without the field to have to reuse
-		// rules.Manager. The problem is that it uses yaml.UnmarshalStrict for some reasons.
-		groupsByStrategy := map[storepb.PartialResponseStrategy]*rulefmt.RuleGroups{}
+		// NOTE: This is very ugly, but we need to write those yaml into tmp dir without the partial partial response field
+		// which is not supported, to be able to reuse rules.Manager. The problem is that it uses yaml.UnmarshalStrict.
+		groupsByStrategy := map[storepb.PartialResponseStrategy][]configRuleAdapter{}
 		for _, rg := range rg.Groups {
-			if _, ok := groupsByStrategy[*rg.PartialResponseStrategy]; !ok {
-				groupsByStrategy[*rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
-			}
-
-			groupsByStrategy[*rg.PartialResponseStrategy].Groups = append(
-				groupsByStrategy[*rg.PartialResponseStrategy].Groups,
-				rg.RuleGroup,
-			)
+			groupsByStrategy[*rg.PartialResponseStrategy] = append(groupsByStrategy[*rg.PartialResponseStrategy], rg)
 		}
 
 		for s, rg := range groupsByStrategy {
-			b, err := yaml.Marshal(rg)
+			b, err := yaml.Marshal(configGroups{Groups: rg})
 			if err != nil {
 				errs = append(errs, errors.Wrapf(err, "%s: failed to marshal rule groups", fn))
 				continue
@@ -292,7 +343,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 			newFn := filepath.Join(m.workDir, fmt.Sprintf("%s.%x.%s", filepath.Base(fn), sha256.Sum256([]byte(fn)), s.String()))
 			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
-				errs = append(errs, errors.Wrap(err, newFn))
+				errs.Add(errors.Wrap(err, newFn))
 				continue
 			}
 
@@ -305,13 +356,13 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	for s, fs := range filesByStrategy {
 		mgr, ok := m.mgrs[s]
 		if !ok {
-			errs = append(errs, errors.Errorf("no manager found for %v", s))
+			errs.Add(errors.Errorf("no manager found for %v", s))
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
-		// TODO(bwplotka): Investigate if we should put ext labels here or not.
 		if err := mgr.Update(evalInterval, fs, nil); err != nil {
-			errs = append(errs, errors.Wrapf(err, "strategy %s", s))
+			// TODO(bwplotka): Prometheus logs all error details. Fix it upstream to have consistent error handling.
+			errs.Add(errors.Wrapf(err, "strategy %s, update rules", s))
 			continue
 		}
 	}

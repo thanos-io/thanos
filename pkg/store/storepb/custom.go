@@ -183,6 +183,7 @@ func (s *mergedSeriesSet) Next() bool {
 }
 
 // LabelsToPromLabels converts Thanos proto labels to Prometheus labels in type safe manner.
+// NOTE: It allocates memory.
 func LabelsToPromLabels(lset []Label) labels.Labels {
 	ret := make(labels.Labels, len(lset))
 	for i, l := range lset {
@@ -200,6 +201,7 @@ func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 }
 
 // PromLabelsToLabels converts Prometheus labels to Thanos proto labels in type safe manner.
+// NOTE: It allocates memory.
 func PromLabelsToLabels(lset labels.Labels) []Label {
 	ret := make([]Label, len(lset))
 	for i, l := range lset {
@@ -290,4 +292,52 @@ func ExtendLabels(lset []Label, extend labels.Labels) []Label {
 		return lset[i].Name < lset[j].Name
 	})
 	return lset
+}
+
+// TranslatePromMatchers returns proto matchers from Prometheus matchers.
+// NOTE: It allocates memory.
+func TranslatePromMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
+	res := make([]LabelMatcher, 0, len(ms))
+	for _, m := range ms {
+		var t LabelMatcher_Type
+
+		switch m.Type {
+		case labels.MatchEqual:
+			t = LabelMatcher_EQ
+		case labels.MatchNotEqual:
+			t = LabelMatcher_NEQ
+		case labels.MatchRegexp:
+			t = LabelMatcher_RE
+		case labels.MatchNotRegexp:
+			t = LabelMatcher_NRE
+		default:
+			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+		}
+		res = append(res, LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
+	}
+	return res, nil
+}
+
+// TranslateFromPromMatchers returns Prometheus matchers from proto matchers.
+// NOTE: It allocates memory.
+func TranslateFromPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		var t labels.MatchType
+
+		switch m.Type {
+		case LabelMatcher_EQ:
+			t = labels.MatchEqual
+		case LabelMatcher_NEQ:
+			t = labels.MatchNotEqual
+		case LabelMatcher_RE:
+			t = labels.MatchRegexp
+		case LabelMatcher_NRE:
+			t = labels.MatchNotRegexp
+		default:
+			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+		}
+		res = append(res, &labels.Matcher{Type: t, Name: m.Name, Value: m.Value})
+	}
+	return res, nil
 }
