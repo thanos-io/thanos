@@ -161,7 +161,7 @@ func (t *MultiTSDB) Flush() error {
 		go func() {
 			head := db.Head()
 			mint, maxt := head.MinTime(), head.MaxTime()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, mint, maxt-1), mint, maxt); err != nil {
+			if err := db.CompactHead(tsdb.NewRangeHead(head, mint, maxt-1)); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()

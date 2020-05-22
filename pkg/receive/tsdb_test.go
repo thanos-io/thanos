@@ -57,7 +57,7 @@ func TestHeadFlushIntoBlock(t *testing.T) {
 	testutil.Ok(t, app.Commit())
 
 	// Flush the WAL/Head.
-	testutil.Ok(t, db.CompactHead(tsdb.NewRangeHead(db.Head(), 0, int64(maxt)-1), 0, int64(maxt)))
+	testutil.Ok(t, db.CompactHead(tsdb.NewRangeHead(db.Head(), 0, int64(maxt)-1)))
 	testutil.Ok(t, db.Close())
 	testutil.Ok(t, deleteNonBlocks(db.Dir()))
 

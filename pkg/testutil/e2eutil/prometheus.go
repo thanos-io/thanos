@@ -410,7 +410,7 @@ func createBlock(
 	resolution int64,
 	tombstones bool,
 ) (id ulid.ULID, err error) {
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, dir, nil, tsdb.DefaultStripeSize)
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, dir, nil, tsdb.DefaultStripeSize, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
