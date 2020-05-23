@@ -185,12 +185,11 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 	if reg != nil {
 		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
 	}
-	return newMemcachedClient(logger, name, client, selector, config, reg)
+	return newMemcachedClient(logger, client, selector, config, reg)
 }
 
 func newMemcachedClient(
 	logger log.Logger,
-	name string,
 	client memcachedClientBackend,
 	selector *MemcachedJumpHashSelector,
 	config MemcachedClientConfig,
