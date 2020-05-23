@@ -1,5 +1,3 @@
-# Build by default has to build in root, current directory. Only then promu crossbuild will work as expected.
-PROMU_TARGET_DIR  ?= $(shell pwd)
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
@@ -12,6 +10,9 @@ GOPATH            ?= $(shell go env GOPATH)
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+
+# Promu is using this exact variable name, do not rename.
+PREFIX  ?= $(GOBIN)
 
 GO111MODULE       ?= on
 export GO111MODULE
@@ -177,9 +178,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building Thanos binary in $(PROMU_TARGET_DIR) and $(GOBIN)"
-	@$(PROMU) build --prefix $(PROMU_TARGET_DIR)
-	@cp ${PROMU_TARGET_DIR}/thanos $(GOBIN)/thanos
+	@echo ">> building Thanos binary in $(PREFIX)"
+	@$(PROMU) build --prefix $(PREFIX)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -195,8 +195,8 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 docker: build
-	@echo ">> copying Thanos from $(GOBIN) to ./thanos_tmp_for_docker"
-	@cp $(GOBIN)/thanos ./thanos_tmp_for_docker
+	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
+	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
 	@rm ./thanos_tmp_for_docker
