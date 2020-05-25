@@ -340,8 +340,14 @@ Flags:
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
       --selector-label=<name>="<value>" ...
-                                 Query selector labels that will be exposed in
-                                 info endpoint (repeated).
+                                 Query selector labels are exposed at the info
+                                 endpoint (repeated) and they comprise key/value
+                                 pair of strings and we always try to have the
+                                 subset of data that these labels point to, the
+                                 store LabelSets and the selector-labels are
+                                 merged and when there are no LabelSets from the
+                                 store-proxy’s discovered stores we consider
+                                 selector-labels as the LabelSets.
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
