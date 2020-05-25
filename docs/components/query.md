@@ -318,7 +318,8 @@ Flags:
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
-                                 'dedup=false' parameter.
+                                 'dedup=false' parameter. Data includes time
+                                 series, recording rules, and alerting rules.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

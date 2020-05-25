@@ -99,11 +99,11 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client.Transport = &userAgentRoundTripper{name: userAgent, rt: client.Transport}
+	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: client.Transport}
 	return client, nil
 }
 
-var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
+var ThanosUserAgent = fmt.Sprintf("Thanos/%s", version.Version)
 
 type userAgentRoundTripper struct {
 	name string

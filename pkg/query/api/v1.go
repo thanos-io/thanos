@@ -26,6 +26,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -42,7 +43,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -103,6 +107,7 @@ type API struct {
 	logger          log.Logger
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
+	ruleGroups      rules.UnaryClient
 
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
@@ -125,6 +130,7 @@ func NewAPI(
 	enablePartialResponse bool,
 	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
+	ruleGroups rules.UnaryClient,
 ) *API {
 	return &API{
 		logger:                                 logger,
@@ -136,6 +142,7 @@ func NewAPI(
 		reg:                                    reg,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		ruleGroups:                             ruleGroups,
 
 		now: time.Now,
 	}
@@ -174,6 +181,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Post("/labels", instr("label_names", api.labelNames))
 
 	r.Get("/stores", instr("stores", api.stores))
+	r.Get("/rules", instr("rules", NewRulesHandler(api.ruleGroups)))
 }
 
 type queryData struct {
@@ -639,4 +647,29 @@ func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
 	}
 	return statuses, nil, nil
+}
+
+// NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
+// which uses gRPC Unary Rules API.
+func NewRulesHandler(client rules.UnaryClient) func(*http.Request) (interface{}, []error, *ApiError) {
+	return func(request *http.Request) (interface{}, []error, *ApiError) {
+		typeParam := request.URL.Query().Get("type")
+		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
+		if !ok {
+			if typeParam != "" {
+				return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid rules parameter type='%v'", typeParam)}
+			}
+			typ = int32(rulespb.RulesRequest_ALL)
+		}
+
+		req := &rulespb.RulesRequest{
+			Type:                    rulespb.RulesRequest_Type(typ),
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		}
+		groups, warnings, err := client.Rules(request.Context(), req)
+		if err != nil {
+			return nil, nil, &ApiError{ErrorInternal, errors.Errorf("error retrieving rules: %v", err)}
+		}
+		return groups, warnings, nil
+	}
 }

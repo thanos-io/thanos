@@ -60,9 +60,7 @@ func TestStoreGateway(t *testing.T) {
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.HTTPEndpoint(), "loaded"))
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(), "1",
-		[]string{s1.GRPCNetworkEndpoint()}, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{s1.GRPCNetworkEndpoint()}, nil, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

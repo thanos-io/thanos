@@ -269,7 +269,17 @@ func seriesEquals(t *testing.T, expected []rawSeries, gotSS SeriesSet) {
 			testutil.Equals(t, len(expected[i].chunks[k]), j)
 		}
 	}
+}
 
+func TestExtendLabels(t *testing.T) {
+	testutil.Equals(t, []Label{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
+		ExtendLabels([]Label{{Name: "xb", Value: "2"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
+
+	testutil.Equals(t, []Label{{Name: "replica", Value: "01"}},
+		ExtendLabels([]Label{}, labels.FromStrings("replica", "01")))
+
+	testutil.Equals(t, []Label{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
+		ExtendLabels([]Label{{Name: "xb", Value: "2"}, {Name: "replica", Value: "NOT01"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
 }
 
 // Test the cost of merging series sets for different number of merged sets and their size.
@@ -353,7 +363,7 @@ func TestPrompbLabelsToLabelsUnsafe(t *testing.T) {
 	for _, l := range labels.FromMap(testLsetMap) {
 		pb = append(pb, prompb.Label{Name: l.Name, Value: l.Value})
 	}
-	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabels(pb))
+	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
 	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
 }
 

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v2.13.0"
+	defaultPrometheusVersion   = "v2.18.1"
 	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
@@ -115,7 +115,8 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on local address.
-// DEPRECATED: Use ForeachPrometheus instead.
+// Use ForeachPrometheus if you want to test against set of Prometheus versions.
+// TODO(bwplotka): Improve it with https://github.com/thanos-io/thanos/issues/758.
 func NewPrometheus() (*Prometheus, error) {
 	return newPrometheus("", "")
 }

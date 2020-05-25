@@ -4,7 +4,7 @@ version: 2
 defaults: &defaults
   docker:
     # Built by Thanos make docker-ci
-    - image: quay.io/thanos/thanos-ci:go1.14.2-node
+    - image: quay.io/thanos/thanos-ci:v1.1-go1.14.2-node
 jobs:
   test:
     <<: *defaults
