@@ -17,6 +17,6 @@ RUN git update-index --refresh; make build
 FROM quay.io/prometheus/busybox:latest
 LABEL maintainer="The Thanos Authors"
 
-COPY --from=builder /go/src/github.com/thanos-io/thanos/thanos /bin/thanos
+COPY --from=builder /go/bin/thanos /bin/thanos
 
 ENTRYPOINT [ "/bin/thanos" ]
