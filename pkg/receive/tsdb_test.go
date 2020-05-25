@@ -64,6 +64,9 @@ func TestFlushableStorage(t *testing.T) {
 		// Flush the WAL.
 		testutil.Ok(t, db.Flush())
 
+		// Open again the db because Flush() leaves the db in a closed state by design.
+		testutil.Ok(t, db.Open())
+
 		querier, err := db.Querier(context.Background(), 0, int64(maxt)-1)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, querier.Close()) }()
