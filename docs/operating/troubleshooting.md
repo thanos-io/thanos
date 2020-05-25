@@ -7,17 +7,17 @@ slug: /troubleshooting.md
 
 # Troubleshooting : Common cases
 
-- [Troubleshooting : Common cases](#troubleshooting---common-cases)
-  * [Overlaps](#overlaps)
-      - [Reasons](#reasons)
-      - [Solutions](#solutions)
-  * [Sidecar](#sidecar)
-    + [Connection Refused](#connection-refused)
-      - [Description](#description)
-      - [Possible Solution](#possible-solution)
-    + [Thanos not identifying Prometheus](#thanos-not-identifying-prometheus)
-      - [Description](#description-1)
-      - [Possible Solution](#possible-solution-1)
+- [Troubleshooting : Common cases](troubleshooting.md#troubleshooting---common-cases)
+  * [Overlaps](troubleshooting.md#overlaps)
+      - [Reasons](troubleshooting.md#reasons)
+      - [Solutions](troubleshooting.md#solutions)
+  * [Sidecar](troubleshooting.md#sidecar)
+    + [Connection Refused](troubleshooting.md#connection-refused)
+      - [Description](troubleshooting.md#description)
+      - [Possible Solution](troubleshooting.md#possible-solution)
+    + [Thanos not identifying Prometheus](troubleshooting.md#thanos-not-identifying-prometheus)
+      - [Description](troubleshooting.md#description-1)
+      - [Possible Solution](troubleshooting.md#possible-solution-1)
 
 ---
 
