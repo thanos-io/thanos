@@ -115,6 +115,7 @@ enum Aggr {
 
 message SeriesResponse {
   oneof result {
+    /// series contains 1 response series. The series labels are sorted by name.
     Series series = 1;
 
     /// warning is considered an information piece in place of series for warning purposes.
