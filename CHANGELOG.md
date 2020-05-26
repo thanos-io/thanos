@@ -11,6 +11,16 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+* [#2637](https://github.com/thanos-io/thanos/pull/2637) Compact: detect retryable errors that are inside of a wrapped `tsdb.MultiError`
+* [#2648](https://github.com/thanos-io/thanos/pull/2648) Store: allow index cache and caching bucket to be configured at the same time.
+
+### Changed
+
+- [#2658](https://github.com/thanos-io/thanos/pull/2658) Upgrade to Prometheus [@f4dd45609a05](https://github.com/prometheus/prometheus/commit/f4dd45609a05) which is after v2.18.1.
+    - TSDB now does memory-mapping of Head chunks and reduces memory usage.
+
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 
 ### Fixed
@@ -31,6 +41,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2532](https://github.com/thanos-io/thanos/pull/2532) Store: Added hidden option `--store.caching-bucket.config=<yaml content>` (or `--store.caching-bucket.config-file=<file.yaml>`) for experimental caching bucket, that can cache chunks into shared memcached. This can speed up querying and reduce number of requests to object storage.
 - [#2579](https://github.com/thanos-io/thanos/pull/2579) Store: Experimental caching bucket can now cache metadata as well. Config has changed from #2532.
 - [#2526](https://github.com/thanos-io/thanos/pull/2526) Compact: In case there are no labels left after deduplication via `--deduplication.replica-label`, assign first `replica-label` with value `deduped`.
+- [#2621](https://github.com/thanos-io/thanos/pull/2621) Receive: add flag to configure forward request timeout.
 
 ### Changed
 

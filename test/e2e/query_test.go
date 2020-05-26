@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ const queryUpWithoutInstance = "sum(up) without (instance)"
 // * expose 2 external labels, source and replica.
 // * scrape fake target. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func defaultPromConfig(name string, replica int, remoteWriteEndpoint string) string {
+func defaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string) string {
 	config := fmt.Sprintf(`
 global:
   external_labels:
@@ -55,6 +56,15 @@ remote_write:
     max_backoff: 10s
 `, config, remoteWriteEndpoint)
 	}
+
+	if ruleFile != "" {
+		config = fmt.Sprintf(`
+%s
+rule_files:
+-  "%s"
+`, config, ruleFile)
+	}
+
 	return config
 }
 
@@ -75,13 +85,13 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "alone", defaultPromConfig("prom-alone", 0, ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(81))), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "ha1", defaultPromConfig("prom-ha", 0, ""), e2ethanos.DefaultPrometheusImage())
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "ha2", defaultPromConfig("prom-ha", 1, ""), e2ethanos.DefaultPrometheusImage())
+	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
@@ -90,6 +100,7 @@ func TestQuery(t *testing.T) {
 		s.SharedDir(), "1",
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
 		[]string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()},
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
@@ -168,10 +179,11 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
 	var result model.Vector
+
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+addr), q, time.Now(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q, time.Now(), opts)
 		if err != nil {
 			return err
 		}

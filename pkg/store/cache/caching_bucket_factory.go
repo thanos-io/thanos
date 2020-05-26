@@ -24,7 +24,7 @@ import (
 // BucketCacheProvider is a type used to evaluate all bucket cache providers.
 type BucketCacheProvider string
 
-const MemcachedBucketCacheProvider BucketCacheProvider = "memcached" // Memcached cache-provider for caching bucket.
+const MemcachedBucketCacheProvider BucketCacheProvider = "MEMCACHED" // Memcached cache-provider for caching bucket.
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
@@ -38,8 +38,8 @@ type CachingWithBackendConfig struct {
 	MaxChunksGetRangeRequests int `yaml:"max_chunks_get_range_requests"`
 
 	// TTLs for various cache items.
-	ChunkObjectSizeTTL time.Duration `yaml:"chunk_object_size_ttl"`
-	ChunkSubrangeTTL   time.Duration `yaml:"chunk_subrange_ttl"`
+	ChunkObjectAttrsTTL time.Duration `yaml:"chunk_object_attrs_ttl"`
+	ChunkSubrangeTTL    time.Duration `yaml:"chunk_subrange_ttl"`
 
 	// How long to cache result of Iter call in root directory.
 	BlocksIterTTL time.Duration `yaml:"blocks_iter_ttl"`
@@ -53,7 +53,7 @@ type CachingWithBackendConfig struct {
 
 func (cfg *CachingWithBackendConfig) Defaults() {
 	cfg.ChunkSubrangeSize = 16000 // Equal to max chunk size.
-	cfg.ChunkObjectSizeTTL = 24 * time.Hour
+	cfg.ChunkObjectAttrsTTL = 24 * time.Hour
 	cfg.ChunkSubrangeTTL = 24 * time.Hour
 	cfg.MaxChunksGetRangeRequests = 3
 	cfg.BlocksIterTTL = 5 * time.Minute
@@ -81,8 +81,8 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	var c cache.Cache
 
-	switch config.Type {
-	case MemcachedBucketCacheProvider:
+	switch strings.ToUpper(string(config.Type)) {
+	case string(MemcachedBucketCacheProvider):
 		var memcached cacheutil.MemcachedClient
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
@@ -96,7 +96,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	cfg := NewCachingBucketConfig()
 
 	// Configure cache.
-	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectSizeTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
+	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
 	cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 	cfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 

@@ -24,10 +24,9 @@ func Test_CheckRules(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
-
 	testutil.Ok(t, checkRulesFiles(logger, &validFiles))
 
 	for _, fn := range invalidFiles {
-		testutil.NotOk(t, checkRulesFiles(logger, &fn))
+		testutil.NotOk(t, checkRulesFiles(logger, &fn), "expected err for file %s", fn)
 	}
 }

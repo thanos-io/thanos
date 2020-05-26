@@ -487,7 +487,7 @@ func (e RetryError) Error() string {
 // IsRetryError returns true if the base error is a RetryError.
 // If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
-	if multiErr, ok := err.(terrors.MultiError); ok {
+	if multiErr, ok := errors.Cause(err).(terrors.MultiError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(RetryError); !ok {
 				return false
@@ -647,7 +647,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 		cgKey, groupKey := cg.Key(), GroupKey(meta.Thanos)
 		if cgKey != groupKey {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cgKey, groupKey))
+			return false, ulid.ULID{}, halt(errors.Errorf("compact planned compaction for mixed groups. group: %s, planned block's group: %s", cgKey, groupKey))
 		}
 
 		for _, s := range meta.Compaction.Sources {

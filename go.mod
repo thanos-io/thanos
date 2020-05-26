@@ -19,6 +19,7 @@ require (
 	github.com/go-kit/kit v0.10.0
 	github.com/go-openapi/strfmt v0.19.5
 	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/status v1.0.3
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
@@ -73,10 +74,8 @@ replace (
 	// Make sure Cortex is not forcing us to some other Prometheus version.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200522113006-f4dd45609a05 // @f4dd45609a05e8f582cdcd8ef369004d1f9e3c02 (current master after v2.18.0).
 	k8s.io/api => k8s.io/api v0.17.5
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.17.5
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.5
 	k8s.io/client-go => k8s.io/client-go v0.17.5
-	k8s.io/code-generator => k8s.io/code-generator v0.17.5
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
 )

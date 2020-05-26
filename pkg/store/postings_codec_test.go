@@ -4,6 +4,8 @@
 package store
 
 import (
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -14,10 +16,14 @@ import (
 )
 
 func TestDiffVarintCodec(t *testing.T) {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000, "", nil, tsdb.DefaultStripeSize, nil)
+	chunksDir, err := ioutil.TempDir("", "diff_varint_codec")
+	testutil.Ok(t, err)
+
+	h, err := tsdb.NewHead(nil, nil, nil, 1000, chunksDir, nil, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
+		testutil.Ok(t, os.RemoveAll(chunksDir))
 	}()
 
 	appendTestData(t, h.Appender(), 1e6)

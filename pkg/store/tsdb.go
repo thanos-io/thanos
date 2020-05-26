@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc/codes"
@@ -51,7 +52,7 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, compo
 }
 
 // Info returns store information about the Prometheus instance.
-func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.externalLabels)),
 		StoreType: s.component.ToProto(),
@@ -95,7 +96,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
-	matchers, err := translateMatchers(newMatchers)
+	matchers, err := promclient.TranslateMatchers(newMatchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

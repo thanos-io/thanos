@@ -50,6 +50,8 @@ func TestRetryMultiError(t *testing.T) {
 	errs = terrors.MultiError{retryErr}
 	testutil.Assert(t, IsRetryError(errs), "if all errors are retriable this should return true")
 
+	testutil.Assert(t, IsRetryError(errors.Wrap(errs, "wrap")), "retry error with wrap")
+
 	errs = terrors.MultiError{nonRetryErr, retryErr}
 	testutil.Assert(t, !IsRetryError(errs), "mixed errors should return false")
 }

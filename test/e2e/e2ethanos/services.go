@@ -36,7 +36,7 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.16.0"
+	return "quay.io/prometheus/prometheus:v2.18.1"
 }
 
 func DefaultAlertmanagerImage() string {
@@ -111,7 +111,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDStoreAddresses []string) (*Service, error) {
+func NewQuerier(sharedDir string, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses []string) (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -127,6 +127,10 @@ func NewQuerier(sharedDir string, name string, storeAddresses []string, fileSDSt
 	})
 	for _, addr := range storeAddresses {
 		args = append(args, "--store="+addr)
+	}
+
+	for _, addr := range ruleAddresses {
+		args = append(args, "--rule="+addr)
 	}
 
 	if len(fileSDStoreAddresses) > 0 {

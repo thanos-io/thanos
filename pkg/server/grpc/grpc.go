@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
@@ -40,8 +41,10 @@ type Server struct {
 	opts options
 }
 
-// New creates a new Server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, opts ...Option) *Server {
+// New creates a new gRPC Store API.
+// If rulesSrv is not nil, it also registers Rules API to the returned server.
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv rulespb.RulesServer, opts ...Option) *Server {
+	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
 	}
@@ -83,14 +86,22 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 	s := grpc.NewServer(grpcOpts...)
 
-	storepb.RegisterStoreServer(s, storeSrv)
+	if rulesSrv != nil {
+		rulespb.RegisterRulesServer(s, rulesSrv)
+		storepb.RegisterStoreServer(s, storeSrv)
+		level.Info(logger).Log("msg", "registering as gRPC StoreAPI and RulesAPI")
+	} else {
+		storepb.RegisterStoreServer(s, storeSrv)
+		level.Info(logger).Log("msg", "registering as gRPC StoreAPI")
+	}
+
 	met.InitializeMetrics(s)
 	reg.MustRegister(met)
 
 	grpc_health.RegisterHealthServer(s, probe.HealthServer())
 
 	return &Server{
-		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
+		logger: logger,
 		comp:   comp,
 		srv:    s,
 		opts:   options,
@@ -146,7 +157,7 @@ type ReadWriteStoreServer interface {
 
 // NewReadWrite creates a new server that can be written to.
 func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
-	s := New(logger, reg, tracer, comp, probe, storeSrv, opts...)
+	s := New(logger, reg, tracer, comp, probe, storeSrv, nil, opts...)
 	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
 	return s
 }

@@ -1115,9 +1115,8 @@ func createBlockWithOneSample(t testutil.TB, dir string, blockIndex int, totalSe
 	var series []storepb.Series
 	h, err := tsdb.NewHead(nil, nil, nil, 1, dir, nil, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, h.Close())
-	}()
+	defer func() { testutil.Ok(t, h.Close()) }()
+
 	app := h.Appender()
 
 	for i := 0; i < totalSeries; i++ {
@@ -1138,9 +1137,7 @@ func createBlockWithOneSeries(t testutil.TB, dir string, lbls labels.Labels, blo
 
 	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples), dir, nil, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, h.Close())
-	}()
+	defer func() { testutil.Ok(t, h.Close()) }()
 
 	app := h.Appender()
 
@@ -1500,9 +1497,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		// Block 1.
 		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, tsdb.DefaultStripeSize, nil)
 		testutil.Ok(t, err)
-		defer func() {
-			testutil.Ok(t, h.Close())
-		}()
+		defer func() { testutil.Ok(t, h.Close()) }()
 
 		app := h.Appender()
 
@@ -1540,9 +1535,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		// Block 2, do not load this block yet.
 		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, tsdb.DefaultStripeSize, nil)
 		testutil.Ok(t, err)
-		defer func() {
-			testutil.Ok(t, h.Close())
-		}()
+		defer func() { testutil.Ok(t, h.Close()) }()
 
 		app := h.Appender()
 

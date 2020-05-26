@@ -13,6 +13,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -378,7 +379,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (*memcachedClient, error) {
 	logger := log.NewNopLogger()
 	selector := &MemcachedJumpHashSelector{}
-	client, err := newMemcachedClient(logger, "test", backendMock, selector, config, nil)
+	client, err := newMemcachedClient(logger, backendMock, selector, config, nil)
 
 	return client, err
 }
@@ -438,4 +439,19 @@ func (c *memcachedClientBackendMock) waitItems(expected int) error {
 	}
 
 	return errors.New("timeout expired while waiting for items in the memcached mock")
+}
+
+func TestMultipleClientsCanUseSameRegistry(t *testing.T) {
+	reg := prometheus.NewRegistry()
+
+	config := defaultMemcachedClientConfig
+	config.Addresses = []string{"127.0.0.1:11211"}
+
+	client1, err := NewMemcachedClientWithConfig(log.NewNopLogger(), "a", config, reg)
+	testutil.Ok(t, err)
+	defer client1.Stop()
+
+	client2, err := NewMemcachedClientWithConfig(log.NewNopLogger(), "b", config, reg)
+	testutil.Ok(t, err)
+	defer client2.Stop()
 }

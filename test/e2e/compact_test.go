@@ -379,7 +379,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

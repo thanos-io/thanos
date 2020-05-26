@@ -4,9 +4,9 @@
 syntax = "proto3";
 package thanos;
 
-import "types.proto";
+import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
-import "prompb/types.proto";
+import "store/storepb/prompb/types.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "storepb";
@@ -59,8 +59,7 @@ message WriteRequest {
   int64 replica = 3;
 }
 
-message InfoRequest {
-}
+message InfoRequest {}
 
 enum StoreType {
   UNKNOWN = 0;
@@ -85,20 +84,6 @@ message InfoResponse {
 
 message LabelSet {
   repeated Label labels = 1 [(gogoproto.nullable) = false];
-}
-
-/// PartialResponseStrategy controls partial response handling.
-enum PartialResponseStrategy {
-  /// WARN strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
-  /// storeAPI is temporarily not available) as warning which will not fail the whole query (still OK response).
-  /// Server should produce those as a warnings field in response.
-  WARN = 0;
-  /// ABORT strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
-  /// storeAPI is temporarily not available) as the gRPC error that aborts the query.
-  ///
-  /// This is especially useful for any rule/alert evaluations on top of StoreAPI which usually does not tolerate partial
-  /// errors.
-  ABORT = 1;
 }
 
 message SeriesRequest {
@@ -133,7 +118,7 @@ message SeriesResponse {
     Series series = 1;
 
     /// warning is considered an information piece in place of series for warning purposes.
-    /// It is used to warn query customer about suspicious cases or partial response (if enabled).
+    /// It is used to warn store API user about suspicious cases or partial response (if enabled).
     string warning = 2;
 
     /// hints is an opaque data structure that can be used to carry additional information from
@@ -153,7 +138,7 @@ message LabelNamesRequest {
 }
 
 message LabelNamesResponse {
-  repeated string names = 1;
+  repeated string names    = 1;
   repeated string warnings = 2;
 }
 
@@ -167,6 +152,6 @@ message LabelValuesRequest {
 }
 
 message LabelValuesResponse {
-  repeated string values = 1;
+  repeated string values   = 1;
   repeated string warnings = 2;
 }

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v2.13.0"
+	defaultPrometheusVersion   = "v2.18.1"
 	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
@@ -115,7 +115,8 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on local address.
-// DEPRECATED: Use ForeachPrometheus instead.
+// Use ForeachPrometheus if you want to test against set of Prometheus versions.
+// TODO(bwplotka): Improve it with https://github.com/thanos-io/thanos/issues/758.
 func NewPrometheus() (*Prometheus, error) {
 	return newPrometheus("", "")
 }
@@ -410,11 +411,17 @@ func createBlock(
 	resolution int64,
 	tombstones bool,
 ) (id ulid.ULID, err error) {
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, dir, nil, tsdb.DefaultStripeSize, nil)
+	chunksRootDir := filepath.Join(dir, "chunks")
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, tsdb.DefaultStripeSize, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
-	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
+	defer func() {
+		runutil.CloseWithErrCapture(&err, h, "TSDB Head")
+		if e := os.RemoveAll(chunksRootDir); e != nil {
+			err = errors.Wrap(e, "delete chunks dir")
+		}
+	}()
 
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)

@@ -1418,7 +1418,7 @@ type mockedStoreAPI struct {
 	injectedErrorIndex int
 }
 
-func (s *mockedStoreAPI) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
+func (s *mockedStoreAPI) Info(context.Context, *storepb.InfoRequest, ...grpc.CallOption) (*storepb.InfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
@@ -1428,13 +1428,13 @@ func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest,
 	return &StoreSeriesClient{injectedErrorIndex: s.injectedErrorIndex, injectedError: s.injectedError, ctx: ctx, respSet: s.RespSeries, respDur: s.RespDuration, slowSeriesIndex: s.SlowSeriesIndex}, s.RespError
 }
 
-func (s *mockedStoreAPI) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
+func (s *mockedStoreAPI) LabelNames(_ context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
 	s.LastLabelNamesReq = req
 
 	return s.RespLabelNames, s.RespError
 }
 
-func (s *mockedStoreAPI) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
+func (s *mockedStoreAPI) LabelValues(_ context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
 	s.LastLabelValuesReq = req
 
 	return s.RespLabelValues, s.RespError
