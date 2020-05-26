@@ -16,6 +16,11 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 * [#2637](https://github.com/thanos-io/thanos/pull/2637) Compact: detect retryable errors that are inside of a wrapped `tsdb.MultiError`
 * [#2648](https://github.com/thanos-io/thanos/pull/2648) Store: allow index cache and caching bucket to be configured at the same time.
 
+### Changed
+
+- [#2658](https://github.com/thanos-io/thanos/pull/2658) Upgrade to Prometheus [@f4dd45609a05](https://github.com/prometheus/prometheus/commit/f4dd45609a05) which is after v2.18.1.
+    - TSDB now does memory-mapping of Head chunks and reduces memory usage.
+
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 
 ### Fixed
