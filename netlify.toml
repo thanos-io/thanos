@@ -30,7 +30,7 @@ command = "(env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_U
     # Force HTTPS only.
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     # Load scripts only via HTTPS and from allowed domains.
-    Content-Security-Policy = "default-src https:; script-src https: 'self' 'sha256-3qFt4qPvMCWVUpjUxP5X57GBKae6RHYZ0rMjn9WuNF4='; style-src https: 'self' 'sha256-ouaL9aaaKO9mYd9/M+uyzYAL1CrOXJVRjV2nFgbGI2E='; object-src 'self'"
+    Content-Security-Policy = "default-src https:; script-src https: 'self' 'nonce-93HDK8392dfjh4Gb' 'unsafe-eval' 'sha256-3qFt4qPvMCWVUpjUxP5X57GBKae6RHYZ0rMjn9WuNF4='; style-src https: 'self' 'sha256-ouaL9aaaKO9mYd9/M+uyzYAL1CrOXJVRjV2nFgbGI2E='; object-src 'self'"
     # Only send referred when HTTPS is used.
     Referrer-Policy = "strict-origin-when-cross-origin"
     # Disable certain magic features, lol.
