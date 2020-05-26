@@ -17,7 +17,7 @@ jobs:
       # cores (> 30) while the CPU and RAM resources are throttled. If we
       # don't limit this to the number of allocated cores, the job is
       # likely to get OOMed and killed.
-      GOOPTS: "-p 2"
+      GOOPTS: "-p 1"
     steps:
       - checkout
       - setup_remote_docker:
