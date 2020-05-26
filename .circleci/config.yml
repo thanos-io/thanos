@@ -18,6 +18,7 @@ jobs:
       # don't limit this to the number of allocated cores, the job is
       # likely to get OOMed and killed.
       GOOPTS: "-p 2"
+      GOMAXPROCS: "2"
     steps:
       - checkout
       - setup_remote_docker:
