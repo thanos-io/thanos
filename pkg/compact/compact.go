@@ -49,6 +49,7 @@ type Syncer struct {
 	partial                  map[ulid.ULID]error
 	blockSyncConcurrency     int
 	metrics                  *syncerMetrics
+	enableVerification       bool
 	acceptMalformedIndex     bool
 	enableVerticalCompaction bool
 	duplicateBlocksFilter    *block.DeduplicateFilter
@@ -116,7 +117,7 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometh
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, blockSyncConcurrency int, enableVerification, acceptMalformedIndex, enableVerticalCompaction bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -130,6 +131,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		duplicateBlocksFilter:    duplicateBlocksFilter,
 		ignoreDeletionMarkFilter: ignoreDeletionMarkFilter,
 		blockSyncConcurrency:     blockSyncConcurrency,
+		enableVerification:       enableVerification,
 		acceptMalformedIndex:     acceptMalformedIndex,
 		// The syncer offers an option to enable vertical compaction, even if it's
 		// not currently used by Thanos, because the compactor is also used by Cortex
@@ -211,6 +213,7 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 				s.bkt,
 				lbls,
 				m.Thanos.Downsample.Resolution,
+				s.enableVerification,
 				s.acceptMalformedIndex,
 				s.enableVerticalCompaction,
 				s.metrics.compactions.WithLabelValues(groupKey),
@@ -295,6 +298,7 @@ type Group struct {
 	resolution                  int64
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
+	enableVerification          bool
 	acceptMalformedIndex        bool
 	enableVerticalCompaction    bool
 	compactions                 prometheus.Counter
@@ -312,6 +316,7 @@ func newGroup(
 	bkt objstore.Bucket,
 	lset labels.Labels,
 	resolution int64,
+	enableVerification bool,
 	acceptMalformedIndex bool,
 	enableVerticalCompaction bool,
 	compactions prometheus.Counter,
@@ -331,6 +336,7 @@ func newGroup(
 		labels:                      lset,
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
+		enableVerification:          enableVerification,
 		acceptMalformedIndex:        acceptMalformedIndex,
 		enableVerticalCompaction:    enableVerticalCompaction,
 		compactions:                 compactions,
@@ -671,22 +677,24 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		// Ensure all input blocks are valid.
-		stats, err := block.GatherIndexIssueStats(cg.logger, filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
-		if err != nil {
-			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", pdir)
-		}
+		if cg.enableVerification {
+			stats, err := block.GatherIndexIssueStats(cg.logger, filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			if err != nil {
+				return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", pdir)
+			}
 
-		if err := stats.CriticalErr(); err != nil {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", pdir, meta.Compaction.Level, meta.Thanos.Labels))
-		}
+			if err := stats.CriticalErr(); err != nil {
+				return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", pdir, meta.Compaction.Level, meta.Thanos.Labels))
+			}
 
-		if err := stats.Issue347OutsideChunksErr(); err != nil {
-			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
-		}
+			if err := stats.Issue347OutsideChunksErr(); err != nil {
+				return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
+			}
 
-		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
-			return false, ulid.ULID{}, errors.Wrapf(err,
-				"block id %s, try running with --debug.accept-malformed-index", id)
+			if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
+				return false, ulid.ULID{}, errors.Wrapf(err,
+					"block id %s, try running with --debug.accept-malformed-index", id)
+			}
 		}
 	}
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -740,8 +748,10 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+	if cg.enableVerification {
+		if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+		}
 	}
 
 	// Ensure the output block is not overlapping with anything else,

@@ -238,6 +238,7 @@ func runCompact(
 			ignoreDeletionMarkFilter,
 			blocksMarkedForDeletion,
 			conf.blockSyncConcurrency,
+			true, // Always enable verification.
 			conf.acceptMalformedIndex, enableVerticalCompaction)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
