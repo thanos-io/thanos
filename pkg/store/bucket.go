@@ -863,13 +863,20 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		ctx     = srv.Context()
-		stats   = &queryStats{}
-		res     []storepb.SeriesSet
-		mtx     sync.Mutex
-		g, gctx = errgroup.WithContext(ctx)
-		hints   = &hintspb.SeriesResponseHints{}
+		ctx      = srv.Context()
+		stats    = &queryStats{}
+		res      []storepb.SeriesSet
+		mtx      sync.Mutex
+		g, gctx  = errgroup.WithContext(ctx)
+		reqHints = &hintspb.SeriesRequestHints{}
+		resHints = &hintspb.SeriesResponseHints{}
 	)
+
+	if s.enableSeriesHints && req.Hints != nil {
+		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
+			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
+		}
+	}
 
 	s.mtx.RLock()
 
@@ -881,21 +888,26 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
-		mtx.Lock()
-		stats.blocksQueried += len(blocks)
-		mtx.Unlock()
-
 		if s.debugLogging {
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
+		numQueriedBlocks := 0
 		for _, b := range blocks {
 			b := b
 
 			if s.enableSeriesHints {
+				// Check whether this block should be included in the query.
+				if !reqHints.ShouldQueryBlock(b.meta.ULID) {
+					continue
+				}
+
 				// Keep track of queried blocks.
-				hints.AddQueriedBlock(b.meta.ULID)
+				resHints.AddQueriedBlock(b.meta.ULID)
 			}
+
+			// Now that the optional filter has been done, we can increase the queried blocks count.
+			numQueriedBlocks++
 
 			// We must keep the readers open until all their data has been sent.
 			indexr := b.indexReader(gctx)
@@ -926,6 +938,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				return nil
 			})
 		}
+
+		mtx.Lock()
+		stats.blocksQueried += numQueriedBlocks
+		mtx.Unlock()
 	}
 
 	s.mtx.RUnlock()
@@ -1010,7 +1026,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	if s.enableSeriesHints {
 		var anyHints *types.Any
 
-		if anyHints, err = types.MarshalAny(hints); err != nil {
+		if anyHints, err = types.MarshalAny(resHints); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 			return
 		}

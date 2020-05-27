@@ -18,6 +18,12 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
+message SeriesRequestHints {
+    /// include_blocks is the list of blocks that should be queried. Any other block loaded in the
+    /// store can be skipped if the list is non empty. If the list is empty, no filtering is applied.
+    repeated Block include_blocks = 1 [(gogoproto.nullable) = false];
+}
+
 message SeriesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];

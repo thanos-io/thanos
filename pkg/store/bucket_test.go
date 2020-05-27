@@ -23,6 +23,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -1691,7 +1692,7 @@ func TestSeries_HintsEnabled(t *testing.T) {
 
 	testCases := []*benchSeriesCase{
 		{
-			name: "query a single block",
+			name: "querying a range containing 1 block should return 1 block in the response hints",
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 1,
@@ -1708,7 +1709,7 @@ func TestSeries_HintsEnabled(t *testing.T) {
 				},
 			},
 		}, {
-			name: "query multiple blocks",
+			name: "querying a range containing multiple blocks should return multiple blocks in the response hints",
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 3,
@@ -1725,8 +1726,38 @@ func TestSeries_HintsEnabled(t *testing.T) {
 					},
 				},
 			},
+		}, {
+			name: "querying a range containing multiple blocks but filtering a specific block should query only the requested block",
+			req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+				Hints: mustMarshalAny(&hintspb.SeriesRequestHints{
+					IncludeBlocks: []hintspb.Block{
+						{Id: block1.String()},
+					},
+				}),
+			},
+			expectedSeries: seriesSet1,
+			expectedHints: []hintspb.SeriesResponseHints{
+				{
+					QueriedBlocks: []hintspb.Block{
+						{Id: block1.String()},
+					},
+				},
+			},
 		},
 	}
 
 	benchmarkSeries(tb, store, testCases)
+}
+
+func mustMarshalAny(pb proto.Message) *types.Any {
+	out, err := types.MarshalAny(pb)
+	if err != nil {
+		panic(err)
+	}
+	return out
 }
