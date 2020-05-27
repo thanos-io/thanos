@@ -60,3 +60,9 @@ issues:
         - linters:
               - unused
           text: "Source.producesBlocks"
+        - linters:
+              - unused
+          text: "newMockAlertmanager"
+        - linters:
+              - unused
+          text: "ruleAndAssert"

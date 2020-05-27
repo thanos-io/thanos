@@ -37,22 +37,18 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v2.18.1"
+	defaultPrometheusVersion   = "v1.8.2-0.20200507164740-ecee9c8abfd1" // v2.18.1
 	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
 	// Space delimited list of versions.
-	promVersionsEnvVar    = "THANOS_TEST_PROMETHEUS_VERSIONS"
+	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
 	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
 )
 
 func PrometheusBinary() string {
-	return prometheusBin(defaultPrometheusVersion)
-}
-
-func prometheusBin(version string) string {
-	return fmt.Sprintf("prometheus-%s", version)
+	return "prometheus-" + defaultPrometheusVersion
 }
 
 func AlertmanagerBinary() string {
@@ -77,7 +73,7 @@ type Prometheus struct {
 	dir     string
 	db      *tsdb.DB
 	prefix  string
-	version string
+	binPath string
 
 	running            bool
 	cmd                *exec.Cmd
@@ -96,14 +92,14 @@ func NewTSDB() (*tsdb.DB, error) {
 }
 
 func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
-	vers := os.Getenv(promVersionsEnvVar)
-	if vers == "" {
-		vers = defaultPrometheusVersion
+	paths := os.Getenv(promPathsEnvVar)
+	if paths == "" {
+		paths = PrometheusBinary()
 	}
 
-	for _, ver := range strings.Split(vers, " ") {
-		if ok := t.Run(ver, func(t *testing.T) {
-			p, err := newPrometheus(ver, "")
+	for _, path := range strings.Split(paths, " ") {
+		if ok := t.Run(path, func(t *testing.T) {
+			p, err := newPrometheus(path, "")
 			testutil.Ok(t, err)
 
 			testFn(t, p)
@@ -126,9 +122,9 @@ func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	return newPrometheus("", prefix)
 }
 
-func newPrometheus(version string, prefix string) (*Prometheus, error) {
-	if version == "" {
-		version = defaultPrometheusVersion
+func newPrometheus(binPath string, prefix string) (*Prometheus, error) {
+	if binPath == "" {
+		binPath = PrometheusBinary()
 	}
 
 	db, err := NewTSDB()
@@ -146,7 +142,7 @@ func newPrometheus(version string, prefix string) (*Prometheus, error) {
 		dir:     db.Dir(),
 		db:      db,
 		prefix:  prefix,
-		version: version,
+		binPath: binPath,
 		addr:    "<prometheus-not-started>",
 	}, nil
 }
@@ -188,7 +184,7 @@ func (p *Prometheus) start() error {
 		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
 	}, extra...)
 
-	p.cmd = exec.Command(prometheusBin(p.version), args...)
+	p.cmd = exec.Command(p.binPath, args...)
 	p.cmd.SysProcAttr = SysProcAttr()
 
 	go func() {
