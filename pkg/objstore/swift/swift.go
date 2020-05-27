@@ -122,7 +122,7 @@ func (c *Container) Get(ctx context.Context, name string) (io.ReadCloser, error)
 func (c *Container) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	lowerLimit := ""
 	upperLimit := ""
-	if off > 0 {
+	if off >= 0 {
 		lowerLimit = fmt.Sprintf("%d", off)
 	}
 	if length > 0 {
