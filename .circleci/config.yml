@@ -24,8 +24,6 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
               echo "Awesome! GCS and S3 AWS integration tests are enabled."
             fi
-      - run: make check-docs
-      - run: make check-examples
       - run:
           name: "Run unit tests."
           # taskset sets CPU affinity to 2 (current CPU limit).

@@ -308,11 +308,11 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 .PHONY: examples-in-container
 examples-in-container:
 	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JB='/go/bin/jb' jsonnet-vendor
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
 		EMBEDMD='/go/bin/embedmd' \
 		JSONNET='/go/bin/jsonnet' \
-		JSONNET_BUNDLER='/go/bin/jb' \
+		JB='/go/bin/jb' \
 		PROMTOOL='/go/bin/promtool' \
 		GOJSONTOYAML='/go/bin/gojsontoyaml' \
 		GOLANGCILINT='/go/bin/golangci-lint' \
@@ -341,9 +341,9 @@ examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.lib
 	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: $(JSONNET_BUNDLER) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
+jsonnet-vendor: $(JB) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
-	cd ${THANOS_MIXIN} && $(JSONNET_BUNDLER) install
+	cd ${THANOS_MIXIN} && $(JB) install
 
 JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s
 

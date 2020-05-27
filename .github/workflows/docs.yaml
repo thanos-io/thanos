@@ -1,0 +1,33 @@
+name: docs
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    name:  Documentation check
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+      - name: Checkout code into the Go module directory.
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.14.x
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Check docs
+        run: make check-docs
+      - name: Check examples
+        run: make check-examples
