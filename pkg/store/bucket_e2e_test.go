@@ -167,7 +167,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		filterConf,
 		true,
 		true,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 	)
