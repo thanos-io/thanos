@@ -4,7 +4,11 @@
 package e2ethanos
 
 import (
+	"os/exec"
+	"testing"
+
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type Service struct {
@@ -35,4 +39,12 @@ func (s *Service) GRPCNetworkEndpoint() string {
 
 func (s *Service) GRPCNetworkEndpointFor(networkName string) string {
 	return s.NetworkEndpointFor(networkName, s.grpc)
+}
+
+func CleanScenario(t *testing.T, s *e2e.Scenario) func() {
+	return func() {
+		// Otherwise close will fail.
+		testutil.Ok(t, exec.Command("chmod", "-R", "777", s.SharedDir()).Run())
+		s.Close()
+	}
 }

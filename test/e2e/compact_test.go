@@ -271,7 +271,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_compact")
 	testutil.Ok(t, err)
-	defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	dir := filepath.Join(s.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))

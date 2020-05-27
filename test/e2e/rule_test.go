@@ -207,7 +207,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_rule_am_http_client")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	tlsSubDir := filepath.Join("tls")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), tlsSubDir), os.ModePerm))
@@ -293,7 +293,7 @@ func TestRule(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_rule")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()

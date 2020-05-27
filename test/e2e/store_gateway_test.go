@@ -36,7 +36,7 @@ func TestStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_store_gateway")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	m := e2edb.NewMinio(80, "thanos")
 	testutil.Ok(t, s.StartAndWaitReady(m))

@@ -28,7 +28,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	s, err := e2e.NewScenario(netName)
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	rulesSubDir := filepath.Join("rules")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
