@@ -423,12 +423,15 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 	cmd := root.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
-	// TODO(bwplotka): Allow to replicate many resolution levels.
-	resolution := cmd.Flag("resolution", "Only blocks with this resolution will be replicated.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64()
-	// TODO(bwplotka): Allow to replicate many compaction levels.
-	compaction := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Int()
+	resolutions := cmd.Flag("resolution", "Only blocks with this resolution will be replicated. (Resolution in ms)").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64List()
+	compactions := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Ints()
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
+
+	var resolutionLevels []compact.ResolutionLevel
+	for _, lvl := range *resolutions {
+		resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl))
+	}
 
 	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
@@ -444,8 +447,8 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			matchers,
-			compact.ResolutionLevel(*resolution),
-			*compaction,
+			resolutionLevels,
+			*compactions,
 			objStoreConfig,
 			toObjStoreConfig,
 			*singleRun,

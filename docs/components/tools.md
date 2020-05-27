@@ -451,9 +451,9 @@ Flags:
                                  format details:
                                  https://thanos.io/storage.md/#configuration The
                                  object storage which replicate data to.
-      --resolution=0             Only blocks with this resolution will be
-                                 replicated.
-      --compaction=1             Only blocks with this compaction level will be
+      --resolution=0 ...         Only blocks with this resolution will be
+                                 replicated. (Resolution in ms)
+      --compaction=1 ...         Only blocks with this compaction level will be
                                  replicated.
       --matcher=key="value" ...  Only blocks whose external labels exactly match
                                  this matcher will be replicated.

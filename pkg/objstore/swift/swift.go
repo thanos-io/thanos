@@ -251,7 +251,7 @@ func configFromEnv() SwiftConfig {
 		ProjectName:       os.Getenv("OS_PROJECT_NAME"),
 		UserDomainID:      os.Getenv("OS_USER_DOMAIN_ID"),
 		UserDomainName:    os.Getenv("OS_USER_DOMAIN_NAME"),
-		ProjectDomainID:   os.Getenv("OS_PROJET_DOMAIN_ID"),
+		ProjectDomainID:   os.Getenv("OS_PROJECT_DOMAIN_ID"),
 		ProjectDomainName: os.Getenv("OS_PROJECT_DOMAIN_NAME"),
 	}
 

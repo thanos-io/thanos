@@ -27,24 +27,24 @@ import (
 
 // BlockFilter is block filter that filters out compacted and unselected blocks.
 type BlockFilter struct {
-	logger          log.Logger
-	labelSelector   labels.Selector
-	resolutionLevel compact.ResolutionLevel
-	compactionLevel int
+	logger           log.Logger
+	labelSelector    labels.Selector
+	resolutionLevels []compact.ResolutionLevel
+	compactionLevels []int
 }
 
 // NewBlockFilter returns block filter.
 func NewBlockFilter(
 	logger log.Logger,
 	labelSelector labels.Selector,
-	resolutionLevel compact.ResolutionLevel,
-	compactionLevel int,
+	resolutionLevels []compact.ResolutionLevel,
+	compactionLevels []int,
 ) *BlockFilter {
 	return &BlockFilter{
-		labelSelector:   labelSelector,
-		logger:          logger,
-		resolutionLevel: resolutionLevel,
-		compactionLevel: compactionLevel,
+		labelSelector:    labelSelector,
+		logger:           logger,
+		resolutionLevels: resolutionLevels,
+		compactionLevels: compactionLevels,
 	}
 }
 
@@ -77,20 +77,28 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	}
 
 	gotResolution := compact.ResolutionLevel(b.Thanos.Downsample.Resolution)
-	expectedResolution := bf.resolutionLevel
-
-	resolutionMatch := gotResolution == expectedResolution
+	resolutionMatch := false
+	for _, allowedResolution := range bf.resolutionLevels {
+		if gotResolution == allowedResolution {
+			resolutionMatch = true
+			break
+		}
+	}
 	if !resolutionMatch {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "resolutions don't match", "got_resolution", gotResolution, "expected_resolution", expectedResolution)
+		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "resolution doesn't match allowed resolutions", "got_resolution", gotResolution, "allowed_resolutions", bf.resolutionLevels)
 		return false
 	}
 
 	gotCompactionLevel := b.BlockMeta.Compaction.Level
-	expectedCompactionLevel := bf.compactionLevel
-
-	compactionMatch := gotCompactionLevel == expectedCompactionLevel
+	compactionMatch := false
+	for _, allowedCompactionLevel := range bf.compactionLevels {
+		if gotCompactionLevel == allowedCompactionLevel {
+			compactionMatch = true
+			break
+		}
+	}
 	if !compactionMatch {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "compaction levels don't match", "got_compaction_level", gotCompactionLevel, "expected_compaction_level", expectedCompactionLevel)
+		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", bf.compactionLevels)
 		return false
 	}
 
