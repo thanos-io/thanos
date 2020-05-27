@@ -71,11 +71,11 @@ $(HUGO): .bingo/hugo.mod
 	@$(GO) build -modfile=.bingo/hugo.mod -o=$(GOBIN)/hugo-v0.55.3 "github.com/gohugoio/hugo"
 .bingo/hugo.mod: ;
 
-JB ?= $(GOBIN)/jb-v0.4.0
+JB ?= $(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443
 $(JB): .bingo/jb.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jb-v0.4.0"
-	@$(GO) build -modfile=.bingo/jb.mod -o=$(GOBIN)/jb-v0.4.0 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
+	@echo "(re)installing $(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443"
+	@$(GO) build -modfile=.bingo/jb.mod -o=$(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
 .bingo/jb.mod: ;
 
 JSONNET ?= $(GOBIN)/jsonnet-v0.16.0
