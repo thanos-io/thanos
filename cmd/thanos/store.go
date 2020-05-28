@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -214,6 +215,9 @@ func runStore(
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
 	}
+
+	// Include interactions with bucket in the traces.
+	bkt = &objstore.TracingBucket{Bucket: bkt}
 
 	cachingBucketConfigYaml, err := cachingBucketConfig.Content()
 	if err != nil {

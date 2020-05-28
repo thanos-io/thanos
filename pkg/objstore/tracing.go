@@ -13,6 +13,10 @@ type TracingBucket struct {
 	Bucket
 }
 
+func NewTracingBucket(bkt Bucket) Bucket {
+	return &TracingBucket{Bucket: bkt}
+}
+
 func (t TracingBucket) WithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) Bucket {
 	if ib, ok := t.Bucket.(InstrumentedBucket); ok {
 		return TracingBucket{ib.WithExpectedErrs(expectedFunc)}
