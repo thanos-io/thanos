@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -724,7 +723,6 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
-	indexCache := filepath.Join(bdir, block.IndexCacheFilename)
 
 	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
 		Labels:     cg.labels.Map(),
@@ -750,10 +748,6 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
 			return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
 		}
-	}
-
-	if err := indexheader.WriteJSON(cg.logger, index, indexCache); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "write index cache")
 	}
 
 	begin = time.Now()

@@ -482,7 +482,6 @@ func TestBucketStore_Info(t *testing.T) {
 		allowAllFilterConf,
 		true,
 		true,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 	)
@@ -731,7 +730,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				20,
 				allowAllFilterConf,
-				true,
 				true,
 				true,
 				DefaultPostingOffsetInMemorySampling,
@@ -1684,7 +1682,6 @@ func TestSeries_HintsEnabled(t *testing.T) {
 		10,
 		nil,
 		false,
-		true,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,

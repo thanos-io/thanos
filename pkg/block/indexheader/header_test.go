@@ -5,7 +5,6 @@ package indexheader
 
 import (
 	"context"
-	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -13,17 +12,16 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -170,24 +168,6 @@ func TestReaders(t *testing.T) {
 
 				compareIndexToHeader(t, b, br)
 			})
-
-			t.Run("json", func(t *testing.T) {
-				fn := filepath.Join(tmpDir, id.String(), block.IndexCacheFilename)
-				testutil.Ok(t, WriteJSON(log.NewNopLogger(), filepath.Join(tmpDir, id.String(), "index"), fn))
-
-				jr, err := NewJSONReader(ctx, log.NewNopLogger(), nil, tmpDir, id)
-				testutil.Ok(t, err)
-
-				defer func() { testutil.Ok(t, jr.Close()) }()
-
-				if id == id1 {
-					testutil.Equals(t, 14, len(jr.symbols))
-					testutil.Equals(t, 2, len(jr.lvals))
-					testutil.Equals(t, 15, len(jr.postings))
-				}
-
-				compareIndexToHeader(t, b, jr)
-			})
 		})
 	}
 
@@ -331,85 +311,6 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 	return m
 }
 
-func BenchmarkJSONWrite(t *testing.B) {
-	ctx := context.Background()
-	logger := log.NewNopLogger()
-	tmpDir, err := ioutil.TempDir("", "bench-indexheader")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
-
-	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bkt.Close()) }()
-
-	m := prepareIndexV2Block(t, tmpDir, bkt)
-	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "local", m.ULID.String()), os.ModePerm))
-	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexCacheFilename)
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
-		testutil.Ok(t, forceDownloadFile(
-			ctx,
-			logger,
-			bkt,
-			filepath.Join(m.ULID.String(), block.IndexFilename),
-			filepath.Join(tmpDir, "local", m.ULID.String(), block.IndexFilename),
-		))
-		testutil.Ok(t, WriteJSON(logger, filepath.Join(tmpDir, "local", m.ULID.String(), block.IndexFilename), fn))
-	}
-}
-
-func forceDownloadFile(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, src, dst string) (err error) {
-	rc, err := bkt.Get(ctx, src)
-	if err != nil {
-		return errors.Wrapf(err, "get file %s", src)
-	}
-	defer runutil.CloseWithLogOnErr(logger, rc, "download block's file reader")
-
-	f, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR, os.ModePerm)
-	if err != nil {
-		return errors.Wrap(err, "create file")
-	}
-
-	if _, err := f.Seek(0, 0); err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			if rerr := os.Remove(dst); rerr != nil {
-				level.Warn(logger).Log("msg", "failed to remove partially downloaded file", "file", dst, "err", rerr)
-			}
-		}
-	}()
-	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
-
-	if _, err = io.Copy(f, rc); err != nil {
-		return errors.Wrap(err, "copy object to file")
-	}
-	return nil
-}
-
-func BenchmarkJSONReader(t *testing.B) {
-	logger := log.NewNopLogger()
-	tmpDir, err := ioutil.TempDir("", "bench-indexheader")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
-
-	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bkt.Close()) }()
-
-	m := prepareIndexV2Block(t, tmpDir, bkt)
-	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexCacheFilename)
-	testutil.Ok(t, WriteJSON(log.NewNopLogger(), filepath.Join(tmpDir, m.ULID.String(), block.IndexFilename), fn))
-
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
-		jr, err := newFileJSONReader(logger, fn)
-		testutil.Ok(t, err)
-		testutil.Ok(t, jr.Close())
-	}
-}
-
 func BenchmarkBinaryWrite(t *testing.B) {
 	ctx := context.Background()
 
@@ -449,4 +350,66 @@ func BenchmarkBinaryReader(t *testing.B) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
 	}
+}
+
+func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
+	version := int(b.Range(4, 5)[0])
+
+	if version != 1 && version != 2 {
+		return nil, errors.Errorf("unknown index file version %d", version)
+	}
+
+	toc, err := index.NewTOCFromByteSlice(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "read TOC")
+	}
+
+	symbolsV2, symbolsV1, err := readSymbols(b, version, int(toc.Symbols))
+	if err != nil {
+		return nil, errors.Wrap(err, "read symbols")
+	}
+
+	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
+	for o, s := range symbolsV1 {
+		symbolsTable[o] = s
+	}
+	for o, s := range symbolsV2 {
+		symbolsTable[uint32(o)] = s
+	}
+	return symbolsTable, nil
+}
+
+// readSymbols reads the symbol table fully into memory and allocates proper strings for them.
+// Strings backed by the mmap'd memory would cause memory faults if applications keep using them
+// after the reader is closed.
+func readSymbols(bs index.ByteSlice, version int, off int) ([]string, map[uint32]string, error) {
+	if off == 0 {
+		return nil, nil, nil
+	}
+	d := encoding.NewDecbufAt(bs, off, castagnoliTable)
+
+	var (
+		origLen     = d.Len()
+		cnt         = d.Be32int()
+		basePos     = uint32(off) + 4
+		nextPos     = basePos + uint32(origLen-d.Len())
+		symbolSlice []string
+		symbols     = map[uint32]string{}
+	)
+	if version == index.FormatV2 {
+		symbolSlice = make([]string, 0, cnt)
+	}
+
+	for d.Err() == nil && d.Len() > 0 && cnt > 0 {
+		s := d.UvarintStr()
+
+		if version == index.FormatV2 {
+			symbolSlice = append(symbolSlice, s)
+		} else {
+			symbols[nextPos] = s
+			nextPos = basePos + uint32(origLen-d.Len())
+		}
+		cnt--
+	}
+	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
 }

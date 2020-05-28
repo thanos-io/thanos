@@ -87,13 +87,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
-	// TODO(bwplotka): Remove in v0.13.0 if no issues.
-	disableIndexHeader := cmd.Flag("store.disable-index-header", "If specified, Store Gateway will use index-cache.json for each block instead of recreating binary index-header").
-		Hidden().Default("false").Bool()
-
 	postingOffsetsInMemSampling := cmd.Flag("store.index-header-posting-offsets-in-mem-sampling", "Controls what is the ratio of postings offsets store will hold in memory. "+
 		"Larger value will keep less offsets, which will increase CPU cycles needed for query touching those postings. It's meant for setups that want low baseline memory pressure and where less traffic is expected. "+
-		"On the contrary, smaller value will increase baseline memory usage, but improve latency slightly. 1 will keep all in memory. Default value is the same as in Prometheus which gives a good balance. This works only when --store.disable-index-header is NOT specified.").
+		"On the contrary, smaller value will increase baseline memory usage, but improve latency slightly. 1 will keep all in memory. Default value is the same as in Prometheus which gives a good balance.").
 		Hidden().Default(fmt.Sprintf("%v", store.DefaultPostingOffsetInMemorySampling)).Int()
 
 	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
@@ -146,7 +142,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			},
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
-			*disableIndexHeader,
 			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
 			time.Duration(*ignoreDeletionMarksDelay),
@@ -179,7 +174,7 @@ func runStore(
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
-	advertiseCompatibilityLabel, disableIndexHeader, enablePostingsCompression bool,
+	advertiseCompatibilityLabel, enablePostingsCompression bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
 	externalPrefix, prefixHeader string,
@@ -281,9 +276,6 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
-	if !disableIndexHeader {
-		level.Info(logger).Log("msg", "index-header instead of index-cache.json enabled")
-	}
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -298,7 +290,6 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		advertiseCompatibilityLabel,
-		!disableIndexHeader,
 		enablePostingsCompression,
 		postingOffsetsInMemSampling,
 		false,
