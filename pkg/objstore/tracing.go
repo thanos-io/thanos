@@ -48,7 +48,7 @@ func (t TracingBucket) Get(ctx context.Context, name string) (io.ReadCloser, err
 
 func (t TracingBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	span, spanCtx := tracing.StartSpan(ctx, "bucket_getrange")
-	span.LogKV("name", name, "off", off, "length", length)
+	span.LogKV("name", name, "offset", off, "length", length)
 
 	r, err := t.Bucket.GetRange(spanCtx, name, off, length)
 	if err != nil {
@@ -66,10 +66,6 @@ func (t TracingBucket) Exists(ctx context.Context, name string) (exists bool, er
 		exists, err = t.Bucket.Exists(spanCtx, name)
 	})
 	return
-}
-
-func (t TracingBucket) IsObjNotFoundErr(err error) bool {
-	return t.Bucket.IsObjNotFoundErr(err)
 }
 
 func (t TracingBucket) Attributes(ctx context.Context, name string) (attrs ObjectAttributes, err error) {
@@ -111,14 +107,21 @@ func (t *tracingReadCloser) Read(p []byte) (int, error) {
 	if n > 0 {
 		t.read += n
 	}
-	if err != nil {
+	if err != nil && err != io.EOF && t.s != nil {
 		t.s.LogKV("err", err)
 	}
 	return n, err
 }
 
 func (t *tracingReadCloser) Close() error {
-	err := t.Close()
-	t.s.LogKV("read", t.read)
+	err := t.r.Close()
+	if t.s != nil {
+		t.s.LogKV("read", t.read)
+		if err != nil {
+			t.s.LogKV("close err", err)
+		}
+		t.s.Finish()
+		t.s = nil
+	}
 	return err
 }

@@ -14,8 +14,15 @@ type TracingCache struct {
 
 func (t TracingCache) Fetch(ctx context.Context, keys []string) (result map[string][]byte) {
 	tracing.DoWithSpan(ctx, "cache_fetch", func(spanCtx context.Context, span opentracing.Span) {
+		span.LogKV("requested keys", len(keys))
+
 		result = t.Cache.Fetch(spanCtx, keys)
-		span.LogKV("requested", len(keys), "returned", len(result))
+
+		bytes := 0
+		for _, v := range result {
+			bytes += len(v)
+		}
+		span.LogKV("returned keys", len(result), "returned bytes", bytes)
 	})
 	return
 }
