@@ -319,3 +319,9 @@ Following options are used for metadata caching (meta.json files, deletion mark 
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
 Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+
+## Index Header
+
+In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
+
+For more information, please refer to the [Binary index-header](../operating/binary-index-header.md) operational guide.
