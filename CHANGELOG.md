@@ -26,7 +26,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [2603](https://github.com/thanos-io/thanos/pull/2603) Store/Querier: Significantly optimize cases where StoreAPIs or blocks returns exact overlapping chunks (e.g Store GW and sidecar or brute force Store Gateway HA).
 
 ### Added
-- [#TBA](https://github.com/thanos-io/thanos/pull/TBA) Tools: bucket replicate now allows passing repeated `--compaction` and `--resolution` flags.
+- [#2671](https://github.com/thanos-io/thanos/pull/2671) Tools: bucket replicate now allows passing repeated `--compaction` and `--resolution` flags.
 
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 
