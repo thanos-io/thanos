@@ -414,29 +414,29 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 // Provide a list of resolution, can not use Enum directly, since string does not implement int64 function.
 func listResLevel() []string {
 	return []string{
-		strconv.FormatInt(downsample.ResLevel0, 10),
-		strconv.FormatInt(downsample.ResLevel1, 10),
-		strconv.FormatInt(downsample.ResLevel2, 10)}
+		time.Duration(downsample.ResLevel0).String(),
+		time.Duration(downsample.ResLevel1).String(),
+		time.Duration(downsample.ResLevel2).String()}
 }
 
 func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
-	resolutions := cmd.Flag("resolution", "Only blocks with those resolutions will be replicated. (Resolution in ms). Repeated flag.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64List()
-	compactions := cmd.Flag("compaction", "Only blocks with those compaction levels will be replicated. Repeated flag.").Default("1").Ints()
+	resolutions := cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationList()
+	compactions := cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").Ints()
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
-
-	var resolutionLevels []compact.ResolutionLevel
-	for _, lvl := range *resolutions {
-		resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl))
-	}
 
 	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse block label matchers")
+		}
+
+		var resolutionLevels []compact.ResolutionLevel
+		for _, lvl := range *resolutions {
+			resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl.Milliseconds()))
 		}
 
 		return replicate.RunReplicate(

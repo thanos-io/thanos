@@ -6,6 +6,7 @@ package replicate
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"path"
@@ -86,13 +87,13 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 
 	gotResolution := compact.ResolutionLevel(b.Thanos.Downsample.Resolution)
 	if _, ok := bf.resolutionLevels[gotResolution]; !ok {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "resolution doesn't match allowed resolutions", "got_resolution", gotResolution, "allowed_resolutions", bf.resolutionLevels)
+		level.Info(bf.logger).Log("msg", "filtering block", "reason", "resolution doesn't match allowed resolutions", "got_resolution", gotResolution, "allowed_resolutions", fmt.Sprintf("%v", bf.resolutionLevels))
 		return false
 	}
 
 	gotCompactionLevel := b.BlockMeta.Compaction.Level
 	if _, ok := bf.compactionLevels[gotCompactionLevel]; !ok {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", bf.compactionLevels)
+		level.Info(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", fmt.Sprintf("%v", bf.compactionLevels))
 		return false
 	}
 
@@ -213,31 +214,23 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 			return nil
 		}
 
-		level.Debug(rs.logger).Log("msg", "adding block to available blocks", "block_uuid", id.String())
-
-		availableBlocks = append(availableBlocks, meta)
+		if rs.blockFilter(meta) {
+			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
+			availableBlocks = append(availableBlocks, meta)
+		}
 
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "iterate over origin bucket")
 	}
 
-	candidateBlocks := []*metadata.Meta{}
-
-	for _, b := range availableBlocks {
-		if rs.blockFilter(b) {
-			level.Debug(rs.logger).Log("msg", "adding block to candidate blocks", "block_uuid", b.BlockMeta.ULID.String())
-			candidateBlocks = append(candidateBlocks, b)
-		}
-	}
-
 	// In order to prevent races in compactions by the target environment, we
 	// need to replicate oldest start timestamp first.
-	sort.Slice(candidateBlocks, func(i, j int) bool {
-		return candidateBlocks[i].BlockMeta.MinTime < candidateBlocks[j].BlockMeta.MinTime
+	sort.Slice(availableBlocks, func(i, j int) bool {
+		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
-	for _, b := range candidateBlocks {
+	for _, b := range availableBlocks {
 		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
 			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 		}
