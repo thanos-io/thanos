@@ -503,7 +503,7 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 This release also disables gossip mode by default for all components.
 See [this](docs/proposals/201809_gossip-removal.md) for more details.
 
-:warning: This release moves Thanos docker images (NOT artifacts by accident) to Golang 1.12. This release includes change in GC's memory release which gives following effect (source: https://golang.org/doc/go1.12):
+:warning: This release moves Thanos docker images (NOT artifacts by accident) to Golang 1.12. This release includes change in GC's memory release which gives following effect:
 
 > On Linux, the runtime now uses MADV_FREE to release unused memory. This is more efficient but may result in higher reported RSS. The kernel will reclaim the unused data when it is needed. To revert to the Go 1.11 behavior (MADV_DONTNEED), set the environment variable GODEBUG=madvdontneed=1.
 

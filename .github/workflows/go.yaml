@@ -1,0 +1,77 @@
+name: go
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+  pull_request:
+
+# TODO(bwplotka): Add tests here.
+jobs:
+  cross-build-check:
+    runs-on: ubuntu-latest
+    name: Go build for different platform"
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+      - name: Install Go.
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.14.2
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Cross build check.
+        run: make crossbuild
+  lint:
+    runs-on: ubuntu-latest
+    name: Linters (Static Analysis) for Go
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+      - name: Checkout code into the Go module directory.
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.14.x
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Format.
+        run: make format
+
+      - name: Linting & vetting.
+        run: make go-lint
+  e2e:
+    runs-on: ubuntu-latest
+    name: Thanos end-to-end tests
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+      - name: Install Go.
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.14.2
+
+      - name: Check out code into the Go module directory.
+        uses: actions/checkout@v2
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Run e2e docker-based tests.
+        run: make test-e2e

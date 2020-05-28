@@ -1,0 +1,11 @@
+
+# Ignore everything
+*
+
+# But not these files:
+!.gitignore
+!*.mod
+!*.md
+!*.mk
+
+*tmp.mod

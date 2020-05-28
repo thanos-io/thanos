@@ -1,3 +1,4 @@
+include .bingo/Variables.mk
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
@@ -18,41 +19,9 @@ export GOPROXY
 GOTEST_OPTS ?= -failfast -timeout 10m -v
 
 # Tools.
-EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
-# v2.0.0
-EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
-LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
-LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
-GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
-PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
-PROMU_VERSION     ?= 9583e5a6448f97c6294dca72dd1d173e28f8d4a4
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
-# v0.55.3 This needs to match with version in netlify.toml
-HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
-HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
-# v3.1.1
-GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
-GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-
-GOLANGCILINT_VERSION ?= d2b1eea2c6171a1a1141a448a745335ce2e928a1
-GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
-MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
-MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
-
-GOJSONTOYAML_VERSION    ?= e8bd32d46b3d764bef60f12b3bada1c132c4be55
-GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
-# v0.14.0
-JSONNET_VERSION         ?= 724650d358b67909a7bea00ea443e23afc3d2a17
-JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
-JSONNETFMT              ?= $(GOBIN)/jsonnetfmt-$(JSONNET_VERSION)
-JSONNET_BUNDLER_VERSION ?= efe0c9e864431e93d5c3376bd5931d0fb9b2a296
-JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
-# Prometheus v2.14.0
-PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
-PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
 # systems gsed won't be installed, so will use sed as expected.
@@ -66,49 +35,10 @@ WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
-# E2e test deps.
-# Referenced by github.com/thanos-io/thanos/blob/master/docs/getting_started.md#prometheus
-
-# Limited prom version, because testing was not possible. This should fix it: https://github.com/thanos-io/thanos/issues/758
-PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0 v2.18.1
-PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0 $(GOBIN)/prometheus-v2.18.1
-
-ALERTMANAGER_VERSION    ?= v0.20.0
-ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
-
-MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
-MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
-
-FAILLINT_VERSION        ?= v1.2.0
-FAILLINT                ?=$(GOBIN)/faillint-$(FAILLINT_VERSION)
-
 REACT_APP_PATH = pkg/ui/react-app
 REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
-
-# fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
-# arguments:
-# $(1): Install path. (e.g github.com/campoy/embedmd)
-# $(2): Tag or revision for checkout.
-# TODO(bwplotka): Move to just using modules, however make sure to not use or edit Thanos go.mod file!
-define fetch_go_bin_version
-	@mkdir -p $(GOBIN)
-	@mkdir -p $(TMP_GOPATH)
-
-	@echo ">> fetching $(1)@$(2) revision/version"
-	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
-	GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
-  else \
-	CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
-  fi
-	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
-	@echo ">> installing $(1)@$(2)"
-	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
-	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
-	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
-
-endef
 
 define require_clean_work_tree
 	@git update-index -q --ignore-submodules --refresh
@@ -179,7 +109,7 @@ build: check-git deps $(PROMU)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
-crossbuild: $(PROMU)
+crossbuild: deps $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
@@ -221,7 +151,7 @@ check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
-	@$(LICHE) --exclude "goreportcard.com" --document-root . *.md
+	@$(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checkin GitHub as we are often rate limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"check documentation")
 
@@ -243,9 +173,6 @@ proto: ## Generates Go files from Thanos proto files.
 proto: check-git  $(GOIMPORTS) $(PROTOC)
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
-.PHONY: promu
-promu: $(PROMU)
-
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
 tarballs-release: $(PROMU)
@@ -258,7 +185,7 @@ tarballs-release: $(PROMU)
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
 test: export THANOS_TEST_MINIO_PATH= $(MINIO_SERVER)
-test: export THANOS_TEST_PROMETHEUS_VERSIONS= $(PROM_VERSIONS)
+test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
@@ -337,7 +264,7 @@ lint: go-lint react-app-lint
 #      --mem-profile-path string   Path to memory profile output file
 # to debug big allocations during linting.
 .PHONY: go-lint
-go-lint: check-git deps $(GOLANGCILINT) $(MISSPELL) $(FAILLINT)
+go-lint: check-git deps $(GOLANGCI_LINT) $(MISSPELL) $(FAILLINT)
 	$(call require_clean_work_tree,"detected not clean master before running lint")
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
@@ -352,7 +279,7 @@ NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewH
 	@echo ">> examining all of the Go files"
 	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
-	@$(GOLANGCILINT) run
+	@$(GOLANGCI_LINT) run
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -v pkg/ui/react-app/node_modules | grep -v pkg/ui/static | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
@@ -381,11 +308,11 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 .PHONY: examples-in-container
 examples-in-container:
 	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JB='/go/bin/jb' jsonnet-vendor
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
 		EMBEDMD='/go/bin/embedmd' \
 		JSONNET='/go/bin/jsonnet' \
-		JSONNET_BUNDLER='/go/bin/jb' \
+		JB='/go/bin/jb' \
 		PROMTOOL='/go/bin/promtool' \
 		GOJSONTOYAML='/go/bin/gojsontoyaml' \
 		GOLANGCILINT='/go/bin/golangci-lint' \
@@ -414,9 +341,9 @@ examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.lib
 	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: $(JSONNET_BUNDLER) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
+jsonnet-vendor: $(JB) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
-	cd ${THANOS_MIXIN} && $(JSONNET_BUNDLER) install
+	cd ${THANOS_MIXIN} && $(JB) install
 
 JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s
 
@@ -446,45 +373,6 @@ examples-clean:
 	rm -f examples/dashboards/*.json
 	rm -f examples/tmp/*.yaml
 
-# non-phony targets
-$(EMBEDMD):
-	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
-
-$(GOIMPORTS):
-	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
-
-$(LICHE):
-	$(call fetch_go_bin_version,github.com/raviqqe/liche,$(LICHE_VERSION))
-
-$(PROMU):
-	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
-
-$(HUGO):
-	@go get github.com/gohugoio/hugo@$(HUGO_VERSION)
-	@mv $(GOBIN)/hugo $(HUGO)
-	@go mod tidy
-
-$(GOBINDATA):
-	$(call fetch_go_bin_version,github.com/go-bindata/go-bindata/go-bindata,$(GOBINDATA_VERSION))
-
-$(GOLANGCILINT):
-	$(call fetch_go_bin_version,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCILINT_VERSION))
-
-$(MISSPELL):
-	$(call fetch_go_bin_version,github.com/client9/misspell/cmd/misspell,$(MISSPELL_VERSION))
-
-$(ALERTMANAGER):
-	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
-
-$(MINIO_SERVER):
-	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
-
-$(FAILLINT):
-	$(call fetch_go_bin_version,github.com/fatih/faillint,$(FAILLINT_VERSION))
-
-$(PROMS):
-	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
-
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
 	@echo ">> fetching protoc@${PROTOC_VERSION}"
@@ -492,18 +380,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
-
-$(JSONNET):
-	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnet,$(JSONNET_VERSION))
-
-$(JSONNETFMT):
-	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnetfmt,$(JSONNET_VERSION))
-
-$(GOJSONTOYAML):
-	$(call fetch_go_bin_version,github.com/brancz/gojsontoyaml,$(GOJSONTOYAML_VERSION))
-
-$(JSONNET_BUNDLER):
-	$(call fetch_go_bin_version,github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb,$(JSONNET_BUNDLER_VERSION))
-
-$(PROMTOOL):
-	$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/promtool,$(PROMTOOL_VERSION))

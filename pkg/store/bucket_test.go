@@ -559,12 +559,9 @@ func TestBucketStore_Sharding(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir2)) }()
 
-	if ok := t.Run("reuse_disk", func(t *testing.T) {
+	t.Run("reuse_disk", func(t *testing.T) {
 		testSharding(t, dir2, bkt, id1, id2, id3, id4)
-	}); !ok {
-		return
-	}
-
+	})
 }
 
 func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ulid.ULID) {

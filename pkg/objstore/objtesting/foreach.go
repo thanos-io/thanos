@@ -138,16 +138,14 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 
 	// Optional OSS.
 	if !IsObjStoreSkipped(t, client.ALIYUNOSS) {
-		bkt, closeFn, err := oss.NewTestBucket(t)
-		testutil.Ok(t, err)
+		t.Run("AliYun oss", func(t *testing.T) {
+			bkt, closeFn, err := oss.NewTestBucket(t)
+			testutil.Ok(t, err)
 
-		ok := t.Run("AliYun oss", func(t *testing.T) {
+			t.Parallel()
+			defer closeFn()
+
 			testFn(t, bkt)
 		})
-
-		closeFn()
-		if !ok {
-			return
-		}
 	}
 }
