@@ -10,28 +10,17 @@ import (
 )
 
 type TracingBucket struct {
-	Bucket
+	bkt Bucket
 }
 
-func NewTracingBucket(bkt Bucket) Bucket {
-	return &TracingBucket{Bucket: bkt}
-}
-
-func (t TracingBucket) WithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) Bucket {
-	if ib, ok := t.Bucket.(InstrumentedBucket); ok {
-		return TracingBucket{ib.WithExpectedErrs(expectedFunc)}
-	}
-	return t
-}
-
-func (t TracingBucket) ReaderWithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) BucketReader {
-	return t.WithExpectedErrs(expectedFunc)
+func NewTracingBucket(bkt Bucket) InstrumentedBucket {
+	return TracingBucket{bkt: bkt}
 }
 
 func (t TracingBucket) Iter(ctx context.Context, dir string, f func(string) error) (err error) {
 	tracing.DoWithSpan(ctx, "bucket_iter", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("dir", dir)
-		err = t.Bucket.Iter(spanCtx, dir, f)
+		err = t.bkt.Iter(spanCtx, dir, f)
 	})
 	return
 }
@@ -40,7 +29,7 @@ func (t TracingBucket) Get(ctx context.Context, name string) (io.ReadCloser, err
 	span, spanCtx := tracing.StartSpan(ctx, "bucket_get")
 	span.LogKV("name", name)
 
-	r, err := t.Bucket.Get(spanCtx, name)
+	r, err := t.bkt.Get(spanCtx, name)
 	if err != nil {
 		span.LogKV("err", err)
 		span.Finish()
@@ -54,7 +43,7 @@ func (t TracingBucket) GetRange(ctx context.Context, name string, off, length in
 	span, spanCtx := tracing.StartSpan(ctx, "bucket_getrange")
 	span.LogKV("name", name, "offset", off, "length", length)
 
-	r, err := t.Bucket.GetRange(spanCtx, name, off, length)
+	r, err := t.bkt.GetRange(spanCtx, name, off, length)
 	if err != nil {
 		span.LogKV("err", err)
 		span.Finish()
@@ -67,7 +56,7 @@ func (t TracingBucket) GetRange(ctx context.Context, name string, off, length in
 func (t TracingBucket) Exists(ctx context.Context, name string) (exists bool, err error) {
 	tracing.DoWithSpan(ctx, "bucket_exists", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("name", name)
-		exists, err = t.Bucket.Exists(spanCtx, name)
+		exists, err = t.bkt.Exists(spanCtx, name)
 	})
 	return
 }
@@ -75,7 +64,7 @@ func (t TracingBucket) Exists(ctx context.Context, name string) (exists bool, er
 func (t TracingBucket) Attributes(ctx context.Context, name string) (attrs ObjectAttributes, err error) {
 	tracing.DoWithSpan(ctx, "bucket_attributes", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("name", name)
-		attrs, err = t.Bucket.Attributes(spanCtx, name)
+		attrs, err = t.bkt.Attributes(spanCtx, name)
 	})
 	return
 }
@@ -83,7 +72,7 @@ func (t TracingBucket) Attributes(ctx context.Context, name string) (attrs Objec
 func (t TracingBucket) Upload(ctx context.Context, name string, r io.Reader) (err error) {
 	tracing.DoWithSpan(ctx, "bucket_upload", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("name", name)
-		err = t.Bucket.Upload(spanCtx, name, r)
+		err = t.bkt.Upload(spanCtx, name, r)
 	})
 	return
 }
@@ -91,13 +80,32 @@ func (t TracingBucket) Upload(ctx context.Context, name string, r io.Reader) (er
 func (t TracingBucket) Delete(ctx context.Context, name string) (err error) {
 	tracing.DoWithSpan(ctx, "bucket_delete", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("name", name)
-		err = t.Bucket.Delete(spanCtx, name)
+		err = t.bkt.Delete(spanCtx, name)
 	})
 	return
 }
 
 func (t TracingBucket) Name() string {
-	return "tracing: " + t.Bucket.Name()
+	return "tracing: " + t.bkt.Name()
+}
+
+func (t TracingBucket) Close() error {
+	return t.bkt.Close()
+}
+
+func (t TracingBucket) IsObjNotFoundErr(err error) bool {
+	return t.bkt.IsObjNotFoundErr(err)
+}
+
+func (t TracingBucket) WithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) Bucket {
+	if ib, ok := t.bkt.(InstrumentedBucket); ok {
+		return TracingBucket{bkt: ib.WithExpectedErrs(expectedFunc)}
+	}
+	return t
+}
+
+func (t TracingBucket) ReaderWithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) BucketReader {
+	return t.WithExpectedErrs(expectedFunc)
 }
 
 type tracingReadCloser struct {
