@@ -424,7 +424,7 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
 	resolutions := cmd.Flag("resolution", "Only blocks with this resolution will be replicated. (Resolution in ms)").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64List()
-	compactions := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Ints()
+	compactions := cmd.Flag("compaction", "Only blocks with those compaction levels will be replicated. Repeated flag.").Default("1").Ints()
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
 
