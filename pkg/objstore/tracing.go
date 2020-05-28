@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package objstore
 
 import (
@@ -9,6 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+// TracingBucket includes bucket operations in the traces.
 type TracingBucket struct {
 	bkt Bucket
 }

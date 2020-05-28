@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package cache
 
 import (
@@ -9,6 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+// TracingCache includes Fetch operation in the traces.
 type TracingCache struct {
 	c Cache
 }
