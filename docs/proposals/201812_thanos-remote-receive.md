@@ -106,23 +106,40 @@ Hard tenants in the Thanos receiver are configured in a configuration file. Chan
 
 A sample of the configuration of tenants and their respective infrastructure:
 
-```json
-[
-    {
-        "hashring": "tenant-a",
-        "endpoints": ["tenant-a-1.metrics.local:19291/api/v1/receive", "tenant-a-2.metrics.local:19291/api/v1/receive"],
-        "tenants": ["tenant-a"]
-    },
-    {
-        "hashring": "tenants-b-c",
-        "endpoints": ["tenant-b-c-1.metrics.local:19291/api/v1/receive", "tenant-b-c-2.metrics.local:19291/api/v1/receive"],
-        "tenants": ["tenant-b", "tenant-c"]
-    },
-    {
-        "hashring": "soft-tenants",
-        "endpoints": ["http://soft-tenants-1.metrics.local:19291/api/v1/receive"]
-    }
-]
+```yaml
+route:
+- hashring_group: soft-tenants
+  partition_keys:
+  - tenant_id
+  routes:
+  - hashring_group: tenant-a
+    match:
+      tenant_id: tenant-a
+  - hashring_group: tenant-b-c
+    match:
+      tenant_id: tenant-b-c
+hashring_groups:
+- hashring_group: tenant-a
+  hashrings:
+  - hashring: tenant-a-1
+    endpoints:
+    - tenant-a-1-1.metrics.local:19291/api/v1/receive
+    - tenant-a-1-2.metrics.local:19291/api/v1/receive
+  - hashring: tenant-a-2
+    endpoints:
+    - tenant-a-2-1.metrics.local:19291/api/v1/receive
+    - tenant-a-2-2.metrics.local:19291/api/v1/receive
+- hashring_group: tenant-b-c
+  hashrings:
+  - hashring: tenant-b-c
+    endpoints:
+    - tenant-b-c-1.metrics.local:19291/api/v1/receive
+    - tenant-b-c-2.metrics.local:19291/api/v1/receive
+- hashring_group: soft-tenants
+  hashrings:
+  - hashring: soft-tenants
+    endpoints:
+    - soft-tenants-1.metrics.local:19291/api/v1/receive
 ```
 
 To start, exact matches of tenant IDs will be used to distribute requests to receive endpoints. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the tenant specified in the request is tested against the configured allowed tenants for each hashring until an exact match is found. If a hashring specifies no explicit tenants, then any tenant is considered a valid match; this allows for a cluster to provide soft-tenancy. Requests whose tenant ID matches no other hashring explicitly, will automatically land in this soft tenancy hashring. If no matching hashring is found and no soft tenancy is configured, the receiver responds with an error.
