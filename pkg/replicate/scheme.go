@@ -29,8 +29,8 @@ import (
 type BlockFilter struct {
 	logger           log.Logger
 	labelSelector    labels.Selector
-	resolutionLevels []compact.ResolutionLevel
-	compactionLevels []int
+	resolutionLevels map[compact.ResolutionLevel]struct{}
+	compactionLevels map[int]struct{}
 }
 
 // NewBlockFilter returns block filter.
@@ -40,11 +40,19 @@ func NewBlockFilter(
 	resolutionLevels []compact.ResolutionLevel,
 	compactionLevels []int,
 ) *BlockFilter {
+	allowedResolutions := make(map[compact.ResolutionLevel]struct{})
+	for _, resolutionLevel := range resolutionLevels {
+		allowedResolutions[resolutionLevel] = struct{}{}
+	}
+	allowedCompactions := make(map[int]struct{})
+	for _, compactionLevel := range compactionLevels {
+		allowedCompactions[compactionLevel] = struct{}{}
+	}
 	return &BlockFilter{
 		labelSelector:    labelSelector,
 		logger:           logger,
-		resolutionLevels: resolutionLevels,
-		compactionLevels: compactionLevels,
+		resolutionLevels: allowedResolutions,
+		compactionLevels: allowedCompactions,
 	}
 }
 
@@ -77,27 +85,13 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	}
 
 	gotResolution := compact.ResolutionLevel(b.Thanos.Downsample.Resolution)
-	resolutionMatch := false
-	for _, allowedResolution := range bf.resolutionLevels {
-		if gotResolution == allowedResolution {
-			resolutionMatch = true
-			break
-		}
-	}
-	if !resolutionMatch {
+	if _, ok := bf.resolutionLevels[gotResolution]; !ok {
 		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "resolution doesn't match allowed resolutions", "got_resolution", gotResolution, "allowed_resolutions", bf.resolutionLevels)
 		return false
 	}
 
 	gotCompactionLevel := b.BlockMeta.Compaction.Level
-	compactionMatch := false
-	for _, allowedCompactionLevel := range bf.compactionLevels {
-		if gotCompactionLevel == allowedCompactionLevel {
-			compactionMatch = true
-			break
-		}
-	}
-	if !compactionMatch {
+	if _, ok := bf.compactionLevels[gotCompactionLevel]; !ok {
 		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", bf.compactionLevels)
 		return false
 	}
