@@ -76,5 +76,5 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-	return objstore.BucketWithMetrics(bucket.Name(), bucket, reg), nil
+	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), bucket, reg)), nil
 }
