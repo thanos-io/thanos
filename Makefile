@@ -74,11 +74,11 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 
 .PHONY: assets
 assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GOBINDATA) $(REACT_APP_OUTPUT_DIR)
+assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
-	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
+	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
 
 .PHONY: react-app-lint
@@ -184,7 +184,7 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
-test: export THANOS_TEST_MINIO_PATH= $(MINIO_SERVER)
+test: export THANOS_TEST_MINIO_PATH= $(MINIO)
 test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-deps
@@ -219,7 +219,7 @@ test-e2e: docker
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-deps: $(ALERTMANAGER) $(MINIO_SERVER) $(PROMS)
+install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: docker-ci
