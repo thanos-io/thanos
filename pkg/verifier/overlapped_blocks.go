@@ -57,7 +57,7 @@ func fetchOverlaps(ctx context.Context, fetcher block.MetadataFetcher) (map[stri
 
 	groupMetasMap := map[string][]tsdb.BlockMeta{}
 	for _, meta := range metas {
-		groupKey := compact.GroupKey(meta.Thanos)
+		groupKey := compact.DefaultGroupKey(meta.Thanos)
 		groupMetasMap[groupKey] = append(groupMetasMap[groupKey], meta.BlockMeta)
 	}
 

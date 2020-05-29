@@ -122,6 +122,10 @@ func runCompact(
 		Name: "thanos_compactor_blocks_marked_for_deletion_total",
 		Help: "Total number of blocks marked for deletion in compactor.",
 	})
+	garbageCollectedBlocks := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_garbage_collected_blocks_total",
+		Help: "Total number of blocks marked for deletion by compactor.",
+	})
 	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "thanos_delete_delay_seconds",
 		Help: "Configured delete delay in seconds.",
@@ -227,8 +231,8 @@ func runCompact(
 			duplicateBlocksFilter,
 			ignoreDeletionMarkFilter,
 			blocksMarkedForDeletion,
-			conf.blockSyncConcurrency,
-			conf.acceptMalformedIndex, enableVerticalCompaction)
+			garbageCollectedBlocks,
+			conf.blockSyncConcurrency)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}
@@ -262,8 +266,9 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
+	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, comp, compactDir, bkt, conf.compactionConcurrency)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
