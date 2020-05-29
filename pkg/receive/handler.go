@@ -517,11 +517,17 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 	h.mtx.RUnlock()
 
+	var err error
 	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
-	defer cancel()
+	defer func() {
+		// If there is no error, let forward requests optimistically run until timeout.
+		if err != nil {
+			cancel()
+		}
+	}()
 
 	quorum := h.writeQuorum()
-	err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
+	err = h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
 	if countCause(err, isNotReady) >= quorum {
 		return tsdb.ErrNotReady
 	}
