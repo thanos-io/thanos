@@ -94,7 +94,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	}
 
 	// Include interactions with cache in the traces.
-	c = &cache.TracingCache{Cache: c}
+	c = cache.NewTracingCache(c)
 	cfg := NewCachingBucketConfig()
 
 	// Configure cache.
