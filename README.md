@@ -11,8 +11,6 @@
 [![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
 [![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago)
 [![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact)
-[![benchmark](https://github.com/thanos-io/thanos/workflows/benchmark/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Abenchmark)
-[![fuzzy-test-on-master](https://github.com/thanos-io/thanos/workflows/fuzzy-test-on-master/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Afuzzy-test-on-master)
 [![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs)
 
 ## Overview
