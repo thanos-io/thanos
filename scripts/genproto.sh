@@ -7,6 +7,7 @@ set -u
 
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
+PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
 
 if ! [[ "$0" =~ "scripts/genproto.sh" ]]; then
 	echo "must be run from repository root"
@@ -18,10 +19,8 @@ if ! [[ $(${PROTOC_BIN} --version) =~ "3.4.0" ]]; then
 	exit 255
 fi
 
-echo "installing gogofast"
-GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
-
-GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
+cp ${PROTOC_GEN_GOGOFAST_BIN} ${GOBIN}/protoc-gen-gogofast
+GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
 DIRS="store/storepb/ store/storepb/prompb/ rules/rulespb store/hintspb"
