@@ -99,6 +99,7 @@ component of the Thanos distributed system. We recommend:
 1. Fork thanos-io/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 
 ```console
+$ GOPATH=$(go env GOPATH)
 $ mkdir -p $GOPATH/src/github.com/thanos-io
 $ cd $GOPATH/src/github.com/thanos-io
 $ git clone https://github.com/<your_github_id>/thanos.git
@@ -107,7 +108,8 @@ $ git remote add upstream https://github.com/thanos-io/thanos.git
 $ git remote update
 $ git merge upstream/master
 $ make build
-$ ./thanos -h
+$ export PATH=$PATH:$GOPATH/bin
+$ thanos -h
 ```
 
 1. Signing your work: DCO (Developer Certificate of Origin) Process.
