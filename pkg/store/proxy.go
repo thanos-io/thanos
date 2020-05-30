@@ -49,10 +49,11 @@ type Client interface {
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
-	logger         log.Logger
-	stores         func() []Client
-	component      component.StoreAPI
-	selectorLabels labels.Labels
+	logger          log.Logger
+	stores          func() []Client
+	component       component.StoreAPI
+	selectorLabels  labels.Labels
+	requiredMatcher labels.Labels
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
@@ -81,6 +82,7 @@ func NewProxyStore(
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	requiredMatcher labels.Labels,
 	responseTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
@@ -93,6 +95,7 @@ func NewProxyStore(
 		stores:          stores,
 		component:       component,
 		selectorLabels:  selectorLabels,
+		requiredMatcher: requiredMatcher,
 		responseTimeout: responseTimeout,
 		metrics:         metrics,
 	}
@@ -198,9 +201,38 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 	s.ch <- r
 }
 
+func matchesRequiredMatchers(ms []storepb.LabelMatcher, requiredMatcher labels.Labels) (bool, error) {
+	if len(requiredMatcher) == 0 {
+		return true, nil
+	}
+
+	for _, rm := range requiredMatcher {
+		flag := false
+		for _, r := range ms {
+			if r.Type == storepb.LabelMatcher_EQ && rm.Name == r.Name && rm.Value == r.Value {
+				flag = true
+				break
+			}
+		}
+		if !flag {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+	
+	
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	ok, err := matchesRequiredMatchers(r.Matchers, s.requiredMatcher)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !ok {
+		return nil
+	}
+
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
