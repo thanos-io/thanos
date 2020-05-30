@@ -220,8 +220,7 @@ func matchesRequiredMatchers(ms []storepb.LabelMatcher, requiredMatcher labels.L
 	}
 	return true, nil
 }
-	
-	
+
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {

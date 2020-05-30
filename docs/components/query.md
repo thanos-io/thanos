@@ -323,6 +323,10 @@ Flags:
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
+      --required-matcher=<name>="<value>" ...
+                                 If required matchers are specified in a querier
+                                 then the querier processes a query only if
+                                 these labels are present in the query request.
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect

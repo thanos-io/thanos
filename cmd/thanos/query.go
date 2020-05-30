@@ -73,10 +73,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
-	
+
 	requiredMatcher := cmd.Flag("required-matcher", "If required matchers are specified in a querier then the querier processes a query only if these labels are present in the query request.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
-	
+
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
@@ -121,7 +121,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 		if err != nil {
 			return errors.Wrap(err, "parse required matcher")
 		}
-		
+
 		if dup := firstDuplicate(*stores); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
 		}
