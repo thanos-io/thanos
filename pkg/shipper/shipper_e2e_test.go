@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
@@ -31,6 +34,10 @@ import (
 
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		// TODO(GiedriusS): consider switching to BucketWithMetrics() everywhere?
+		metrics := prometheus.NewRegistry()
+		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
+
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {
@@ -38,7 +45,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		}()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -111,11 +118,24 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			// After rename sync should upload the block.
 			b, err = shipper.Sync(ctx)
 			testutil.Ok(t, err)
+
 			if i != 5 {
 				ids = append(ids, id)
 				maxSyncSoFar = meta.MaxTime
 				testutil.Equals(t, 1, b)
 			} else {
+				// 5 blocks uploaded so far - 5 existence checks & 25 uploads (5 files each).
+				testutil.Ok(t, promtest.GatherAndCompare(metrics, strings.NewReader(`
+				# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+				# TYPE thanos_objstore_bucket_operations_total counter
+				thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+				thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+				thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 5
+				thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 0
+				thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+				thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 0
+				thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 25
+				`), `thanos_objstore_bucket_operations_total`))
 				testutil.Equals(t, 0, b)
 			}
 
