@@ -70,6 +70,8 @@ scrape_configs:
       - targets: ['127.0.0.1:9091','127.0.0.1:9092']
 </pre>
 
+**NOTE** : The `global` entry should have `external_labels` else Thanos will not recognise it.
+
 ## Starting Prometheus Instances
 
 Let's now start three containers representing our three different Prometheus instances.
