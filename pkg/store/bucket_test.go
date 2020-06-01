@@ -187,6 +187,98 @@ func TestBucketBlock_Property(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestBucketBlock_matchLabels(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	dir, err := ioutil.TempDir("", "bucketblock-test")
+	testutil.Ok(t, err)
+	defer testutil.Ok(t, os.RemoveAll(dir))
+
+	bkt, err := filesystem.NewBucket(dir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	blockID := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: blockID},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"a": "b",
+				"c": "d",
+			},
+		},
+	}
+
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, prometheus.NewCounter(prometheus.CounterOpts{}), true)
+	testutil.Ok(t, err)
+
+	cases := []struct {
+		in    []*labels.Matcher
+		match bool
+	}{
+		{
+			in:    []*labels.Matcher{},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "d"},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "b"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "e", Value: "f"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: blockID.String()},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: "xxx"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: blockID.String()},
+				{Type: labels.MatchEqual, Name: "c", Value: "b"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "x"},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "d"},
+			},
+			match: true,
+		},
+	}
+	for _, c := range cases {
+		ok := b.matchLabels(c.in...)
+		testutil.Equals(t, c.match, ok)
+	}
+}
+
 func TestBucketBlockSet_addGet(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -1735,8 +1827,8 @@ func TestSeries_HintsEnabled(t *testing.T) {
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				Hints: mustMarshalAny(&hintspb.SeriesRequestHints{
-					IncludeBlocks: []hintspb.Block{
-						{Id: block1.String()},
+					BlockMatchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
 					},
 				}),
 			},

@@ -260,7 +260,7 @@ type BucketStore struct {
 	postingOffsetsInMemSampling int
 
 	// Enables hints in the Series() response.
-	enableSeriesHints bool
+	enableSeriesResponseHints bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -281,7 +281,7 @@ func NewBucketStore(
 	enableCompatibilityLabel bool,
 	enablePostingsCompression bool,
 	postingOffsetsInMemSampling int,
-	enableSeriesHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
+	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -318,7 +318,7 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		enablePostingsCompression:   enablePostingsCompression,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
-		enableSeriesHints:           enableSeriesHints,
+		enableSeriesResponseHints:   enableSeriesResponseHints,
 	}
 	s.metrics = metrics
 
@@ -863,18 +863,24 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		ctx      = srv.Context()
-		stats    = &queryStats{}
-		res      []storepb.SeriesSet
-		mtx      sync.Mutex
-		g, gctx  = errgroup.WithContext(ctx)
-		reqHints = &hintspb.SeriesRequestHints{}
-		resHints = &hintspb.SeriesResponseHints{}
+		ctx              = srv.Context()
+		stats            = &queryStats{}
+		res              []storepb.SeriesSet
+		mtx              sync.Mutex
+		g, gctx          = errgroup.WithContext(ctx)
+		resHints         = &hintspb.SeriesResponseHints{}
+		reqHintsMatchers = []*labels.Matcher(nil)
 	)
 
-	if s.enableSeriesHints && req.Hints != nil {
+	if req.Hints != nil {
+		reqHints := &hintspb.SeriesRequestHints{}
 		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
+		}
+
+		reqHintsMatchers, err = promclient.TranslateMatchers(reqHints.BlockMatchers)
+		if err != nil {
+			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
 	}
 
@@ -892,22 +898,18 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
-		numQueriedBlocks := 0
 		for _, b := range blocks {
 			b := b
 
-			if s.enableSeriesHints {
-				// Check whether this block should be included in the query.
-				if !reqHints.ShouldQueryBlock(b.meta.ULID) {
-					continue
-				}
+			// Check whether this block should be included in the query.
+			if len(reqHintsMatchers) > 0 && !b.matchLabels(reqHintsMatchers...) {
+				continue
+			}
 
+			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
 				resHints.AddQueriedBlock(b.meta.ULID)
 			}
-
-			// Now that the optional filter has been done, we can increase the queried blocks count.
-			numQueriedBlocks++
 
 			// We must keep the readers open until all their data has been sent.
 			indexr := b.indexReader(gctx)
@@ -938,10 +940,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				return nil
 			})
 		}
-
-		mtx.Lock()
-		stats.blocksQueried += numQueriedBlocks
-		mtx.Unlock()
 	}
 
 	s.mtx.RUnlock()
@@ -982,6 +980,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
+		stats.blocksQueried = len(res)
 		stats.getAllDuration = time.Since(begin)
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
@@ -1023,7 +1022,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		err = nil
 	})
 
-	if s.enableSeriesHints {
+	if s.enableSeriesResponseHints {
 		var anyHints *types.Any
 
 		if anyHints, err = types.MarshalAny(resHints); err != nil {
@@ -1257,6 +1256,7 @@ type bucketBlock struct {
 	logger     log.Logger
 	bkt        objstore.BucketReader
 	meta       *metadata.Meta
+	labels     labels.Labels
 	dir        string
 	indexCache storecache.IndexCache
 	chunkPool  pool.BytesPool
@@ -1299,6 +1299,15 @@ func newBucketBlock(
 		seriesRefetches:           seriesRefetches,
 		enablePostingsCompression: enablePostingsCompression,
 	}
+
+	// Translate the block's labels and inject the block ID as a label
+	// to allow to match blocks also by ID.
+	b.labels = labels.FromMap(meta.Thanos.Labels)
+	b.labels = append(b.labels, labels.Label{
+		Name:  block.BlockIDLabel,
+		Value: meta.ULID.String(),
+	})
+	sort.Sort(b.labels)
 
 	// Get object handles for all chunk files.
 	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
@@ -1358,6 +1367,16 @@ func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 	b.pendingReaders.Add(1)
 	return newBucketChunkReader(ctx, b)
+}
+
+// matchLabels verifies whether the block matches the given matchers.
+func (b *bucketBlock) matchLabels(matchers ...*labels.Matcher) bool {
+	for _, m := range matchers {
+		if !m.Matches(b.labels.Get(m.Name)) {
+			return false
+		}
+	}
+	return true
 }
 
 // Close waits for all pending readers to finish and then closes all underlying resources.
