@@ -299,7 +299,7 @@ func runCompact(
 	compactMainFn := func() error {
 		// Remove blocks that are older than the retention policy and won't be needed in downsampling.
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution.InitialRetentionPolicy(), blocksMarkedForDeletion); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("initial retention failed"))
+			return errors.Wrap(err, "initial retention failed")
 		}
 
 		if err := compactor.Compact(ctx); err != nil {
