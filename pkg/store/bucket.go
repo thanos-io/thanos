@@ -869,7 +869,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		mtx              sync.Mutex
 		g, gctx          = errgroup.WithContext(ctx)
 		resHints         = &hintspb.SeriesResponseHints{}
-		reqHintsMatchers = []*labels.Matcher(nil)
+		reqBlockMatchers = []*labels.Matcher(nil)
 	)
 
 	if req.Hints != nil {
@@ -878,7 +878,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 
-		reqHintsMatchers, err = promclient.TranslateMatchers(reqHints.BlockMatchers)
+		reqBlockMatchers, err = promclient.TranslateMatchers(reqHints.BlockMatchers)
 		if err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -902,7 +902,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			b := b
 
 			// Check whether this block should be included in the query.
-			if len(reqHintsMatchers) > 0 && !b.matchLabels(reqHintsMatchers...) {
+			if len(reqBlockMatchers) > 0 && !b.matchLabels(reqBlockMatchers...) {
 				continue
 			}
 
