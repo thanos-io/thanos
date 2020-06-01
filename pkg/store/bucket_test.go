@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -277,6 +278,12 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		ok := b.matchLabels(c.in...)
 		testutil.Equals(t, c.match, ok)
 	}
+
+	// Ensure block's labels in the meta have not been manipulated.
+	testutil.Equals(t, map[string]string{
+		"a": "b",
+		"c": "d",
+	}, meta.Thanos.Labels)
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
@@ -1721,7 +1728,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	})
 }
 
-func TestSeries_HintsEnabled(t *testing.T) {
+func TestSeries_RequestAndResponseHints(t *testing.T) {
 	tb := testutil.NewTB(t)
 
 	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
@@ -1844,6 +1851,67 @@ func TestSeries_HintsEnabled(t *testing.T) {
 	}
 
 	benchmarkSeries(tb, store, testCases)
+}
+
+func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bktDir := filepath.Join(tmpDir, "bkt")
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	var (
+		logger   = log.NewNopLogger()
+		instrBkt = objstore.WithNoopInstr(bkt)
+	)
+
+	// Instance a real bucket store we'll use to query the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		logger,
+		nil,
+		instrBkt,
+		fetcher,
+		tmpDir,
+		indexCache,
+		1000000,
+		10000,
+		10,
+		false,
+		10,
+		nil,
+		false,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	// Create a request with invalid hints (uses response hints instead of request hints).
+	req := &storepb.SeriesRequest{
+		MinTime: 0,
+		MaxTime: 3,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+		},
+		Hints: mustMarshalAny(&hintspb.SeriesResponseHints{}),
+	}
+
+	srv := newStoreSeriesServer(context.Background())
+	err = store.Series(req, srv)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, true, regexp.MustCompile(".*unmarshal series request hints.*").MatchString(err.Error()))
 }
 
 func mustMarshalAny(pb proto.Message) *types.Any {

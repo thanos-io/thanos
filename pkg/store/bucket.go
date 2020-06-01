@@ -1256,7 +1256,6 @@ type bucketBlock struct {
 	logger     log.Logger
 	bkt        objstore.BucketReader
 	meta       *metadata.Meta
-	labels     labels.Labels
 	dir        string
 	indexCache storecache.IndexCache
 	chunkPool  pool.BytesPool
@@ -1272,6 +1271,9 @@ type bucketBlock struct {
 	seriesRefetches prometheus.Counter
 
 	enablePostingsCompression bool
+
+	// Block's labels used by block-level matchers to filter blocks to query.
+	matcherLabels labels.Labels
 }
 
 func newBucketBlock(
@@ -1302,12 +1304,12 @@ func newBucketBlock(
 
 	// Translate the block's labels and inject the block ID as a label
 	// to allow to match blocks also by ID.
-	b.labels = labels.FromMap(meta.Thanos.Labels)
-	b.labels = append(b.labels, labels.Label{
+	b.matcherLabels = labels.FromMap(meta.Thanos.Labels)
+	b.matcherLabels = append(b.matcherLabels, labels.Label{
 		Name:  block.BlockIDLabel,
 		Value: meta.ULID.String(),
 	})
-	sort.Sort(b.labels)
+	sort.Sort(b.matcherLabels)
 
 	// Get object handles for all chunk files.
 	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
@@ -1372,7 +1374,7 @@ func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 // matchLabels verifies whether the block matches the given matchers.
 func (b *bucketBlock) matchLabels(matchers ...*labels.Matcher) bool {
 	for _, m := range matchers {
-		if !m.Matches(b.labels.Get(m.Name)) {
+		if !m.Matches(b.matcherLabels.Get(m.Name)) {
 			return false
 		}
 	}
