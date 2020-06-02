@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+- [#2705](https://github.com/thanos-io/thanos/pull/2705) minio-go: Added support for `af-south-1` and `eu-south-1` regions.
+
 ## [v0.13.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.13.0-rc.0) - 2020.05.20
 
 ### Fixed
