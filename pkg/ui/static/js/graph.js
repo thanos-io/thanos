@@ -207,48 +207,48 @@ Prometheus.Graph.prototype.initialize = function() {
   // Deduplication.
   let dedup_icon = self.dedupBtn.find('.glyphicon');
   self.isDedupEnabled = function() {
-    let v = localStorage.getItem('enable-dedup');
+    let v = localStorage.getItem(`enable-dedup-${self.id}`);
 
     // If not set in localstorage, make it enabled.
     return v === '1' || v === null;
   };
 
   if (self.isDedupEnabled()) {
-    self.toggleOn(dedup_icon, 'enable-dedup');
+    self.toggleOn(dedup_icon, `enable-dedup-${self.id}`);
   } else {
-    self.toggleOff(dedup_icon, 'enable-dedup');
+    self.toggleOff(dedup_icon, `enable-dedup-${self.id}`);
   }
 
   self.dedupBtn.click(function() {
     self.enableDedup.val(self.isDedupEnabled() ? '0' : '1');
     if (dedup_icon.hasClass('glyphicon-unchecked')) {
-      self.toggleOn(dedup_icon, 'enable-dedup');
+      self.toggleOn(dedup_icon, `enable-dedup-${self.id}`);
     } else if (dedup_icon.hasClass('glyphicon-check')) {
-      self.toggleOff(dedup_icon, 'enable-dedup');
+      self.toggleOff(dedup_icon, `enable-dedup-${self.id}`);
     }
   });
 
   // Partial response.
   let partial_response_icon = self.partialResponseBtn.find('.glyphicon');
   self.isPartialResponseEnabled = function() {
-    let v = localStorage.getItem('enable-partial-response');
+    let v = localStorage.getItem(`enable-partial-response-${self.id}`);
 
     // If not set in localstorage, make it enabled.
     return v === '1' || v === null;
   };
 
   if (self.isPartialResponseEnabled()) {
-    self.toggleOn(partial_response_icon, 'enable-partial-response');
+    self.toggleOn(partial_response_icon, `enable-partial-response-${self.id}`);
   } else {
-    self.toggleOff(partial_response_icon, 'enable-partial-response');
+    self.toggleOff(partial_response_icon, `enable-partial-response-${self.id}`);
   }
 
   self.partialResponseBtn.click(function() {
     self.partialResponse.val(self.isPartialResponseEnabled() ? '0' : '1');
     if (partial_response_icon.hasClass('glyphicon-unchecked')) {
-      self.toggleOn(partial_response_icon, 'enable-partial-response');
+      self.toggleOn(partial_response_icon, `enable-partial-response-${self.id}`);
     } else if (partial_response_icon.hasClass('glyphicon-check')) {
-      self.toggleOff(partial_response_icon, 'enable-partial-response');
+      self.toggleOff(partial_response_icon, `enable-partial-response-${self.id}`);
     }
   });
 
