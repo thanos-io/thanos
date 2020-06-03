@@ -108,7 +108,7 @@ func TestBucketBlock_Property(t *testing.T) {
 				return true
 			}
 
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, maxResolution, nil)
 
 			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -147,7 +147,7 @@ func TestBucketBlock_Property(t *testing.T) {
 			}
 
 			maxResolution := downsample.ResLevel2
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, maxResolution, nil)
 
 			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -275,7 +275,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ok := b.matchLabels(c.in...)
+		ok := b.matchRelabelLabels(c.in)
 		testutil.Equals(t, c.match, ok)
 	}
 
@@ -392,7 +392,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				m.MaxTime = b.maxt
 				exp = append(exp, &bucketBlock{meta: &m})
 			}
-			testutil.Equals(t, exp, set.getFor(c.mint, c.maxt, c.maxResolution))
+			testutil.Equals(t, exp, set.getFor(c.mint, c.maxt, c.maxResolution, nil))
 		})
 	}
 }
@@ -420,7 +420,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 	set.remove(input[1].id)
-	res := set.getFor(0, 300, 0)
+	res := set.getFor(0, 300, 0, nil)
 
 	testutil.Equals(t, 2, len(res))
 	testutil.Equals(t, input[0].id, res[0].meta.ULID)

@@ -869,7 +869,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		mtx              sync.Mutex
 		g, gctx          = errgroup.WithContext(ctx)
 		resHints         = &hintspb.SeriesResponseHints{}
-		reqBlockMatchers = []*labels.Matcher(nil)
+		reqBlockMatchers []*labels.Matcher
 	)
 
 	if req.Hints != nil {
@@ -892,7 +892,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			continue
 		}
 
-		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
+		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
 		if s.debugLogging {
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
@@ -900,11 +900,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 		for _, b := range blocks {
 			b := b
-
-			// Check whether this block should be included in the query.
-			if len(reqBlockMatchers) > 0 && !b.matchLabels(reqBlockMatchers...) {
-				continue
-			}
 
 			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
@@ -1192,7 +1187,7 @@ func int64index(s []int64, x int64) int {
 // It supports overlapping blocks.
 //
 // NOTE: s.blocks are expected to be sorted in minTime order.
-func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
+func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64, blockMatchers []*labels.Matcher) (bs []*bucketBlock) {
 	if mint > maxt {
 		return nil
 	}
@@ -1219,15 +1214,20 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 		}
 
 		if i+1 < len(s.resolutions) {
-			bs = append(bs, s.getFor(start, b.meta.MinTime-1, s.resolutions[i+1])...)
+			bs = append(bs, s.getFor(start, b.meta.MinTime-1, s.resolutions[i+1], blockMatchers)...)
 		}
-		bs = append(bs, b)
+
+		// Include the block in the list of matching ones only if there are no block-level matchers
+		// or they actually match.
+		if len(blockMatchers) == 0 || b.matchRelabelLabels(blockMatchers) {
+			bs = append(bs, b)
+		}
 
 		start = b.meta.MaxTime
 	}
 
 	if i+1 < len(s.resolutions) {
-		bs = append(bs, s.getFor(start, maxt, s.resolutions[i+1])...)
+		bs = append(bs, s.getFor(start, maxt, s.resolutions[i+1], blockMatchers)...)
 	}
 	return bs
 }
@@ -1272,8 +1272,9 @@ type bucketBlock struct {
 
 	enablePostingsCompression bool
 
-	// Block's labels used by block-level matchers to filter blocks to query.
-	matcherLabels labels.Labels
+	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
+	// request hints' BlockMatchers.
+	relabelLabels labels.Labels
 }
 
 func newBucketBlock(
@@ -1304,12 +1305,11 @@ func newBucketBlock(
 
 	// Translate the block's labels and inject the block ID as a label
 	// to allow to match blocks also by ID.
-	b.matcherLabels = labels.FromMap(meta.Thanos.Labels)
-	b.matcherLabels = append(b.matcherLabels, labels.Label{
+	b.relabelLabels = append(labels.FromMap(meta.Thanos.Labels), labels.Label{
 		Name:  block.BlockIDLabel,
 		Value: meta.ULID.String(),
 	})
-	sort.Sort(b.matcherLabels)
+	sort.Sort(b.relabelLabels)
 
 	// Get object handles for all chunk files.
 	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
@@ -1371,10 +1371,10 @@ func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 	return newBucketChunkReader(ctx, b)
 }
 
-// matchLabels verifies whether the block matches the given matchers.
-func (b *bucketBlock) matchLabels(matchers ...*labels.Matcher) bool {
+// matchRelabelLabels verifies whether the block matches the given matchers.
+func (b *bucketBlock) matchRelabelLabels(matchers []*labels.Matcher) bool {
 	for _, m := range matchers {
-		if !m.Matches(b.matcherLabels.Get(m.Name)) {
+		if !m.Matches(b.relabelLabels.Get(m.Name)) {
 			return false
 		}
 	}
