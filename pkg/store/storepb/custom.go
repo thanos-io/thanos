@@ -4,10 +4,10 @@
 package storepb
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
-	"bytes"
 	"strings"
 	"unsafe"
 
