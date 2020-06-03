@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -106,7 +108,7 @@ func TestBucketBlock_Property(t *testing.T) {
 				return true
 			}
 
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, maxResolution, nil)
 
 			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -145,7 +147,7 @@ func TestBucketBlock_Property(t *testing.T) {
 			}
 
 			maxResolution := downsample.ResLevel2
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, maxResolution, nil)
 
 			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -184,6 +186,104 @@ func TestBucketBlock_Property(t *testing.T) {
 	)
 
 	properties.TestingRun(t)
+}
+
+func TestBucketBlock_matchLabels(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	dir, err := ioutil.TempDir("", "bucketblock-test")
+	testutil.Ok(t, err)
+	defer testutil.Ok(t, os.RemoveAll(dir))
+
+	bkt, err := filesystem.NewBucket(dir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	blockID := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: blockID},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"a": "b",
+				"c": "d",
+			},
+		},
+	}
+
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, true)
+	testutil.Ok(t, err)
+
+	cases := []struct {
+		in    []*labels.Matcher
+		match bool
+	}{
+		{
+			in:    []*labels.Matcher{},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "d"},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "b"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "e", Value: "f"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: blockID.String()},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: "xxx"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: block.BlockIDLabel, Value: blockID.String()},
+				{Type: labels.MatchEqual, Name: "c", Value: "b"},
+			},
+			match: false,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "x"},
+			},
+			match: true,
+		},
+		{
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "d"},
+			},
+			match: true,
+		},
+	}
+	for _, c := range cases {
+		ok := b.matchRelabelLabels(c.in)
+		testutil.Equals(t, c.match, ok)
+	}
+
+	// Ensure block's labels in the meta have not been manipulated.
+	testutil.Equals(t, map[string]string{
+		"a": "b",
+		"c": "d",
+	}, meta.Thanos.Labels)
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
@@ -292,7 +392,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				m.MaxTime = b.maxt
 				exp = append(exp, &bucketBlock{meta: &m})
 			}
-			testutil.Equals(t, exp, set.getFor(c.mint, c.maxt, c.maxResolution))
+			testutil.Equals(t, exp, set.getFor(c.mint, c.maxt, c.maxResolution, nil))
 		})
 	}
 }
@@ -320,7 +420,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 	set.remove(input[1].id)
-	res := set.getFor(0, 300, 0)
+	res := set.getFor(0, 300, 0, nil)
 
 	testutil.Equals(t, 2, len(res))
 	testutil.Equals(t, input[0].id, res[0].meta.ULID)
@@ -1628,7 +1728,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	})
 }
 
-func TestSeries_HintsEnabled(t *testing.T) {
+func TestSeries_RequestAndResponseHints(t *testing.T) {
 	tb := testutil.NewTB(t)
 
 	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
@@ -1691,7 +1791,7 @@ func TestSeries_HintsEnabled(t *testing.T) {
 
 	testCases := []*benchSeriesCase{
 		{
-			name: "query a single block",
+			name: "querying a range containing 1 block should return 1 block in the response hints",
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 1,
@@ -1708,7 +1808,7 @@ func TestSeries_HintsEnabled(t *testing.T) {
 				},
 			},
 		}, {
-			name: "query multiple blocks",
+			name: "querying a range containing multiple blocks should return multiple blocks in the response hints",
 			req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 3,
@@ -1725,8 +1825,99 @@ func TestSeries_HintsEnabled(t *testing.T) {
 					},
 				},
 			},
+		}, {
+			name: "querying a range containing multiple blocks but filtering a specific block should query only the requested block",
+			req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+				Hints: mustMarshalAny(&hintspb.SeriesRequestHints{
+					BlockMatchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
+					},
+				}),
+			},
+			expectedSeries: seriesSet1,
+			expectedHints: []hintspb.SeriesResponseHints{
+				{
+					QueriedBlocks: []hintspb.Block{
+						{Id: block1.String()},
+					},
+				},
+			},
 		},
 	}
 
 	benchmarkSeries(tb, store, testCases)
+}
+
+func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bktDir := filepath.Join(tmpDir, "bkt")
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	var (
+		logger   = log.NewNopLogger()
+		instrBkt = objstore.WithNoopInstr(bkt)
+	)
+
+	// Instance a real bucket store we'll use to query the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		logger,
+		nil,
+		instrBkt,
+		fetcher,
+		tmpDir,
+		indexCache,
+		1000000,
+		10000,
+		10,
+		false,
+		10,
+		nil,
+		false,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	// Create a request with invalid hints (uses response hints instead of request hints).
+	req := &storepb.SeriesRequest{
+		MinTime: 0,
+		MaxTime: 3,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+		},
+		Hints: mustMarshalAny(&hintspb.SeriesResponseHints{}),
+	}
+
+	srv := newStoreSeriesServer(context.Background())
+	err = store.Series(req, srv)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, true, regexp.MustCompile(".*unmarshal series request hints.*").MatchString(err.Error()))
+}
+
+func mustMarshalAny(pb proto.Message) *types.Any {
+	out, err := types.MarshalAny(pb)
+	if err != nil {
+		panic(err)
+	}
+	return out
 }
