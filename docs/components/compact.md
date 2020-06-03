@@ -174,11 +174,10 @@ Flags:
                                 relabel-config syntax. See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --web.external-prefix=""  Static prefix for all HTML links and redirect
-                                URLs in the bucket web UI interface. Actual
-                                endpoints are still served on / or the
-                                web.route-prefix. This allows thanos bucket web
-                                UI to be served behind a reverse proxy that
-                                strips a URL sub-path.
+                                URLs in the web UI interface. Actual endpoints
+                                are still served on / or the web.route-prefix.
+                                This allows thanos web UI to be served behind a
+                                reverse proxy that strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
                                 prefixing of UI links and redirects. This option
                                 is ignored if web.external-prefix argument is

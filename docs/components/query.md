@@ -313,17 +313,11 @@ Flags:
                                  Server name to verify the hostname on the
                                  returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
-      --web.route-prefix=""      Prefix for API and UI endpoints. This allows
-                                 thanos UI to be served on a sub-path. Defaults
-                                 to the value of --web.external-prefix. This
-                                 option is analogous to --web.route-prefix of
-                                 Promethus.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
-                                 URLs in the UI query web interface. Actual
-                                 endpoints are still served on / or the
-                                 web.route-prefix. This allows thanos UI to be
-                                 served behind a reverse proxy that strips a URL
-                                 sub-path.
+                                 URLs in the web UI interface. Actual endpoints
+                                 are still served on / or the web.route-prefix.
+                                 This allows thanos web UI to be served behind a
+                                 reverse proxy that strips a URL sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
                                  prefixing of UI links and redirects. This
                                  option is ignored if web.external-prefix
@@ -337,6 +331,10 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --web.route-prefix=""      Prefix for API and UI endpoints. This allows
+                                 thanos UI to be served on a sub-path. This
+                                 option is analogous to --web.route-prefix of
+                                 Promethus.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
@@ -349,6 +347,15 @@ Flags:
                                  able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+      --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
+                                 source of data should be used in store gateways
+                                 if no max_source_resolution param is specified.
+      --query.partial-response   Enable partial response for queries if no
+                                 partial_response param is specified.
+                                 --no-query.partial-response for disabling.
+      --query.default-evaluation-interval=1m
+                                 Set default evaluation interval for sub
+                                 queries.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
@@ -373,15 +380,6 @@ Flags:
       --store.unhealthy-timeout=5m
                                  Timeout before an unhealthy store is cleaned
                                  from the store UI page.
-      --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
-                                 source of data should be used in store gateways
-                                 if no max_source_resolution param is specified.
-      --query.partial-response   Enable partial response for queries if no
-                                 partial_response param is specified.
-                                 --no-query.partial-response for disabling.
-      --query.default-evaluation-interval=1m
-                                 Set default evaluation interval for sub
-                                 queries.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

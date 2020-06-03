@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
@@ -50,107 +51,33 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
-
-	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
-
-	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
-	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
-	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
-	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
-	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
-
-	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
-	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
-	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
-
-	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
-		Default("2m"))
-
-	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
-		Default("20").Int()
-
-	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
-		Default("4").Int()
-
-	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
-		Strings()
-
-	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
-
-	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
-		PlaceHolder("<name>=\"<value>\"").Strings()
-
-	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
-		PlaceHolder("<store>").Strings()
-
-	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<rule>").Strings()
-
-	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
-		PlaceHolder("<staticstore>").Strings()
-
-	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
-		PlaceHolder("<path>").Strings()
-
-	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
-		Default("5m"))
-
-	// TODO(bwplotka): Grab this from TTL at some point.
-	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
-		Default("30s"))
-
-	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
-		Default(string(dns.GolangResolverType)).Hidden().String()
-
-	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
-
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
-		Default("false").Bool()
-
-	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
-		Default("true").Bool()
-
-	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
-		Hidden().Default("true").Bool()
-
-	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
-
-	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	conf := &queryConfig{}
+	conf.registerFlag(cmd)
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		selectorLset, err := parseFlagLabels(*selectorLabels)
+		selectorLset, err := parseFlagLabels(conf.selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		if dup := firstDuplicate(*stores); dup != "" {
+		if dup := firstDuplicate(conf.stores); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
 		}
 
-		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
+		if dup := firstDuplicate(conf.ruleEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
 		}
 
 		var fileSD *file.Discovery
-		if len(*fileSDFiles) > 0 {
-			conf := &file.SDConfig{
-				Files:           *fileSDFiles,
-				RefreshInterval: *fileSDInterval,
+		if len(conf.fileSDFiles) > 0 {
+			sdConf := &file.SDConfig{
+				Files:           conf.fileSDFiles,
+				RefreshInterval: conf.fileSDInterval,
 			}
-			fileSD = file.NewDiscovery(conf, logger)
+			fileSD = file.NewDiscovery(sdConf, logger)
 		}
 
-		if *webRoutePrefix == "" {
-			*webRoutePrefix = *webExternalPrefix
-		}
-
-		if *webRoutePrefix != *webExternalPrefix {
-			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
-		}
-
-		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+		promql.SetDefaultEvaluationInterval(time.Duration(conf.defaultEvaluationInterval))
 
 		flagsMap := map[string]string{}
 
@@ -170,40 +97,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
-			*grpcBindAddr,
-			time.Duration(*grpcGracePeriod),
-			*grpcCert,
-			*grpcKey,
-			*grpcClientCA,
-			*secure,
-			*cert,
-			*key,
-			*caCert,
-			*serverName,
-			*httpBindAddr,
-			time.Duration(*httpGracePeriod),
-			*webRoutePrefix,
-			*webExternalPrefix,
-			*webPrefixHeaderName,
-			*maxConcurrentQueries,
-			*maxConcurrentSelects,
-			time.Duration(*queryTimeout),
-			time.Duration(*storeResponseTimeout),
-			*queryReplicaLabels,
+			component.Query,
+			fileSD,
 			selectorLset,
 			flagsMap,
-			*stores,
-			*ruleEndpoints,
-			*enableAutodownsampling,
-			*enableQueryPartialResponse,
-			*enableRulePartialResponse,
-			fileSD,
-			time.Duration(*dnsSDInterval),
-			*dnsSDResolver,
-			time.Duration(*unhealthyStoreTimeout),
-			time.Duration(*instantDefaultMaxSourceResolution),
-			*strictStores,
-			component.Query,
+			*conf,
 		)
 	}
 }
@@ -215,40 +113,11 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	grpcBindAddr string,
-	grpcGracePeriod time.Duration,
-	grpcCert string,
-	grpcKey string,
-	grpcClientCA string,
-	secure bool,
-	cert string,
-	key string,
-	caCert string,
-	serverName string,
-	httpBindAddr string,
-	httpGracePeriod time.Duration,
-	webRoutePrefix string,
-	webExternalPrefix string,
-	webPrefixHeaderName string,
-	maxConcurrentQueries int,
-	maxConcurrentSelects int,
-	queryTimeout time.Duration,
-	storeResponseTimeout time.Duration,
-	queryReplicaLabels []string,
+	comp component.Component,
+	fileSD *file.Discovery,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
-	storeAddrs []string,
-	ruleAddrs []string,
-	enableAutodownsampling bool,
-	enableQueryPartialResponse bool,
-	enableRulePartialResponse bool,
-	fileSD *file.Discovery,
-	dnsSDInterval time.Duration,
-	dnsSDResolver string,
-	unhealthyStoreTimeout time.Duration,
-	instantDefaultMaxSourceResolution time.Duration,
-	strictStores []string,
-	comp component.Component,
+	conf queryConfig,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -256,7 +125,9 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, conf.secure, conf.clientTlsCert,
+		conf.clientTlsKey, conf.clientTlsCA, conf.serverName,
+	)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
@@ -265,10 +136,10 @@ func runQuery(
 	dnsStoreProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
-		dns.ResolverType(dnsSDResolver),
+		dns.ResolverType(conf.dnsSDResolver),
 	)
 
-	for _, store := range strictStores {
+	for _, store := range conf.strictStores {
 		if dns.IsDynamicNode(store) {
 			return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
 		}
@@ -277,7 +148,7 @@ func runQuery(
 	dnsRuleProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_rule_apis_", reg),
-		dns.ResolverType(dnsSDResolver),
+		dns.ResolverType(conf.dnsSDResolver),
 	)
 
 	var (
@@ -287,7 +158,7 @@ func runQuery(
 			func() (specs []query.StoreSpec) {
 
 				// Add strict & static nodes.
-				for _, addr := range strictStores {
+				for _, addr := range conf.strictStores {
 					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 				// Add DNS resolved addresses from static flags and file SD.
@@ -307,18 +178,18 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
-			unhealthyStoreTimeout,
+			time.Duration(conf.unhealthyStoreTimeout),
 		)
-		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
+		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, time.Duration(conf.storeResponseTimeout))
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		queryableCreator = query.NewQueryableCreator(logger, reg, proxy, maxConcurrentSelects, queryTimeout)
+		queryableCreator = query.NewQueryableCreator(logger, reg, proxy, conf.maxConcurrentSelect, time.Duration(conf.timeout))
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger: logger,
 				Reg:    reg,
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
+				Timeout:    time.Duration(conf.timeout),
 			},
 		)
 	)
@@ -361,7 +232,7 @@ func runQuery(
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
 
-					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), conf.stores...)); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 					}
 					// Rules apis do not support file service discovery as of now.
@@ -378,11 +249,11 @@ func runQuery(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				if err := dnsStoreProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+			return runutil.Repeat(time.Duration(conf.dnsSDInterval), ctx.Done(), func() error {
+				if err := dnsStoreProvider.Resolve(ctx, append(fileSDCache.Addresses(), conf.stores...)); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 				}
-				if err := dnsRuleProvider.Resolve(ctx, ruleAddrs); err != nil {
+				if err := dnsRuleProvider.Resolve(ctx, conf.ruleEndpoints); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}
 				return nil
@@ -405,7 +276,7 @@ func runQuery(
 		router := route.New()
 
 		// RoutePrefix must always start with '/'.
-		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+		webRoutePrefix := "/" + strings.Trim(conf.webConf.routePrefix.prefix, "/")
 
 		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "/" {
@@ -445,7 +316,8 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName, runtimeInfo, *buildInfo).Register(router, ins)
+		ui.NewQueryUI(logger, reg, stores, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, runtimeInfo, *buildInfo).
+			Register(router, ins)
 
 		api := v1.NewAPI(
 			logger,
@@ -454,14 +326,14 @@ func runQuery(
 			engine,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
-			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
-			enableAutodownsampling,
-			enableQueryPartialResponse,
-			enableRulePartialResponse,
-			queryReplicaLabels,
+			rules.NewGRPCClientWithDedup(rulesProxy, conf.replicaLabels),
+			conf.enableAutoDownsampling,
+			conf.enablePartialResponse,
+			conf.enableRulePartialResponse,
+			conf.replicaLabels,
 			flagsMap,
-			instantDefaultMaxSourceResolution,
-			maxConcurrentQueries,
+			time.Duration(conf.instantDefaultMaxSourceResolution),
+			conf.maxConcurrent,
 			runtimeInfo,
 			buildInfo,
 		)
@@ -469,8 +341,8 @@ func runQuery(
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
-			httpserver.WithListen(httpBindAddr),
-			httpserver.WithGracePeriod(httpGracePeriod),
+			httpserver.WithListen(conf.http.bindAddress),
+			httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		)
 		srv.Handle("/", router)
 
@@ -487,14 +359,16 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
+			conf.clientTlsCert, conf.clientTlsKey, conf.clientTlsCA,
+		)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
 		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, proxy, rulesProxy,
-			grpcserver.WithListen(grpcBindAddr),
-			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithListen(conf.grpc.bindAddress),
+			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 
@@ -542,4 +416,104 @@ func firstDuplicate(ss []string) string {
 	}
 
 	return ""
+}
+
+type queryConfig struct {
+	http httpConfig
+
+	grpc          grpcConfig
+	secure        bool
+	clientTlsCert string
+	clientTlsKey  string
+	clientTlsCA   string
+	serverName    string
+
+	webConf webConfig
+
+	timeout                           model.Duration
+	maxConcurrent                     int
+	maxConcurrentSelect               int
+	replicaLabels                     []string
+	instantDefaultMaxSourceResolution model.Duration
+	enableAutoDownsampling            bool
+	enablePartialResponse             bool
+	defaultEvaluationInterval         model.Duration
+
+	enableRulePartialResponse bool
+
+	selectorLabels []string
+	stores         []string
+	ruleEndpoints  []string
+	strictStores   []string
+
+	fileSDFiles           []string
+	fileSDInterval        model.Duration
+	dnsSDInterval         model.Duration
+	dnsSDResolver         string
+	unhealthyStoreTimeout model.Duration
+	storeResponseTimeout  model.Duration
+}
+
+func (qc *queryConfig) registerFlag(cmd *kingpin.CmdClause) *queryConfig {
+	qc.http.registerFlag(cmd)
+
+	qc.grpc.registerFlag(cmd)
+	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").
+		Default("false").BoolVar(&qc.secure)
+	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").
+		Default("").StringVar(&qc.clientTlsCert)
+	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").
+		Default("").StringVar(&qc.clientTlsKey)
+	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").
+		Default("").StringVar(&qc.clientTlsCA)
+	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").
+		Default("").StringVar(&qc.serverName)
+
+	qc.webConf.registerFlag(cmd)
+	qc.webConf.routePrefix.registerFlag(cmd)
+
+	cmd.Flag("query.timeout", "Maximum time to process query by query node.").
+		Default("2m").SetValue(&qc.timeout)
+	cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
+		Default("20").IntVar(&qc.maxConcurrent)
+	cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
+		Default("4").IntVar(&qc.maxConcurrentSelect)
+	cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
+		StringsVar(&qc.replicaLabels)
+	cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").
+		Default("0s").Hidden().SetValue(&qc.instantDefaultMaxSourceResolution)
+	cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
+		Default("false").BoolVar(&qc.enableAutoDownsampling)
+	cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
+		Default("true").BoolVar(&qc.enablePartialResponse)
+	cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").
+		Default("1m").SetValue(&qc.defaultEvaluationInterval)
+
+	cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
+		Hidden().Default("true").BoolVar(&qc.enableRulePartialResponse)
+
+	cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
+		PlaceHolder("<name>=\"<value>\"").StringsVar(&qc.selectorLabels)
+	cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
+		PlaceHolder("<store>").StringsVar(&qc.stores)
+	cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<rule>").StringsVar(&qc.ruleEndpoints)
+	cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
+		PlaceHolder("<staticstore>").StringsVar(&qc.strictStores)
+
+	cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
+		PlaceHolder("<path>").StringsVar(&qc.fileSDFiles)
+	cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
+		Default("5m").SetValue(&qc.fileSDInterval)
+	// TODO(bwplotka): Grab this from TTL at some point.
+	cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s").SetValue(&qc.dnsSDInterval)
+	cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
+		Default(string(dns.GolangResolverType)).Hidden().StringVar(&qc.dnsSDResolver)
+	cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").
+		Default("5m").SetValue(&qc.unhealthyStoreTimeout)
+	cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").
+		Default("0ms").SetValue(&qc.storeResponseTimeout)
+
+	return qc
 }
