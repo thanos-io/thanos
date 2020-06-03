@@ -62,10 +62,8 @@ func (s *promSeriesSet) Next() bool {
 		return s.currChunks[i].MinTime < s.currChunks[j].MinTime
 	})
 
-	// newChunkSeriesIterator will handle overlaps well, however we don't need to iterate over those samples,
-	// removed early duplicates here.
-	// TODO(bwplotka): Remove chunk duplicates on proxy level as well to avoid decoding those.
-	// https://github.com/thanos-io/thanos/issues/2546, consider skipping removal here then.
+	// Proxy handles duplicates between different series, let's handle duplicates within single series now as well.
+	// We don't need to decode those.
 	s.currChunks = removeExactDuplicates(s.currChunks)
 	return true
 }
@@ -81,7 +79,7 @@ func removeExactDuplicates(chks []storepb.AggrChunk) []storepb.AggrChunk {
 	ret = append(ret, chks[0])
 
 	for _, c := range chks[1:] {
-		if ret[len(ret)-1].String() == c.String() {
+		if ret[len(ret)-1].Compare(c) == 0 {
 			continue
 		}
 		ret = append(ret, c)
