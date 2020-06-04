@@ -64,6 +64,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
 		nil,
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
+		"",
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))

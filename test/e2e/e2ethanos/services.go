@@ -111,7 +111,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir string, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses []string) (*Service, error) {
+func NewQuerier(sharedDir string, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses []string, routePrefix string) (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -155,6 +155,10 @@ func NewQuerier(sharedDir string, name string, storeAddresses, fileSDStoreAddres
 		}
 
 		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
+	}
+
+	if routePrefix != "" {
+		args = append(args, "--web.route-prefix="+routePrefix)
 	}
 
 	querier := NewService(
