@@ -28,6 +28,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2525](https://github.com/thanos-io/thanos/pull/2525) Query: Fixed logging for dns resolution error in the `Query` component.
 - [#2484](https://github.com/thanos-io/thanos/pull/2484) Query/Ruler: Fixed issue #2483, when web.route-prefix is set, it is added twice in HTTP router prefix.
 - [#2416](https://github.com/thanos-io/thanos/pull/2416) Bucket: Fixed issue #2416 bug in `inspect --sort-by` doesn't work correctly in all cases
+- [#2719](https://github.com/thanos-io/thanos/pull/2719) Store: `irate` and `resets` use now counter downsampling aggregations.
 
 ### Added
 
