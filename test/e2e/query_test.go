@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,7 +210,7 @@ func TestQueryRoutePrefix(t *testing.T) {
 
 	err = func() error {
 		if len(networkErrors) > 0 {
-			return fmt.Errorf("some network requests failed")
+			return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
 		}
 		return nil
 	}()
