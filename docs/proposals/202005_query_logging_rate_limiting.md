@@ -11,7 +11,7 @@ owner: yashrsharma44, kakkoyun, bwplotka
 
 ### Related Tickets
 
-* Add Query Logging : https://github.com/thanos-io/thanos/issues/1706
+* Add Query Logging : https://github.com/thanos-io/thanos/issues/170
 * Add generic layer of limits : https://github.com/thanos-io/thanos/issues/2527
 
 ## Summary
@@ -40,7 +40,7 @@ Another feature lacking from Thanos, is tracking/logging of active queries run i
 ## Goals of this design
 
 * Implement Query Logging for internal APIs of Thanos, StoreAPI in particular
-* The Query Logging to implement a seperate logger derived from the base logger. 
+* The Query Logging to implement a separate logger derived from the base logger. 
 * Implement Rate limiting and tracking of queries of the internal APIs
 
 
