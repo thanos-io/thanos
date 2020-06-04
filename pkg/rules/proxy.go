@@ -6,7 +6,6 @@ package rules
 import (
 	"context"
 	"io"
-	"sort"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -63,8 +62,6 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 		return err
 	}
 
-	groups = dedupGroups(groups)
-
 	for _, g := range groups {
 		if err := srv.Send(rulespb.NewRuleGroupRulesResponse(g)); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send rules response").Error())
@@ -72,28 +69,6 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 	}
 
 	return nil
-}
-
-func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
-	// sort groups such that they appear next to each other.
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
-
-	// nothing to do if we have no or a single result, also no deduplication is necessary.
-	if len(groups) < 2 {
-		return groups
-	}
-
-	i := 0
-	for _, g := range groups[1:] {
-		if g.Name == groups[i].Name {
-			groups[i].Rules = append(groups[i].Rules, g.Rules...)
-		} else {
-			i++
-			groups[i] = g
-		}
-	}
-
-	return groups[:i+1]
 }
 
 type rulesStream struct {

@@ -110,7 +110,8 @@ type API struct {
 	ruleGroups      rules.UnaryClient
 
 	enableAutodownsampling                 bool
-	enablePartialResponse                  bool
+	enableQueryPartialResponse             bool
+	enableRulePartialResponse              bool
 	replicaLabels                          []string
 	reg                                    prometheus.Registerer
 	storeSet                               *query.StoreSet
@@ -127,7 +128,8 @@ func NewAPI(
 	qe *promql.Engine,
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
-	enablePartialResponse bool,
+	enableQueryPartialResponse bool,
+	enableRulePartialResponse bool,
 	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	ruleGroups rules.UnaryClient,
@@ -137,7 +139,8 @@ func NewAPI(
 		queryEngine:                            qe,
 		queryableCreate:                        c,
 		enableAutodownsampling:                 enableAutodownsampling,
-		enablePartialResponse:                  enablePartialResponse,
+		enableQueryPartialResponse:             enableQueryPartialResponse,
+		enableRulePartialResponse:              enableRulePartialResponse,
 		replicaLabels:                          replicaLabels,
 		reg:                                    reg,
 		storeSet:                               storeSet,
@@ -181,7 +184,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Post("/labels", instr("label_names", api.labelNames))
 
 	r.Get("/stores", instr("stores", api.stores))
-	r.Get("/rules", instr("rules", NewRulesHandler(api.ruleGroups)))
+
+	r.Get("/rules", instr("rules", NewRulesHandler(api.ruleGroups, api.enableRulePartialResponse)))
 }
 
 type queryData struct {
@@ -243,19 +247,18 @@ func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Du
 	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
-func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *ApiError) {
+func (api *API) parsePartialResponseParam(r *http.Request, defaultEnablePartialResponse bool) (enablePartialResponse bool, _ *ApiError) {
 	const partialResponseParam = "partial_response"
-	enablePartialResponse = api.enablePartialResponse
 
 	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(partialResponseParam); val != "" {
 		var err error
-		enablePartialResponse, err = strconv.ParseBool(val)
+		defaultEnablePartialResponse, err = strconv.ParseBool(val)
 		if err != nil {
 			return false, &ApiError{errorBadData, errors.Wrapf(err, "'%s' parameter", partialResponseParam)}
 		}
 	}
-	return enablePartialResponse, nil
+	return defaultEnablePartialResponse, nil
 }
 
 func (api *API) options(r *http.Request) (interface{}, []error, *ApiError) {
@@ -296,7 +299,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r, api.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -393,7 +396,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r, api.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -438,7 +441,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorBadData, errors.Errorf("invalid label name: %q", name)}
 	}
 
-	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r, api.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -514,7 +517,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r, api.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -622,7 +625,7 @@ func parseDuration(s string) (time.Duration, error) {
 func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	ctx := r.Context()
 
-	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r, api.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -651,9 +654,14 @@ func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
-func NewRulesHandler(client rules.UnaryClient) func(*http.Request) (interface{}, []error, *ApiError) {
-	return func(request *http.Request) (interface{}, []error, *ApiError) {
-		typeParam := request.URL.Query().Get("type")
+func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *ApiError) {
+		typeParam := r.URL.Query().Get("type")
 		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
 		if !ok {
 			if typeParam != "" {
@@ -662,11 +670,12 @@ func NewRulesHandler(client rules.UnaryClient) func(*http.Request) (interface{},
 			typ = int32(rulespb.RulesRequest_ALL)
 		}
 
+		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
 		req := &rulespb.RulesRequest{
 			Type:                    rulespb.RulesRequest_Type(typ),
-			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			PartialResponseStrategy: ps,
 		}
-		groups, warnings, err := client.Rules(request.Context(), req)
+		groups, warnings, err := client.Rules(r.Context(), req)
 		if err != nil {
 			return nil, nil, &ApiError{ErrorInternal, errors.Errorf("error retrieving rules: %v", err)}
 		}

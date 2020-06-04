@@ -1280,7 +1280,7 @@ func TestRulesHandler(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, false)
 
 	type test struct {
 		params   map[string]string

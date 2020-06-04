@@ -48,16 +48,22 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-query.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+			Name: "thanos-query.rules",
+			File: filepath.Join(dir, "alerts.yaml"),
+			Rules: []*rulespb.Rule{
+				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
+				someRecording, someRecording, someRecording, someRecording, someRecording,
+			},
 			Interval:                          60,
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-receive.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+			Name: "thanos-receive.rules",
+			File: filepath.Join(dir, "alerts.yaml"),
+			Rules: []*rulespb.Rule{
+				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
+				someRecording, someRecording, someRecording, someRecording, someRecording, someRecording,
+			},
 			Interval:                          60,
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
@@ -76,36 +82,12 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-store.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-		},
-		{
-			Name:                              "thanos-bucket-replicate.rules",
-			File:                              filepath.Join(dir, "rules.yaml"),
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-		},
-		{
-			Name:                              "thanos-query.rules",
-			File:                              filepath.Join(dir, "rules.yaml"),
-			Rules:                             []*rulespb.Rule{someRecording, someRecording, someRecording, someRecording, someRecording},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-		},
-		{
-			Name:                              "thanos-receive.rules",
-			File:                              filepath.Join(dir, "rules.yaml"),
-			Rules:                             []*rulespb.Rule{someRecording, someRecording, someRecording, someRecording, someRecording, someRecording},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
-		},
-		{
-			Name:                              "thanos-store.rules",
-			File:                              filepath.Join(dir, "rules.yaml"),
-			Rules:                             []*rulespb.Rule{someRecording, someRecording, someRecording, someRecording},
+			Name: "thanos-store.rules",
+			File: filepath.Join(dir, "alerts.yaml"),
+			Rules: []*rulespb.Rule{
+				someAlert, someAlert, someAlert, someAlert,
+				someRecording, someRecording, someRecording, someRecording,
+			},
 			Interval:                          60,
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
@@ -126,7 +108,7 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 		},
 	} {
 		t.Run(tcase.requestedType.String(), func(t *testing.T) {
-			groups, w, err := NewGRPCClient(server).Rules(context.Background(), &rulespb.RulesRequest{
+			groups, w, err := NewGRPCClientWithDedup(server, nil).Rules(context.Background(), &rulespb.RulesRequest{
 				Type: tcase.requestedType,
 			})
 			testutil.Equals(t, storage.Warnings(nil), w)
@@ -185,6 +167,585 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 				testutil.Equals(t, expectedForType[i], got[i])
 			}
 			testutil.Equals(t, expectedForType, got)
+		})
+	}
+}
+
+func TestDedupRules(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		rules, want   []*rulespb.Rule
+		replicaLabels []string
+	}{
+		{
+			name:  "nil slice",
+			rules: nil,
+			want:  nil,
+		},
+		{
+			name:  "empty rule slice",
+			rules: []*rulespb.Rule{},
+			want:  []*rulespb.Rule{},
+		},
+		{
+			name: "single recording rule",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+			},
+		},
+		{
+			name: "single alert",
+			rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+			},
+		},
+		{
+			name: "rule type",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+			},
+		},
+		{
+			name: "rule name",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+			},
+		},
+		{
+			name: "rule labels",
+			rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+		},
+		{
+			name: "rule expression",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+		},
+		{
+			name: "alert duration",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 1.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 1.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 2.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 1.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 2.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1", Query: "up", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+		},
+		{
+			name: "alert duration with replicas",
+			rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 1.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+						{Name: "replica", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 2.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 2.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:            "a1",
+					Query:           "up",
+					DurationSeconds: 1.0,
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "a", Value: "1"},
+					}}}),
+			},
+			replicaLabels: []string{"replica"},
+		},
+		{
+			name: "replica labels",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "replica", Value: "3"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "replica", Value: "1"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "replica", Value: "2"},
+				}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			},
+			replicaLabels: []string{"replica"},
+		},
+		{
+			name: "ambiguous replica labels",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "replica", Value: "1"},
+					{Name: "a", Value: "1"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "replica", Value: "1"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "replica", Value: "1"},
+					{Name: "a", Value: "2"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "replica", Value: "1"},
+					{Name: "a", Value: "1"},
+				}}}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "2"},
+				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+			},
+			replicaLabels: []string{"replica"},
+		},
+		{
+			name: "youngest recording rule",
+			rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "2"},
+					}},
+					LastEvaluation: time.Unix(0, 0),
+				}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "1"},
+					}},
+					LastEvaluation: time.Unix(1, 0),
+				}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "3"},
+					}},
+					LastEvaluation: time.Unix(3, 0),
+				}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:           "a1",
+					Query:          "up",
+					LastEvaluation: time.Unix(2, 0),
+				}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:           "a1",
+					Query:          "up",
+					LastEvaluation: time.Unix(3, 0),
+				}),
+			},
+			replicaLabels: []string{"replica"},
+		},
+		{
+			name: "youngest firing alert",
+			rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "2"},
+					}},
+					LastEvaluation: time.Unix(4, 0),
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "2"},
+						{Name: "foo", Value: "bar"},
+					}},
+					LastEvaluation: time.Unix(2, 0),
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:           "a2",
+					LastEvaluation: time.Unix(2, 0),
+					State:          rulespb.AlertState_PENDING,
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "1"},
+					}},
+					LastEvaluation: time.Unix(3, 0),
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a2",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "1"},
+					}},
+					LastEvaluation: time.Unix(3, 0),
+					State:          rulespb.AlertState_PENDING,
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "replica", Value: "3"},
+					}},
+					LastEvaluation: time.Unix(2, 0),
+					State:          rulespb.AlertState_FIRING,
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name: "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "foo", Value: "bar"},
+					}},
+					State:          rulespb.AlertState_FIRING,
+					LastEvaluation: time.Unix(1, 0),
+				}),
+			},
+			want: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					State: rulespb.AlertState_FIRING,
+					Name:  "a1",
+					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+						{Name: "foo", Value: "bar"},
+					}},
+					LastEvaluation: time.Unix(1, 0),
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					State:          rulespb.AlertState_FIRING,
+					Name:           "a1",
+					LastEvaluation: time.Unix(2, 0),
+				}),
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					State:          rulespb.AlertState_PENDING,
+					Name:           "a2",
+					LastEvaluation: time.Unix(3, 0),
+				}),
+			},
+			replicaLabels: []string{"replica"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			replicaLabels := make(map[string]struct{})
+			for _, lbl := range tc.replicaLabels {
+				replicaLabels[lbl] = struct{}{}
+			}
+			testutil.Equals(t, tc.want, dedupRules(tc.rules, replicaLabels))
+		})
+	}
+}
+
+func TestDedupGroups(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		groups, want []*rulespb.RuleGroup
+	}{
+		{
+			name:   "no groups",
+			groups: nil,
+			want:   nil,
+		},
+		{
+			name: "empty group",
+			groups: []*rulespb.RuleGroup{
+				{Name: "a"},
+			},
+			want: []*rulespb.RuleGroup{
+				{Name: "a"},
+			},
+		},
+		{
+			name: "multiple empty groups",
+			groups: []*rulespb.RuleGroup{
+				{Name: "a"},
+				{Name: "b"},
+			},
+			want: []*rulespb.RuleGroup{
+				{Name: "a"},
+				{Name: "b"},
+			},
+		},
+		{
+			name: "single group",
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+		},
+		{
+			name: "separate groups",
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+			},
+		},
+		{
+			name: "duplicate groups",
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(t *testing.T) {
+				testutil.Equals(t, tc.want, dedupGroups(tc.groups))
+			})
 		})
 	}
 }

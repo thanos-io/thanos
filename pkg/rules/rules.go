@@ -5,10 +5,12 @@ package rules
 
 import (
 	"context"
+	"sort"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 var _ UnaryClient = &GRPCClient{}
@@ -23,22 +25,123 @@ type UnaryClient interface {
 // TODO(bwplotka): Switch to native gRPC transparent client->server adapter once available.
 type GRPCClient struct {
 	proxy rulespb.RulesServer
+
+	replicaLabels map[string]struct{}
 }
 
 func NewGRPCClient(rs rulespb.RulesServer) *GRPCClient {
-	return &GRPCClient{
-		proxy: rs,
+	return NewGRPCClientWithDedup(rs, nil)
+}
+
+func NewGRPCClientWithDedup(rs rulespb.RulesServer, replicaLabels []string) *GRPCClient {
+	c := &GRPCClient{
+		proxy:         rs,
+		replicaLabels: map[string]struct{}{},
 	}
+
+	for _, label := range replicaLabels {
+		c.replicaLabels[label] = struct{}{}
+	}
+	return c
 }
 
 func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
 	resp := &rulesServer{ctx: ctx}
 
 	if err := rr.proxy.Rules(req, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy RuleGroups()")
+		return nil, nil, errors.Wrap(err, "proxy Rules")
+	}
+
+	// TODO(bwplotka): Move to SortInterface with equal method and heap.
+	resp.groups = dedupGroups(resp.groups)
+	for _, g := range resp.groups {
+		g.Rules = dedupRules(g.Rules, rr.replicaLabels)
 	}
 
 	return &rulespb.RuleGroups{Groups: resp.groups}, resp.warnings, nil
+}
+
+// dedupRules re-sorts the set so that the same series with different replica
+// labels are coming right after each other.
+func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rulespb.Rule {
+	if len(rules) == 0 {
+		return rules
+	}
+
+	// Sort each rule's label names such that they are comparable.
+	for _, r := range rules {
+		sort.Slice(r.GetLabels(), func(i, j int) bool {
+			return r.GetLabels()[i].Name < r.GetLabels()[j].Name
+		})
+	}
+
+	// Sort rules globally based on synthesized deduplication labels, also considering replica labels and their values.
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i].Compare(rules[j]) < 0
+	})
+
+	// Remove rules based on synthesized deduplication labels, this time ignoring replica labels and last evaluation.
+	i := 0
+	removeReplicaLabels(rules[i], replicaLabels)
+	for j := 1; j < len(rules); j++ {
+		removeReplicaLabels(rules[j], replicaLabels)
+		if rules[i].Compare(rules[j]) != 0 {
+			// Effectively retain rules[j] in the resulting slice.
+			i++
+			rules[i] = rules[j]
+			continue
+		}
+
+		// If rules are the same, ordering is still determined depending on type.
+		switch {
+		case rules[i].GetRecording() != nil && rules[j].GetRecording() != nil:
+			if rules[i].GetRecording().Compare(rules[j].GetRecording()) <= 0 {
+				continue
+			}
+		case rules[i].GetAlert() != nil && rules[j].GetAlert() != nil:
+			if rules[i].GetAlert().Compare(rules[j].GetAlert()) <= 0 {
+				continue
+			}
+		default:
+			continue
+		}
+
+		// Swap if we found a younger recording rule or a younger firing alerting rule.
+		rules[i] = rules[j]
+	}
+	return rules[:i+1]
+}
+
+func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
+	labels := r.GetLabels()
+	newLabels := make([]storepb.Label, 0, len(labels))
+	for _, l := range labels {
+		if _, ok := replicaLabels[l.Name]; !ok {
+			newLabels = append(newLabels, l)
+		}
+	}
+
+	r.SetLabels(newLabels)
+}
+
+func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	// Sort groups such that they appear next to each other.
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+
+	i := 0
+	for _, g := range groups[1:] {
+		if g.Name == groups[i].Name {
+			groups[i].Rules = append(groups[i].Rules, g.Rules...)
+		} else {
+			i++
+			groups[i] = g
+		}
+	}
+	return groups[:i+1]
 }
 
 type rulesServer struct {
@@ -62,7 +165,6 @@ func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 
 	srv.groups = append(srv.groups, res.GetGroup())
 	return nil
-
 }
 
 func (srv *rulesServer) Context() context.Context {

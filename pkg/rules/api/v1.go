@@ -66,5 +66,5 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Get("/alerts", instr("alerts", func(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 		return struct{ Alerts []*rulespb.AlertInstance }{Alerts: api.alerts.Active()}, nil, nil
 	}))
-	r.Get("/rules", instr("rules", qapi.NewRulesHandler(api.ruleGroups)))
+	r.Get("/rules", instr("rules", qapi.NewRulesHandler(api.ruleGroups, false)))
 }
