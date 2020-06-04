@@ -429,7 +429,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.NewReadWrite(logger, reg, tracer, comp, grpcProbe, rw,
+				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcProbe, rw,
 					grpcserver.WithListen(grpcBindAddr),
 					grpcserver.WithGracePeriod(grpcGracePeriod),
 					grpcserver.WithTLSConfig(tlsCfg),

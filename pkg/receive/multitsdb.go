@@ -264,7 +264,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		s, err := tsdb.Open(
 			dataDir,
 			logger,
-			reg,
+			&UnRegisterer{Registerer: reg},
 			t.tsdbOpts,
 		)
 
@@ -409,4 +409,28 @@ func (a adapter) Appender() (storage.Appender, error) {
 // Close closes the storage and all its underlying resources.
 func (a adapter) Close() error {
 	return a.db.Close()
+}
+
+// UnRegisterer is a Prometheus registerer that
+// ensures that collectors can be registered
+// by unregistering already-registered collectors.
+// FlushableStorage uses this registerer in order
+// to not lose metric values between DB flushes.
+type UnRegisterer struct {
+	prometheus.Registerer
+}
+
+func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
+	for _, c := range cs {
+		if err := u.Register(c); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+				if ok = u.Unregister(c); !ok {
+					panic("unable to unregister existing collector")
+				}
+				u.Registerer.MustRegister(c)
+				continue
+			}
+			panic(err)
+		}
+	}
 }
