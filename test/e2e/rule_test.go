@@ -36,7 +36,7 @@ import (
 const (
 	testAlertRuleAbortOnPartialResponse = `
 groups:
-- name: example
+- name: example_abort
   # Abort should be a default: partial_response_strategy: "ABORT"
   rules:
   - alert: TestAlert_AbortOnPartialResponse
@@ -49,7 +49,7 @@ groups:
 `
 	testAlertRuleWarnOnPartialResponse = `
 groups:
-- name: example
+- name: example_warn
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_WarnOnPartialResponse

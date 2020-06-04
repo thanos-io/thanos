@@ -357,3 +357,95 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		})
 	}
 }
+
+func TestRulesComparator(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		r1, r2 *Rule
+		want   int
+	}{
+		{
+			name: "same recording rule",
+			r1:   NewRecordingRule(&RecordingRule{Name: "a"}),
+			r2:   NewRecordingRule(&RecordingRule{Name: "a"}),
+			want: 0,
+		},
+		{
+			name: "same alerting rule",
+			r1:   NewAlertingRule(&Alert{Name: "a"}),
+			r2:   NewAlertingRule(&Alert{Name: "a"}),
+			want: 0,
+		},
+		{
+			name: "different types",
+			r1:   NewAlertingRule(&Alert{Name: "a"}),
+			r2:   NewRecordingRule(&RecordingRule{Name: "a"}),
+			want: -1,
+		},
+		{
+			name: "different names",
+			r1:   NewAlertingRule(&Alert{Name: "a"}),
+			r2:   NewAlertingRule(&Alert{Name: "b"}),
+			want: -1,
+		},
+		{
+			name: "no label before label",
+			r1:   NewAlertingRule(&Alert{Name: "a"}),
+			r2: NewAlertingRule(&Alert{
+				Name: "a",
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			want: -1,
+		},
+		{
+			name: "label ordering",
+			r1: NewAlertingRule(&Alert{
+				Name: "a",
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			r2: NewAlertingRule(&Alert{
+				Name: "a",
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "2"},
+				}}}),
+			want: -1,
+		},
+		{
+			name: "multiple label ordering",
+			r1: NewAlertingRule(&Alert{
+				Name: "a",
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			r2: NewAlertingRule(&Alert{
+				Name: "a",
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "1"},
+				}}}),
+			want: -1,
+		},
+		{
+			name: "different durations",
+			r1: NewAlertingRule(&Alert{
+				Name:            "a",
+				DurationSeconds: 0.0,
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			r2: NewAlertingRule(&Alert{
+				Name:            "a",
+				DurationSeconds: 1.0,
+				Labels: PromLabels{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+				}}}),
+			want: -1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.Equals(t, tc.want, tc.r1.Compare(tc.r2))
+		})
+	}
+}
