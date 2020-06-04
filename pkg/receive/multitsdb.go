@@ -71,10 +71,10 @@ func NewMultiTSDB(
 type tenant struct {
 	tsdbOpts *tsdb.Options
 
-	readyS *ReadyStorage
-	fs     *FlushableStorage
-	s      *store.TSDBStore
-	ship   *shipper.Shipper
+	readyS    *ReadyStorage
+	tsdb      *tsdb.DB
+	storeTSDB *store.TSDBStore
+	ship      *shipper.Shipper
 
 	mtx *sync.RWMutex
 }
@@ -94,7 +94,7 @@ func (t *tenant) readyStorage() *ReadyStorage {
 func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	return t.s
+	return t.storeTSDB
 }
 
 func (t *tenant) shipper() *shipper.Shipper {
@@ -103,17 +103,17 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) flushableStorage() *FlushableStorage {
+func (t *tenant) db() *tsdb.DB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	return t.fs
+	return t.tsdb
 }
 
-func (t *tenant) set(tstore *store.TSDBStore, fs *FlushableStorage, ship *shipper.Shipper) {
-	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
+func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
+	t.readyS.Set(tenantTSDB, int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
 	t.mtx.Lock()
-	t.fs = fs
-	t.s = tstore
+	t.tsdb = tenantTSDB
+	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.mtx.Unlock()
 }
@@ -152,14 +152,16 @@ func (t *MultiTSDB) Flush() error {
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
 	for _, tenant := range t.tenants {
-		s := tenant.flushableStorage()
-		if s == nil {
+		db := tenant.db()
+		if db == nil {
 			continue
 		}
 
 		wg.Add(1)
 		go func() {
-			if err := s.Flush(); err != nil {
+			head := db.Head()
+			mint, maxt := head.MinTime(), head.MaxTime()
+			if err := db.CompactHead(tsdb.NewRangeHead(head, mint, maxt-1)); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -259,15 +261,15 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 			)
 		}
 
-		s := NewFlushableStorage(
+		s, err := tsdb.Open(
 			dataDir,
 			logger,
-			reg,
+			&UnRegisterer{Registerer: reg},
 			t.tsdbOpts,
 		)
 
 		// Assign to outer error to report in blocking case.
-		if err = s.Open(); err != nil {
+		if err != nil {
 			level.Error(logger).Log("msg", "failed to open tsdb", "err", err)
 			t.mtx.Lock()
 			delete(t.tenants, tenantID)
@@ -280,7 +282,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 			store.NewTSDBStore(
 				logger,
 				reg,
-				s.Get(),
+				s,
 				component.Receive,
 				lbls,
 			),
@@ -407,4 +409,28 @@ func (a adapter) Appender() (storage.Appender, error) {
 // Close closes the storage and all its underlying resources.
 func (a adapter) Close() error {
 	return a.db.Close()
+}
+
+// UnRegisterer is a Prometheus registerer that
+// ensures that collectors can be registered
+// by unregistering already-registered collectors.
+// FlushableStorage uses this registerer in order
+// to not lose metric values between DB flushes.
+type UnRegisterer struct {
+	prometheus.Registerer
+}
+
+func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
+	for _, c := range cs {
+		if err := u.Register(c); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+				if ok = u.Unregister(c); !ok {
+					panic("unable to unregister existing collector")
+				}
+				u.Registerer.MustRegister(c)
+				continue
+			}
+			panic(err)
+		}
+	}
 }
