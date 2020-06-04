@@ -96,8 +96,9 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour)
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -132,7 +133,8 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		groups, err := sy.Groups()
+		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks)
+		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, "0@17241709254077376921", groups[0].Key())
@@ -186,13 +188,15 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 5, false, false)
+		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 5)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		bComp, err := NewBucketCompactor(logger, sy, comp, dir, bkt, 2)
+		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, comp, dir, bkt, 2)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
@@ -200,10 +204,10 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
-		testutil.Equals(t, 0, MetricCount(sy.metrics.compactions))
-		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsStarted))
-		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsCompleted))
-		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionFailures))
+		testutil.Equals(t, 0, MetricCount(grouper.compactions))
+		testutil.Equals(t, 0, MetricCount(grouper.compactionRunsStarted))
+		testutil.Equals(t, 0, MetricCount(grouper.compactionRunsCompleted))
+		testutil.Equals(t, 0, MetricCount(grouper.compactionFailures))
 
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
@@ -289,28 +293,28 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
-		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[0].Thanos))))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[7].Thanos))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[4].Thanos))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[5].Thanos))))
-		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionRunsStarted))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[0].Thanos))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 4, MetricCount(grouper.compactions))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(DefaultGroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(DefaultGroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(DefaultGroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(grouper.compactionRunsStarted))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsStarted.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsStarted.WithLabelValues(DefaultGroupKey(metas[7].Thanos))))
 		// TODO(bwplotka): Looks like we do some unnecessary loops. Not a major problem but investigate.
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[4].Thanos))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[5].Thanos))))
-		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionRunsCompleted))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[0].Thanos))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsStarted.WithLabelValues(DefaultGroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsStarted.WithLabelValues(DefaultGroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(grouper.compactionRunsCompleted))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsCompleted.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsCompleted.WithLabelValues(DefaultGroupKey(metas[7].Thanos))))
 		// TODO(bwplotka): Looks like we do some unnecessary loops. Not a major problem but investigate.
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[4].Thanos))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[5].Thanos))))
-		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionFailures))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[0].Thanos))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[7].Thanos))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[4].Thanos))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsCompleted.WithLabelValues(DefaultGroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.compactionRunsCompleted.WithLabelValues(DefaultGroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(grouper.compactionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactionFailures.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactionFailures.WithLabelValues(DefaultGroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactionFailures.WithLabelValues(DefaultGroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactionFailures.WithLabelValues(DefaultGroupKey(metas[5].Thanos))))
 
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
@@ -340,7 +344,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				return err
 			}
 
-			others[GroupKey(meta.Thanos)] = meta
+			others[DefaultGroupKey(meta.Thanos)] = meta
 			return nil
 		}))
 
@@ -351,7 +355,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		// We expect two compacted blocks only outside of what we expected in `nonCompactedExpected`.
 		testutil.Equals(t, 2, len(others))
 		{
-			meta, ok := others[groupKey(124, extLabels)]
+			meta, ok := others[defaultGroupKey(124, extLabels)]
 			testutil.Assert(t, ok, "meta not found")
 
 			testutil.Equals(t, int64(0), meta.MinTime)
@@ -366,7 +370,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 		}
 		{
-			meta, ok := others[groupKey(124, extLabels2)]
+			meta, ok := others[defaultGroupKey(124, extLabels2)]
 			testutil.Assert(t, ok, "meta not found")
 
 			testutil.Equals(t, int64(0), meta.MinTime)
@@ -458,6 +462,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		}
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter()
@@ -467,13 +472,13 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		}, nil)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, 1, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
 		testutil.Ok(t, sy.GarbageCollect(ctx))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(garbageCollectedBlocks))
 
 		rem, err := listBlocksMarkedForDeletion(ctx, bkt)
 		testutil.Ok(t, err)

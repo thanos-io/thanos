@@ -31,7 +31,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.29
-	github.com/minio/minio-go/v6 v6.0.53
+	github.com/minio/minio-go/v6 v6.0.56
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
@@ -45,7 +45,7 @@ require (
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.10.0
-	github.com/prometheus/prometheus v1.8.2-0.20200522113006-f4dd45609a05
+	github.com/prometheus/prometheus v1.8.2-0.20200601152113-3268eac2ddda
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/uber/jaeger-client-go v2.23.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
@@ -72,7 +72,7 @@ replace (
 	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
 	// Make sure Cortex is not forcing us to some other Prometheus version.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200522113006-f4dd45609a05 // @f4dd45609a05e8f582cdcd8ef369004d1f9e3c02 (current master after v2.18.0).
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200601152113-3268eac2ddda // Master after v2.18.0 including m-map fixes.
 	k8s.io/api => k8s.io/api v0.17.5
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.5
 	k8s.io/client-go => k8s.io/client-go v0.17.5

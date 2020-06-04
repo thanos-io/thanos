@@ -378,7 +378,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			var relabelConfig []*relabel.Config
-			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, blockIDLabel, i)), &relabelConfig))
+			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), &relabelConfig))
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
 

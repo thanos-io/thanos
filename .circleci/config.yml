@@ -4,20 +4,13 @@ version: 2
 defaults: &defaults
   docker:
     # Built by Thanos make docker-ci
-    - image: quay.io/thanos/thanos-ci:v1.1-go1.14.2-node
+    - image: quay.io/thanos/thanos-ci:v1.2-go1.14.2-node
 jobs:
   test:
     <<: *defaults
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
-      # Run garbage collection more aggressively to avoid getting OOMed during the lint phase (4GB limit).
-      GOGC: "20"
-      # By default Go uses GOMAXPROCS but a Circle CI executor has many
-      # cores (> 30) while the CPU and RAM resources are throttled. If we
-      # don't limit this to the number of allocated cores, the job is
-      # likely to get OOMed and killed.
-      GOOPTS: "-p 1"
     steps:
       - checkout
       - setup_remote_docker:
@@ -31,11 +24,6 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
               echo "Awesome! GCS and S3 AWS integration tests are enabled."
             fi
-      - run: make deps
-      - run: make lint
-      - run: make check-docs
-      - run: make check-examples
-      - run: make format
       - run:
           name: "Run unit tests."
           # taskset sets CPU affinity to 2 (current CPU limit).

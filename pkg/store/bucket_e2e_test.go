@@ -167,7 +167,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		filterConf,
 		true,
 		true,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 	)
@@ -446,7 +445,7 @@ func TestBucketStore_e2e(t *testing.T) {
 			return
 		}
 
-		if ok := t.Run("with small index cache", func(t *testing.T) {
+		t.Run("with small index cache", func(t *testing.T) {
 			indexCache2, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
 				MaxItemSize: 50,
 				MaxSize:     100,
@@ -454,9 +453,7 @@ func TestBucketStore_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 			s.cache.SwapWith(indexCache2)
 			testBucketStore_e2e(t, ctx, s)
-		}); !ok {
-			return
-		}
+		})
 	})
 }
 

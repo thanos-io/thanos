@@ -1,4 +1,4 @@
-name: react-test
+name: react
 
 on:
   push:
