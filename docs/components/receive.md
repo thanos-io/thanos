@@ -60,8 +60,7 @@ The example content of `hashring.json`:
 ```$
 usage: thanos receive [<flags>]
 
-Accept Prometheus remote write API requests and write to local tsdb
-(EXPERIMENTAL, this may change drastically without notice)
+Accept Prometheus remote write API requests and write to local tsdb.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -101,21 +100,21 @@ Flags:
                                  Address to listen on for remote write requests.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
-                                 disable TLS
+                                 disable TLS.
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
-                                 disable TLS
+                                 disable TLS.
       --remote-write.server-tls-client-ca=""
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.client-tls-cert=""
                                  TLS Certificates to use to identify this client
-                                 to the server
+                                 to the server.
       --remote-write.client-tls-key=""
-                                 TLS Key for the client's certificate
+                                 TLS Key for the client's certificate.
       --remote-write.client-tls-ca=""
-                                 TLS CA Certificates to use to verify servers
+                                 TLS CA Certificates to use to verify servers.
       --remote-write.client-server-name=""
                                  Server name to verify the hostname on the
                                  returned gRPC certificates. See
@@ -135,7 +134,7 @@ Flags:
                                  details:
                                  https://thanos.io/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention
+                                 storage. 0d - disables this retention.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration.
