@@ -226,13 +226,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_series_fetch_duration_seconds",
+		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
 		Help:    "Time it takes to fetch postings to respond a query.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
-		Help:    "Time it takes to fetch sub-results to respond a query.",
+		Name:    "thanos_bucket_store_series_fetch_duration_seconds",
+		Help:    "Time it takes to fetch series to respond a query.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 	m.chunksFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -987,7 +987,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.cachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.cachedPostingsCompressedSizeSum))
 		s.metrics.postingsFetchDuration.Observe(stats.postingsFetchDurationSum.Seconds())
-		s.metrics.chunksFetchDuration.Observe(stats.postingsFetchDurationSum.Seconds())
+		s.metrics.chunksFetchDuration.Observe(stats.chunksFetchDurationSum.Seconds())
 		s.metrics.seriesFetchDuration.Observe(stats.seriesFetchDurationSum.Seconds())
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
