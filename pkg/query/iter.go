@@ -381,8 +381,12 @@ func (s *dedupSeriesSet) peekLset() labels.Labels {
 	}
 	// Check how many replica labels are present so that these are removed.
 	var totalToRemove int
-	for index := 0; index < len(s.replicaLabels); index++ {
-		if _, ok := s.replicaLabels[lset[len(lset)-index-1].Name]; ok {
+	for i := 0; i < len(s.replicaLabels); i++ {
+		if len(lset)-i == 0 {
+			break
+		}
+
+		if _, ok := s.replicaLabels[lset[len(lset)-i-1].Name]; ok {
 			totalToRemove++
 		}
 	}

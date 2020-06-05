@@ -214,10 +214,8 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		}, warns, nil
 	}
 
-	// TODO(fabxc): this could potentially pushed further down into the store API
-	// to make true streaming possible.
+	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
 	sortDedupLabels(resp.seriesSet, q.replicaLabels)
-
 	set := &promSeriesSet{
 		mint:  q.mint,
 		maxt:  q.maxt,
@@ -225,9 +223,8 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		aggrs: aggrs,
 	}
 
-	// The merged series set assembles all potentially-overlapping time ranges
-	// of the same series into a single one. The series are ordered so that equal series
-	// from different replicas are sequential. We can now deduplicate those.
+	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
+	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
 	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), warns, nil
 }
 
