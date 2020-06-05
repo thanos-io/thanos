@@ -106,6 +106,10 @@ type bucketStoreMetrics struct {
 	queriesDropped        prometheus.Counter
 	seriesRefetches       prometheus.Counter
 
+	postingsFetchDuration prometheus.Histogram
+	seriesFetchDuration   prometheus.Histogram
+	chunksFetchDuration   prometheus.Histogram
+
 	cachedPostingsCompressions           *prometheus.CounterVec
 	cachedPostingsCompressionErrors      *prometheus.CounterVec
 	cachedPostingsCompressionTimeSeconds *prometheus.CounterVec
@@ -219,6 +223,22 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.cachedPostingsCompressedSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_compressed_size_bytes_total",
 		Help: "Compressed size of postings stored into cache.",
+	})
+
+	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_fetch_duration_seconds",
+		Help:    "Time it takes to fetch postings to respond a query.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_postings_fetch_duration_seconds",
+		Help:    "Time it takes to fetch sub-results to respond a query.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+	m.chunksFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_chunks_fetch_duration_seconds",
+		Help:    "Time it takes to fetch chunks to respond a query.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
 	return &m
@@ -966,6 +986,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.cachedPostingsCompressionTimeSeconds.WithLabelValues(labelDecode).Add(stats.cachedPostingsDecompressionTimeSum.Seconds())
 		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.cachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.cachedPostingsCompressedSizeSum))
+		s.metrics.postingsFetchDuration.Observe(stats.postingsFetchDurationSum.Seconds())
+		s.metrics.chunksFetchDuration.Observe(stats.postingsFetchDurationSum.Seconds())
+		s.metrics.seriesFetchDuration.Observe(stats.seriesFetchDurationSum.Seconds())
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"stats", fmt.Sprintf("%+v", stats), "err", err)
