@@ -162,7 +162,7 @@ Since there are no consistency guarantees provided by some Object Storage provid
 - [#1870](https://github.com/thanos-io/thanos/pull/1870) UI: Persist settings in query.
 - [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags.
 - [#1967](https://github.com/thanos-io/thanos/issues/1967) Receive: Allow local TSDB compaction.
-- [#1939](https://github.com/thanos-io/thanos/pull/1939) Ruler: Add TLS and authentication support for query endpoints with the `--query.config` and `--query.config-file` CLI flags. See [documentation](docs/components/rule.md/#configuration) for further information.
+- [#1939](https://github.com/thanos-io/thanos/pull/1939) Ruler: Add TLS and authentication support for query endpoints with the `--query.config` and `--query.config-file` CLI flags. See [documentation](https://thanos.io/components/rule.md/#configuration) for further information.
 - [#1982](https://github.com/thanos-io/thanos/pull/1982) Ruler: Add support for Alertmanager v2 API endpoints.
 - [#2030](https://github.com/thanos-io/thanos/pull/2030) Query: Add `thanos_proxy_store_empty_stream_responses_total` metric for number of empty responses from stores.
 - [#2049](https://github.com/thanos-io/thanos/pull/2049) Tracing: Support sampling on Elastic APM with new sample_rate setting.
@@ -210,9 +210,9 @@ Compactor now properly handles partial block uploads for all operation like rete
 
 - [#1852](https://github.com/thanos-io/thanos/pull/1852) Add support for `AWS_CONTAINER_CREDENTIALS_FULL_URI` by upgrading to minio-go v6.0.44
 - [#1854](https://github.com/thanos-io/thanos/pull/1854) Update Rule UI to support alerts count displaying and filtering.
-- [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add TLS and authentication support for Alertmanager with the `--alertmanagers.config` and `--alertmanagers.config-file` CLI flags. See [documentation](docs/components/rule.md/#configuration) for further information.
+- [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add TLS and authentication support for Alertmanager with the `--alertmanagers.config` and `--alertmanagers.config-file` CLI flags. See [documentation](https://thanos.io/components/rule.md/#configuration) for further information.
 - [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add a new `--alertmanagers.sd-dns-interval` CLI option to specify the interval between DNS resolutions of Alertmanager hosts.
-- [#1881](https://github.com/thanos-io/thanos/pull/1881) Store Gateway: memcached support for index cache. See [documentation](docs/components/store.md/#index-cache) for further information.
+- [#1881](https://github.com/thanos-io/thanos/pull/1881) Store Gateway: memcached support for index cache. See [documentation](https://thanos.io/components/store.md/#index-cache) for further information.
 - [#1904](https://github.com/thanos-io/thanos/pull/1904) Add a skip-chunks option in Store Series API to improve the response time of `/api/v1/series` endpoint.
 - [#1910](https://github.com/thanos-io/thanos/pull/1910) Query: `/api/v1/labels` now understands `POST` - useful for sending bigger requests
 
@@ -224,7 +224,7 @@ Compactor now properly handles partial block uploads for all operation like rete
   * Querier: Accepting spaces between time range and square bracket. e.g `[ 5m]`
   * Querier: Improved PromQL parser performance.
 
-- [#1833](https://github.com/thanos-io/thanos/pull/1833) `--shipper.upload-compacted` flag has been promoted to non hidden, non experimental state. More info available [here](docs/quick-tutorial.md#uploading-old-metrics).
+- [#1833](https://github.com/thanos-io/thanos/pull/1833) `--shipper.upload-compacted` flag has been promoted to non hidden, non experimental state. More info available [here](https://thanos.io/quick-tutorial.md/#uploading-old-metrics).
 - [#1867](https://github.com/thanos-io/thanos/pull/1867) Ruler: now sets a `Thanos/$version` `User-Agent` in requests
 - [#1887](https://github.com/thanos-io/thanos/pull/1887) Service discovery now deduplicates targets between different target groups
 
@@ -235,7 +235,7 @@ Compactor now properly handles partial block uploads for all operation like rete
 - [#1678](https://github.com/thanos-io/thanos/pull/1678) Add Lightstep as a tracing provider.
 - [#1687](https://github.com/thanos-io/thanos/pull/1687) Add a new `--grpc-grace-period` CLI option to components which serve gRPC to set how long to wait until gRPC Server shuts down.
 - [#1660](https://github.com/thanos-io/thanos/pull/1660) Sidecar: Add a new `--prometheus.ready_timeout` CLI option to the sidecar to set how long to wait until Prometheus starts up.
-- [#1573](https://github.com/thanos-io/thanos/pull/1573) `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss) for further information.
+- [#1573](https://github.com/thanos-io/thanos/pull/1573) `AliYun OSS` object storage, see [documents](https://thanos.io/storage.md/#aliyun-oss) for further information.
 - [#1680](https://github.com/thanos-io/thanos/pull/1680) Add a new `--http-grace-period` CLI option to components which serve HTTP to set how long to wait until HTTP Server shuts down.
 - [#1712](https://github.com/thanos-io/thanos/pull/1712) Bucket: Rename flag on bucket web component from `--listen` to `--http-address` to match other components.
 - [#1733](https://github.com/thanos-io/thanos/pull/1733) Compactor: New metric `thanos_compactor_iterations_total` on Thanos Compactor which shows the number of successful iterations.
@@ -515,7 +515,7 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
 
 This release also disables gossip mode by default for all components.
-See [this](docs/proposals/201809_gossip-removal.md) for more details.
+See [this](https://thanos.io/proposals/201809_gossip-removal.md/) for more details.
 
 :warning: This release moves Thanos docker images (NOT artifacts by accident) to Golang 1.12. This release includes change in GC's memory release which gives following effect:
 
@@ -671,11 +671,11 @@ the old behaviour (no boundary), use a large enough value.
 
 - Support for gzip compressed configuration files before envvar substitution for reloader package.
 - `bucket inspect` command for better insights on blocks in object storage.
-- Support for [Tencent COS](docs/storage.md#tencent-cos-configuration) object storage.
+- Support for [Tencent COS](https://thanos.io/storage.md/#tencent-cos) object storage.
 - Partial Response disable option for StoreAPI and QueryAPI.
 - Partial Response disable button on Thanos UI
 - We have initial docs for goDoc documentation!
-- Flags for Querier and Ruler UIs: `--web.route-prefix`, `--web.external-prefix`, `--web.prefix-header`. Details [here](docs/components/query.md#expose-ui-on-a-sub-path)
+- Flags for Querier and Ruler UIs: `--web.route-prefix`, `--web.external-prefix`, `--web.prefix-header`. Details [here](https://thanos.io/components/query.md/#expose-ui-on-a-sub-path)
 
 ### Fixed
 
@@ -767,13 +767,13 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 
 - Support for heterogeneous secure gRPC on StoreAPI.
 - Handling of scalar result in rule node evaluating rules.
-- Flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Detailed information can be found in document [storage](docs/storage.md).
+- Flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Detailed information can be found in document [storage](https://thanos.io/storage.md/).
 - File service discovery for StoreAPIs:
 - In `thanos rule`, static configuration of query nodes via `--query`
 - In `thanos rule`, file based discovery of query nodes using `--query.file-sd-config.files`
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
-- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](docs/service-discovery.md)
+- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](https://thanos.io/service-discovery.md/)
 - `--cluster.disable` flag to disable gossip functionality completely.
 - Hidden flag to configure max compaction level.
 - Azure Storage.

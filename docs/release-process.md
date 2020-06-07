@@ -82,10 +82,10 @@ Release is happening on separate `release-<major>.<minor>` branch.
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
 
 1. Update tutorials:
-    1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
+    1. Update the Thanos version used in the [tutorials](https://github.com/thanos-io/thanos/tree/master/tutorials) manifests.
     1. In case of any breaking changes or necessary updates adjust the manifests
        so the tutorial stays up to date.
-    1. Update the [scripts/quickstart.sh](../scripts/quickstart.sh) script if needed.
+    1. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/master/scripts/quickstart.sh) script if needed.
 
 1. After review, merge the PR and immediately after this tag a version:
 
