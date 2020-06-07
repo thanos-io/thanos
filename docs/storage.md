@@ -50,7 +50,7 @@ Current object storage client implementations:
 | [Google Cloud Storage](./storage.md#gcs)                                                           | Stable             | Production Usage      | yes               | @bwplotka               |
 | [AWS/S3](./storage.md#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
 | [Azure Storage Account](./storage.md#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
-| [OpenStack Swift](./storage.md#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @sudhi-vm               |
+| [OpenStack Swift](./storage.md#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
 | [Tencent COS](./storage.md#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
 | [AliYun OSS](./storage.md#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
 | [Local Filesystem](./storage.md#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
@@ -331,16 +331,25 @@ config:
 
 #### OpenStack Swift
 
-Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
+Thanos uses [ncw/swift](https://github.com/ncw/swift) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
 Below is an example configuration file for thanos to use OpenStack swift container as an object store.
 Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.
 Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
 
+By default, OpenStack Swift has a limit for maximum file size of 5 GiB. Thanos index files are often larger than that.
+To resolve this issue, Thanos uses [Static Large Objects (SLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html)
+which are uploaded as segments. These are by default put into the `segments` directory of the same container.
+Default limit for using SLO is 1 GiB which is also maximal size of the segment.
+If you don't want to use the same container for the segments
+(best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects)
+you can use the `large_file_segments_container_name` option to override the default and put the segments to other container.
+
 [embedmd]:# (flags/config_bucket_swift.txt yaml)
 ```yaml
 type: SWIFT
 config:
+  auth_version: 0
   auth_url: ""
   username: ""
   user_domain_name: ""
@@ -355,6 +364,11 @@ config:
   project_domain_name: ""
   region_name: ""
   container_name: ""
+  large_object_chunk_size: 1073741824
+  large_object_segments_container_name: ""
+  retries: 3
+  connect_timeout: 10s
+  timeout: 5m
 ```
 
 #### Tencent COS
