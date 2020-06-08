@@ -183,18 +183,18 @@ func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool)
 	if sc.SegmentContainerName == "" {
 		sc.SegmentContainerName = sc.ContainerName
 	} else if _, err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
+}
 
-	container := Container{
-		logger:            logger,
-		name:              sc.ContainerName,
-		connection:        connection,
-		chunkSize:         sc.ChunkSize,
-		segmentsContainer: sc.SegmentContainerName,
-	}
-	return &container, nil
+container := Container{
+logger:            logger,
+name:              sc.ContainerName,
+connection:        connection,
+chunkSize:         sc.ChunkSize,
+segmentsContainer: sc.SegmentContainerName,
+}
+return &container, nil
 }
 
 // Name returns the container name for swift.
@@ -265,10 +265,10 @@ func (c *Container) Attributes(ctx context.Context, name string) (objstore.Objec
 // Exists checks if the given object exists.
 func (c *Container) Exists(ctx context.Context, name string) (bool, error) {
 	_, _, err := c.connection.Object(c.name, name)
+	if c.IsObjNotFoundErr(err) {
+		err = nil
+	}
 	if err != nil {
-		if c.IsObjNotFoundErr(err) {
-			err = nil
-		}
 		return false, errors.Wrap(err, "swift check if file exists")
 	}
 	return true, nil
