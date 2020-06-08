@@ -182,8 +182,7 @@ func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool)
 	}
 	if sc.SegmentContainerName == "" {
 		sc.SegmentContainerName = sc.ContainerName
-	} else {
-		if _, err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
+	} else if _, err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
 			return nil, err
 		}
 	}
