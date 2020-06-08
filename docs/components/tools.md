@@ -273,8 +273,7 @@ Flags:
                            Issues to verify (and optionally repair). Possible
                            values: [duplicated_compaction index_issue
                            overlapped_blocks]
-      --id-whitelist=ID-WHITELIST ...
-                           Block IDs to verify (and optionally repair) only. If
+      --id=ID ...          Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
       --delete-delay=0s    Duration after which blocks marked for deletion would
