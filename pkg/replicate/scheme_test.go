@@ -311,7 +311,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			selector = c.selector
 		}
 
-		filter := NewBlockFilter(logger, selector, compact.ResolutionLevelRaw, 1).Filter
+		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}).Filter
 		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil, nil)
 		testutil.Ok(t, err)
 
