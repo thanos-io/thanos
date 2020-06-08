@@ -71,7 +71,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
-	selectorLabels := cmd.Flag("selector-label", "Query selector labels are exposed at the info endpoint (repeated) and they comprise key/value pair of strings and we always try to have the subset of data that these labels point to, the store LabelSets and the selector-labels are merged and when there are no LabelSets from the store-proxy’s discovered stores we consider selector-labels as the LabelSets.").
+	selectorLabels := cmd.Flag("selector-label", "Query selector labels are exposed at the info endpoint (repeated). They comprise key/value pair of strings. We always try to have the subset of data that these labels point to. The store label-sets and the selector-labels are merged and when there are no label-sets from the store-proxy’s discovered stores we consider selector-labels as the label-set.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
