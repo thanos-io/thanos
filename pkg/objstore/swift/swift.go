@@ -185,16 +185,15 @@ func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool)
 	} else if _, err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
 		return nil, err
 	}
-}
 
-container := Container{
-logger:            logger,
-name:              sc.ContainerName,
-connection:        connection,
-chunkSize:         sc.ChunkSize,
-segmentsContainer: sc.SegmentContainerName,
-}
-return &container, nil
+	container := Container{
+		logger:            logger,
+		name:              sc.ContainerName,
+		connection:        connection,
+		chunkSize:         sc.ChunkSize,
+		segmentsContainer: sc.SegmentContainerName,
+	}
+	return &container, nil
 }
 
 // Name returns the container name for swift.
