@@ -18,7 +18,7 @@ We will go through the problem statement, use-cases and potential solution for t
 
 ## Problem Statement / Motivation
 
-Conceptually and at a very high level, **Thanos** is a durable and cheap database, storing a very large amount of metric data in external object storage. This has the possible implication of having expensive data queries if the amount of data required to be queried is large. Even after local optimisations and efficient indexing, still querying a large amount of data is very resource-intensive, and unless the user knows what he/she is doing, it can be very expensive. 
+Conceptually and at a very high level, **Thanos** is a durable and cheap database, storing a very large amount of metric data in external object storage. This has the possible implication of having expensive data queries if the amount of data required to be queried is large. Even after local optimisations and efficient indexing, still querying a large amount of data is very resource-intensive, and unless the user knows what he/she is doing, it can be very expensive.
 
 Different types of Query Logging are useful as a feature in Thanos, which would help in improving the developer experience.
 
@@ -47,7 +47,7 @@ The latter is quite useful, as we can log all queries based upon fulfilling a ce
 
 ### Query Logging in Thanos
 
-The proposal for Query Logging has been divided into three major parts. The *first of the two logging feature* would be implemented across the Store API level, while the *last one* would be local to each component of Thanos. 
+The proposal for Query Logging has been divided into three major parts. The *first of the two logging feature* would be implemented across the Store API level, while the *last one* would be local to each component of Thanos.
 
 ![](../img/thanos_log_limit.png)
 
@@ -55,15 +55,15 @@ Each of the use case of the sub-part would be described and a possible implement
 
 #### Use case 1: Audit Logging
 
-**Audit logging** is a kind of logging, where we log in every internal API requests. Typically, rather than logging in specific queries, we ought to log in every query that has been made until now. 
+**Audit logging** is a kind of logging, where we log in every internal API requests. Typically, rather than logging in specific queries, we ought to log in every query that has been made until now.
 
-From a developer’s perspective, audit logs can keep you sane by giving you some insight into how a complex system arrived at its current state. Developers are typically fond of state diagrams and deterministic outcomes. An audit log that shows that a person or process applied a change can give developers valuable insight.  
+From a developer’s perspective, audit logs can keep you sane by giving you some insight into how a complex system arrived at its current state. Developers are typically fond of state diagrams and deterministic outcomes. An audit log that shows that a person or process applied a change can give developers valuable insight.
 
 #### Implementation:
 
 ```go
 type AuditLogging struct {
-     
+
      // logger object derived from the base logger class
      logger         log.Logger
      // component using the audit logger
@@ -85,7 +85,7 @@ type AuditLogging struct {
 
 ```go
 type AdaptiveLogging struct {
-     
+
      // logger object derived from the base logger class
      logger         log.Logger
      // component using the adaptive logger
@@ -123,11 +123,11 @@ type ActiveQueryLogging struct {
 }
 ```
 
-This interface is designed with some ideas from a similar interface designed for *Prometheus Query Logger*[[2]](https://prometheus.io/docs/guides/query-log/). 
-Here is a rough algorithm that would implement the Query Logging in Thanos - 
+This interface is designed with some ideas from a similar interface designed for *Prometheus Query Logger*[[2]](https://prometheus.io/docs/guides/query-log/).
+Here is a rough algorithm that would implement the Query Logging in Thanos -
 
 ```txt
-1) Thanos receives a query. 
+1) Thanos receives a query.
 2) It calls the index_generator, which is a Python-style generator that will generate natural numbers from 0(or 1) indicating the byte index at which to put the information about the query in the log file. This would ensure that the key remains unique for each of the queries logged.
 3) The log file would be a memory-mapped file, which would help in accessing a random position for logging the query in constant time.
 ```
@@ -155,7 +155,7 @@ This proposal adds in a new feature for Thanos, so there isn't any alternative u
 
 ## Work Plan
 
-1. Roll out grpc-middlewareV2. 
+1. Roll out grpc-middlewareV2.
 2. Implement a grpc-interceptor for Store API currently(this might be extended for other APIs as well).
 3. Write up the Audit Logger derived from the base logger.
 4. Configure the Audit Logger along with the grpc-interceptor.
