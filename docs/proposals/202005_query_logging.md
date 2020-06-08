@@ -8,11 +8,11 @@ owner: yashrsharma44
 
 ### Related Tickets
 
-* Add Query Logging : https://github.com/thanos-io/thanos/issues/1706
+* Add Query Logging: https://github.com/thanos-io/thanos/issues/1706
 
 ## Summary
 
-This proposal describes configuring a new internal feature : *Query logging* for various types of queries in **Thanos**.
+This proposal describes configuring a new internal feature: *Query logging* for various types of queries in **Thanos**.
 
 We will go through the problem statement, use-cases and potential solution for the same.
 
@@ -53,7 +53,7 @@ The proposal for Query Logging has been divided into three major parts. The *fir
 
 Each of the use case of the sub-part would be described and a possible implementation would be discussed -
 
-#### Use case 1 : Audit Logging
+#### Use case 1: Audit Logging
 
 **Audit logging** is a kind of logging, where we log in every internal API requests. Typically, rather than logging in specific queries, we ought to log in every query that has been made until now. 
 
@@ -77,7 +77,7 @@ type AuditLogging struct {
 * As StoreAPI is interconnected with each of the other components, we can leverage this to provide a Global overview of different queries which would be useful for auditing purposes.
 * We will have a *different logger* derived from the base logger, and would log the queries separately.
 
-#### Use case 2 : Adaptive Logging
+#### Use case 2: Adaptive Logging
 
 **Adaptive logging** is totally different from the Audit Logging. Out here in adaptive logging, we would log only certain queries which *satisfies a certain policy/satisfies a certain condition*. Possible filters could be, queries making an invalid request, latency time crossing a certain barrier, and so on.
 
@@ -102,7 +102,7 @@ type AdaptiveLogging struct {
 * We can achieve **Global overview** of the logs, due to the StoreAPI being interconnected with the other components.
 * We can maintain map of **Prometheus metrics** corresponding to each of the queries, so we can get the total number of latency queries and 404 queries as a Prometheus metric, that are logged in adaptive logging
 
-#### Use case 3 : Active Query Logging
+#### Use case 3: Active Query Logging
 
 As the name suggests, this logger logs all the current active logs that are running in a component. This type of logging is aimed at providing logs of the active queries that are running currently in an component. This logger would be **local** to each component, and would run as a **standalone for each component** in contrast to the other two loggers. This logger would help in debugging queries which led to the component instanced *OOM* killed, or helping in tracking queries which are taking too long. Note that we can configure tracking of latency queries in the adaptive logger, but this logger is solely focused on providing active queries that are running, much like Prometheus does.
 
@@ -148,6 +148,10 @@ The current logger is a bit different from the other loggers described above. Th
 
 This proposal adds in a new feature for Thanos, so there isn't any alternative until now that would solve our problem.
 
+### Non Goals
+
+* Query logging part would help in debugging the internal requests made.
+* This provides ample of insights about possible bottle-neck of individual components of Thanos.
 
 ## Work Plan
 
