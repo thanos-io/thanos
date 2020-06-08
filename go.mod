@@ -10,6 +10,8 @@ require (
 	github.com/armon/go-metrics v0.3.3
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
+	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
+	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v0.6.1-0.20200228110116-92ab6cbe0995
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb

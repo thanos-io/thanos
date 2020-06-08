@@ -10,9 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -96,7 +99,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -160,6 +163,53 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-ha",
 		},
 	})
+}
+
+func TestQueryRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
+	testutil.Ok(t, err)
+	defer s.Close()
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		"test",
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+
+	var networkErrors []string
+
+	// Listen for failed network requests and push them to an array.
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *network.EventLoadingFailed:
+			networkErrors = append(networkErrors, ev.ErrorText)
+		}
+	})
+
+	err = chromedp.Run(ctx,
+		network.Enable(),
+		chromedp.Navigate("http://"+q.HTTPEndpoint()+"/test/graph"),
+		chromedp.WaitVisible(`body`),
+	)
+	testutil.Ok(t, err)
+
+	err = func() error {
+		if len(networkErrors) > 0 {
+			return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+		}
+		return nil
+	}()
+
+	testutil.Ok(t, err)
 }
 
 func urlParse(t *testing.T, addr string) *url.URL {
