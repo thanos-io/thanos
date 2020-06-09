@@ -74,6 +74,7 @@ h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
 
 /* seaarchBox */
 .searchBox {
+    position: relative;
     height: 100%;
     display: flex;
     align-items: center;
@@ -90,9 +91,21 @@ input[type="search"] {
     border-radius: 15px;
     margin-right: 10px;
     transition: border-color 0.2s ease;
-    background:  url("./search.svg") 8px 5px no-repeat;
+    background-color: transparent;
     background-size: 15px;
     vertical-align: middle !important;
+}
+
+.searchbtn {
+	position: absolute;
+	font-size: 15px;
+	color: #66757f;
+	background-color: transparent;
+	border:none;
+	left: 2%;
+	top: 4px;
+	outline: none;
+	padding: 4px;
 }
 
 input[type="search"]:focus {
@@ -135,4 +148,11 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
 .menuinput:checked ~ .list-group {
     transform: scaleY(1);
     height: auto;
+}
+
+@media (max-width: 990px){
+    .searchbtn {
+        top: 0px;
+        left: 1%;
+    }
 }
