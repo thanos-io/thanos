@@ -167,8 +167,6 @@ type ActiveQueryLogging struct {
 	getNextIndex   chan int
      // logger, different from the usual one
      logger         log.Logger
-     // Request - ID (Same as tracer-id)
-     requestId      string
 
 }
 ```
@@ -183,6 +181,13 @@ Here is a rough algorithm that would implement the Query Logging in Thanos -
 ```
 
 This algorithm has been heavily derived from this pull request[[3]](https://github.com/prometheus/prometheus/pull/5794) and would suggest referring this for the implementation of the same.
+
+#### Common Use case to all
+* **Tracking queries across different components**
+The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
+
+* **Implementation**
+Since **Thanos** has a solid tracing infrastructure in place, we can **re-use the tracing-id** for a given request, and thus we can track the request across the different components.
 
 ### Alternatives
 
