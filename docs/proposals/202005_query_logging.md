@@ -38,16 +38,60 @@ level=info ts=2019-08-28T14:30:09.144Z caller=main.go:654 msg="Starting TSDB ...
 
 Here, we can see that this log was taken before the Prometheus instance died unnaturally, and the query logged under the component **ActiveQueryTracker**, logs the respective query that did the damage. Even though it does not pin-points the exact issue that created the problem, still it is quite helpful in considering this issue as one of the potential queries that led to the unnatural death of the Prometheus instance.
 
-Another requirement is using **Audit and Adaptive Logging** in Thanos. This is a useful feature, as the former helps in aggregating all the queries made until now, and that can be utilised to track down and provide a comprehensive overview of what is happening.
+Another requirement is using **Audit and Adaptive Logging** in Thanos. This is a useful feature, as the former helps in aggregating all the queries made until now, and that can be utilised to track down and provide a comprehensive overview of what is happening. Audit logs can help in capturing the flow of requests made, thus we can track line to line flow of queries which can be helpful in describing the observed behaviour of a request. More info - https://rollout.io/blog/audit-logs/
 
-The latter is quite useful, as we can log all queries based upon fulfilling a certain criteria/filters, and later those can be used for inspecting abnormal queries and improving the user experience overall.
+```json
+    {
+      protoPayload: {
+        @type: "type.googleapis.com/google.cloud.audit.AuditLog",
+        status: {},
+        authenticationInfo: {
+          principalEmail: "user@example.com"
+        },
+        serviceName: "appengine.googleapis.com",
+        methodName: "SetIamPolicy",
+        authorizationInfo: [...],
+        serviceData: {
+          @type: "type.googleapis.com/google.appengine.legacy.AuditData",
+          policyDelta: { bindingDeltas: [
+              action: "ADD",
+              role: "roles/logging.privateLogViewer",
+              member: "user:user@example.com"
+          ], }
+        },
+        request: {
+          resource: "my-gcp-project-id",
+          policy: { bindings: [...], }
+        },
+        response: {
+          bindings: [
+            {
+              role: "roles/logging.privateLogViewer",
+              members: [ "user:user@example.com" ]
+            }
+          ],
+        }
+      },
+      insertId: "53179D9A9B559.AD6ACC7.B40604EF",
+      resource: {
+        type: "gcp_app",
+        labels: { project_id: "my-gcp-project-id" }
+      },
+      timestamp: "2019-05-27T16:24:56.135Z",
+      severity: "NOTICE",
+      logName: "projects/my-gcp-project-id/logs/cloudaudit.googleapis.com%2Factivity",
+    }
+Taken from - https://cloud.google.com/logging/docs/audit/understanding-audit-logs
+```
+_Example of an audit logging_
 
+**Adaptive Logging** is quite useful, as we can log all queries based upon fulfilling a certain criteria/filters, and later those can be used for inspecting abnormal queries and improving the user experience overall.
 
 ## Proposal
 
 ### Query Logging in Thanos
 
-The proposal for Query Logging has been divided into three major parts. The *first of the two logging feature* would be implemented across the Store API level, while the *last one* would be local to each component of Thanos.
+The proposal for Query Logging has been divided into three major parts - Audit Logging, Adaptive Logging and Active Query Logging. Audit and Adaptive Logging would be implemented across the Store API level, while the Active Query Logging would be local to each component of Thanos, providing logs of queries currently running.
 
 ![](../img/thanos_log_limit.png)
 
@@ -68,6 +112,8 @@ type AuditLogging struct {
      logger         log.Logger
      // component using the audit logger
      component      component.StoreAPI
+     // Request - ID (Same as tracer-id)
+     requestId      string
 
 }
 ```
@@ -93,6 +139,8 @@ type AdaptiveLogging struct {
      reg            prometheus.Registerer
      // Map of different policy of queries that would be logged when a certain criteria is reached
      mapQueries     map[string]prometheus.Counter
+     // Request - ID (Same as tracer-id)
+     requestId      string
 
 }
 ```
@@ -104,7 +152,7 @@ type AdaptiveLogging struct {
 
 #### Use case 3: Active Query Logging
 
-As the name suggests, this logger logs all the current active logs that are running in a component. This type of logging is aimed at providing logs of the active queries that are running currently in an component. This logger would be **local** to each component, and would run as a **standalone for each component** in contrast to the other two loggers. This logger would help in debugging queries which led to the component instanced *OOM* killed, or helping in tracking queries which are taking too long. Note that we can configure tracking of latency queries in the adaptive logger, but this logger is solely focused on providing active queries that are running, much like Prometheus does.
+As the name suggests, this logger logs all the current active logs that are running in a component. This type of logging is aimed at providing logs of the active queries that are running currently in an component. This logger would be **local** **to each component**, and would run as a **standalone for each component** in contrast to the other two loggers. This logger would help in debugging queries which led to the component instanced *OOM* killed, or helping in tracking queries which are taking too long. The purpose of this logger can clash with the above two, but this logger is solely focused on providing active queries that are running, much like Prometheus does.
 
 #### Implementation
 
@@ -119,6 +167,8 @@ type ActiveQueryLogging struct {
 	getNextIndex   chan int
      // logger, different from the usual one
      logger         log.Logger
+     // Request - ID (Same as tracer-id)
+     requestId      string
 
 }
 ```
