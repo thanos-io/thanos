@@ -84,7 +84,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		Short('r').Default("false").Bool()
 	issuesToVerify := cmd.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
-	idWhitelist := cmd.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
+	ids := cmd.Flag("id", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
 		"If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket. "+
@@ -153,18 +153,18 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
-		if len(*idWhitelist) > 0 {
-			whilelistIDs := map[string]struct{}{}
-			for _, bid := range *idWhitelist {
+		if len(*ids) > 0 {
+			idsMap := map[string]struct{}{}
+			for _, bid := range *ids {
 				id, err := ulid.Parse(bid)
 				if err != nil {
-					return errors.Wrap(err, "invalid ULID found in --id-whitelist flag")
+					return errors.Wrap(err, "invalid ULID found in --id-allowlist flag")
 				}
-				whilelistIDs[id.String()] = struct{}{}
+				idsMap[id.String()] = struct{}{}
 			}
 
 			idMatcher = func(id ulid.ULID) bool {
-				if _, ok := whilelistIDs[id.String()]; !ok {
+				if _, ok := idsMap[id.String()]; !ok {
 					return false
 				}
 				return true

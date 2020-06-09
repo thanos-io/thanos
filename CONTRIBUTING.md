@@ -53,6 +53,14 @@ method with the owners of this repository before making a change.
 
 Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
+## General Naming
+
+In the code and documentation prefer non-offensive terminology, for example:
+
+* `allowlist` / `denylist` (instead of `whitelist` / `blacklist`)
+* `primary` / `replica` (instead of `master` / `slave`)
+* `openbox` / `closedbox` (instead of `whitebox` / `blackbox`)
+
 ## Components Naming
 
 Thanos is a distributed system composed with several services and CLI tools as listed [here](cmd/thanos).
