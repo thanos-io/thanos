@@ -40,7 +40,7 @@ Here, we can see that this log was taken before the Prometheus instance died unn
 
 Another requirement is using **Audit and Adaptive Logging** in Thanos. This is a useful feature, as the former helps in aggregating all the queries made until now, and that can be utilised to track down and provide a comprehensive overview of what is happening. Audit logs can help in capturing the flow of requests made, thus we can track line to line flow of queries which can be helpful in describing the observed behaviour of a request. More info - https://rollout.io/blog/audit-logs/
 
-```json
+```log
     {
       protoPayload: {
         @type: "type.googleapis.com/google.cloud.audit.AuditLog",
