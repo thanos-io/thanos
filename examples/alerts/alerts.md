@@ -189,6 +189,7 @@ rules:
     sum(rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[2m])) <= 0
       and
     sum(thanos_rule_loaded_rules{job=~"thanos-rule.*"}) > 0
+  for: 3m
   labels:
     severity: critical
 ```
