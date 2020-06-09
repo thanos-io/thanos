@@ -8,9 +8,9 @@ menu: components
 
 The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It builds on top of existing Prometheus TSDB and retains their usefulness while extending their functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
 
-We recommend this component to users who can only push into a Thanos due to air-gapped environments. Please note the various pros and cons of pushing metrics.
+We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the various pros and cons of pushing metrics.
 
-Thanos Receive supports multi-tenancy by using labels. We don't recommend the Thanos Receiver in order to achieve a global view of data of a single-tenant. For such use cases, the [Thanos Sidecar](./sidecar.md) based approach with layered [Thanos Queriers](./query.md) is recommended. Note that, multi-tenancy may also be achievable if ingestion is not user-controlled, as then enforcing of labels, for example using the [prom-label-proxy](https://github.com/openshift/prom-label-proxy) (please thoroughly understand the mechanism if intending to employ this mechanism, as the wrong configuration could leak data).
+Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documentation here](../operating/multi-tenancy.md).
 
 For more information please check out [initial design proposal](../proposals/201812_thanos-remote-receive.md).
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
