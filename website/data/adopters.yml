@@ -102,3 +102,6 @@ adopters:
 - name: Cloud&Heat
   url: https://cloudandheat.com
   logo: cloudandheat.png
+- name: Hetzner
+  url: https://www.hetzner.com
+  logo: hetzner.png
