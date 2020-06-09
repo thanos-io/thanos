@@ -31,6 +31,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Added
 
 - [#2671](https://github.com/thanos-io/thanos/pull/2671) Tools: bucket replicate now allows passing repeated `--compaction` and `--resolution` flags.
+- [#2746](https://github.com/thanos-io/thanos/pull/2746) Compact: Added new flags `--compaction.disable` and `--retention.disable`.
 
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 

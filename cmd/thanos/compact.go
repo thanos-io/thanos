@@ -291,8 +291,12 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx); err != nil {
-			return errors.Wrap(err, "compaction")
+		if !conf.disableCompaction {
+			if err := compactor.Compact(ctx); err != nil {
+				return errors.Wrap(err, "compaction")
+			}
+		} else {
+			level.Info(logger).Log("msg", "compaction was explicitly disabled")
 		}
 
 		if !conf.disableDownsampling {
@@ -319,19 +323,23 @@ func runCompact(
 			level.Info(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
-		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync before first pass of downsampling")
-		}
+		if !conf.disableRetention {
+			// TODO(bwplotka): Find a way to avoid syncing if no op was done.
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync before first pass of downsampling")
+			}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
-			return errors.Wrap(err, "retention failed")
-		}
+			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
+				return errors.Wrap(err, "retention failed")
+			}
 
-		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning blocks")
+			// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
+			compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
+			if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+				return errors.Wrap(err, "error cleaning blocks")
+			}
+		} else {
+			level.Info(logger).Log("msg", "retention was explicitly disabled")
 		}
 		return nil
 	}
@@ -434,6 +442,8 @@ type compactConfig struct {
 	wait                                           bool
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
+	disableCompaction                              bool
+	disableRetention                               bool
 	blockSyncConcurrency                           int
 	compactionConcurrency                          int
 	deleteDelay                                    model.Duration
@@ -479,6 +489,12 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 	cmd.Flag("downsampling.disable", "Disables downsampling. This is not recommended "+
 		"as querying long time ranges without non-downsampled data is not efficient and useful e.g it is not possible to render all samples for a human eye anyway").
 		Default("false").BoolVar(&cc.disableDownsampling)
+
+	cmd.Flag("compaction.disable", "Disables compaction. This is not recommended "+
+		"as compaction optimizes the stored data in bucket").
+		Default("false").BoolVar(&cc.disableCompaction)
+
+	cmd.Flag("retention.disable", "Disables retention.").Default("false").BoolVar(&cc.disableRetention)
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&cc.blockSyncConcurrency)

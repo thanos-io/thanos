@@ -138,6 +138,9 @@ Flags:
                                 non-downsampled data is not efficient and useful
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
+      --compaction.disable      Disables compaction. This is not recommended as
+                                compaction optimizes the stored data in bucket
+      --retention.disable       Disables retention.
       --block-sync-concurrency=20
                                 Number of goroutines to use when syncing block
                                 metadata from object storage.
