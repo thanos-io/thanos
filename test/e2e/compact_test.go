@@ -271,7 +271,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_compact")
 	testutil.Ok(t, err)
-	defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+	t.Cleanup(s.Close)
 
 	dir := filepath.Join(s.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
@@ -290,7 +290,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+	t.Cleanup(cancel)
 
 	rawBlockIDs := map[ulid.ULID]struct{}{}
 	for _, b := range blocks {
@@ -384,7 +384,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	// Check if query detects current series, even if overlapped.
 	queryAndAssert(t, ctx, q.HTTPEndpoint(),
@@ -530,7 +530,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, s.Stop(c))
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, ctx, q.HTTPEndpoint(),
@@ -575,7 +575,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, s.Stop(c))
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, ctx, q.HTTPEndpoint(),

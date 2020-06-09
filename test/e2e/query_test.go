@@ -82,7 +82,7 @@ func TestQuery(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_query")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(s.Close)
 
 	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
 	testutil.Ok(t, err)
@@ -104,7 +104,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(5), "thanos_store_nodes_grpc_connections"))
 
@@ -170,7 +170,7 @@ func TestQueryRoutePrefix(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(s.Close)
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
@@ -183,7 +183,7 @@ func TestQueryRoutePrefix(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 
 	var networkErrors []string
 
