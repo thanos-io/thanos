@@ -180,6 +180,7 @@
                 and
               sum(thanos_rule_loaded_rules{%(selector)s}) > 0
             ||| % thanos.rule,
+            'for': '3m',
             labels: {
               severity: 'critical',
             },
