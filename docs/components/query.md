@@ -28,10 +28,10 @@ Thanos Querier essentially allows to aggregate and optionally deduplicate multip
 
 Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
 
-* Prometheus (see [Sidecar](sidecar.md))
-* Object Storage (see [Store Gateway](store.md))
-* Global alerting/recording rules evaluations (see [Ruler](rule.md))
-* Metrics received from Prometheus remote write streams (see [Thanos Receiver](../proposals/201812_thanos-remote-receive.md))
+* Prometheus (see [Sidecar](./sidecar.md))
+* Object Storage (see [Store Gateway](./store.md))
+* Global alerting/recording rules evaluations (see [Ruler](./rule.md))
+* Metrics received from Prometheus remote write streams (see [Receiver](./receive.md))
 * Another Querier (you can stack Queriers on top of each other)
 * Non-Prometheus systems!
     * e.g [OpenTSDB](../integrations.md#opentsdb)

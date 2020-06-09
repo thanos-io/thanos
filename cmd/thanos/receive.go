@@ -39,19 +39,19 @@ import (
 
 func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Receive
-	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
+	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
-	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS").Default("").String()
-	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS").Default("").String()
+	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS.").Default("").String()
+	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS.").Default("").String()
 	rwServerClientCA := cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
-	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate").Default("").String()
-	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers").Default("").String()
+	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").String()
+	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").String()
+	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").String()
 	rwClientServerName := cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
@@ -61,7 +61,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
-	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention").Default("15d"))
+	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
 	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
 		PlaceHolder("<path>").String()
