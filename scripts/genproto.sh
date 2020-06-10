@@ -19,7 +19,9 @@ if ! [[ $(${PROTOC_BIN} --version) =~ "3.4.0" ]]; then
 	exit 255
 fi
 
-cp ${PROTOC_GEN_GOGOFAST_BIN} ${GOBIN}/protoc-gen-gogofast
+mkdir -p /tmp/protobin/
+cp ${PROTOC_GEN_GOGOFAST_BIN} /tmp/protobin/protoc-gen-gogofast
+PATH=${PATH}:/tmp/protobin
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
