@@ -579,7 +579,7 @@ implicit and thus more prone to surprises.
 
 #### Clean Defer Only if Function Fails
 
-There is a way to sacrifice defer in order to properly close all on each error. Repetitions makes it easier to make error
+There is a way to sacrifice defer in order to properly close all on each error. Repetition makes it easier to make an error
 and forget something when changing the code, so on-error deferring is doable:
 
 <table>
