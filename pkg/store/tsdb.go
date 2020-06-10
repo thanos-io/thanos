@@ -107,13 +107,10 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier series")
 
-	set, _, err := q.Select(false, nil, matchers...)
-	if err != nil {
-		return status.Error(codes.Internal, err.Error())
-	}
-
-	var respSeries storepb.Series
-
+	var (
+		set        = q.Select(false, nil, matchers...)
+		respSeries storepb.Series
+	)
 	for set.Next() {
 		series := set.At()
 
@@ -138,6 +135,9 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
+	}
+	if err := set.Err(); err != nil {
+		return status.Error(codes.Internal, err.Error())
 	}
 	return nil
 }

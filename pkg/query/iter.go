@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -27,6 +28,8 @@ type promSeriesSet struct {
 
 	currLset   []storepb.Label
 	currChunks []storepb.AggrChunk
+
+	warns storage.Warnings
 }
 
 func (s *promSeriesSet) Next() bool {
@@ -96,6 +99,10 @@ func (s *promSeriesSet) At() storage.Series {
 
 func (s *promSeriesSet) Err() error {
 	return s.set.Err()
+}
+
+func (s *promSeriesSet) Warnings() storage.Warnings {
+	return s.warns
 }
 
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
@@ -425,6 +432,10 @@ func (s *dedupSeriesSet) At() storage.Series {
 
 func (s *dedupSeriesSet) Err() error {
 	return s.set.Err()
+}
+
+func (s *dedupSeriesSet) Warnings() storage.Warnings {
+	return s.set.Warnings()
 }
 
 type seriesWithLabels struct {

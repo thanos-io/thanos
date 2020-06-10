@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -160,7 +161,7 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 }
 
-func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
+func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
 	if hints == nil {
 		hints = &storage.SelectHints{
 			Start: q.mint,
@@ -181,7 +182,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 
 	sms, err := storepb.TranslatePromMatchers(ms...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "convert matchers")
+		return storage.ErrSeriesSet(errors.Wrap(err, "convert matchers"))
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
@@ -196,7 +197,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
 	}, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Series()")
+		return storage.ErrSeriesSet(errors.Wrap(err, "proxy Series()"))
 	}
 
 	var warns storage.Warnings
@@ -211,7 +212,8 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 			maxt:  q.maxt,
 			set:   newStoreSeriesSet(resp.seriesSet),
 			aggrs: aggrs,
-		}, warns, nil
+			warns: warns,
+		}
 	}
 
 	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
@@ -221,11 +223,12 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		maxt:  q.maxt,
 		set:   newStoreSeriesSet(resp.seriesSet),
 		aggrs: aggrs,
+		warns: warns,
 	}
 
 	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
 	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), warns, nil
+	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER)
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
