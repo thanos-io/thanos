@@ -33,7 +33,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -42,9 +42,11 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -114,7 +116,8 @@ func TestEndpoints(t *testing.T) {
 			MaxSamples: 10000,
 			Timeout:    100 * time.Second,
 		}),
-		now: func() time.Time { return now },
+		now:  func() time.Time { return now },
+		gate: gate.NewGate(4, nil),
 	}
 
 	start := time.Unix(0, 0)
@@ -1028,7 +1031,9 @@ func TestParseDuration(t *testing.T) {
 
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
-	api := &API{}
+	api := &API{
+		gate: gate.NewGate(4, nil),
+	}
 	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
 
 	s := httptest.NewServer(r)
@@ -1142,7 +1147,10 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		api := API{enableAutodownsampling: test.enableAutodownsampling}
+		api := API{
+			enableAutodownsampling: test.enableAutodownsampling,
+			gate:                   gate.NewGate(4, nil),
+		}
 		v := url.Values{}
 		v.Set("max_source_resolution", test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
