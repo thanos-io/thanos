@@ -47,7 +47,7 @@ require (
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.10.0
-	github.com/prometheus/prometheus v1.8.2-0.20200601152113-3268eac2ddda
+	github.com/prometheus/prometheus v1.8.2-0.20200609165731-66dfb951c4ca
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/uber/jaeger-client-go v2.23.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
