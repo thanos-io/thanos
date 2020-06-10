@@ -453,7 +453,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	subDir := filepath.Join(dir, cg.Key())
 
 	defer func() {
-		if rerr != nil {
+		if IsHaltError(rerr) {
 			return
 		}
 		if err := os.RemoveAll(subDir); err != nil {
