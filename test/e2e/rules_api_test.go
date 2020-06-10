@@ -31,7 +31,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	s, err := e2e.NewScenario(netName)
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(s.Close)
 
 	rulesSubDir := filepath.Join("rules")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
@@ -76,7 +76,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(4), "thanos_store_nodes_grpc_connections"))
 
