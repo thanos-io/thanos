@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -512,16 +513,17 @@ func TestQuerier_Select(t *testing.T) {
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
 					t.Run("querier.Select", func(t *testing.T) {
 						defer leaktest.CheckTimeout(t, 10*time.Second)()
-						defer func() { testutil.Ok(t, q.Close()) }()
+						defer testutil.Ok(t, q.Close())
 
-						res, w, err := q.Select(false, tcase.hints, tcase.matchers...)
-						testutil.Ok(t, err)
+						res := q.Select(false, tcase.hints, tcase.matchers...)
+
+						testSelectResponse(t, sc.expected, res)
+
 						if tcase.expectedWarning != "" {
+							w := res.Warnings()
 							testutil.Equals(t, 1, len(w))
 							testutil.Equals(t, tcase.expectedWarning, w[0].Error())
 						}
-						testSelectResponse(t, sc.expected, res)
-
 					})
 					// Integration test: Make sure the PromQL would select exactly the same.
 					t.Run("through PromQL with 100s step", func(t *testing.T) {
@@ -535,16 +537,18 @@ func TestQuerier_Select(t *testing.T) {
 						r := q.Exec(context.Background())
 						testutil.Ok(t, r.Err)
 
+						testSelectResponse(t, sc.expected, catcher.resp[0])
+
+						warns := catcher.warns()
 						// We don't care about anything else, all should be recorded.
-						testutil.Assert(t, len(catcher.warns) == 1, "expected only single warnings")
+						testutil.Assert(t, len(warns) == 1, "expected only single warnings")
 						testutil.Assert(t, len(catcher.resp) == 1, "expected only single response, subqueries?")
 
-						w := catcher.warns[0]
+						w := warns[0]
 						if tcase.expectedWarning != "" {
 							testutil.Equals(t, 1, len(w))
 							testutil.Equals(t, tcase.expectedWarning, w[0].Error())
 						}
-						testSelectResponse(t, sc.expected, catcher.resp[0])
 					})
 				})
 			}
@@ -590,20 +594,24 @@ type querierResponseCatcher struct {
 	storage.Querier
 	t testing.TB
 
-	resp  []storage.SeriesSet
-	warns []storage.Warnings
+	resp []storage.SeriesSet
 }
 
-func (q *querierResponseCatcher) Select(selectSorted bool, p *storage.SelectHints, m ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
-	s, w, err := q.Querier.Select(selectSorted, p, m...)
-	testutil.Ok(q.t, err)
-
+func (q *querierResponseCatcher) Select(selectSorted bool, p *storage.SelectHints, m ...*labels.Matcher) storage.SeriesSet {
+	s := q.Querier.Select(selectSorted, p, m...)
 	q.resp = append(q.resp, s)
-	q.warns = append(q.warns, w)
-	return storage.NoopSeriesSet(), storage.Warnings{errors.New("response caught")}, nil
+	return storage.NoopSeriesSet()
 }
 
 func (q querierResponseCatcher) Close() error { return nil }
+
+func (q *querierResponseCatcher) warns() []storage.Warnings {
+	var warns []storage.Warnings
+	for _, r := range q.resp {
+		warns = append(warns, r.Warnings())
+	}
+	return warns
+}
 
 // TODO(bwplotka): Reuse SeriesSets from chunk iterators from Prometheus.
 type mockedSeriesSet struct {
@@ -620,6 +628,8 @@ func (s *mockedSeriesSet) At() storage.Series {
 	return s.series[s.cur-1]
 }
 func (s *mockedSeriesSet) Err() error { return nil }
+
+func (s *mockedSeriesSet) Warnings() storage.Warnings { return nil }
 
 type mockedSeriesIterator struct {
 	cur     int

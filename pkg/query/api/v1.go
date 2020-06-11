@@ -556,17 +556,11 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
 	var (
-		warnings []error
-		metrics  = []labels.Labels{}
-		sets     []storage.SeriesSet
+		metrics = []labels.Labels{}
+		sets    []storage.SeriesSet
 	)
 	for _, mset := range matcherSets {
-		s, warns, err := q.Select(false, nil, mset...)
-		if err != nil {
-			return nil, nil, &ApiError{errorExec, err}
-		}
-		warnings = append(warnings, warns...)
-		sets = append(sets, s)
+		sets = append(sets, q.Select(false, nil, mset...))
 	}
 
 	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
@@ -576,7 +570,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	if set.Err() != nil {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
-	return metrics, warnings, nil
+	return metrics, set.Warnings(), nil
 }
 
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
