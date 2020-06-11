@@ -72,6 +72,52 @@ pre {
 .header-anchor { font-size: 100%; visibility: hidden;}
 h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
 
+/* seaarchBox */
+.searchBox {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+input[type="search"] {
+    height: 30px;
+    line-height: 30px;
+    box-sizing: border-box;
+    padding: 0 15px 0 30px;
+    border: 1px solid #e3e3e3;
+    color: #ffffff;
+    outline: none;
+    border-radius: 15px;
+    margin-right: 10px;
+    transition: border-color 0.2s ease;
+    background-color: transparent;
+    background-size: 15px;
+    vertical-align: middle !important;
+}
+
+.searchbtn {
+	position: absolute;
+	font-size: 15px;
+	color: #66757f;
+	background-color: transparent;
+	border:none;
+	left: 2%;
+	top: 4px;
+	outline: none;
+	padding: 4px;
+}
+
+input[type="search"]:focus {
+    border-color: #42b983;
+    background-color: #fff;
+    color: #273849;
+}
+
+input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+    color: #fff;
+  }
+
 /* SideMenu Collapse */
 .menuinput {
     display: none;
@@ -102,4 +148,11 @@ h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}
 .menuinput:checked ~ .list-group {
     transform: scaleY(1);
     height: auto;
+}
+
+@media (max-width: 990px){
+    .searchbtn {
+        top: 0px;
+        left: 1%;
+    }
 }
