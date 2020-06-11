@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -34,6 +35,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+func isEmptyDir(name string) (bool, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	_, err = f.Readdirnames(1)
+	if err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
 
 type blockDesc struct {
 	series  []labels.Labels
@@ -474,6 +489,12 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// Expect compactor halted.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compactor_halted"))
+
+		// The compact directory is still there.
+		dataDir := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt")
+		empty, err := isEmptyDir(dataDir)
+		testutil.Ok(t, err)
+		testutil.Equals(t, false, empty, "directory %s should not be empty", dataDir)
 
 		// We expect no ops.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_iterations_total"))
