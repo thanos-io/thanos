@@ -170,8 +170,8 @@ format: $(GOIMPORTS) check-comments
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
-proto: check-git  $(GOIMPORTS) $(PROTOC)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
+proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
@@ -287,6 +287,8 @@ NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewH
 	$(call require_clean_work_tree,"detected white noise")
 	@echo ">> ensuring Copyright headers"
 	@go run ./scripts/copyright
+	@echo ">> ensuring generated proto files are up to date"
+	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
 
 .PHONY: web-serve
