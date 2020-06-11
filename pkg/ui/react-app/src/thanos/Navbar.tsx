@@ -10,7 +10,10 @@ interface NavConfig {
 }
 
 const navConfig: { [component: string]: NavConfig[] } = {
-  query: [{ name: 'Graph', uri: '/new/graph' }],
+  query: [
+    { name: 'Graph', uri: '/new/graph' },
+    { name: 'Stores', uri: '/new/stores' },
+  ],
 };
 
 const Navigation: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {

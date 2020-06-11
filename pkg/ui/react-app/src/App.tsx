@@ -6,6 +6,7 @@ import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBSt
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
 import Navigation from './thanos/Navbar';
+import { Stores } from './thanos/pages';
 
 import './App.css';
 
@@ -30,6 +31,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
           <Status path="/status" pathPrefix={pathPrefix} />
           <TSDBStatus path="/tsdb-status" pathPrefix={pathPrefix} />
           <Targets path="/targets" pathPrefix={pathPrefix} />
+          <Stores path="/stores" />
         </Router>
       </Container>
     </>
