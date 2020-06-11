@@ -70,7 +70,7 @@ scrape_configs:
       - targets: ['127.0.0.1:9091','127.0.0.1:9092']
 </pre>
 
-**NOTE** : The `global` entry should have `external_labels` else Thanos will not recognise it.
+**NOTE** : Every Prometheus instance must have a globally unique set of identifying labels. These labels are used by the sidecar, Querier to filter out store APIs, and various object readers. It is important to provide compatable set of external labels as Thanos aggregate data across all the available instances. 
 
 ## Starting Prometheus Instances
 
