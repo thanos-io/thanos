@@ -117,7 +117,7 @@ func TestEndpoints(t *testing.T) {
 			Timeout:    100 * time.Second,
 		}),
 		now:  func() time.Time { return now },
-		gate: gate.NewGate(4, nil),
+		gate: gate.NewKeeper(nil).NewGate(4),
 	}
 
 	start := time.Unix(0, 0)
@@ -1032,7 +1032,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{
-		gate: gate.NewGate(4, nil),
+		gate: gate.NewKeeper(nil).NewGate(4),
 	}
 	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
 
@@ -1149,7 +1149,7 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	for i, test := range tests {
 		api := API{
 			enableAutodownsampling: test.enableAutodownsampling,
-			gate:                   gate.NewGate(4, nil),
+			gate:                   gate.NewKeeper(nil).NewGate(4),
 		}
 		v := url.Values{}
 		v.Set("max_source_resolution", test.maxSourceResolutionParam)

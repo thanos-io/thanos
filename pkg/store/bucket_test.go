@@ -41,6 +41,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -53,7 +55,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	"gopkg.in/yaml.v2"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -1420,7 +1421,7 @@ func benchSeries(t testutil.TB, number int, dimension Dimension, cases ...int) {
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{blocks}},
 		},
-		queryGate:      noopGater{},
+		queryGate:      noopGate{},
 		samplesLimiter: noopLimiter{},
 	}
 
@@ -1502,10 +1503,10 @@ func (m *mockedPool) Put(b *[]byte) {
 	m.parent.Put(b)
 }
 
-type noopGater struct{}
+type noopGate struct{}
 
-func (noopGater) IsMyTurn(context.Context) error { return nil }
-func (noopGater) Done()                          {}
+func (noopGate) Start(context.Context) error { return nil }
+func (noopGate) Done()                       {}
 
 type noopLimiter struct{}
 
@@ -1675,7 +1676,7 @@ func TestSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			b1.meta.ULID: b1,
 			b2.meta.ULID: b2,
 		},
-		queryGate:      noopGater{},
+		queryGate:      noopGate{},
 		samplesLimiter: noopLimiter{},
 	}
 
