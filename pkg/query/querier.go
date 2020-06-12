@@ -13,11 +13,10 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -63,7 +62,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.maxConcurrentSelects, q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, gate.New(q.maxConcurrentSelects), q.selectTimeout), nil
 }
 
 type querier struct {
@@ -78,7 +77,7 @@ type querier struct {
 	maxResolutionMillis int64
 	partialResponse     bool
 	skipChunks          bool
-	gate                *gate.Gate
+	selectGate          *gate.Gate
 	selectTimeout       time.Duration
 }
 
@@ -94,7 +93,7 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse, skipChunks bool,
-	maxConcurrentSelects int,
+	selectGate *gate.Gate,
 	selectTimeout time.Duration,
 ) *querier {
 	if logger == nil {
@@ -107,14 +106,11 @@ func newQuerier(
 		rl[replicaLabel] = struct{}{}
 	}
 	return &querier{
-		ctx:    ctx,
-		logger: logger,
-		reg:    reg,
-		cancel: cancel,
-		gate: gate.NewGate(
-			maxConcurrentSelects,
-			extprom.WrapRegistererWithPrefix("thanos_concurrent_select", reg),
-		),
+		ctx:           ctx,
+		logger:        logger,
+		reg:           reg,
+		cancel:        cancel,
+		selectGate:    selectGate,
 		selectTimeout: selectTimeout,
 
 		mint:                mint,
@@ -196,7 +192,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		matchers[i] = m.String()
 	}
 
-	// querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
+	// The querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
 	ctx, cancel := context.WithTimeout(context.Background(), q.selectTimeout)
 	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
 		"minTime":  hints.Start,
@@ -210,13 +206,13 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 
 		var err error
 		tracing.DoInSpan(ctx, "querier_select_ismyturn", func(ctx context.Context) {
-			err = q.gate.IsMyTurn(ctx)
+			err = q.selectGate.Start(ctx)
 		})
 		if err != nil {
 			promise <- storage.ErrSeriesSet(errors.Wrap(err, "failed to wait for turn"))
 			return
 		}
-		defer q.gate.Done()
+		defer q.selectGate.Done()
 
 		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
 		defer span.Finish()
