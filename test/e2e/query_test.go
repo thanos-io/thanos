@@ -20,6 +20,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -82,7 +83,7 @@ func TestQuery(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_query")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
 	testutil.Ok(t, err)
@@ -170,7 +171,7 @@ func TestQueryRoutePrefix(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",

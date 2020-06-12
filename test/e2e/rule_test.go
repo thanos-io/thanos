@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -30,7 +32,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -207,7 +208,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_rule_am_http_client")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	tlsSubDir := filepath.Join("tls")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), tlsSubDir), os.ModePerm))
@@ -293,7 +294,7 @@ func TestRule(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_rule")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)

@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -286,7 +287,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_compact")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	dir := filepath.Join(s.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))

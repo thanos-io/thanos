@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -36,7 +37,7 @@ func TestStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_store_gateway")
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	m := e2edb.NewMinio(80, "thanos")
 	testutil.Ok(t, s.StartAndWaitReady(m))

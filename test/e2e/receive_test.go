@@ -10,6 +10,7 @@ import (
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/common/model"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -24,7 +25,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_hashring")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The hashring suite creates three receivers, each with a Prometheus
 		// remote-writing data to it. However, due to the hashing of the labels,
@@ -105,7 +106,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The replication suite creates three receivers but only one
 		// receives Prometheus remote-written data. The querier queries all
@@ -180,7 +181,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication_with_outage")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
