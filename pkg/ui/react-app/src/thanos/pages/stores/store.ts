@@ -9,10 +9,9 @@ export interface Labels {
 
 export interface Store {
   name: string;
-  min_time: number;
-  max_time: number;
-  last_error: string | null;
-  last_check: string;
-  label_sets: Labels[];
-  store_type: {};
+  minTime: number;
+  maxTime: number;
+  lastError: string | null;
+  lastCheck: string;
+  labelSets: Labels[];
 }

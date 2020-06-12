@@ -3,10 +3,10 @@ import { Container, Collapse, Table, Badge } from 'reactstrap';
 import { now } from 'moment';
 import { ToggleMoreLess } from '../../../components/ToggleMoreLess';
 import { useLocalStorage } from '../../../hooks/useLocalStorage';
-import { Store } from './store';
-import StoreLabels from './StoreLabels';
 import { getColor } from '../../../pages/targets/target';
 import { formatRelative, formatTime } from '../../../utils';
+import { Store } from './store';
+import StoreLabels from './StoreLabels';
 
 export type StorePoolPanelProps = { title: string; storePool: Store[] };
 
@@ -39,14 +39,7 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
           </thead>
           <tbody>
             {storePool.map((store: Store) => {
-              const {
-                name,
-                min_time: minTime,
-                max_time: maxTime,
-                label_sets: labelSets,
-                last_check: lastCheck,
-                last_error: lastError,
-              } = store;
+              const { name, minTime, maxTime, labelSets, lastCheck, lastError } = store;
               const health = lastError ? 'down' : 'up';
               const color = getColor(health);
 

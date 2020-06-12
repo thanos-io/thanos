@@ -13,7 +13,7 @@ export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
   return (
     <>
       {Object.keys(data).map<JSX.Element>(storeGroup => (
-        <StorePoolPanel title={storeGroup} storePool={data[storeGroup]} />
+        <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
       ))}
     </>
   );
