@@ -333,6 +333,9 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.max-concurrent-select=4
+                                 Maximum number of select requests made
+                                 concurrently per a query.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be

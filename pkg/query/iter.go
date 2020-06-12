@@ -670,3 +670,40 @@ func (it *dedupSeriesIterator) Err() error {
 	}
 	return it.b.Err()
 }
+
+type lazySeriesSet struct {
+	create func() (s storage.SeriesSet, ok bool)
+
+	set storage.SeriesSet
+}
+
+func (c *lazySeriesSet) Next() bool {
+	if c.set != nil {
+		return c.set.Next()
+	}
+
+	var ok bool
+	c.set, ok = c.create()
+	return ok
+}
+
+func (c *lazySeriesSet) Err() error {
+	if c.set != nil {
+		return c.set.Err()
+	}
+	return nil
+}
+
+func (c *lazySeriesSet) At() storage.Series {
+	if c.set != nil {
+		return c.set.At()
+	}
+	return nil
+}
+
+func (c *lazySeriesSet) Warnings() storage.Warnings {
+	if c.set != nil {
+		return c.set.Warnings()
+	}
+	return nil
+}
