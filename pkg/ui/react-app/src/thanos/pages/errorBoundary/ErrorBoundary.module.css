@@ -1,0 +1,16 @@
+.container {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.detailsBtn {
+  margin: 2em 0;
+}
+
+.errorDiv {
+  white-space: pre-wrap;
+  font-family: monospace;
+}
