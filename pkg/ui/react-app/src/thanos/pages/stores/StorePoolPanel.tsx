@@ -1,10 +1,12 @@
 import React, { FC } from 'react';
 import { Container, Collapse, Table, Badge } from 'reactstrap';
 import { now } from 'moment';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faInfinity } from '@fortawesome/free-solid-svg-icons';
 import { ToggleMoreLess } from '../../../components/ToggleMoreLess';
 import { useLocalStorage } from '../../../hooks/useLocalStorage';
 import { getColor } from '../../../pages/targets/target';
-import { formatRelative, formatTime } from '../../../utils';
+import { formatRelative, formatTime, parseTime } from '../../../utils';
 import { Store } from './store';
 import StoreLabels from './StoreLabels';
 
@@ -19,6 +21,8 @@ export const columns = [
   'Last Successful Health Check',
   'Last Message',
 ];
+
+const MAX_TIME = 9223372036854775807;
 
 export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) => {
   const [{ expanded }, setOptions] = useLocalStorage(`store-pool-${title}-expanded`, { expanded: true });
@@ -52,9 +56,16 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
                   <td>
                     <StoreLabels labelSet={labelSets} />
                   </td>
-                  <td>{formatTime(minTime)}</td>
-                  <td>{formatTime(maxTime)}</td>
-                  <td>{formatRelative(lastCheck, now())} ago</td>
+                  <td>{minTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}</td>
+                  <td>{maxTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}</td>
+                  <td>
+                    {parseTime(lastCheck) >= MAX_TIME ? (
+                      <FontAwesomeIcon icon={faInfinity} />
+                    ) : (
+                      formatRelative(lastCheck, now())
+                    )}{' '}
+                    ago
+                  </td>
                   <td>{lastError ? <Badge color={color}>{lastError}</Badge> : null}</td>
                 </tr>
               );
