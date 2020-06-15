@@ -10,6 +10,7 @@ import (
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/common/model"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -24,7 +25,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_hashring")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The hashring suite creates three receivers, each with a Prometheus
 		// remote-writing data to it. However, due to the hashing of the labels,
@@ -56,11 +57,11 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
@@ -105,7 +106,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The replication suite creates three receivers but only one
 		// receives Prometheus remote-written data. The querier queries all
@@ -135,7 +136,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
@@ -180,7 +181,7 @@ func TestReceive(t *testing.T) {
 
 		s, err := e2e.NewScenario("e2e_test_receive_replication_with_outage")
 		testutil.Ok(t, err)
-		t.Cleanup(s.Close)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
@@ -207,7 +208,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(81)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 

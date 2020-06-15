@@ -18,11 +18,12 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/receive"
-	"gopkg.in/yaml.v2"
 )
 
 const logLevel = "info"
@@ -77,7 +78,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		e2e.NewReadinessProbe(9090, "/-/ready", 200),
 		9090,
 	)
-	prom.SetUser("root")
+	prom.SetUser(strconv.Itoa(os.Getuid()))
 	prom.SetBackoff(defaultBackoffConfig)
 
 	return prom, container, nil
@@ -97,15 +98,16 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 			"--debug.name":        fmt.Sprintf("sidecar-%v", name),
 			"--grpc-address":      ":9091",
 			"--grpc-grace-period": "0s",
-			"--http-address":      ":80",
+			"--http-address":      ":8080",
 			"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
 			"--tsdb.path":         dataDir,
 			"--log.level":         logLevel,
 		})...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 		9091,
 	)
+	sidecar.SetUser(strconv.Itoa(os.Getuid()))
 	sidecar.SetBackoff(defaultBackoffConfig)
 
 	return prom, sidecar, nil
@@ -118,7 +120,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		"--debug.name":            fmt.Sprintf("querier-%v", name),
 		"--grpc-address":          ":9091",
 		"--grpc-grace-period":     "0s",
-		"--http-address":          ":80",
+		"--http-address":          ":8080",
 		"--query.replica-label":   replicaLabel,
 		"--store.sd-dns-interval": "5s",
 		"--log.level":             logLevel,
@@ -165,10 +167,11 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 		9091,
 	)
+	querier.SetUser(strconv.Itoa(os.Getuid()))
 	querier.SetBackoff(defaultBackoffConfig)
 
 	return querier, nil
@@ -177,7 +180,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
 func NewReceiver(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
-	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 80, 9091, 81).GRPCNetworkEndpointFor(networkName)
+	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
 	if len(hashring) == 0 {
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
 	}
@@ -205,8 +208,8 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--debug.name":                              fmt.Sprintf("receive-%v", name),
 			"--grpc-address":                            ":9091",
 			"--grpc-grace-period":                       "0s",
-			"--http-address":                            ":80",
-			"--remote-write.address":                    ":81",
+			"--http-address":                            ":8080",
+			"--remote-write.address":                    ":8081",
 			"--label":                                   fmt.Sprintf(`receive="%s"`, name),
 			"--tsdb.path":                               filepath.Join(container, "data"),
 			"--log.level":                               logLevel,
@@ -215,11 +218,12 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 		9091,
-		81,
+		8081,
 	)
+	receiver.SetUser(strconv.Itoa(os.Getuid()))
 	receiver.SetBackoff(defaultBackoffConfig)
 
 	return receiver, nil
@@ -251,7 +255,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--debug.name":                    fmt.Sprintf("rule-%v", name),
 			"--grpc-address":                  ":9091",
 			"--grpc-grace-period":             "0s",
-			"--http-address":                  ":80",
+			"--http-address":                  ":8080",
 			"--label":                         fmt.Sprintf(`replica="%s"`, name),
 			"--data-dir":                      container,
 			"--rule-file":                     filepath.Join(e2e.ContainerSharedDir, ruleSubDir, "*.yaml"),
@@ -263,10 +267,11 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--query.sd-dns-interval":         "1s",
 			"--resend-delay":                  "5s",
 		})...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 		9091,
 	)
+	ruler.SetUser(strconv.Itoa(os.Getuid()))
 	ruler.SetBackoff(defaultBackoffConfig)
 
 	return ruler, nil
@@ -296,16 +301,16 @@ receivers:
 		DefaultAlertmanagerImage(),
 		e2e.NewCommandWithoutEntrypoint("/bin/alertmanager", e2e.BuildArgs(map[string]string{
 			"--config.file":         filepath.Join(container, "config.yaml"),
-			"--web.listen-address":  "0.0.0.0:80",
+			"--web.listen-address":  "0.0.0.0:8080",
 			"--log.level":           logLevel,
 			"--storage.path":        container,
 			"--web.get-concurrency": "1",
 			"--web.timeout":         "2m",
 		})...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 	)
-	s.SetUser("root")
+	s.SetUser(strconv.Itoa(os.Getuid()))
 	s.SetBackoff(defaultBackoffConfig)
 
 	return s, nil
@@ -335,7 +340,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--debug.name":        fmt.Sprintf("store-gw-%v", name),
 			"--grpc-address":      ":9091",
 			"--grpc-grace-period": "0s",
-			"--http-address":      ":80",
+			"--http-address":      ":8080",
 			"--log.level":         logLevel,
 			"--data-dir":          container,
 			"--objstore.config":   string(bktConfigBytes),
@@ -346,10 +351,11 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
 		})...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 		9091,
 	)
+	store.SetUser(strconv.Itoa(os.Getuid()))
 	store.SetBackoff(defaultBackoffConfig)
 
 	return store, nil
@@ -381,14 +387,15 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--log.level":               logLevel,
 			"--data-dir":                container,
 			"--objstore.config":         string(bktConfigBytes),
-			"--http-address":            ":80",
+			"--http-address":            ":8080",
 			"--block-sync-concurrency":  "20",
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),
-		e2e.NewReadinessProbe(80, "/-/ready", 200),
-		80,
+		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		8080,
 	)
+	compactor.SetUser(strconv.Itoa(os.Getuid()))
 	compactor.SetBackoff(defaultBackoffConfig)
 
 	return compactor, nil
