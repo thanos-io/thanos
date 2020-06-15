@@ -14,10 +14,8 @@ import (
 
 func CleanScenario(t *testing.T, s *e2e.Scenario) func() {
 	return func() {
-		// Otherwise close will fail.
-		out, err := exec.Command("chmod", "-R", "777", s.SharedDir()).CombinedOutput()
-		t.Log("command out", string(out))
-		testutil.Ok(t, err)
+		// Make sure Clean can properly delete everything.
+		testutil.Ok(t, exec.Command("chmod", "-R", "777", s.SharedDir()).Run())
 		s.Close()
 	}
 }

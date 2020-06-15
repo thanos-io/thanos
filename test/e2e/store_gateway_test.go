@@ -39,7 +39,7 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	m := e2edb.NewMinio(80, "thanos")
+	m := e2edb.NewMinio(8080, "thanos")
 	testutil.Ok(t, s.StartAndWaitReady(m))
 
 	s1, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", client.BucketConfig{
