@@ -89,6 +89,12 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
+	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
+		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().Bool()
+
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -157,6 +163,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
 			comp,
+			*allowOutOfOrderUpload,
 		)
 	}
 }
@@ -195,6 +202,7 @@ func runReceive(
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
 	comp component.SourceStoreAPI,
+	allowOutOfOrderUpload bool,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -246,6 +254,7 @@ func runReceive(
 		lset,
 		tenantLabelName,
 		bkt,
+		allowOutOfOrderUpload,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
