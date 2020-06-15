@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"sort"
 	"testing"
 
 	"github.com/go-kit/kit/log"
@@ -84,7 +83,6 @@ func TestShipperTimestamps(t *testing.T) {
 }
 
 func TestIterBlockMetas(t *testing.T) {
-	var metas []*metadata.Meta
 	dir, err := ioutil.TempDir("", "shipper-test")
 	testutil.Ok(t, err)
 	defer func() {
@@ -124,16 +122,15 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}))
 
+	var ids []ulid.ULID
 	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource)
 	if err := shipper.iterBlockMetas(func(m *metadata.Meta) error {
-		metas = append(metas, m)
+		ids = append(ids, m.ULID)
 		return nil
 	}); err != nil {
 		testutil.Ok(t, err)
 	}
-	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
-		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
-	}), true)
+	testutil.Equals(t, []ulid.ULID{id1, id3, id2}, ids)
 }
 
 func BenchmarkIterBlockMetas(b *testing.B) {
