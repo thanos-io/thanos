@@ -52,17 +52,20 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
-              /
-                sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
-              )
-              >
-              (
-                max by (job) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
-              /
-                max by (job) (thanos_receive_hashring_nodes{%(selector)s})
-              )
+                (
+                  sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
+                /
+                  sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
+                )
+                >
+                (
+                  max by (job) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
+                /
+                  max by (job) (thanos_receive_hashring_nodes{%(selector)s})
+                )
+              ) * 100
             ||| % thanos.receive,
+            'for': '5m',
             labels: {
               severity: 'warning',
             },
@@ -102,9 +105,9 @@
               message: 'Thanos Receive {{$labels.job}} has not uploaded latest data to object storage.',
             },
             expr: 'increase(thanos_shipper_uploads_total{%(selector)s}[2h]) == 0' % thanos.receive,
-            'for': '30m',
+            'for': '2h',
             labels: {
-              severity: 'warning',
+              severity: 'critical',
             },
           },
         ],
