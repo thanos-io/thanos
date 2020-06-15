@@ -7,7 +7,6 @@ slug: /troubleshooting.md
 
 # Troubleshooting; Common cases
 
-
 ## Overlaps
 
 **Block overlap**: Set of blocks with exactly the same external labels in meta.json and for the same time or overlapping time period.
@@ -29,6 +28,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 
 ### Reasons
 
+- You are running Thanos (sidecar, ruler or receive) older than 0.13.0. During transient upload errors there is a possibility to have overlaps caused by the compactor not being aware of all blocks See: [this](https://github.com/thanos-io/thanos/issues/2753)
 - Misconfiguraiton of sidecar/ruler: Same external labels or no external labels across many block producers.
 - Running multiple compactors for single block "stream", even for short duration.
 - Manually uploading blocks to the bucket.
@@ -36,6 +36,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 
 ### Solutions
 
+- Upgrade sidecar, ruler and receive to 0.13.0+
 - Compactor can be blocked for some time, but if it is urgent. Mitigate by removing overlap or better: Backing up somewhere else (you can rename block ULID to non-ulid).
 - Who uploaded the block? Search for logs with this ULID across all sidecars/rulers. Check access logs to object storage. Check debug/metas or meta.json of problematic block to see how blocks looks like and what is the `source`.
 - Determine what you misconfigured.

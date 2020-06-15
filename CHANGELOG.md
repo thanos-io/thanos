@@ -26,6 +26,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2416](https://github.com/thanos-io/thanos/pull/2416) Bucket: Fixed issue #2416 bug in `inspect --sort-by` doesn't work correctly in all cases.
 - [#2719](https://github.com/thanos-io/thanos/pull/2719) Query: `irate` and `resets` use now counter downsampling aggregations.
 - [#2705](https://github.com/thanos-io/thanos/pull/2705) minio-go: Added support for `af-south-1` and `eu-south-1` regions.
+- [#2753](https://github.com/thanos-io/thanos/issues/2753) Sidecar,Receive,Rule: Fixed cause for compactor overlapping blocks in upload error cases.
 
 ### Added
 

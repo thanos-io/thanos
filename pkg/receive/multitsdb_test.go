@@ -43,6 +43,7 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 		)
 		defer testutil.Ok(t, m.Flush())
 
@@ -109,6 +110,7 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 		)
 		defer testutil.Ok(t, m.Flush())
 
