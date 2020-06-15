@@ -15,11 +15,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -140,7 +141,7 @@ type memcachedClient struct {
 	asyncQueue chan func()
 
 	// Gate used to enforce the max number of concurrent GetMulti() operations.
-	getMultiGate *gate.Gate
+	getMultiGate gate.Gate
 
 	// Wait group used to wait all workers on stopping.
 	workers sync.WaitGroup
@@ -208,10 +209,8 @@ func newMemcachedClient(
 		dnsProvider: dnsProvider,
 		asyncQueue:  make(chan func(), config.MaxAsyncBufferSize),
 		stop:        make(chan struct{}, 1),
-		getMultiGate: gate.NewGate(
-			config.MaxGetMultiConcurrency,
-			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
-		),
+		getMultiGate: gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg)).
+			NewGate(config.MaxGetMultiConcurrency),
 	}
 
 	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -388,7 +387,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	// Wait until we get a free slot from the gate, if the max
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
-		if err := c.getMultiGate.IsMyTurn(ctx); err != nil {
+		if err := c.getMultiGate.Start(ctx); err != nil {
 			return nil, errors.Wrapf(err, "failed to wait for turn")
 		}
 		defer c.getMultiGate.Done()
