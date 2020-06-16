@@ -34,6 +34,7 @@ import (
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -132,7 +133,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receiveHTTP)))
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
 
 	return h
 }
@@ -357,6 +358,10 @@ func (h *Handler) writeQuorum() int {
 // requests succeeds or fails or if context is cancelled.
 func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
 	logger := log.With(h.logger, "tenant", tenant)
+	if id, ok := middleware.RequestIDFromContext(ctx); ok {
+		logger = log.With(logger, "request-id", id)
+	}
+
 	ec := make(chan error)
 
 	var wg sync.WaitGroup
