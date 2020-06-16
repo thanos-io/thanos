@@ -230,7 +230,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 		replicated: rep != 0,
 	}
 
-	// on-the-wire format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
+	// On-the-wire format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
 	if r.replicated {
 		r.n--
 	}
@@ -450,7 +450,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		close(ec)
 	}()
 
-	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asnychronously.
+	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
 	// This is needed if context is cancelled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
