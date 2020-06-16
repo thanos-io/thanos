@@ -1,20 +1,26 @@
 import React, { FC } from 'react';
 import { RouteComponentProps } from '@reach/router';
+import { Alert } from 'reactstrap';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import { Store } from './store';
 import { StorePoolPanel } from './StorePoolPanel';
 
-interface StoreListProps {
+export interface StoreListProps {
   [storeType: string]: Store[];
 }
 
 export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
+  const storePools = Object.keys(data);
   return (
     <>
-      {Object.keys(data).map<JSX.Element>(storeGroup => (
-        <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
-      ))}
+      {storePools.length > 0 ? (
+        storePools.map<JSX.Element>(storeGroup => (
+          <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
+        ))
+      ) : (
+        <Alert color="warning">No stores registered.</Alert>
+      )}
     </>
   );
 };

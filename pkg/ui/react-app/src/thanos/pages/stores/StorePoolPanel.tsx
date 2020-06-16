@@ -22,7 +22,7 @@ export const columns = [
   'Last Message',
 ];
 
-const MAX_TIME = 9223372036854775807;
+export const MAX_TIME = 9223372036854775807;
 
 export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) => {
   const [{ expanded }, setOptions] = useLocalStorage(`store-pool-${title}-expanded`, { expanded: true });
@@ -49,16 +49,20 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
 
               return (
                 <tr key={name}>
-                  <td>{name}</td>
-                  <td>
+                  <td data-testid="endpoint">{name}</td>
+                  <td data-testid="health">
                     <Badge color={color}>{health.toUpperCase()}</Badge>
                   </td>
-                  <td>
-                    <StoreLabels labelSet={labelSets} />
+                  <td data-testid="storeLabels">
+                    <StoreLabels labelSets={labelSets} />
                   </td>
-                  <td>{minTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}</td>
-                  <td>{maxTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}</td>
-                  <td>
+                  <td data-testid="minTime">
+                    {minTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}
+                  </td>
+                  <td data-testid="maxTime">
+                    {maxTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}
+                  </td>
+                  <td data-testid="lastCheck">
                     {parseTime(lastCheck) >= MAX_TIME ? (
                       <FontAwesomeIcon icon={faInfinity} />
                     ) : (
@@ -66,7 +70,7 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
                     )}{' '}
                     ago
                   </td>
-                  <td>{lastError ? <Badge color={color}>{lastError}</Badge> : null}</td>
+                  <td data-testid="lastError">{lastError ? <Badge color={color}>{lastError}</Badge> : null}</td>
                 </tr>
               );
             })}
