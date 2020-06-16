@@ -793,7 +793,7 @@ func reloadRules(logger log.Logger,
 
 	metrics.rulesLoaded.Reset()
 	for _, group := range ruleMgr.RuleGroups() {
-		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
+		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.OriginalFile, group.Name()).Set(float64(len(group.Rules())))
 	}
 	return errs.Err()
 }
