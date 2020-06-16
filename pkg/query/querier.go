@@ -13,10 +13,10 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -31,6 +31,8 @@ type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResoluti
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
+	keeper := gate.NewKeeper(reg)
+
 	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
 		return &queryable{
 			logger:               logger,
@@ -41,6 +43,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			maxResolutionMillis:  maxResolutionMillis,
 			partialResponse:      partialResponse,
 			skipChunks:           skipChunks,
+			gateKeeper:           keeper,
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
 		}
@@ -56,13 +59,14 @@ type queryable struct {
 	maxResolutionMillis  int64
 	partialResponse      bool
 	skipChunks           bool
+	gateKeeper           *gate.Keeper
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, gate.New(q.maxConcurrentSelects), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateKeeper.NewGate(q.maxConcurrentSelects), q.selectTimeout), nil
 }
 
 type querier struct {
@@ -77,7 +81,7 @@ type querier struct {
 	maxResolutionMillis int64
 	partialResponse     bool
 	skipChunks          bool
-	selectGate          *gate.Gate
+	selectGate          gate.Gate
 	selectTimeout       time.Duration
 }
 
@@ -93,7 +97,7 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse, skipChunks bool,
-	selectGate *gate.Gate,
+	selectGate gate.Gate,
 	selectTimeout time.Duration,
 ) *querier {
 	if logger == nil {
