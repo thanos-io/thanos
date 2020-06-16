@@ -19,8 +19,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	conntrack "github.com/mwitkow/go-conntrack"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/mwitkow/go-conntrack"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -28,7 +28,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,6 +35,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -248,6 +248,9 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
+	defer span.Finish()
+
 	compressed, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -281,7 +284,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	err = h.handleRequest(r.Context(), rep, tenant, &wreq)
+	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	switch err {
 	case nil:
 		return
@@ -306,6 +309,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 // The function only returns when all requests have finished
 // or the context is canceled.
 func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
+	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
+	defer span.Finish()
+
 	wreqs := make(map[string]*prompb.WriteRequest)
 	replicas := make(map[string]replica)
 
@@ -347,7 +353,7 @@ func (h *Handler) writeQuorum() int {
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
-// fanoutForward fanouts concurrently given set of write requests. It returns status immediately when quorum of
+// fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is cancelled.
 func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
 	ec := make(chan error)
@@ -362,7 +368,11 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				defer wg.Done()
-				if err := h.replicate(ctx, tenant, wreqs[endpoint]); err != nil {
+				var err error
+				tracing.DoInSpan(ctx, "receive_replicate", func(ctx context.Context) {
+					err = h.replicate(ctx, tenant, wreqs[endpoint])
+				})
+				if err != nil {
 					ec <- errors.Wrap(err, "replicate write request")
 					return
 				}
@@ -543,6 +553,9 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
+	defer span.Finish()
+
 	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	switch err {
 	case nil:
