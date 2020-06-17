@@ -108,13 +108,14 @@ func TestEndpoints(t *testing.T) {
 	testutil.Ok(t, app.Commit())
 
 	now := time.Now()
+	timeout := 100 * time.Second
 	api := &API{
-		queryableCreate: query.NewQueryableCreator(nil, store.NewTSDBStore(nil, nil, db, component.Query, nil)),
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
 		queryEngine: promql.NewEngine(promql.EngineOpts{
 			Logger:     nil,
 			Reg:        nil,
 			MaxSamples: 10000,
-			Timeout:    100 * time.Second,
+			Timeout:    timeout,
 		}),
 		now:  func() time.Time { return now },
 		gate: gate.NewKeeper(nil).NewGate(4),
