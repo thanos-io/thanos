@@ -1542,7 +1542,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Compact",
    "uid": "651943d05a8123e32867b4673963f42b",
    "version": 0

@@ -2059,7 +2059,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Overview",
    "uid": "0cb8830a6e957978796729870f560cda",
    "version": 0

@@ -2007,7 +2007,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Rule",
    "uid": "35da848f5f92b2dc612e0c3a0577b8a1",
    "version": 0
