@@ -2329,7 +2329,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Receive",
    "uid": "916a852b00ccc5ed81056644718fa4fb",
    "version": 0

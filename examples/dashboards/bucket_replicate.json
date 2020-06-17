@@ -508,7 +508,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / BucketReplicate",
    "uid": "49f644ecf8e31dd1a5084ae2a5f10e80",
    "version": 0
