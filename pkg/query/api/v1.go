@@ -483,6 +483,10 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 
+	if vals == nil {
+		vals = make([]string, 0)
+	}
+
 	return vals, warnings, nil
 }
 
