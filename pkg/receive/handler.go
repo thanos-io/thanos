@@ -34,6 +34,7 @@ import (
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -132,7 +133,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receiveHTTP)))
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
 
 	return h
 }
@@ -356,6 +357,11 @@ func (h *Handler) writeQuorum() int {
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is cancelled.
 func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+	logger := log.With(h.logger, "tenant", tenant)
+	if id, ok := middleware.RequestIDFromContext(ctx); ok {
+		logger = log.With(logger, "request-id", id)
+	}
+
 	ec := make(chan error)
 
 	var wg sync.WaitGroup
@@ -373,7 +379,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
-					ec <- errors.Wrap(err, "replicate write request")
+					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
 					return
 				}
 				ec <- nil
@@ -460,13 +466,13 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		close(ec)
 	}()
 
-	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asnychronously.
+	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
 	// This is needed if context is cancelled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
 			for err := range ec {
 				if err != nil {
-					level.Debug(h.logger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
+					level.Debug(logger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
 				}
 			}
 		}()
