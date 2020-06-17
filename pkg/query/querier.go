@@ -197,7 +197,9 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 	}
 
 	// The querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
-	ctx, cancel := context.WithTimeout(context.Background(), q.selectTimeout)
+	// We want to prevent this from happening for the async storea API calls we make while preserving tracing context.
+	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
+	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
 	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
 		"minTime":  hints.Start,
 		"maxTime":  hints.End,
@@ -209,7 +211,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		defer close(promise)
 
 		var err error
-		tracing.DoInSpan(ctx, "querier_select_ismyturn", func(ctx context.Context) {
+		tracing.DoInSpan(ctx, "querier_select_gate_ismyturn", func(ctx context.Context) {
 			err = q.selectGate.Start(ctx)
 		})
 		if err != nil {
