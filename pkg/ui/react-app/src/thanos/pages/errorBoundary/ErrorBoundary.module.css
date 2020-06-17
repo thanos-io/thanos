@@ -6,7 +6,8 @@
   align-items: center;
 }
 
-.detailsBtn {
+button.detailsBtn {
+  font-size: 1.2em;
   margin: 2em 0;
 }
 

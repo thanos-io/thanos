@@ -28,15 +28,15 @@ class ErrorBoundary extends React.Component<{}, ErrorState> {
         <Container fluid className={styles.container}>
           <h1>Aaaah! Something went wrong.</h1>
           <h3>
-            Please file an issue at&nbsp;
+            Please file an issue in the&nbsp;
             <a href="https://github.com/thanos-io/thanos/issues" target="_blank" rel="noreferrer noopener">
               Thanos issue tracker.
             </a>
           </h3>
-          <Button color="link" id="toggler" className={styles.detailsBtn} style={{ fontSize: '1.2em' }}>
+          <Button color="link" id="error-details-toggler" className={styles.detailsBtn}>
             View error details.
           </Button>
-          <UncontrolledCollapse toggler="#toggler" className={styles.errorDiv}>
+          <UncontrolledCollapse toggler="#error-details-toggler" className={styles.errorDiv}>
             <span>{this.state.error && this.state.error.toString()}</span>
             {this.state.errorInfo.componentStack}
           </UncontrolledCollapse>
