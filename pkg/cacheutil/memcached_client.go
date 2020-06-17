@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -269,7 +270,7 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
@@ -287,7 +288,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", c.getServerAddrByKey(key), "err", err)
 			return
 		}
 
@@ -462,4 +463,9 @@ func (c *memcachedClient) resolveAddrs() error {
 	}
 
 	return c.selector.SetServers(servers...)
+}
+
+func (c *memcachedClient) getServerAddrByKey(key string) net.Addr {
+	addr, _ := c.selector.PickServer(key)
+	return addr
 }
