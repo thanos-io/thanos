@@ -109,7 +109,7 @@ type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
 type API struct {
 	logger          log.Logger
 	reg             prometheus.Registerer
-	gate            *gate.Gate
+	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 	ruleGroups      rules.UnaryClient
@@ -145,10 +145,8 @@ func NewAPI(
 		reg:             reg,
 		queryEngine:     qe,
 		queryableCreate: c,
-		gate: gate.NewGate(maxConcurrentQueries,
-			extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
-		),
-		ruleGroups: ruleGroups,
+		gate:            gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg)).NewGate(maxConcurrentQueries),
+		ruleGroups:      ruleGroups,
 
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
@@ -329,7 +327,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = api.gate.IsMyTurn(ctx)
+		err = api.gate.Start(ctx)
 	})
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
@@ -435,7 +433,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = api.gate.IsMyTurn(ctx)
+		err = api.gate.Start(ctx)
 	})
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
@@ -483,6 +481,10 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
+	}
+
+	if vals == nil {
+		vals = make([]string, 0)
 	}
 
 	return vals, warnings, nil
@@ -556,17 +558,11 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
 	var (
-		warnings []error
-		metrics  = []labels.Labels{}
-		sets     []storage.SeriesSet
+		metrics = []labels.Labels{}
+		sets    []storage.SeriesSet
 	)
 	for _, mset := range matcherSets {
-		s, warns, err := q.Select(false, nil, mset...)
-		if err != nil {
-			return nil, nil, &ApiError{errorExec, err}
-		}
-		warnings = append(warnings, warns...)
-		sets = append(sets, s)
+		sets = append(sets, q.Select(false, nil, mset...))
 	}
 
 	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
@@ -576,7 +572,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	if set.Err() != nil {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
-	return metrics, warnings, nil
+	return metrics, set.Warnings(), nil
 }
 
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {

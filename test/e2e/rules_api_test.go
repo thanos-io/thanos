@@ -17,6 +17,7 @@ import (
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -31,7 +32,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	s, err := e2e.NewScenario(netName)
 	testutil.Ok(t, err)
-	t.Cleanup(s.Close)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	rulesSubDir := filepath.Join("rules")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))

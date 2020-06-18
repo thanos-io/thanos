@@ -2474,7 +2474,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Query",
    "uid": "af36c91291a603f1d9fbdabdd127ac4a",
    "version": 0

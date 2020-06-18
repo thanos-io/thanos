@@ -67,6 +67,15 @@ config:
 EOF
 fi
 
+# Setup alert / rules config file.
+cat >data/rules.yml <<-EOF
+groups:
+  - name: example
+    rules:
+    - record: job:http_inprogress_requests:sum
+      expr: sum(http_inprogress_requests) by (job)
+EOF
+
 STORES=""
 
 # Start three Prometheus servers monitoring themselves.
@@ -78,6 +87,8 @@ for i in $(seq 0 2); do
 global:
   external_labels:
     prometheus: prom-${i}
+rule_files:
+  - 'rules.yml'
 scrape_configs:
 - job_name: prometheus
   scrape_interval: 5s
@@ -111,6 +122,8 @@ scrape_configs:
     - "localhost:10904"
     - "localhost:10914"
 EOF
+
+cp data/rules.yml data/prom${i}/rules.yml
 
   ${PROMETHEUS_EXECUTABLE} \
     --config.file data/prom${i}/prometheus.yml \
@@ -257,5 +270,19 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
     --http-grace-period 1s \
     ${OBJSTORECFG} &
 fi
+
+sleep 0.5
+
+# Start Thanos Ruler.
+${THANOS_EXECUTABLE} rule \
+  --data-dir data/ \
+  --eval-interval "30s" \
+  --rule-file "data/rules.yml" \
+  --alert.query-url "http://0.0.0.0:9090" \
+  --query "http://0.0.0.0:10904" \
+  --query "http://0.0.0.0:10914" \
+  --http-address="0.0.0.0:19999" \
+  --grpc-address="0.0.0.0:19998" \
+  ${OBJSTORECFG} &
 
 wait

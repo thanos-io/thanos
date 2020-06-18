@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -27,6 +28,8 @@ type promSeriesSet struct {
 
 	currLset   []storepb.Label
 	currChunks []storepb.AggrChunk
+
+	warns storage.Warnings
 }
 
 func (s *promSeriesSet) Next() bool {
@@ -96,6 +99,10 @@ func (s *promSeriesSet) At() storage.Series {
 
 func (s *promSeriesSet) Err() error {
 	return s.set.Err()
+}
+
+func (s *promSeriesSet) Warnings() storage.Warnings {
+	return s.warns
 }
 
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
@@ -427,6 +434,10 @@ func (s *dedupSeriesSet) Err() error {
 	return s.set.Err()
 }
 
+func (s *dedupSeriesSet) Warnings() storage.Warnings {
+	return s.set.Warnings()
+}
+
 type seriesWithLabels struct {
 	storage.Series
 	lset labels.Labels
@@ -658,4 +669,41 @@ func (it *dedupSeriesIterator) Err() error {
 		return it.a.Err()
 	}
 	return it.b.Err()
+}
+
+type lazySeriesSet struct {
+	create func() (s storage.SeriesSet, ok bool)
+
+	set storage.SeriesSet
+}
+
+func (c *lazySeriesSet) Next() bool {
+	if c.set != nil {
+		return c.set.Next()
+	}
+
+	var ok bool
+	c.set, ok = c.create()
+	return ok
+}
+
+func (c *lazySeriesSet) Err() error {
+	if c.set != nil {
+		return c.set.Err()
+	}
+	return nil
+}
+
+func (c *lazySeriesSet) At() storage.Series {
+	if c.set != nil {
+		return c.set.At()
+	}
+	return nil
+}
+
+func (c *lazySeriesSet) Warnings() storage.Warnings {
+	if c.set != nil {
+		return c.set.Warnings()
+	}
+	return nil
 }

@@ -70,11 +70,11 @@ $(HUGO): .bingo/hugo.mod
 	@echo "(re)installing $(GOBIN)/hugo-v0.55.3"
 	@cd .bingo && $(GO) build -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.55.3 "github.com/gohugoio/hugo"
 
-JB := $(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443
+JB := $(GOBIN)/jb-v0.4.0
 $(JB): .bingo/jb.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443"
-	@cd .bingo && $(GO) build -modfile=jb.mod -o=$(GOBIN)/jb-v0.2.1-0.20200211220001-efe0c9e86443 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
+	@echo "(re)installing $(GOBIN)/jb-v0.4.0"
+	@cd .bingo && $(GO) build -modfile=jb.mod -o=$(GOBIN)/jb-v0.4.0 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
 
 JSONNET := $(GOBIN)/jsonnet-v0.16.0
 $(JSONNET): .bingo/jsonnet.mod
@@ -125,4 +125,10 @@ $(PROMU): .bingo/promu.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/promu-v0.5.0"
 	@cd .bingo && $(GO) build -modfile=promu.mod -o=$(GOBIN)/promu-v0.5.0 "github.com/prometheus/promu"
+
+PROTOC_GEN_GOGOFAST := $(GOBIN)/protoc-gen-gogofast-v1.3.1
+$(PROTOC_GEN_GOGOFAST): .bingo/protoc-gen-gogofast.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.1"
+	@cd .bingo && $(GO) build -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.1 "github.com/gogo/protobuf/protoc-gen-gogofast"
 

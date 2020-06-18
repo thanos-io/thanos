@@ -1882,7 +1882,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Sidecar",
    "uid": "b19644bfbf0ec1e108027cce268d99f7",
    "version": 0

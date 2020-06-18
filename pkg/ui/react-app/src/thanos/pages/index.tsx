@@ -1,3 +1,4 @@
 import Stores from './stores/Stores';
+import ErrorBoundary from './errorBoundary/ErrorBoundary';
 
-export { Stores };
+export { ErrorBoundary, Stores };

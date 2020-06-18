@@ -418,16 +418,19 @@ rules:
       }}% of requests.
   expr: |
     (
-      sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
-    /
-      sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
-    )
-    >
-    (
-      max by (job) (floor((thanos_receive_replication_factor{job=~"thanos-receive.*"}+1) / 2))
-    /
-      max by (job) (thanos_receive_hashring_nodes{job=~"thanos-receive.*"})
-    )
+      (
+        sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+      /
+        sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+      )
+      >
+      (
+        max by (job) (floor((thanos_receive_replication_factor{job=~"thanos-receive.*"}+1) / 2))
+      /
+        max by (job) (thanos_receive_hashring_nodes{job=~"thanos-receive.*"})
+      )
+    ) * 100
+  for: 5m
   labels:
     severity: warning
 - alert: ThanosReceiveHighHashringFileRefreshFailures
@@ -457,9 +460,9 @@ rules:
     message: Thanos Receive {{$labels.job}} has not uploaded latest data to object
       storage.
   expr: increase(thanos_shipper_uploads_total{job=~"thanos-receive.*"}[2h]) == 0
-  for: 30m
+  for: 2h
   labels:
-    severity: warning
+    severity: critical
 ```
 
 ## Replicate

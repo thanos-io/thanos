@@ -33,14 +33,14 @@ const tmpRuleDir = ".tmp-rules"
 
 type Group struct {
 	*rules.Group
-	originalFile            string
+	OriginalFile            string
 	PartialResponseStrategy storepb.PartialResponseStrategy
 }
 
 func (g Group) toProto() *rulespb.RuleGroup {
 	ret := &rulespb.RuleGroup{
 		Name:                    g.Name(),
-		File:                    g.originalFile,
+		File:                    g.OriginalFile,
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
 	}
@@ -172,7 +172,7 @@ func (m *Manager) RuleGroups() []Group {
 		for _, group := range r.RuleGroups() {
 			res = append(res, Group{
 				Group:                   group,
-				originalFile:            m.ruleFiles[group.File()],
+				OriginalFile:            m.ruleFiles[group.File()],
 				PartialResponseStrategy: s,
 			})
 		}

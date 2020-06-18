@@ -216,6 +216,12 @@ type queryData struct {
 Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
 option controls if storeAPI unavailability is considered critical.
 
+### Concurrent Selects
+
+Thanos Querier has the ability to perform concurrent select request per query. It dissects given PromQL statement and executes selectors concurrently against the discovered StoreAPIs.
+The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
+Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
+
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path.
@@ -333,6 +339,9 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.max-concurrent-select=4
+                                 Maximum number of select requests made
+                                 concurrently per a query.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
