@@ -1,15 +1,20 @@
 # Delete series for object storage
 
-
+---
 **Date:**	&lt;2020-06-17>
+
 **Type:**   Proposal
+
 **Menu:**   Proposals
+
 **Status:** Draft
+
 **Authors:** 	&lt;Harshitha Chowdary Thota, Matthias Loibl, Bartek Plotka>
+
 **Tickets:**
 1. [https://github.com/thanos-io/thanos/issues/1598](https://github.com/thanos-io/thanos/issues/1598) (main)
 2. [https://github.com/thanos-io/thanos/issues/903](https://github.com/thanos-io/thanos/issues/903)
-
+---
 
 # Summary
 
