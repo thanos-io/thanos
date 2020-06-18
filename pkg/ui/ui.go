@@ -156,12 +156,12 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix str
 // GetWebPrefix sanitizes an external URL path prefix value.
 // A value provided by web.external-prefix flag is preferred over the one supplied through an HTTP header.
 func GetWebPrefix(logger log.Logger, externalPrefix, prefixHeader string, r *http.Request) string {
+	prefix := r.Header.Get(prefixHeader)
+
 	// Ignore web.prefix-header value if web.external-prefix is defined.
 	if len(externalPrefix) > 0 {
-		return externalPrefix
+		prefix = externalPrefix
 	}
-
-	prefix := r.Header.Get(prefixHeader)
 
 	// Even if rfc2616 suggests that Location header "value consists of a single absolute URI", browsers
 	// support relative location too. So for extra security, scheme and host parts are stripped from a dynamic prefix.
