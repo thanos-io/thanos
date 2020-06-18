@@ -5,7 +5,6 @@ package cacheutil
 
 import (
 	"context"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -288,7 +287,11 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", c.getServerAddrByKey(key), "err", err)
+
+			// If the PickServer will fail for any reason the server address will be nil
+			// and so missing in the logs. We're OK with that (it's a best effort).
+			serverAddr, _ := c.selector.PickServer(key)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", serverAddr, "err", err)
 			return
 		}
 
@@ -463,9 +466,4 @@ func (c *memcachedClient) resolveAddrs() error {
 	}
 
 	return c.selector.SetServers(servers...)
-}
-
-func (c *memcachedClient) getServerAddrByKey(key string) net.Addr {
-	addr, _ := c.selector.PickServer(key)
-	return addr
 }
