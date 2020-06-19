@@ -447,7 +447,7 @@ func (cg *Group) Resolution() int64 {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (shouldRerun bool, compID ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor, downloadRetries uint64) (shouldRerun bool, compID ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -468,7 +468,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, comp)
+	shouldRerun, compID, err := cg.compact(ctx, subDir, comp, downloadRetries)
 	if err != nil {
 		cg.compactionFailures.Inc()
 		return false, ulid.ULID{}, err
@@ -595,7 +595,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, excludeDirs ...str
 }
 
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
-func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
+func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error, downloadRetries uint64) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
 	if !ok {
 		return errors.Errorf("Given error is not an issue347 error: %v", issue347Err)
@@ -615,7 +615,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	}()
 
 	bdir := filepath.Join(tmpdir, ie.id.String())
-	if err := block.Download(ctx, logger, bkt, ie.id, bdir); err != nil {
+	if err := block.Download(ctx, logger, bkt, ie.id, bdir, downloadRetries); err != nil {
 		return retry(errors.Wrapf(err, "download block %s", ie.id))
 	}
 
@@ -652,7 +652,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (shouldRerun bool, compID ulid.ULID, err error) {
+func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, downloadRetries uint64) (shouldRerun bool, compID ulid.ULID, err error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -721,7 +721,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return false, ulid.ULID{}, errors.Errorf("mismatch between meta %s and dir %s", meta.ULID, id)
 		}
 
-		if err := block.Download(ctx, cg.logger, cg.bkt, id, pdir); err != nil {
+		if err := block.Download(ctx, cg.logger, cg.bkt, id, pdir, downloadRetries); err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", id))
 		}
 
@@ -882,7 +882,7 @@ func NewBucketCompactor(
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+func (c *BucketCompactor) Compact(ctx context.Context, downloadRetries uint64) (rerr error) {
 	defer func() {
 		if IsHaltError(rerr) {
 			return
@@ -911,7 +911,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp)
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp, downloadRetries)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
@@ -922,7 +922,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err, downloadRetries); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()

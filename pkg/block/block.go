@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/cenkalti/backoff"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -42,8 +43,29 @@ const (
 	DebugMetas = "debug/metas"
 )
 
-// Download downloads directory that is mean to be block directory.
-func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
+// Download downloads directory that is mean to be block directory. Tries the given amount of times before giving up.
+func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string, retries uint64) error {
+	if retries == 0 {
+		retries = 1
+	}
+
+	eb := backoff.NewExponentialBackOff()
+	b := backoff.WithMaxRetries(eb, retries)
+	bCtx := backoff.WithContext(b, ctx)
+
+	return backoff.Retry(backoff.Operation(func() error {
+		if err := downloadBlock(ctx, logger, bucket, id, dst); err != nil {
+			if retries > 1 {
+				logger.Log("failed to download a block, retrying", "err", err)
+			}
+			return err
+		}
+		return nil
+	}), bCtx)
+}
+
+// downloadBlock downloads directory that is mean to be block directory.
+func downloadBlock(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
 	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), dst); err != nil {
 		return err
 	}

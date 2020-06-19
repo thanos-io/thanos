@@ -92,6 +92,10 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("0s"))
+
+	downloadRetries := cmd.Flag("download.retries", "How many time to retry downloading a block with exponential backoff before giving up").
+		Hidden().Default("1").Uint64()
+
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -147,9 +151,9 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		}
 
 		if *repair {
-			v = verifier.NewWithRepair(logger, reg, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), issues)
+			v = verifier.NewWithRepair(logger, reg, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), issues, *downloadRetries)
 		} else {
-			v = verifier.New(logger, reg, bkt, fetcher, time.Duration(*deleteDelay), issues)
+			v = verifier.New(logger, reg, bkt, fetcher, time.Duration(*deleteDelay), issues, *downloadRetries)
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
@@ -466,8 +470,11 @@ func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, n
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
+	downloadRetries := cmd.Flag("download.retries", "How many time to retry downloading a block with exponential backoff before giving up").
+		Hidden().Default("1").Uint64()
+
 	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
+		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp, *downloadRetries)
 	}
 }
 

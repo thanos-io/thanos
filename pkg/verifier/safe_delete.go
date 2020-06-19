@@ -39,7 +39,7 @@ func TSDBBlockExistsInBucket(ctx context.Context, bkt objstore.Bucket, id ulid.U
 // It returns error if block dir already exists in
 // the backup bucket (blocks should be immutable) or if any of the operations
 // fail.
-func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objstore.Bucket, id ulid.ULID, deleteDelay time.Duration, blocksMarkedForDeletion prometheus.Counter) error {
+func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objstore.Bucket, id ulid.ULID, deleteDelay time.Duration, blocksMarkedForDeletion prometheus.Counter, downloadRetries uint64) error {
 	// Does this TSDB block exist in backupBkt already?
 	found, err := TSDBBlockExistsInBucket(ctx, backupBkt, id)
 	if err != nil {
@@ -62,7 +62,7 @@ func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objs
 
 	// Download the TSDB block.
 	dir := filepath.Join(tempdir, id.String())
-	if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
+	if err := block.Download(ctx, logger, bkt, id, dir, downloadRetries); err != nil {
 		return errors.Wrap(err, "download from source")
 	}
 

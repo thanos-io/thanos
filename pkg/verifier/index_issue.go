@@ -29,7 +29,7 @@ const IndexIssueID = "index_issue"
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
 // NOTE: This also verifies all indexes against chunks mismatches and duplicates.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics, downloadRetries uint64) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
 	metas, _, err := fetcher.Fetch(ctx)
@@ -85,7 +85,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 
 		level.Info(logger).Log("msg", "downloading block for repair", "id", id, "issue", IndexIssueID)
-		if err = block.Download(ctx, logger, bkt, id, path.Join(tmpdir, id.String())); err != nil {
+		if err = block.Download(ctx, logger, bkt, id, path.Join(tmpdir, id.String()), downloadRetries); err != nil {
 			return errors.Wrapf(err, "download block %s", id)
 		}
 		level.Info(logger).Log("msg", "downloaded block to be repaired", "id", id, "issue", IndexIssueID)

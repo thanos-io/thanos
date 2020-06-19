@@ -291,7 +291,7 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx); err != nil {
+		if err := compactor.Compact(ctx, conf.downloadRetries); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
 
@@ -303,7 +303,7 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downloadRetries); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
@@ -311,7 +311,7 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downloadRetries); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -441,6 +441,7 @@ type compactConfig struct {
 	selectorRelabelConf                            extflag.PathOrContent
 	webConf                                        webConfig
 	label                                          string
+	downloadRetries                                uint64
 }
 
 func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
@@ -498,6 +499,9 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
+
+	cmd.Flag("download.retries", "How many time to retry downloading a block with exponential backoff before giving up").
+		Hidden().Default("1").Uint64Var(&cc.downloadRetries)
 
 	cc.selectorRelabelConf = *regSelectorRelabelFlags(cmd)
 

@@ -35,44 +35,47 @@ func newVerifierMetrics(reg prometheus.Registerer) *verifierMetrics {
 
 // Issue is an function that does verification and repair only if repair arg is true.
 // It should log affected blocks using warn level logs. It should be safe for issue to run on healthy bucket.
-type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error
+type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics, downloadRetries uint64) error
 
 // Verifier runs given issues to verify if bucket is healthy.
 type Verifier struct {
-	logger      log.Logger
-	bkt         objstore.Bucket
-	backupBkt   objstore.Bucket
-	issues      []Issue
-	repair      bool
-	fetcher     block.MetadataFetcher
-	deleteDelay time.Duration
-	metrics     *verifierMetrics
+	logger          log.Logger
+	bkt             objstore.Bucket
+	backupBkt       objstore.Bucket
+	issues          []Issue
+	repair          bool
+	fetcher         block.MetadataFetcher
+	deleteDelay     time.Duration
+	metrics         *verifierMetrics
+	downloadRetries uint64
 }
 
 // New returns verifier that only logs affected blocks.
-func New(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
+func New(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue, downloadRetries uint64) *Verifier {
 	return &Verifier{
-		logger:      logger,
-		bkt:         bkt,
-		issues:      issues,
-		fetcher:     fetcher,
-		repair:      false,
-		deleteDelay: deleteDelay,
-		metrics:     newVerifierMetrics(reg),
+		logger:          logger,
+		bkt:             bkt,
+		issues:          issues,
+		fetcher:         fetcher,
+		repair:          false,
+		deleteDelay:     deleteDelay,
+		metrics:         newVerifierMetrics(reg),
+		downloadRetries: downloadRetries,
 	}
 }
 
 // NewWithRepair returns verifier that logs affected blocks and attempts to repair them.
-func NewWithRepair(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue) *Verifier {
+func NewWithRepair(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, issues []Issue, downloadRetries uint64) *Verifier {
 	return &Verifier{
-		logger:      logger,
-		bkt:         bkt,
-		backupBkt:   backupBkt,
-		issues:      issues,
-		fetcher:     fetcher,
-		repair:      true,
-		deleteDelay: deleteDelay,
-		metrics:     newVerifierMetrics(reg),
+		logger:          logger,
+		bkt:             bkt,
+		backupBkt:       backupBkt,
+		issues:          issues,
+		fetcher:         fetcher,
+		repair:          true,
+		deleteDelay:     deleteDelay,
+		metrics:         newVerifierMetrics(reg),
+		downloadRetries: downloadRetries,
 	}
 }
 
@@ -91,7 +94,7 @@ func (v *Verifier) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) e
 	// TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 	// TODO(bplotka): Implement disk "bucket" to allow this verify to work on local disk space as well.
 	for _, issueFn := range v.issues {
-		err := issueFn(ctx, v.logger, v.bkt, v.backupBkt, v.repair, idMatcher, v.fetcher, v.deleteDelay, v.metrics)
+		err := issueFn(ctx, v.logger, v.bkt, v.backupBkt, v.repair, idMatcher, v.fetcher, v.deleteDelay, v.metrics, v.downloadRetries)
 		if err != nil {
 			return errors.Wrap(err, "verify")
 		}

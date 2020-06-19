@@ -27,7 +27,7 @@ const DuplicatedCompactionIssueID = "duplicated_compaction"
 // until sync-delay passes.
 // The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
 // If repair is enabled, all but one duplicates are safely deleted.
-func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
+func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics, downloadRetries uint64) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported by issue %s verifier", DuplicatedCompactionIssueID)
 	}
@@ -84,7 +84,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 	}
 
 	for i, id := range toKill {
-		if err := BackupAndDelete(ctx, logger, bkt, backupBkt, id, deleteDelay, metrics.blocksMarkedForDeletion); err != nil {
+		if err := BackupAndDelete(ctx, logger, bkt, backupBkt, id, deleteDelay, metrics.blocksMarkedForDeletion, downloadRetries); err != nil {
 			return err
 		}
 		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)

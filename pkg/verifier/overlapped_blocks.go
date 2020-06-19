@@ -22,7 +22,7 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.
 // No repair is available for this issue.
-func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, _ objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, _ time.Duration, _ *verifierMetrics) error {
+func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, _ objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, _ time.Duration, _ *verifierMetrics, _ uint64) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported by issue %s verifier", OverlappedBlocksIssueID)
 	}

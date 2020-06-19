@@ -61,6 +61,7 @@ func RunDownsample(
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
+	downloadRetries uint64,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -106,7 +107,7 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downloadRetries); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -115,7 +116,7 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downloadRetries); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -152,6 +153,7 @@ func downsampleBucket(
 	bkt objstore.Bucket,
 	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
+	downloadRetries uint64,
 ) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return errors.Wrap(err, "clean working directory")
@@ -207,7 +209,7 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1, downloadRetries); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
@@ -230,7 +232,7 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2, downloadRetries); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
@@ -240,11 +242,13 @@ func downsampleBucket(
 	return nil
 }
 
-func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string, resolution int64) error {
+func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
+	m *metadata.Meta, dir string, resolution int64,
+	downloadRetries uint64) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.Download(ctx, logger, bkt, m.ULID, bdir)
+	err := block.Download(ctx, logger, bkt, m.ULID, bdir, downloadRetries)
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}

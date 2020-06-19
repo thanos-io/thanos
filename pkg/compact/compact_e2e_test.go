@@ -200,7 +200,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
-		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Ok(t, bComp.Compact(ctx, 1))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
@@ -289,7 +289,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			},
 		})
 
-		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Ok(t, bComp.Compact(ctx, 1))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
