@@ -65,6 +65,8 @@ Release is happening on separate `release-<major>.<minor>` branch.
 
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
 
+1. Create small PR to master (!) to cut CHANGELOG. This helps to maintain new changelog on master. For example: https://github.com/thanos-io/thanos/pull/2627
+
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history.
@@ -74,14 +76,17 @@ Release is happening on separate `release-<major>.<minor>` branch.
   what have changed between release candidates.
 
 1. Double check backward compatibility:
+
     1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have.
     1. In case of `v0.y.z`, document all incompatibilities in changelog.
 
 1. Double check metric changes:
+
     1. Note any changes in the changelog
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
 
 1. Update tutorials:
+
     1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
     1. In case of any breaking changes or necessary updates adjust the manifests
        so the tutorial stays up to date.

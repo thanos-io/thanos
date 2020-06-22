@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"sort"
 	"testing"
 
 	"github.com/go-kit/kit/log"
@@ -25,7 +26,7 @@ func TestShipperTimestamps(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir))
 	}()
 
-	s := New(nil, nil, dir, nil, nil, metadata.TestSource)
+	s := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
 
 	// Missing thanos meta file.
 	_, _, err = s.Timestamps()
@@ -122,15 +123,12 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}))
 
-	var ids []ulid.ULID
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource)
-	if err := shipper.iterBlockMetas(func(m *metadata.Meta) error {
-		ids = append(ids, m.ULID)
-		return nil
-	}); err != nil {
-		testutil.Ok(t, err)
-	}
-	testutil.Equals(t, []ulid.ULID{id1, id3, id2}, ids)
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
+	metas, err := shipper.blockMetasFromOldest()
+	testutil.Ok(t, err)
+	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
+		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+	}), true)
 }
 
 func BenchmarkIterBlockMetas(b *testing.B) {
@@ -164,11 +162,8 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource)
-	if err := shipper.iterBlockMetas(func(m *metadata.Meta) error {
-		metas = append(metas, m)
-		return nil
-	}); err != nil {
-		testutil.Ok(b, err)
-	}
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
+
+	_, err = shipper.blockMetasFromOldest()
+	testutil.Ok(b, err)
 }
