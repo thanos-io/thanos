@@ -114,6 +114,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
 
+	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
+		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().Bool()
+
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -197,6 +203,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
 			comp,
+			*allowOutOfOrderUpload,
 		)
 	}
 }
@@ -283,6 +290,7 @@ func runRule(
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
 	comp component.Component,
+	allowOutOfOrderUpload bool,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -610,7 +618,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource)
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, allowOutOfOrderUpload)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
