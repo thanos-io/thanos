@@ -959,7 +959,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 		st := time.Now()
-		compactCount := 0
+		progressCount := 0
 
 		// Send all groups found during this pass to the compaction workers.
 		var groupErrs terrors.MultiError
@@ -968,8 +968,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			case groupErr := <-errChan:
 				groupErrs.Add(groupErr)
 			case groupChan <- g:
-				compactCount++
-				level.Info(c.logger).Log("msg", "start compact group", "group", g.Key(), "compactRatio", fmt.Sprintf("%d/%d", compactCount, len(groups)), "duration", time.Since(st))
+				progressCount++
+				level.Info(c.logger).Log("msg", "get compact group", "group", g.Key(), "progressRate", fmt.Sprintf("%d/%d", progressCount, len(groups)))
 			}
 		}
 		close(groupChan)
@@ -981,6 +981,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		for groupErr := range errChan {
 			groupErrs.Add(groupErr)
 		}
+
+		level.Info(c.logger).Log("msg", "finish of compactions", "groupCount", len(groups), "errCount", len(groupErrs), "duration", time.Since(st))
 
 		workCtxCancel()
 		if len(groupErrs) > 0 {
