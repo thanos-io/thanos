@@ -11,7 +11,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## [v0.13.0-rc.2](https://github.com/thanos-io/thanos/releases/tag/v0.13.0-rc.2) - 2020.06.15
+## [v0.13.0](https://github.com/thanos-io/thanos/releases/tag/v0.13.0) - 2020.06.22
 
 ### Fixed
 
