@@ -143,7 +143,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 		flagsMap := map[string]string{}
 
-		// Exclude kingpin default flags to expose only Prometheus ones.
+		// Exclude kingpin default flags to expose only Thanos ones.
 		boilerplateFlags := kingpin.New("", "").Version("")
 
 		for _, f := range cmd.Model().Flags {
