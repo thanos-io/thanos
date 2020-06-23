@@ -46,7 +46,7 @@ See [release process docs](release-process.md) for details.
 
 Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.12+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+If you want to build Thanos from source you would need a working installation of the Go 1.14+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 

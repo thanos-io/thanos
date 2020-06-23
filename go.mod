@@ -47,7 +47,7 @@ require (
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.10.0
-	github.com/prometheus/prometheus v1.8.2-0.20200609165731-66dfb951c4ca
+	github.com/prometheus/prometheus v1.8.2-0.20200619100132-74207c04655e
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/uber/jaeger-client-go v2.23.1+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
@@ -71,12 +71,10 @@ require (
 // so that we don't get errors about being incompatible with the Go proxies.
 // See https://github.com/thanos-io/thanos/issues/1415
 replace (
-	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
 	// Make sure Cortex is not forcing us to some other Prometheus version.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200609165731-66dfb951c4ca
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
 )
 
-go 1.13
+go 1.14

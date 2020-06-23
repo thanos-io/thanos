@@ -11,6 +11,10 @@ GOPATH            ?= $(shell go env GOPATH)
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+
+# Promu is using this exact variable name, do not rename.
+PREFIX  ?= $(GOBIN)
+
 GO111MODULE       ?= on
 export GO111MODULE
 GOPROXY           ?= https://proxy.golang.org
@@ -79,7 +83,7 @@ assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
 	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
-	@go fmt ./pkg/ui
+	@$(MAKE) format
 
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
@@ -104,8 +108,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building Thanos binary in $(GOBIN)"
-	@$(PROMU) build --prefix $(GOBIN)
+	@echo ">> building Thanos binary in $(PREFIX)"
+	@$(PROMU) build --prefix $(PREFIX)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -121,8 +125,8 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 docker: build
-	@echo ">> copying Thanos from $(GOBIN) to ./thanos_tmp_for_docker"
-	@cp $(GOBIN)/thanos ./thanos_tmp_for_docker
+	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
+	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
 	@rm ./thanos_tmp_for_docker

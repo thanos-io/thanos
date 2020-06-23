@@ -38,8 +38,9 @@ type MultiTSDB struct {
 	labels          labels.Labels
 	bucket          objstore.Bucket
 
-	mtx     *sync.RWMutex
-	tenants map[string]*tenant
+	mtx                   *sync.RWMutex
+	tenants               map[string]*tenant
+	allowOutOfOrderUpload bool
 }
 
 func NewMultiTSDB(
@@ -50,21 +51,23 @@ func NewMultiTSDB(
 	labels labels.Labels,
 	tenantLabelName string,
 	bucket objstore.Bucket,
+	allowOutOfOrderUpload bool,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
 	return &MultiTSDB{
-		dataDir:         dataDir,
-		logger:          l,
-		reg:             reg,
-		tsdbOpts:        tsdbOpts,
-		mtx:             &sync.RWMutex{},
-		tenants:         map[string]*tenant{},
-		labels:          labels,
-		tenantLabelName: tenantLabelName,
-		bucket:          bucket,
+		dataDir:               dataDir,
+		logger:                l,
+		reg:                   reg,
+		tsdbOpts:              tsdbOpts,
+		mtx:                   &sync.RWMutex{},
+		tenants:               map[string]*tenant{},
+		labels:                labels,
+		tenantLabelName:       tenantLabelName,
+		bucket:                bucket,
+		allowOutOfOrderUpload: allowOutOfOrderUpload,
 	}
 }
 
@@ -258,6 +261,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 				t.bucket,
 				func() labels.Labels { return lbls },
 				metadata.ReceiveSource,
+				t.allowOutOfOrderUpload,
 			)
 		}
 

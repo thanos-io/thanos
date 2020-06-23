@@ -45,7 +45,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		}()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, false)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -219,7 +219,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel2()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx2))
 
-		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
+		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, false)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (

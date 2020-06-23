@@ -269,7 +269,7 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
@@ -287,7 +287,11 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
+
+			// If the PickServer will fail for any reason the server address will be nil
+			// and so missing in the logs. We're OK with that (it's a best effort).
+			serverAddr, _ := c.selector.PickServer(key)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", serverAddr, "err", err)
 			return
 		}
 

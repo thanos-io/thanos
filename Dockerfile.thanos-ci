@@ -1,6 +1,6 @@
 # Available from https://hub.docker.com/r/circleci/golang/
 FROM circleci/golang:1.14.2-node
 
-ENV GOBIN=/go/bin
+ENV GOBIN=/home/circleci/.local/bin
 
-COPY tmp/bin ${GOBIN}
+COPY --chown=circleci tmp/bin/* ${GOBIN}/
