@@ -5,6 +5,10 @@
                 {{ partial "_default/sidemenu.html" . }}
             </div>
             <div class="col-12 col-lg-9">
+                {{ if or (eq .Params.toc true) (and (gt .WordCount 400) (ne .Params.toc false)) }}
+                <h1>Table of Content</h1>
+                {{ .TableOfContents }}
+                {{ end }}
                 {{ $content := replace .Content "<table>" "<table class='table table-striped'>" }}
                 {{ $content = $content | replaceRE "(<h[1-4] id=\"([^\"]+)\".+)(</h[1-9]+>)" `${1} <a href="#${2}" class="header-anchor" aria-label="Header Anchor">#</a> ${3}` }}
                 {{ $content | safeHTML}}
