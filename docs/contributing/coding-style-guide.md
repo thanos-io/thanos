@@ -22,48 +22,6 @@ Some style is enforced by our linters and is covered in separate smaller section
 embrace some of the rules in your own project! For Thanos developers, we recommend reading sections about rules to manually apply during
 development. Some of those are currently impossible to detect with linters. Ideally, everything would be automated. (:
 
-## TOC
-
-- [Thanos Coding Style Guide](coding-style-guide.md#thanos-coding-style-guide)
-  * [TOC](coding-style-guide.md#toc)
-- [Go](coding-style-guide.md#go)
-  * [Development / Code Review](coding-style-guide.md#development-code-review)
-        + [Reliability](coding-style-guide.md#reliability)
-          - [Defers: Don't Forget to Check Returned Errors](coding-style-guide.md#defers-don-t-forget-to-check-returned-errors)
-          - [Exhaust Readers](coding-style-guide.md#exhaust-readers)
-          - [Avoid Globals](coding-style-guide.md#avoid-globals)
-          - [Never Use Panics](coding-style-guide.md#never-use-panics)
-          - [Avoid Using the `reflect` or `unsafe` Packages](coding-style-guide.md#avoid-using-the-reflect-or-unsafe-packages)
-          - [Avoid variable shadowing](coding-style-guide.md#avoid-variable-shadowing)
-        + [Performance](coding-style-guide.md#performance)
-          - [Pre-allocating Slices and Maps](coding-style-guide.md#pre-allocating-slices-and-maps)
-          - [Reuse arrays](coding-style-guide.md#reuse-arrays)
-        + [Readability](coding-style-guide.md#readability)
-          - [Keep the Interface Narrow; Avoid Shallow Functions](coding-style-guide.md#keep-the-interface-narrow-avoid-shallow-functions)
-          - [Use Named Return Parameters Carefully](coding-style-guide.md#use-named-return-parameters-carefully)
-          - [Clean Defer Only if Function Fails](coding-style-guide.md#clean-defer-only-if-function-fails)
-          - [Explicitly Handled Returned Errors](coding-style-guide.md#explicitly-handled-returned-errors)
-          - [Avoid Defining Variables Used Only Once.](coding-style-guide.md#avoid-defining-variables-used-only-once)
-          - [Only Two Ways of Formatting Functions/Methods](coding-style-guide.md#only-two-ways-of-formatting-functions-methods)
-          - [Control Structure: Prefer early returns and avoid `else`](coding-style-guide.md#control-structure-prefer-early-returns-and-avoid-else)
-          - [Wrap Errors for More Context; Don't Repeat "failed ..." There.](coding-style-guide.md#wrap-errors-for-more-context-don-t-repeat-failed-there)
-          - [Use the Blank Identifier `_`](coding-style-guide.md#use-the-blank-identifier)
-          - [Rules for Log Messages](coding-style-guide.md#rules-for-log-messages)
-          - [Comment Necessary Surprises](coding-style-guide.md#comment-necessary-surprises)
-        + [Testing](coding-style-guide.md#testing)
-          - [Table Tests](coding-style-guide.md#table-tests)
-          - [Tests for Packages / Structs That Involve `time` package.](coding-style-guide.md#tests-for-packages-structs-that-involve-time-package)
-  * [Enforced by Linters](coding-style-guide.md#enforced-by-linters)
-      - [Avoid Prints](coding-style-guide.md#avoid-prints)
-      - [Ensure Prometheus Metric Registration](coding-style-guide.md#ensure-prometheus-metric-registration)
-      - [go vet](coding-style-guide.md#go-vet)
-      - [golangci-lint](coding-style-guide.md#golangci-lint)
-      - [misspell](coding-style-guide.md#misspell)
-      - [Comments Should be Full Sentences](coding-style-guide.md#comments-should-be-full-sentences)
-- [Bash](coding-style-guide.md#bash)
-
-<small><i>Table of contents generated with <a href='http://ecotrust-canada.github.io/markdown-toc/'>markdown-toc</a></i></small>
-
 # Go
 
 For code written in [Go](https://golang.org/) we use the standard Go style guides ([Effective Go](https://golang.org/doc/effective_go.html),

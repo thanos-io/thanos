@@ -3,19 +3,6 @@ title: Developer Onboarding
 type: docs
 menu: contributing
 ---
-- [Developer Onboarding](#developer-onboarding)
-- [Getting up and running with Thanos](#getting-up-and-running-with-thanos)
-- [Resources for the design and internal working for Thanos](#resources-for-the-design-and-internal-working-for-thanos)
-- [Prometheus TSDB Blocks](#prometheus-tsdb-blocks)
-- [Step by step flow of command for Thanos](#step-by-step-flow-of-command-for-thanos)
-- [Sidecar](#sidecar)
-- [Compact](#compact)
-- [Bucket](#bucket)
-- [Store Gateway](#store-gateway)
-- [Querier](#querier)
-- [Ruler](#ruler)
-
-<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
 
 # Developer Onboarding
 
