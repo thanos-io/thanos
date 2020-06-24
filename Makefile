@@ -253,13 +253,14 @@ endif
 .PHONY: web-pre-process
 web-pre-process:
 	@echo ">> running documentation website pre processing"
-	@bash scripts/websitepreprocess.sh
+	@bash scripts/website/websitepreprocess.sh
 
 .PHONY: web
 web: ## Builds our website.
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
 	# TODO(bwplotka): Make it --gc
+	@rm -rf "$(WEB_DIR)/public"
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
 .PHONY:lint

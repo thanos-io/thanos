@@ -44,10 +44,10 @@
                     </div>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ "/getting-started.md" | relURL }}">Documentation</a>
+                    <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
+                    {{ partial "versioning/version-picker.html" . }}
                 </li>
                 <li class="nav-item">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="nav-link"><i class="fab fa-fw fa-github"></i> GitHub</a>
@@ -68,12 +68,12 @@
                 <div class="col-12 col-md-6 col-lg">
                     <h6 class="font-weight-bold">Documentation</h6>
                     <ul class="list-unstyled">
-                        <li><a class="text-reset" href="{{ "/getting-started.md" | relURL }}">Getting Started</a></li>
-                        <li><a class="text-reset" href="{{ "/design.md" | relURL }}">Design</a></li>
-                        <li><a class="text-reset" href="{{ "/storage.md" | relURL }}">Storage</a></li>
-                        <li><a class="text-reset" href="{{ "/service-discovery.md" | relURL }}">Service Discovery</a></li>
-                        <li><a class="text-reset" href="{{ "/maintainers" | relURL }}">Maintainers</a></li>
-                        <li><a class="text-reset" href="{{ "/contributing" | relURL }}">Contributing</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/getting-started.md" | relURL }}">Getting Started</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/design.md" | relURL }}">Design</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/storage.md" | relURL }}">Storage</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/service-discovery.md" | relURL }}">Service Discovery</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/maintainers" | relURL }}">Maintainers</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/contributing/contributing" | relURL }}">Contributing</a></li>
                     </ul>
                 </div>
                 <div class="col-12 col-md-6 col-lg">
