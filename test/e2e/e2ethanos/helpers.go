@@ -37,7 +37,7 @@ func singleJoiningSlash(a, b string) string {
 }
 
 // NewSingleHostReverseProxy is almost same as httputil.NewSingleHostReverseProxy
-// but it performs a url path rewrite
+// but it performs a url path rewrite.
 func NewSingleHostReverseProxy(target *url.URL, externalPrefix string) *httputil.ReverseProxy {
 	targetQuery := target.RawQuery
 	director := func(req *http.Request) {
@@ -52,7 +52,7 @@ func NewSingleHostReverseProxy(target *url.URL, externalPrefix string) *httputil
 		}
 
 		if _, ok := req.Header["User-Agent"]; !ok {
-			// explicitly disable User-Agent so it's not set to default value
+			// Explicitly disable User-Agent so it's not set to default value.
 			req.Header.Set("User-Agent", "")
 		}
 	}

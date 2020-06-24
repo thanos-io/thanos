@@ -185,34 +185,7 @@ func TestQueryRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	ctx, cancel := chromedp.NewContext(context.Background())
-	t.Cleanup(cancel)
-
-	var networkErrors []string
-
-	// Listen for failed network requests and push them to an array.
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-		case *network.EventLoadingFailed:
-			networkErrors = append(networkErrors, ev.ErrorText)
-		}
-	})
-
-	err = chromedp.Run(ctx,
-		network.Enable(),
-		chromedp.Navigate("http://"+q.HTTPEndpoint()+"/test/graph"),
-		chromedp.WaitVisible(`body`),
-	)
-	testutil.Ok(t, err)
-
-	err = func() error {
-		if len(networkErrors) > 0 {
-			return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
-		}
-		return nil
-	}()
-
-	testutil.Ok(t, err)
+	checkNetworkRequests(t, "http://"+q.HTTPEndpoint()+"/test/graph")
 }
 
 func TestQueryExternalPrefix(t *testing.T) {
@@ -239,6 +212,38 @@ func TestQueryExternalPrefix(t *testing.T) {
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_external_prefix_and_route_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	externalPrefix := "thanos"
+	routePrefix := "test"
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		routePrefix,
+		externalPrefix,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
+
+	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
 
@@ -252,9 +257,9 @@ func TestQueryExternalPrefix(t *testing.T) {
 		}
 	})
 
-	err = chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		network.Enable(),
-		chromedp.Navigate(querierProxy.URL+"/thanos/graph"),
+		chromedp.Navigate(addr),
 		chromedp.WaitVisible(`body`),
 	)
 	testutil.Ok(t, err)
