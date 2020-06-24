@@ -1,0 +1,16 @@
+{{- $currentVersion := index (split .Dir "/") 1 }}
+{{- $latestVersion := .Site.Params.latest }}
+{{- $notLatestVersion := ne $currentVersion $latestVersion }}
+{{- $latestUrl := replace .URL $currentVersion $latestVersion }}
+<header>
+  <h1 class="is-size-1{{ if .Params.description }} is-spaced{{ end }}">{{ .Title }}</h1>
+  {{- with .Params.description }}<h4 class="subtitle is-size-4">{{ . }}</h4>{{ end }}
+
+  {{- if $notLatestVersion }}
+  <div class="notification is-info">
+    This document is for an earlier version of Thanos. Click <a href="{{ $latestUrl }}">here</a> to see the latest version of this page.
+  </div>
+  {{- end }}
+
+  <hr class="hr" />
+</header>

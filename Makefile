@@ -239,6 +239,12 @@ web-pre-process:
 	@echo ">> running documentation website pre processing"
 	@bash scripts/websitepreprocess.sh
 
+.PHONY: generate-versioned-docs
+generate-versioned-docs: ## generating docs for versioning
+generate-versioned-docs:
+	@echo ">> generating documentation for versioning"
+	@bash scripts/docsversioning.sh
+
 .PHONY: web
 web: ## Builds our website.
 web: web-pre-process $(HUGO)

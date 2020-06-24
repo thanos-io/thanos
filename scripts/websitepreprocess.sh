@@ -11,10 +11,13 @@ OUTPUT_CONTENT_DIR="${WEBSITE_DIR}/docs-pre-processed"
 COMMIT_SHA=`git rev-parse HEAD`
 
 rm -rf ${OUTPUT_CONTENT_DIR}
+# cd ${OUTPUT_CONTENT_DIR} | grep -v 'release-.*' | xargs rm -rf
 mkdir -p ${OUTPUT_CONTENT_DIR}
 
 # Copy original content.
 cp -r ${ORIGINAL_CONTENT_DIR}/* ${OUTPUT_CONTENT_DIR}
+
+sh ./scripts/docsversioning.sh
 
 # Add edit footer to `docs/` md items.
 ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
