@@ -97,6 +97,35 @@ The proposal for Query Logging has been divided into three major parts - Audit L
 
 Each of the use case of the sub-part would be described and a possible implementation would be discussed -
 
+#### Using Middlewares -
+
+Since Middlewares are a good chunk of the implementation, it makes sense to discuss briefly about -
+
+* How we are going to use the middlewares in our logging.
+* Discuss the different types of middlewares that we plan to use.
+
+**Usage of Middlewares** : As it has been suggested by the diagram above, we plan to put in interceptors/middlewares to intercept the connection for a server implementation and client implementation.
+
+The middlewares helps in intercepting the queries flowing before a client, and all the queries leaving the server.
+
+The middlewares provide a nice abstraction to log the queries because we have the following objective from the logging -
+
+* Log all the queries
+* Log some specific queries
+* Logging at a certain level(Debug / Info)
+* Have a same request-id for a given request
+
+All of the goals are easily possible using grpc middlewares, as the grpc-ecosystem has a nice set of middlewares that makes the above possible, so we can just plug and play our middlewares
+
+For HTTP, all these nice middlewares are not present, so we need to code up our implementation performing the same logic.
+
+**Types of Middlewares** : We are going to use the following middlewares for achieving the above objectives -
+
+* [`logging.WithDecider`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L51) - This `grpc.Option` would help us in deciding the logic whether a given request should be logged or not. This should help in logging specific / all queries
+* [`logging.WithLevels`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L58) - This `grpc.Option` would help us in fixating the level of query that we might want to log. So based on a query hitting a certain criteria, we can switch the levels of it
+* For using the request-id, we can store the request-id in the metadata of the `context`, and while logging, we can use it.
+* Same equivalent for the HTTP can be implemented for mirroring the logic of gRPC middlewares
+
 #### Use case 1: Audit Logging
 
 **Audit logging** is a kind of logging, where we log in every internal API requests. Typically, rather than logging in specific queries, we ought to log in every query that has been made until now.
@@ -105,17 +134,12 @@ From a developer’s perspective, audit logs can keep you sane by giving you som
 
 #### Implementation:
 
+
 ```go
-type AuditLogging struct {
+// The request-id would be used from the context of the request
+auditLogger = log.With(logger, "component", component.StoreAPI)
 
-     // logger object derived from the base logger class
-     logger         log.Logger
-     // component using the audit logger
-     component      component.StoreAPI
-     // Request - ID (Same as tracer-id)
-     requestId      string
-
-}
+// The decider logic would be implemented in the grpc-middleware itself
 ```
 
 * Currently, we are looking to implement Audit Logging at the **StoreAPI** level.
@@ -130,19 +154,10 @@ type AuditLogging struct {
 #### Implementation:
 
 ```go
-type AdaptiveLogging struct {
+// The request-id would be used from the context of the request
+adpativeLogger = log.With(logger, "component", component.StoreAPI)
 
-     // logger object derived from the base logger class
-     logger         log.Logger
-     // component using the adaptive logger
-     component      component.StoreAPI
-     reg            prometheus.Registerer
-     // Map of different policy of queries that would be logged when a certain criteria is reached
-     mapQueries     map[string]prometheus.Counter
-     // Request - ID (Same as tracer-id)
-     requestId      string
-
-}
+// The decider logic would be implemented in the grpc-middleware itself
 ```
 
 * Along with audit logging, we are looking to implement the Adaptive Logging at the **StoreAPI** level.
@@ -150,7 +165,39 @@ type AdaptiveLogging struct {
 * We can achieve **Global overview** of the logs, due to the StoreAPI being interconnected with the other components.
 * We can maintain map of **Prometheus metrics** corresponding to each of the queries, so we can get the total number of latency queries and 404 queries as a Prometheus metric, that are logged in adaptive logging
 
-#### Use case 3: Active Query Logging
+#### Use case 3:
+#### Common Use case to all
+* **Tracking queries across different components**
+The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
+
+* **Implementation**
+
+  * Since **Thanos** has a solid tracing infrastructure in place, we can **re-use the tracing-id** for a given request, and thus we can track the request across the different components.
+
+  * In case tracing is disabled, we can use our implementation of generating a request-id on the fly for a given request.
+
+### Alternatives
+
+#### Use Active Queries in StoreAPI
+
+This is not possible due to the **distributed nature** of Thanos. It has a lot of moving parts, and with the current implementation of *ActiveQueryLogging*, it is best used as a local logger for each component.
+
+#### Integrating the Query Logging with the current logging
+
+The current logger is a bit different from the other loggers described above. These three loggers are aimed at providing debugging/insights about the queries made, and it makes sense to separate the logic of the usual logger with the above ones.
+
+#### Don't add anything
+
+This proposal adds in a new feature for Thanos, so there isn't any alternative until now that would solve our problem.
+
+### Non Goals
+
+* Query logging part would help in debugging the internal requests made.
+* This provides ample of insights about possible bottle-neck of individual components of Thanos.
+* Active Query Logging -
+
+_Currently, the implementation of Active Query Logging seems flaky, as it is quite difficult to achieve a consistent logging of active queries after a forced shutdown. Considering the probability of logs correctly getting logged, the cons of the logging outweighs the pros, and hence would be sensible to discuss the implementation after the initial goals are achieved._
+
 
 As the name suggests, this logger logs all the current active logs that are running in a component. This type of logging is aimed at providing logs of the active queries that are running currently in an component. This logger would be **local** **to each component**, and would run as a **standalone for each component** in contrast to the other two loggers. This logger would help in debugging queries which led to the component instanced *OOM* killed, or helping in tracking queries which are taking too long. The purpose of this logger can clash with the above two, but this logger is solely focused on providing active queries that are running, much like Prometheus does.
 
@@ -182,31 +229,6 @@ Here is a rough algorithm that would implement the Query Logging in Thanos -
 
 This algorithm has been heavily derived from this pull request[[3]](https://github.com/prometheus/prometheus/pull/5794) and would suggest referring this for the implementation of the same.
 
-#### Common Use case to all
-* **Tracking queries across different components**
-The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
-
-* **Implementation**
-Since **Thanos** has a solid tracing infrastructure in place, we can **re-use the tracing-id** for a given request, and thus we can track the request across the different components.
-
-### Alternatives
-
-#### Use Active Queries in StoreAPI
-
-This is not possible due to the **distributed nature** of Thanos. It has a lot of moving parts, and with the current implementation of *ActiveQueryLogging*, it is best used as a local logger for each component.
-
-#### Integrating the Query Logging with the current logging
-
-The current logger is a bit different from the other loggers described above. These three loggers are aimed at providing debugging/insights about the queries made, and it makes sense to separate the logic of the usual logger with the above ones.
-
-#### Don't add anything
-
-This proposal adds in a new feature for Thanos, so there isn't any alternative until now that would solve our problem.
-
-### Non Goals
-
-* Query logging part would help in debugging the internal requests made.
-* This provides ample of insights about possible bottle-neck of individual components of Thanos.
 
 ## Work Plan
 
