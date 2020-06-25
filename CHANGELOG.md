@@ -36,6 +36,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2671](https://github.com/thanos-io/thanos/pull/2671) Tools: bucket replicate now allows passing repeated `--compaction` and `--resolution` flags.
 - [#2657](https://github.com/thanos-io/thanos/pull/2657) Querier: Now, has the ability to perform concurrent select request per query.
+- [#2754](https://github.com/thanos-io/thanos/pull/2671) UI: add stores page in the React UI.
 
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases/tag/v0.13.0) - 2020.06.22
 
