@@ -67,7 +67,7 @@ func (e *stringifiedError) Error() string {
 type StoreStatus struct {
 	Name      string             `json:"name"`
 	LastCheck time.Time          `json:"lastCheck"`
-	LastError stringifiedError   `json:"lastError"`
+	LastError *stringifiedError  `json:"lastError"`
 	LabelSets []storepb.LabelSet `json:"labelSets"`
 	StoreType component.StoreAPI `json:"-"`
 	MinTime   int64              `json:"minTime"`
@@ -527,7 +527,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = stringifiedError{originalErr: err}
+	status.LastError = &stringifiedError{originalErr: err}
 
 	if err == nil {
 		status.LastCheck = time.Now()
