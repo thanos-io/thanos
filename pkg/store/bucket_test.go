@@ -52,7 +52,6 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	"gopkg.in/yaml.v2"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
