@@ -1319,11 +1319,15 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	}
 	defer runutil.CloseWithLogOnErr(b.logger, r, "readIndexRange close range reader")
 
-	c, err := ioutil.ReadAll(r)
-	if err != nil {
+	// Preallocate the buffer with the exact size so we don't waste allocations
+	// while progressively growing an initial small buffer. The buffer capacity
+	// is increased by MinRead to avoid extra allocations due to how ReadFrom()
+	// internally works.
+	buf := bytes.NewBuffer(make([]byte, 0, length+bytes.MinRead))
+	if _, err := buf.ReadFrom(r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return c, nil
+	return buf.Bytes(), nil
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {

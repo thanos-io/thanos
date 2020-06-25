@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2705](https://github.com/thanos-io/thanos/pull/2705) minio-go: Added support for `af-south-1` and `eu-south-1` regions.
 - [#2728](https://github.com/thanos-io/thanos/pull/2728) Query: Fixed panics when using larger number of replica labels with short series label sets.
 - [#2787](https://github.com/thanos-io/thanos/pull/2787) Update Prometheus mod to pull in prometheus/prometheus#7414.
+- [#2807](https://github.com/thanos-io/thanos/pull/2807) Store: decreased memory allocations while querying block's index.
 
 ### Changed
 
