@@ -143,8 +143,8 @@ func runCompact(
 
 	srv := httpserver.New(logger, reg, component, "/",
 		httpProbe,
-		httpserver.WithListen(httpBindAddr),
-		httpserver.WithGracePeriod(httpGracePeriod),
+		httpserver.WithListen(conf.http.bindAddress),
+		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 	)
 
 	g.Add(func() error {
