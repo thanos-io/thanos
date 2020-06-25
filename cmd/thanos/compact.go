@@ -357,6 +357,7 @@ func runCompact(
 				if conf.haltOnError {
 					level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
 					halted.Set(1)
+					httpProbe.NotHealthy(fmt.Errorf("critical error detected; halting: %v", err))
 					select {}
 				} else {
 					return errors.Wrap(err, "critical error detected")
