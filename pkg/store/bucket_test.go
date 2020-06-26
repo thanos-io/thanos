@@ -1933,7 +1933,7 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	}
 
 	p := newBigEndianPostings(raw)
-	testutil.Equals(t, count, p.count())
+	testutil.Equals(t, count, p.length())
 
 	c := 0
 	for p.Next() {

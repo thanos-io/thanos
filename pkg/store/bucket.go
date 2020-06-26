@@ -1706,7 +1706,7 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 					compressions++
 					s := time.Now()
 					bep := newBigEndianPostings(pBytes[4:])
-					data, err := diffVarintSnappyEncode(bep, bep.count())
+					data, err := diffVarintSnappyEncode(bep, bep.length())
 					compressionTime = time.Since(s)
 					if err == nil {
 						dataToCache = data
@@ -1805,7 +1805,7 @@ func (it *bigEndianPostings) Err() error {
 }
 
 // Returns number of remaining postings values.
-func (it *bigEndianPostings) count() int {
+func (it *bigEndianPostings) length() int {
 	return len(it.list) / 4
 }
 
