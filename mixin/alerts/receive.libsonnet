@@ -104,7 +104,11 @@
             annotations: {
               message: 'Thanos Receive {{$labels.job}} has not uploaded latest data to object storage.',
             },
-            expr: 'increase(thanos_shipper_uploads_total{%(selector)s}[2h]) == 0' % thanos.receive,
+            expr: |||
+              (up{%(selector)s} - 1)
+              + on (instance) # filters to only alert on current instance last 2h
+              sum by (instance) (increase(thanos_shipper_uploads_total{%(selector)s}[2h]) == 0)
+            ||| % thanos.receive,
             'for': '2h',
             labels: {
               severity: 'critical',
