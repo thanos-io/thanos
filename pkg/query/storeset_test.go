@@ -795,9 +795,9 @@ func (e *weirdError) Error() string {
 	return e.originalErr.Error()
 }
 
-func TestStringifiedError(t *testing.T) {
+func TestStringError(t *testing.T) {
 	weirdError := &weirdError{originalErr: errors.New("test")}
-	properErr := &stringifiedError{originalErr: weirdError}
+	properErr := &stringError{originalErr: weirdError}
 	storestatusMock := map[string]error{}
 	storestatusMock["weird"] = weirdError
 	storestatusMock["proper"] = properErr

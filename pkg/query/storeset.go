@@ -48,26 +48,26 @@ type RuleSpec interface {
 	Addr() string
 }
 
-// stringifiedError forces the error to be a string
+// stringError forces the error to be a string
 // when marshalled into a JSON.
-type stringifiedError struct {
+type stringError struct {
 	originalErr error
 }
 
 // MarshalJSON marshals the error into a string form.
-func (e *stringifiedError) MarshalJSON() ([]byte, error) {
+func (e *stringError) MarshalJSON() ([]byte, error) {
 	return json.Marshal(e.originalErr.Error())
 }
 
 // Error returns the original underlying error.
-func (e *stringifiedError) Error() string {
+func (e *stringError) Error() string {
 	return e.originalErr.Error()
 }
 
 type StoreStatus struct {
 	Name      string             `json:"name"`
 	LastCheck time.Time          `json:"lastCheck"`
-	LastError *stringifiedError  `json:"lastError"`
+	LastError *stringError       `json:"lastError"`
 	LabelSets []storepb.LabelSet `json:"labelSets"`
 	StoreType component.StoreAPI `json:"-"`
 	MinTime   int64              `json:"minTime"`
@@ -527,7 +527,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = &stringifiedError{originalErr: err}
+	status.LastError = &stringError{originalErr: err}
 
 	if err == nil {
 		status.LastCheck = time.Now()
