@@ -33,9 +33,9 @@ func isDiffVarintSnappyEncodedPostings(input []byte) bool {
 // diffVarintSnappyEncode encodes postings into diff+varint representation,
 // and applies snappy compression on the result.
 // Returned byte slice starts with codecHeaderSnappy header.
-// Values argument is expected number of postings, used for preallocating buffer.
-func diffVarintSnappyEncode(p index.Postings, values int) ([]byte, error) {
-	buf, err := diffVarintEncodeNoHeader(p, values)
+// Length argument is expected number of postings, used for preallocating buffer.
+func diffVarintSnappyEncode(p index.Postings, length int) ([]byte, error) {
+	buf, err := diffVarintEncodeNoHeader(p, length)
 	if err != nil {
 		return nil, err
 	}
@@ -53,14 +53,14 @@ func diffVarintSnappyEncode(p index.Postings, values int) ([]byte, error) {
 
 // diffVarintEncodeNoHeader encodes postings into diff+varint representation.
 // It doesn't add any header to the output bytes.
-// Values argument is expected number of postings, used for preallocating buffer.
-func diffVarintEncodeNoHeader(p index.Postings, values int) ([]byte, error) {
+// Length argument is expected number of postings, used for preallocating buffer.
+func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	buf := encoding.Encbuf{}
 
 	// This encoding uses around ~1 bytes per posting, but let's use
 	// conservative 1.25 bytes per posting to avoid extra allocations.
-	if values > 0 {
-		buf.B = make([]byte, 0, 5*values/4)
+	if length > 0 {
+		buf.B = make([]byte, 0, 5*length/4)
 	}
 
 	prev := uint64(0)
