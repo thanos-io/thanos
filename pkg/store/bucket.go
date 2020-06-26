@@ -1705,7 +1705,8 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 					// Errors from corrupted postings will be reported when postings are used.
 					compressions++
 					s := time.Now()
-					data, err := diffVarintSnappyEncode(newBigEndianPostings(pBytes[4:]))
+					bep := newBigEndianPostings(pBytes[4:])
+					data, err := diffVarintSnappyEncode(bep, bep.count())
 					compressionTime = time.Since(s)
 					if err == nil {
 						dataToCache = data
@@ -1801,6 +1802,11 @@ func (it *bigEndianPostings) Seek(x uint64) bool {
 
 func (it *bigEndianPostings) Err() error {
 	return nil
+}
+
+// Returns number of remaining postings values.
+func (it *bigEndianPostings) count() int {
+	return len(it.list) / 4
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
