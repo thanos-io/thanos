@@ -33,7 +33,7 @@ Many users (mostly developers) often want to look through the docs of previous r
 
 #### User Story (Previous release)
 
-* As a Thanos developer, I want to be able to fix docs for certain previous release.
+* As a Thanos developer, I want to be able to fix docs for an individual previous release.
 * As a Thanos user, I want to be able to read docs for older versions of Thanos.
 
 #### Use Case
