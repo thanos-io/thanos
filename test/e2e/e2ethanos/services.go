@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -167,7 +168,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewReadinessProbe(8080, path.Join("/", routePrefix, "/-/ready"), 200),
 		8080,
 		9091,
 	)
