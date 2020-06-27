@@ -31,7 +31,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
           <Status path="/status" pathPrefix={pathPrefix} />
           <TSDBStatus path="/tsdb-status" pathPrefix={pathPrefix} />
           <Targets path="/targets" pathPrefix={pathPrefix} />
-          <Stores path="/stores" />
+          <Stores path="/stores" pathPrefix={pathPrefix} />
         </Router>
       </Container>
     </ErrorBoundary>
