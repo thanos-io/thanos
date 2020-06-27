@@ -314,7 +314,8 @@ Flags:
                                  returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
-                                 thanos UI to be served on a sub-path. This
+                                 thanos UI to be served on a sub-path. Defaults
+                                 to the value of --web.external-prefix. This
                                  option is analogous to --web.route-prefix of
                                  Promethus.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
