@@ -6,6 +6,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -575,8 +576,8 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		dir,
 		noopCache{},
+		nil,
 		2e5,
-		0,
 		0,
 		false,
 		20,
@@ -825,9 +826,9 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				metaFetcher,
 				dir,
 				noopCache{},
+				nil,
 				0,
 				0,
-				99,
 				false,
 				20,
 				allowAllFilterConf,
@@ -1776,9 +1777,9 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		fetcher,
 		tmpDir,
 		indexCache,
+		nil,
 		1000000,
 		10000,
-		10,
 		false,
 		10,
 		nil,
@@ -1885,9 +1886,9 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		fetcher,
 		tmpDir,
 		indexCache,
+		nil,
 		1000000,
 		10000,
-		10,
 		false,
 		10,
 		nil,
@@ -1921,4 +1922,22 @@ func mustMarshalAny(pb proto.Message) *types.Any {
 		panic(err)
 	}
 	return out
+}
+
+func TestBigEndianPostingsCount(t *testing.T) {
+	const count = 1000
+	raw := make([]byte, count*4)
+
+	for ix := 0; ix < count; ix++ {
+		binary.BigEndian.PutUint32(raw[4*ix:], rand.Uint32())
+	}
+
+	p := newBigEndianPostings(raw)
+	testutil.Equals(t, count, p.length())
+
+	c := 0
+	for p.Next() {
+		c++
+	}
+	testutil.Equals(t, count, c)
 }

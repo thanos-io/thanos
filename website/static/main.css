@@ -155,4 +155,12 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
         top: 0px;
         left: 1%;
     }
+
+    /* navbar toggle icon */
+    .fa-bars{
+        display: inline-block;
+        height: 1em;
+        vertical-align: middle;
+        width: 1em;
+    }
 }

@@ -5,7 +5,10 @@ package store
 
 import (
 	"io/ioutil"
+	"math"
+	"math/rand"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -49,7 +52,7 @@ func TestDiffVarintCodec(t *testing.T) {
 	}
 
 	codecs := map[string]struct {
-		codingFunction   func(index.Postings) ([]byte, error)
+		codingFunction   func(index.Postings, int) ([]byte, error)
 		decodingFunction func([]byte) (index.Postings, error)
 	}{
 		"raw":    {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (index.Postings, error) { return newDiffVarintPostings(bytes), nil }},
@@ -68,11 +71,11 @@ func TestDiffVarintCodec(t *testing.T) {
 				t.Log("original size (4*entries):", 4*p.len(), "bytes")
 				p.reset() // We reuse postings between runs, so we need to reset iterator.
 
-				data, err := codec.codingFunction(p)
+				data, err := codec.codingFunction(p, p.len())
 				testutil.Ok(t, err)
 
 				t.Log("encoded size", len(data), "bytes")
-				t.Logf("ratio: %0.3f", (float64(len(data)) / float64(4*p.len())))
+				t.Logf("ratio: %0.3f", float64(len(data))/float64(4*p.len()))
 
 				decodedPostings, err := codec.decodingFunction(data)
 				testutil.Ok(t, err)
@@ -187,4 +190,32 @@ func (p *uint64Postings) reset() {
 
 func (p *uint64Postings) len() int {
 	return len(p.vals)
+}
+
+func BenchmarkEncodePostings(b *testing.B) {
+	const max = 1000000
+	r := rand.New(rand.NewSource(0))
+
+	p := make([]uint64, max)
+
+	for ix := 1; ix < len(p); ix++ {
+		// Use normal distribution, with stddev=64 (i.e. most values are < 64).
+		// This is very rough approximation of experiments with real blocks.v
+		d := math.Abs(r.NormFloat64()*64) + 1
+
+		p[ix] = p[ix-1] + uint64(d)
+	}
+
+	for _, count := range []int{10000, 100000, 1000000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				ps := &uint64Postings{vals: p[:count]}
+
+				_, err := diffVarintEncodeNoHeader(ps, ps.len())
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }

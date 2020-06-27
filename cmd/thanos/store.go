@@ -15,6 +15,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -22,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -276,6 +278,17 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
+	// Limit the concurrency on queries against the Thanos store.
+	if maxConcurrency < 0 {
+		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrency)
+	}
+
+	queriesGate := gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg)).NewGate(maxConcurrency)
+	promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_bucket_store_queries_concurrent_max",
+		Help: "Number of maximum concurrent queries.",
+	}).Set(float64(maxConcurrency))
+
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -283,9 +296,9 @@ func runStore(
 		metaFetcher,
 		dataDir,
 		indexCache,
+		queriesGate,
 		chunkPoolSizeBytes,
 		maxSampleCount,
-		maxConcurrency,
 		verbose,
 		blockSyncConcurrency,
 		filterConf,

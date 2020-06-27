@@ -118,6 +118,7 @@ type API struct {
 	enableQueryPartialResponse bool
 	enableRulePartialResponse  bool
 	replicaLabels              []string
+	flagsMap                   map[string]string
 
 	storeSet                               *query.StoreSet
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -137,6 +138,7 @@ func NewAPI(
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
 	replicaLabels []string,
+	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	maxConcurrentQueries int,
 ) *API {
@@ -152,6 +154,7 @@ func NewAPI(
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
 		replicaLabels:                          replicaLabels,
+		flagsMap:                               flagsMap,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
@@ -190,6 +193,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 
 	r.Get("/labels", instr("label_names", api.labelNames))
 	r.Post("/labels", instr("label_names", api.labelNames))
+
+	r.Get("/status/flags", instr("status_flags", api.flags))
 
 	r.Get("/stores", instr("stores", api.stores))
 
@@ -672,6 +677,10 @@ func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
 	}
 	return statuses, nil, nil
+}
+
+func (api *API) flags(r *http.Request) (interface{}, []error, *ApiError) {
+	return api.flagsMap, nil, nil
 }
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules

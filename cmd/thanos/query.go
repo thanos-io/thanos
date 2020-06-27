@@ -149,6 +149,19 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
 
+		flagsMap := map[string]string{}
+
+		// Exclude kingpin default flags to expose only Thanos ones.
+		boilerplateFlags := kingpin.New("", "").Version("")
+
+		for _, f := range cmd.Model().Flags {
+			if boilerplateFlags.GetFlag(f.Name) != nil {
+				continue
+			}
+
+			flagsMap[f.Name] = f.Value.String()
+		}
+
 		return runQuery(
 			g,
 			logger,
@@ -175,6 +188,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
 			selectorLset,
+			flagsMap,
 			*stores,
 			*ruleEndpoints,
 			*enableAutodownsampling,
@@ -219,6 +233,7 @@ func runQuery(
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
+	flagsMap map[string]string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	enableAutodownsampling bool,
@@ -413,6 +428,7 @@ func runQuery(
 			enableQueryPartialResponse,
 			enableRulePartialResponse,
 			queryReplicaLabels,
+			flagsMap,
 			instantDefaultMaxSourceResolution,
 			maxConcurrentQueries,
 		)
