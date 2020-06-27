@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -274,11 +275,16 @@ func (q *QuerierBuilder) Initiate(service e2e.InstrumentedRunnableBuilder, store
 		return nil, err
 	}
 
+	// Query defaults to using --web.external-prefix when --web.route-prefix is not set.
+	if q.routePrefix == "" {
+		q.routePrefix = q.externalPrefix
+	}
+
 	querier := initiateService(
 		service,
 		q.image,
 		e2e.NewCommand("query", args...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", path.Join("/", q.routePrefix, "/-/ready"), 200, 200),
 	)
 
 	return querier, nil
@@ -290,12 +296,17 @@ func (q *QuerierBuilder) Build() (e2e.InstrumentedRunnable, error) {
 		return nil, err
 	}
 
+	// Query defaults to using --web.external-prefix when --web.route-prefix is not set.
+	if q.routePrefix == "" {
+		q.routePrefix = q.externalPrefix
+	}
+
 	querier := NewService(
 		q.environment,
 		fmt.Sprintf("querier-%v", q.name),
 		q.image,
 		e2e.NewCommand("query", args...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", path.Join("/", q.routePrefix, "/-/ready"), 200, 200),
 		8080,
 		9091,
 	)

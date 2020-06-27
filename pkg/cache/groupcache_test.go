@@ -48,10 +48,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	httpServer := httpserver.New(log.NewNopLogger(), nil, component.Bucket, &prober.HTTPProbe{},
+	httpServer := httpserver.New(log.NewNopLogger(), nil, component.Bucket, "/", &prober.HTTPProbe{},
 		httpserver.WithListen("0.0.0.0:12345"))
 	httpServer.Handle("/", router)
-	httpServerH2C := httpserver.New(log.NewNopLogger(), nil, component.Bucket, &prober.HTTPProbe{},
+	httpServerH2C := httpserver.New(log.NewNopLogger(), nil, component.Bucket, "/", &prober.HTTPProbe{},
 		httpserver.WithListen("0.0.0.0:12346"), httpserver.WithEnableH2C(true))
 	httpServerH2C.Handle("/", router)
 
