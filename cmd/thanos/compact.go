@@ -400,7 +400,7 @@ func runCompact(
 			iterCancel()
 
 			// For /global state make sure to fetch periodically.
-			return runutil.Repeat(time.Minute, ctx.Done(), func() error {
+			return runutil.Repeat(conf.blockViewerSyncBlockInterval, ctx.Done(), func() error {
 				return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
 					iterCtx, iterCancel := context.WithTimeout(ctx, conf.waitInterval)
 					defer iterCancel()
@@ -435,6 +435,7 @@ type compactConfig struct {
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
 	blockSyncConcurrency                           int
+	blockViewerSyncBlockInterval                   time.Duration
 	compactionConcurrency                          int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
@@ -482,6 +483,8 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&cc.blockSyncConcurrency)
+	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
+		Default("1m").DurationVar(&cc.blockViewerSyncBlockInterval)
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)

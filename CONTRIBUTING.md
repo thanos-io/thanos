@@ -4,23 +4,6 @@ This document explain the process of contributing to the Thanos project.
 
 First of all please follow the [CODE_OF_CONDUCT](https://github.com/thanos-io/thanos/blob/master/CODE_OF_CONDUCT.md) in all your interactions with the project.
 
-## TOC
-
-- [Contributing](#contributing)
-  * [TOC](#toc)
-  * [Thanos Philosophy](#thanos-philosophy)
-  * [Feedback / Issues](#feedback---issues)
-  * [Adding New Features / Components](#adding-new-features---components)
-  * [Components Naming](#components-naming)
-  * [Development](#development)
-    + [Prerequisites](#prerequisites)
-    + [First steps](#first-steps)
-    + [Pull Request Process](#pull-request-process)
-    + [Dependency management](#dependency-management)
-    + [Advanced testing](#advanced-testing)
-
-<small><i>Table of contents generated with <a href='http://ecotrust-canada.github.io/markdown-toc/'>markdown-toc</a></i></small>
-
 ## Thanos Philosophy
 
 The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.

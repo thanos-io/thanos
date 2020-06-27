@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2705](https://github.com/thanos-io/thanos/pull/2705) minio-go: Added support for `af-south-1` and `eu-south-1` regions.
 - [#2728](https://github.com/thanos-io/thanos/pull/2728) Query: Fixed panics when using larger number of replica labels with short series label sets.
 - [#2787](https://github.com/thanos-io/thanos/pull/2787) Update Prometheus mod to pull in prometheus/prometheus#7414.
+- [#2807](https://github.com/thanos-io/thanos/pull/2807) Store: decreased memory allocations while querying block's index.
 
 ### Changed
 
@@ -36,6 +37,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2671](https://github.com/thanos-io/thanos/pull/2671) Tools: bucket replicate now allows passing repeated `--compaction` and `--resolution` flags.
 - [#2657](https://github.com/thanos-io/thanos/pull/2657) Querier: Now, has the ability to perform concurrent select request per query.
+- [#2754](https://github.com/thanos-io/thanos/pull/2671) UI: add stores page in the React UI.
+- [#2752](https://github.com/thanos-io/thanos/pull/2752) Compact: add flag `--block-viewer.global.sync-block-interval` to configure metadata sync interval for the bucket UI.
 
 ## [v0.13.0](https://github.com/thanos-io/thanos/releases/tag/v0.13.0) - 2020.06.22
 

@@ -34,6 +34,7 @@ var (
 		"/targets",
 		"/tsdb-status",
 		"/version",
+		"/stores",
 	}
 )
 
