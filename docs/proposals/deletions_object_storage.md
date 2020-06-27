@@ -1,25 +1,19 @@
-# Delete series for object storage
+---
+title: Delete series for object storage
+type: proposal
+menu: proposals
+status: draft
+owner: bwplotka, Harshitha1234, metalmatze
+--- 
 
-**Date:**	&lt;2020-06-17>
+### Ticket: https://github.com/thanos-io/thanos/issues/1598
 
-**Type:**   Proposal
-
-**Menu:**   Proposals
-
-**Status:** Draft
-
-**Authors:** 	&lt;Harshitha Chowdary Thota, Matthias Loibl, Bartek Plotka>
-
-**Tickets:**
-1. [https://github.com/thanos-io/thanos/issues/1598](https://github.com/thanos-io/thanos/issues/1598) (main)
-2. [https://github.com/thanos-io/thanos/issues/903](https://github.com/thanos-io/thanos/issues/903)
-
-# Summary
+## Summary
 
 This design document proposes deletion of series for object storage in Thanos. This feature mainly causes changes in the Compactor and Store components and the object storage itself where the changes are expected to be reflected.
 
 
-# Motivation
+## Motivation
 
 The main motivation for considering deletions in the object storage are the following use cases
 
@@ -41,23 +35,25 @@ The main motivation for considering deletions in the object storage are the foll
 *   Performing all the above operations at admin level.
 
 
-# Proposed Approach
+## Proposed Approach
 
 
 
 *   We propose to implement deletions using the tombstones approach.
 *   A user is expected to enter the following details for performing deletions:
-    *   **external labels**
+    *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
     *   **maximum waiting duration for performing deletions** where a default value is considered if explicitly not specified by the user. (only after this time passes the deletions are performed by the compactor in the next compaction cycle)
-*   The details are entered via a deletions API (good to have a web UI interface) and they are processed by the compactor to create a tombstone file, if there’s a match for the details entered. Afterwards the tombstone file is uploaded to object storage making it accessible to other components.
+*   The details are entered via a deletions API and they are processed by the compactor to create a tombstone file, if there’s a match for the details entered. Afterwards the tombstone file is uploaded to object storage making it accessible to other components.
+*   **Why Compactor**? : The compactor is one of the very few components (next to Sidecar, Receiver, Ruler) that has write capabilities to object storage. At the same time it is only ever running once per object storage, so that we have a single writer to the deletion tombstones.
 *   If the data with the requested details couldn’t be found in the storage an error message is returned back as a response to the request.
 *   Store Gateway masks the series on processing the tombstones from the object storage.
 *   **Perspectives to deal with Downsampling of blocks having tombstones:**
     *   **Block with tombstones and max duration to perform deletes passed:** The compactor should first check the maximum duration to perform deletions for that block and if the proposed maxtime passed the deletions are first performed and then the downsampling occurs.
     *   **Block with tombstones and max duration still hasn’t passed:** Perform compaction.
-    *   **Performing deletes on already compacted blocks:** Have a threshold to perform deletions on the compacted blocks (Prometheus has 5%)
+    *   **Block with deletion-mark.json i.e., entire block marked for deletion:** Returns an error message as the entire block is going to be deleted.
+    *   **Performing deletes on already compacted blocks:** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.)
 *   For undoing deletions of a time series there are two proposed ways
     *   API to undelete a time series - maybe delete the whole tombstones file?
     *   “Imaginary” deletion that can delete other tombstones 
@@ -66,7 +62,7 @@ Considerations :
 
 
 
-*   Tombstones should be append only, so that we can solve these during compaction.
+*   Tombstones should be append only, so that we can solve tombstones and rewrite the blocks by performing changes. The old block and the tombstones are deleted during compaction.
 *   We don’t want to add this feature to the sidecar. The sidecar is expected to be kept lightweight.
 
 
@@ -74,7 +70,8 @@ Considerations :
 
 
 
-1. External tool operating to perform deletions on the object storage.(Details still to be discussed)
+1. A new component with write permission to the object storage, which creates the tombstones and exposes the deletions API. And the actual deletions are still performed by the compactor. 
+**Advantages:** As the component has the write permission, it can perform immediate deletions.
 
 
 ## Action Plan
@@ -83,4 +80,3 @@ Considerations :
 
 *   Add the deletion API (probably compactor) that only creates tombstones
 *   Store Gateway should be able to mask based on the tombstones from object storage
-*   A web UI for the deletion API?
