@@ -167,25 +167,27 @@ func TestQuery(t *testing.T) {
 	})
 }
 
-func TestQueryRoutePrefix(t *testing.T) {
+func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
+	externalPrefix := "test"
+
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
 		nil,
 		nil,
 		nil,
-		"test",
 		"",
+		externalPrefix,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	checkNetworkRequests(t, "http://"+q.HTTPEndpoint()+"/test/graph")
+	checkNetworkRequests(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix+"/graph")
 }
 
 func TestQueryExternalPrefix(t *testing.T) {
@@ -208,7 +210,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	querierURL := urlParse(t, "http://"+q.HTTPEndpoint())
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 
