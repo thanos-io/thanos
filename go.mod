@@ -34,7 +34,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
-	github.com/googleapis/gnostic v0.4.2 // indirect
 	github.com/gophercloud/gophercloud v0.12.0
 	github.com/gorilla/mux v1.7.4 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
@@ -104,6 +103,8 @@ require (
 )
 
 replace (
+	// googleapis/gnostic messed up and released a patch release with module names which have been lowercased.
+	github.com/googleapis/gnostic v0.4.2 => github.com/googleapis/gnostic v0.4.0
 	// Make sure Cortex is not forcing us to some other Prometheus version.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200629082805-315564210816
 	// We need to stay on 0.x.y according to https://github.com/kubernetes/client-go/#client-go
