@@ -6,8 +6,10 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
-	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
+	github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible
 	github.com/armon/go-metrics v0.3.3
+	github.com/aws/aws-sdk-go v1.31.15 // indirect
+	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
@@ -17,28 +19,39 @@ require (
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
 	github.com/fortytw2/leaktest v1.3.0
-	github.com/fsnotify/fsnotify v1.4.7
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-kit/kit v0.10.0
+	github.com/go-openapi/runtime v0.19.19 // indirect
 	github.com/go-openapi/strfmt v0.19.5
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.0.3
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/snappy v0.0.1
+	github.com/google/go-cmp v0.4.1 // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible
+	github.com/googleapis/gnostic v0.4.2 // indirect
 	github.com/gophercloud/gophercloud v0.11.0
+	github.com/gorilla/mux v1.7.4 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru v0.5.4
+	github.com/hashicorp/serf v0.9.2 // indirect
+	github.com/json-iterator/go v1.1.10 // indirect
+	github.com/klauspost/cpuid v1.2.5 // indirect
+	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/leanovate/gopter v0.2.4
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
+	github.com/mattn/go-colorable v0.1.7 // indirect
+	github.com/mattn/go-ieproxy v0.0.1 // indirect
+	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/miekg/dns v1.1.29
-	github.com/minio/minio-go/v6 v6.0.56
+	github.com/minio/minio-go/v6 v6.0.57
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
 	github.com/oklog/ulid v1.3.1
-	github.com/olekukonko/tablewriter v0.0.2
+	github.com/olekukonko/tablewriter v0.0.4
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.1.1-0.20200124165624-2876d2018785
 	github.com/pkg/errors v0.9.1
@@ -53,18 +66,21 @@ require (
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
+	go.opencensus.io v0.22.4 // indirect
 	go.uber.org/automaxprocs v1.2.0
 	golang.org/x/crypto v0.0.0-20200422194213-44a606286825
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
-	golang.org/x/text v0.3.2
+	golang.org/x/text v0.3.3
 	google.golang.org/api v0.26.0
 	google.golang.org/genproto v0.0.0-20200603110839-e855014d5736
 	google.golang.org/grpc v1.29.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
+	gopkg.in/ini.v1 v1.51.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
-	gopkg.in/yaml.v3 v3.0.0-20200603094226-e3079894b1e8
+	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
+	k8s.io/client-go v0.18.5 // indirect
 )
 
 // We want to replace the client-go version with a specific commit hash,
