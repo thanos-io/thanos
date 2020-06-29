@@ -70,7 +70,6 @@ func NewMultiTSDB(
 
 type tenant struct {
 	readyS    *ReadyStorage
-	tsdb      *tsdb.DB
 	storeTSDB *store.TSDBStore
 	ship      *shipper.Shipper
 
@@ -100,16 +99,9 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) db() *tsdb.DB {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	return t.tsdb
-}
-
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
-	t.tsdb = tenantTSDB
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.mtx.Unlock()
@@ -148,17 +140,17 @@ func (t *MultiTSDB) Flush() error {
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
-	for _, tenant := range t.tenants {
-		db := tenant.db()
+	for id, tenant := range t.tenants {
+		db := tenant.readyStorage().Get()
 		if db == nil {
+			level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id)
 			continue
 		}
-
+		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Add(1)
 		go func() {
 			head := db.Head()
-			mint, maxt := head.MinTime(), head.MaxTime()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, mint, maxt-1)); err != nil {
+			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1)); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -171,7 +163,28 @@ func (t *MultiTSDB) Flush() error {
 	return merr.Err()
 }
 
+func (t *MultiTSDB) Close() error {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	merr := terrors.MultiError{}
+	for id, tenant := range t.tenants {
+		db := tenant.readyStorage().Get()
+		if db == nil {
+			level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id)
+			continue
+		}
+		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
+		merr.Add(db.Close())
+	}
+	return merr.Err()
+}
+
 func (t *MultiTSDB) Sync(ctx context.Context) error {
+	if t.bucket == nil {
+		return errors.New("bucket is not specified, Sync should not be invoked")
+	}
+
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -184,7 +197,6 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 		if s == nil {
 			continue
 		}
-
 		wg.Add(1)
 		go func() {
 			if uploaded, err := s.Sync(ctx); err != nil {
@@ -195,7 +207,6 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 			wg.Done()
 		}()
 	}
-
 	wg.Wait()
 	return merr.Err()
 }
@@ -219,6 +230,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
 	dataDir := path.Join(t.dataDir, tenantID)
 
+	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
 	s, err := tsdb.Open(
 		dataDir,
@@ -232,7 +244,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		t.mtx.Unlock()
 		return err
 	}
-
 	var ship *shipper.Shipper
 	if t.bucket != nil {
 		ship = shipper.New(
@@ -245,16 +256,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.allowOutOfOrderUpload,
 		)
 	}
-	tenant.set(store.NewTSDBStore(
-		logger,
-		reg,
-		s,
-		component.Receive,
-		lbls,
-	), s, ship)
-
+	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lbls), s, ship)
+	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
+
 func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
 	// Fast path, as creating tenants is a very rare operation.
 	t.mtx.RLock()
