@@ -219,7 +219,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	minStart := int64(math.MaxInt64)
 	maxEnd := int64(math.MinInt64)
 	for il, lname := range expLabelNames {
-		expectedLabelVals, err := indexReader.LabelValues(lname)
+		expectedLabelVals, err := indexReader.SortedLabelValues(lname)
 		testutil.Ok(t, err)
 
 		vals, err := headerReader.LabelValues(lname)
