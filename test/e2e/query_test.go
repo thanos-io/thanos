@@ -213,6 +213,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
 
 	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
 }
@@ -241,6 +242,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
 
 	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
 }
