@@ -1,7 +1,14 @@
-# In progress
+[Thanos](thanos.io) is a set of components that can be composed into a highly available metric system with unlimited storage capacity. It can be added seamlessly on top of existing Prometheus deployments.
 
-🚧 This tutorial is in progress. 🚧
+Thanos allows users to aggregate Prometheus data natively by directly querying the Prometheus API, efficiently compact it, and most importantly, de-duplicate data.
 
-Do you want to see this soon or you want to help us?
+Thanos will work in cloud native environments like Kubernetes as well as more traditional ones. However, this course uses docker containers which will allow us to use pre-built docker images.
 
-Let us know on https://github.com/thanos-io/thanos or #thanos slack channel linked on https://thanos.io
+In this tutorial, you will learn about :
+
+* Thanos Store Gateway : a metric browser that translate blocks into StoreAPI gRPC API.
+* Querying multiple Prometheus instances from single Prometheus API endpoint.
+
+Let's jump in! 🤓
+
+https://thanos.io
