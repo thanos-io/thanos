@@ -11,6 +11,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+* [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: fix issue with missing Content-Type HTTP headers.
+
+### Changed
+
 ## [v0.14.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 
 ### Fixed
