@@ -96,5 +96,3 @@ Once started you should be able to reach all of those Prometheus instances:
 
 * [Prometheus-0 EU1](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/)
 * [Prometheus-1 US1](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/)
-
-TODO : attach sidecars with config to push to s3 (minio)
