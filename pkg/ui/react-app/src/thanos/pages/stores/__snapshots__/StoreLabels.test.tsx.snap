@@ -1,0 +1,169 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`storeLabels renders discovered labels 1`] = `
+<ListGroup
+  horizontal={false}
+  tag="ul"
+>
+  <ListGroupItem
+    key="0"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_one"
+    </Badge>
+  </ListGroupItem>
+  <ListGroupItem
+    key="1"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_one"
+    </Badge>
+    <Badge
+      color="primary"
+      key="source"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      source="Thanos"
+    </Badge>
+  </ListGroupItem>
+  <ListGroupItem
+    key="2"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_one"
+    </Badge>
+    <Badge
+      color="primary"
+      key="source"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      source="Thanos1"
+    </Badge>
+  </ListGroupItem>
+  <ListGroupItem
+    key="3"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_two"
+    </Badge>
+  </ListGroupItem>
+  <ListGroupItem
+    key="4"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_two"
+    </Badge>
+    <Badge
+      color="primary"
+      key="source"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      source="Thanos"
+    </Badge>
+  </ListGroupItem>
+  <ListGroupItem
+    key="5"
+    tag="li"
+  >
+    <Badge
+      color="primary"
+      key="monitor"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      monitor="prometheus_two"
+    </Badge>
+    <Badge
+      color="primary"
+      key="source"
+      pill={false}
+      style={
+        Object {
+          "margin": "0px 5px",
+        }
+      }
+      tag="span"
+    >
+      source="Thanos2"
+    </Badge>
+  </ListGroupItem>
+</ListGroup>
+`;

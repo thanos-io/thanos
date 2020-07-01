@@ -34,6 +34,7 @@ var (
 		"/targets",
 		"/tsdb-status",
 		"/version",
+		"/stores",
 	}
 )
 
@@ -156,18 +157,24 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix str
 // GetWebPrefix sanitizes an external URL path prefix value.
 // A value provided by web.external-prefix flag is preferred over the one supplied through an HTTP header.
 func GetWebPrefix(logger log.Logger, externalPrefix, prefixHeader string, r *http.Request) string {
+	prefix := r.Header.Get(prefixHeader)
+
 	// Ignore web.prefix-header value if web.external-prefix is defined.
 	if len(externalPrefix) > 0 {
-		return externalPrefix
+		prefix = externalPrefix
 	}
-
-	prefix := r.Header.Get(prefixHeader)
 
 	// Even if rfc2616 suggests that Location header "value consists of a single absolute URI", browsers
 	// support relative location too. So for extra security, scheme and host parts are stripped from a dynamic prefix.
 	prefix, err := SanitizePrefix(prefix)
 	if err != nil {
 		level.Warn(logger).Log("msg", "Could not parse value of UI external prefix", "prefix", prefix, "err", err)
+	}
+
+	// To use relative URLs we need the prefix to have trailing "/" so that we don't have to add the
+	// "/" everywhere in templates.
+	if prefix != "" {
+		prefix = prefix + "/"
 	}
 
 	return prefix
@@ -183,10 +190,7 @@ func SanitizePrefix(prefix string) (string, error) {
 
 	// Remove double slashes, convert to absolute path.
 	sanitizedPrefix := strings.TrimPrefix(path.Clean(u.Path), ".")
-
-	if strings.HasSuffix(sanitizedPrefix, "/") {
-		sanitizedPrefix = strings.TrimSuffix(sanitizedPrefix, "/")
-	}
+	sanitizedPrefix = strings.TrimSuffix(sanitizedPrefix, "/")
 
 	return sanitizedPrefix, nil
 }

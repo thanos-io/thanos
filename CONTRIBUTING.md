@@ -2,24 +2,7 @@
 
 This document explain the process of contributing to the Thanos project.
 
-First of all please follow the [code of conduct](CODE_OF_CONDUCT.md) in all your interactions with the project.
-
-## TOC
-
-- [Contributing](#contributing)
-  * [TOC](#toc)
-  * [Thanos Philosophy](#thanos-philosophy)
-  * [Feedback / Issues](#feedback---issues)
-  * [Adding New Features / Components](#adding-new-features---components)
-  * [Components Naming](#components-naming)
-  * [Development](#development)
-    + [Prerequisites](#prerequisites)
-    + [First steps](#first-steps)
-    + [Pull Request Process](#pull-request-process)
-    + [Dependency management](#dependency-management)
-    + [Advanced testing](#advanced-testing)
-
-<small><i>Table of contents generated with <a href='http://ecotrust-canada.github.io/markdown-toc/'>markdown-toc</a></i></small>
+First of all please follow the [CODE_OF_CONDUCT](https://github.com/thanos-io/thanos/blob/master/CODE_OF_CONDUCT.md) in all your interactions with the project.
 
 ## Thanos Philosophy
 
@@ -52,6 +35,14 @@ discuss the change you wish to make via issue or slack, or any other
 method with the owners of this repository before making a change.
 
 Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+
+## General Naming
+
+In the code and documentation prefer non-offensive terminology, for example:
+
+* `allowlist` / `denylist` (instead of `whitelist` / `blacklist`)
+* `primary` / `replica` (instead of `master` / `slave`)
+* `openbox` / `closedbox` (instead of `whitebox` / `blackbox`)
 
 ## Components Naming
 
@@ -99,6 +90,7 @@ component of the Thanos distributed system. We recommend:
 1. Fork thanos-io/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 
 ```console
+$ GOPATH=$(go env GOPATH)
 $ mkdir -p $GOPATH/src/github.com/thanos-io
 $ cd $GOPATH/src/github.com/thanos-io
 $ git clone https://github.com/<your_github_id>/thanos.git
@@ -107,7 +99,8 @@ $ git remote add upstream https://github.com/thanos-io/thanos.git
 $ git remote update
 $ git merge upstream/master
 $ make build
-$ ./thanos -h
+$ export PATH=$PATH:$GOPATH/bin
+$ thanos -h
 ```
 
 1. Signing your work: DCO (Developer Certificate of Origin) Process.

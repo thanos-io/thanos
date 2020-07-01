@@ -7,12 +7,16 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -26,38 +30,49 @@ import (
 type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer) QueryableCreator {
+func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
+	keeper := gate.NewKeeper(reg)
+
 	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
 		return &queryable{
-			logger:              logger,
-			replicaLabels:       replicaLabels,
-			proxy:               proxy,
-			deduplicate:         deduplicate,
-			maxResolutionMillis: maxResolutionMillis,
-			partialResponse:     partialResponse,
-			skipChunks:          skipChunks,
+			logger:               logger,
+			reg:                  reg,
+			replicaLabels:        replicaLabels,
+			proxy:                proxy,
+			deduplicate:          deduplicate,
+			maxResolutionMillis:  maxResolutionMillis,
+			partialResponse:      partialResponse,
+			skipChunks:           skipChunks,
+			gateKeeper:           keeper,
+			maxConcurrentSelects: maxConcurrentSelects,
+			selectTimeout:        selectTimeout,
 		}
 	}
 }
 
 type queryable struct {
-	logger              log.Logger
-	replicaLabels       []string
-	proxy               storepb.StoreServer
-	deduplicate         bool
-	maxResolutionMillis int64
-	partialResponse     bool
-	skipChunks          bool
+	logger               log.Logger
+	reg                  prometheus.Registerer
+	replicaLabels        []string
+	proxy                storepb.StoreServer
+	deduplicate          bool
+	maxResolutionMillis  int64
+	partialResponse      bool
+	skipChunks           bool
+	gateKeeper           *gate.Keeper
+	maxConcurrentSelects int
+	selectTimeout        time.Duration
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks), nil
+	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateKeeper.NewGate(q.maxConcurrentSelects), q.selectTimeout), nil
 }
 
 type querier struct {
 	ctx                 context.Context
 	logger              log.Logger
+	reg                 prometheus.Registerer
 	cancel              func()
 	mint, maxt          int64
 	replicaLabels       map[string]struct{}
@@ -66,6 +81,8 @@ type querier struct {
 	maxResolutionMillis int64
 	partialResponse     bool
 	skipChunks          bool
+	selectGate          gate.Gate
+	selectTimeout       time.Duration
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -73,13 +90,15 @@ type querier struct {
 func newQuerier(
 	ctx context.Context,
 	logger log.Logger,
+	reg prometheus.Registerer,
 	mint, maxt int64,
 	replicaLabels []string,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
-	partialResponse bool,
-	skipChunks bool,
+	partialResponse, skipChunks bool,
+	selectGate gate.Gate,
+	selectTimeout time.Duration,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -91,9 +110,13 @@ func newQuerier(
 		rl[replicaLabel] = struct{}{}
 	}
 	return &querier{
-		ctx:                 ctx,
-		logger:              logger,
-		cancel:              cancel,
+		ctx:           ctx,
+		logger:        logger,
+		reg:           reg,
+		cancel:        cancel,
+		selectGate:    selectGate,
+		selectTimeout: selectTimeout,
+
 		mint:                mint,
 		maxt:                maxt,
 		replicaLabels:       rl,
@@ -153,14 +176,14 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	if strings.HasPrefix(f, "sum_") {
 		return []storepb.Aggr{storepb.Aggr_SUM}
 	}
-	if f == "increase" || f == "rate" {
+	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
 		return []storepb.Aggr{storepb.Aggr_COUNTER}
 	}
 	// In the default case, we retrieve count and sum to compute an average.
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 }
 
-func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
+func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
 	if hints == nil {
 		hints = &storage.SelectHints{
 			Start: q.mint,
@@ -172,16 +195,60 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 	for i, m := range ms {
 		matchers[i] = m.String()
 	}
-	span, ctx := tracing.StartSpan(q.ctx, "querier_select", opentracing.Tags{
+
+	// The querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
+	// We want to prevent this from happening for the async storea API calls we make while preserving tracing context.
+	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
+	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
+	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
 		"minTime":  hints.Start,
 		"maxTime":  hints.End,
 		"matchers": "{" + strings.Join(matchers, ",") + "}",
 	})
-	defer span.Finish()
 
+	promise := make(chan storage.SeriesSet, 1)
+	go func() {
+		defer close(promise)
+
+		var err error
+		tracing.DoInSpan(ctx, "querier_select_gate_ismyturn", func(ctx context.Context) {
+			err = q.selectGate.Start(ctx)
+		})
+		if err != nil {
+			promise <- storage.ErrSeriesSet(errors.Wrap(err, "failed to wait for turn"))
+			return
+		}
+		defer q.selectGate.Done()
+
+		span, ctx := tracing.StartSpan(ctx, "querier_select_select_fn")
+		defer span.Finish()
+
+		set, err := q.selectFn(ctx, hints, ms...)
+		if err != nil {
+			promise <- storage.ErrSeriesSet(err)
+			return
+		}
+
+		promise <- set
+	}()
+
+	return &lazySeriesSet{create: func() (storage.SeriesSet, bool) {
+		defer cancel()
+		defer span.Finish()
+
+		// Only gets called once, for the first Next() call of the series set.
+		set, ok := <-promise
+		if !ok {
+			return storage.ErrSeriesSet(errors.New("channel closed before a value received")), false
+		}
+		return set, set.Next()
+	}}
+}
+
+func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	sms, err := storepb.TranslatePromMatchers(ms...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "convert matchers")
+		return nil, errors.Wrap(err, "convert matchers")
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
@@ -196,7 +263,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
 	}, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Series()")
+		return nil, errors.Wrap(err, "proxy Series()")
 	}
 
 	var warns storage.Warnings
@@ -211,24 +278,23 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 			maxt:  q.maxt,
 			set:   newStoreSeriesSet(resp.seriesSet),
 			aggrs: aggrs,
-		}, warns, nil
+			warns: warns,
+		}, nil
 	}
 
-	// TODO(fabxc): this could potentially pushed further down into the store API
-	// to make true streaming possible.
+	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
 	sortDedupLabels(resp.seriesSet, q.replicaLabels)
-
 	set := &promSeriesSet{
 		mint:  q.mint,
 		maxt:  q.maxt,
 		set:   newStoreSeriesSet(resp.seriesSet),
 		aggrs: aggrs,
+		warns: warns,
 	}
 
-	// The merged series set assembles all potentially-overlapping time ranges
-	// of the same series into a single one. The series are ordered so that equal series
-	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), warns, nil
+	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
+	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
+	return newDedupSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica

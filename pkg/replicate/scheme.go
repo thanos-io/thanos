@@ -6,6 +6,7 @@ package replicate
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"path"
@@ -27,24 +28,32 @@ import (
 
 // BlockFilter is block filter that filters out compacted and unselected blocks.
 type BlockFilter struct {
-	logger          log.Logger
-	labelSelector   labels.Selector
-	resolutionLevel compact.ResolutionLevel
-	compactionLevel int
+	logger           log.Logger
+	labelSelector    labels.Selector
+	resolutionLevels map[compact.ResolutionLevel]struct{}
+	compactionLevels map[int]struct{}
 }
 
 // NewBlockFilter returns block filter.
 func NewBlockFilter(
 	logger log.Logger,
 	labelSelector labels.Selector,
-	resolutionLevel compact.ResolutionLevel,
-	compactionLevel int,
+	resolutionLevels []compact.ResolutionLevel,
+	compactionLevels []int,
 ) *BlockFilter {
+	allowedResolutions := make(map[compact.ResolutionLevel]struct{})
+	for _, resolutionLevel := range resolutionLevels {
+		allowedResolutions[resolutionLevel] = struct{}{}
+	}
+	allowedCompactions := make(map[int]struct{})
+	for _, compactionLevel := range compactionLevels {
+		allowedCompactions[compactionLevel] = struct{}{}
+	}
 	return &BlockFilter{
-		labelSelector:   labelSelector,
-		logger:          logger,
-		resolutionLevel: resolutionLevel,
-		compactionLevel: compactionLevel,
+		labelSelector:    labelSelector,
+		logger:           logger,
+		resolutionLevels: allowedResolutions,
+		compactionLevels: allowedCompactions,
 	}
 }
 
@@ -77,20 +86,14 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	}
 
 	gotResolution := compact.ResolutionLevel(b.Thanos.Downsample.Resolution)
-	expectedResolution := bf.resolutionLevel
-
-	resolutionMatch := gotResolution == expectedResolution
-	if !resolutionMatch {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "resolutions don't match", "got_resolution", gotResolution, "expected_resolution", expectedResolution)
+	if _, ok := bf.resolutionLevels[gotResolution]; !ok {
+		level.Info(bf.logger).Log("msg", "filtering block", "reason", "resolution doesn't match allowed resolutions", "got_resolution", gotResolution, "allowed_resolutions", fmt.Sprintf("%v", bf.resolutionLevels))
 		return false
 	}
 
 	gotCompactionLevel := b.BlockMeta.Compaction.Level
-	expectedCompactionLevel := bf.compactionLevel
-
-	compactionMatch := gotCompactionLevel == expectedCompactionLevel
-	if !compactionMatch {
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "compaction levels don't match", "got_compaction_level", gotCompactionLevel, "expected_compaction_level", expectedCompactionLevel)
+	if _, ok := bf.compactionLevels[gotCompactionLevel]; !ok {
+		level.Info(bf.logger).Log("msg", "filtering block", "reason", "compaction level doesn't match allowed levels", "got_compaction_level", gotCompactionLevel, "allowed_compaction_levels", fmt.Sprintf("%v", bf.compactionLevels))
 		return false
 	}
 
@@ -211,31 +214,23 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 			return nil
 		}
 
-		level.Debug(rs.logger).Log("msg", "adding block to available blocks", "block_uuid", id.String())
-
-		availableBlocks = append(availableBlocks, meta)
+		if rs.blockFilter(meta) {
+			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
+			availableBlocks = append(availableBlocks, meta)
+		}
 
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "iterate over origin bucket")
 	}
 
-	candidateBlocks := []*metadata.Meta{}
-
-	for _, b := range availableBlocks {
-		if rs.blockFilter(b) {
-			level.Debug(rs.logger).Log("msg", "adding block to candidate blocks", "block_uuid", b.BlockMeta.ULID.String())
-			candidateBlocks = append(candidateBlocks, b)
-		}
-	}
-
 	// In order to prevent races in compactions by the target environment, we
 	// need to replicate oldest start timestamp first.
-	sort.Slice(candidateBlocks, func(i, j int) bool {
-		return candidateBlocks[i].BlockMeta.MinTime < candidateBlocks[j].BlockMeta.MinTime
+	sort.Slice(availableBlocks, func(i, j int) bool {
+		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
-	for _, b := range candidateBlocks {
+	for _, b := range availableBlocks {
 		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
 			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 		}

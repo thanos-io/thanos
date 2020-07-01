@@ -275,9 +275,9 @@ func runSidecar(
 
 			var s *shipper.Shipper
 			if conf.shipper.uploadCompacted {
-				s = shipper.NewWithCompacted(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource)
+				s = shipper.NewWithCompacted(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource, conf.shipper.allowOutOfOrderUpload)
 			} else {
-				s = shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource)
+				s = shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource, conf.shipper.allowOutOfOrderUpload)
 			}
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {

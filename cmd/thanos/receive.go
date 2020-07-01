@@ -18,6 +18,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -39,19 +40,19 @@ import (
 
 func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Receive
-	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
+	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
-	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS").Default("").String()
-	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS").Default("").String()
+	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS.").Default("").String()
+	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS.").Default("").String()
 	rwServerClientCA := cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
-	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate").Default("").String()
-	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers").Default("").String()
+	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").String()
+	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").String()
+	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").String()
 	rwClientServerName := cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
@@ -61,7 +62,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
-	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention").Default("15d"))
+	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
 	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
 		PlaceHolder("<path>").String()
@@ -88,6 +89,12 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
+
+	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
+		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().Bool()
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -157,6 +164,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
 			comp,
+			*allowOutOfOrderUpload,
 		)
 	}
 }
@@ -195,10 +203,10 @@ func runReceive(
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
 	comp component.SourceStoreAPI,
+	allowOutOfOrderUpload bool,
 ) error {
 	logger = log.With(logger, "component", "receive")
-	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
-
+	level.Warn(logger).Log("msg", "setting up receive")
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
 	if err != nil {
 		return err
@@ -246,6 +254,7 @@ func runReceive(
 		lset,
 		tenantLabelName,
 		bkt,
+		allowOutOfOrderUpload,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
@@ -276,8 +285,8 @@ func runReceive(
 
 	// dbReady signals when TSDB is ready and the Store gRPC server can start.
 	dbReady := make(chan struct{}, 1)
-	// updateDB signals when TSDB needs to be flushed and updated.
-	updateDB := make(chan struct{}, 1)
+	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
+	hashringChangedChan := make(chan struct{}, 1)
 	// uploadC signals when new blocks should be uploaded.
 	uploadC := make(chan struct{}, 1)
 	// uploadDone signals when uploading has finished.
@@ -285,16 +294,28 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
-		// TSDB.
+		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_attempted_total",
+			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
+		})
+		dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_completed_total",
+			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
+		})
+
+		// TSDBs reload logic, listening on hashring changes.
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
 
-			// Before quitting, ensure the WAL is flushed and the DB is closed.
+			// Before quitting, ensure the WAL is flushed and the DBs are closed.
 			defer func() {
 				if err := dbs.Flush(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
+				}
+				if err := dbs.Close(); err != nil {
+					level.Warn(logger).Log("err", err, "msg", "failed to close multi db")
 				}
 			}()
 
@@ -302,12 +323,12 @@ func runReceive(
 				select {
 				case <-cancel:
 					return nil
-				case _, ok := <-updateDB:
+				case _, ok := <-hashringChangedChan:
 					if !ok {
 						return nil
 					}
-
-					level.Info(logger).Log("msg", "updating DB")
+					dbUpdatesStarted.Inc()
+					level.Info(logger).Log("msg", "updating Multi DB")
 
 					if err := dbs.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
@@ -321,6 +342,7 @@ func runReceive(
 					}
 					statusProber.Ready()
 					level.Info(logger).Log("msg", "tsdb started, and server is ready to receive web requests")
+					dbUpdatesCompleted.Inc()
 					dbReady <- struct{}{}
 				}
 			}
@@ -364,7 +386,7 @@ func runReceive(
 
 		cancel := make(chan struct{})
 		g.Add(func() error {
-			defer close(updateDB)
+			defer close(hashringChangedChan)
 			for {
 				select {
 				case h, ok := <-updates:
@@ -375,7 +397,7 @@ func runReceive(
 					msg := "hashring has changed; server is not ready to receive web requests."
 					statusProber.NotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
-					updateDB <- struct{}{}
+					hashringChangedChan <- struct{}{}
 				case <-cancel:
 					return nil
 				}

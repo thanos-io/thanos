@@ -11,6 +11,10 @@ GOPATH            ?= $(shell go env GOPATH)
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+
+# Promu is using this exact variable name, do not rename.
+PREFIX  ?= $(GOBIN)
+
 GO111MODULE       ?= on
 export GO111MODULE
 GOPROXY           ?= https://proxy.golang.org
@@ -74,12 +78,12 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 
 .PHONY: assets
 assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GOBINDATA) $(REACT_APP_OUTPUT_DIR)
+assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
-	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
-	@go fmt ./pkg/ui
+	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
+	@$(MAKE) format
 
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
@@ -104,8 +108,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
-	@echo ">> building Thanos binary in $(GOBIN)"
-	@$(PROMU) build --prefix $(GOBIN)
+	@echo ">> building Thanos binary in $(PREFIX)"
+	@$(PROMU) build --prefix $(PREFIX)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -121,8 +125,8 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 docker: build
-	@echo ">> copying Thanos from $(GOBIN) to ./thanos_tmp_for_docker"
-	@cp $(GOBIN)/thanos ./thanos_tmp_for_docker
+	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
+	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
 	@rm ./thanos_tmp_for_docker
@@ -170,8 +174,8 @@ format: $(GOIMPORTS) check-comments
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
-proto: check-git  $(GOIMPORTS) $(PROTOC)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
+proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
@@ -184,7 +188,7 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
-test: export THANOS_TEST_MINIO_PATH= $(MINIO_SERVER)
+test: export THANOS_TEST_MINIO_PATH= $(MINIO)
 test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-deps
@@ -219,7 +223,7 @@ test-e2e: docker
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-deps: $(ALERTMANAGER) $(MINIO_SERVER) $(PROMS)
+install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: docker-ci
@@ -287,6 +291,8 @@ NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewH
 	$(call require_clean_work_tree,"detected white noise")
 	@echo ">> ensuring Copyright headers"
 	@go run ./scripts/copyright
+	@echo ">> ensuring generated proto files are up to date"
+	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
 
 .PHONY: web-serve

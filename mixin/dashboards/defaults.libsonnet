@@ -15,7 +15,7 @@
   grafanaDashboards:: {
     [filename]: grafanaDashboards[filename] {
       uid: std.md5(filename),
-      timezone: '',
+      timezone: 'UTC',
       tags: thanos.dashboard.tags,
 
       // Modify tooltip to only show a single value

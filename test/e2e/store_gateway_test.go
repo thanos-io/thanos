@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -36,9 +37,9 @@ func TestStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_store_gateway")
 	testutil.Ok(t, err)
-	defer s.Close()
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	m := e2edb.NewMinio(80, "thanos")
+	m := e2edb.NewMinio(8080, "thanos")
 	testutil.Ok(t, s.StartAndWaitReady(m))
 
 	s1, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", client.BucketConfig{
@@ -60,7 +61,7 @@ func TestStoreGateway(t *testing.T) {
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.HTTPEndpoint(), "loaded"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{s1.GRPCNetworkEndpoint()}, nil, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{s1.GRPCNetworkEndpoint()}, nil, nil, "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -74,7 +75,7 @@ func TestStoreGateway(t *testing.T) {
 	extLset4 := labels.FromStrings("ext1", "value1", "replica", "3")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	now := time.Now()
 	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0)

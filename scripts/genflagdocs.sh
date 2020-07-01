@@ -37,7 +37,7 @@ CHECK=${1:-}
 
 # Auto update flags.
 
-commands=("compact" "query" "rule" "sidecar" "store" "tools")
+commands=("compact" "query" "rule" "sidecar" "store" "receive" "tools")
 for x in "${commands[@]}"; do
     ${THANOS_BIN} "${x}" --help &> "docs/components/flags/${x}.txt"
 done

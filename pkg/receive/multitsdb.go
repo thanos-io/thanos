@@ -9,13 +9,11 @@ import (
 	"os"
 	"path"
 	"sync"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -23,7 +21,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"golang.org/x/sync/errgroup"
@@ -38,8 +35,9 @@ type MultiTSDB struct {
 	labels          labels.Labels
 	bucket          objstore.Bucket
 
-	mtx     *sync.RWMutex
-	tenants map[string]*tenant
+	mtx                   *sync.RWMutex
+	tenants               map[string]*tenant
+	allowOutOfOrderUpload bool
 }
 
 func NewMultiTSDB(
@@ -50,40 +48,38 @@ func NewMultiTSDB(
 	labels labels.Labels,
 	tenantLabelName string,
 	bucket objstore.Bucket,
+	allowOutOfOrderUpload bool,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
 	}
 
 	return &MultiTSDB{
-		dataDir:         dataDir,
-		logger:          l,
-		reg:             reg,
-		tsdbOpts:        tsdbOpts,
-		mtx:             &sync.RWMutex{},
-		tenants:         map[string]*tenant{},
-		labels:          labels,
-		tenantLabelName: tenantLabelName,
-		bucket:          bucket,
+		dataDir:               dataDir,
+		logger:                l,
+		reg:                   reg,
+		tsdbOpts:              tsdbOpts,
+		mtx:                   &sync.RWMutex{},
+		tenants:               map[string]*tenant{},
+		labels:                labels,
+		tenantLabelName:       tenantLabelName,
+		bucket:                bucket,
+		allowOutOfOrderUpload: allowOutOfOrderUpload,
 	}
 }
 
 type tenant struct {
-	tsdbOpts *tsdb.Options
-
-	readyS *ReadyStorage
-	fs     *FlushableStorage
-	s      *store.TSDBStore
-	ship   *shipper.Shipper
+	readyS    *ReadyStorage
+	storeTSDB *store.TSDBStore
+	ship      *shipper.Shipper
 
 	mtx *sync.RWMutex
 }
 
-func newTenant(tsdbOpts *tsdb.Options) *tenant {
+func newTenant() *tenant {
 	return &tenant{
-		tsdbOpts: tsdbOpts,
-		readyS:   &ReadyStorage{},
-		mtx:      &sync.RWMutex{},
+		readyS: &ReadyStorage{},
+		mtx:    &sync.RWMutex{},
 	}
 }
 
@@ -94,7 +90,7 @@ func (t *tenant) readyStorage() *ReadyStorage {
 func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	return t.s
+	return t.storeTSDB
 }
 
 func (t *tenant) shipper() *shipper.Shipper {
@@ -103,17 +99,10 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) flushableStorage() *FlushableStorage {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	return t.fs
-}
-
-func (t *tenant) set(tstore *store.TSDBStore, fs *FlushableStorage, ship *shipper.Shipper) {
-	t.readyS.Set(fs.Get(), int64(2*time.Duration(t.tsdbOpts.MinBlockDuration).Seconds()*1000))
+func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
+	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
-	t.fs = fs
-	t.s = tstore
+	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.mtx.Unlock()
 }
@@ -151,15 +140,17 @@ func (t *MultiTSDB) Flush() error {
 	errmtx := &sync.Mutex{}
 	merr := terrors.MultiError{}
 	wg := &sync.WaitGroup{}
-	for _, tenant := range t.tenants {
-		s := tenant.flushableStorage()
-		if s == nil {
+	for id, tenant := range t.tenants {
+		db := tenant.readyStorage().Get()
+		if db == nil {
+			level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id)
 			continue
 		}
-
+		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Add(1)
 		go func() {
-			if err := s.Flush(); err != nil {
+			head := db.Head()
+			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1)); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -172,7 +163,28 @@ func (t *MultiTSDB) Flush() error {
 	return merr.Err()
 }
 
+func (t *MultiTSDB) Close() error {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	merr := terrors.MultiError{}
+	for id, tenant := range t.tenants {
+		db := tenant.readyStorage().Get()
+		if db == nil {
+			level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id)
+			continue
+		}
+		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
+		merr.Add(db.Close())
+	}
+	return merr.Err()
+}
+
 func (t *MultiTSDB) Sync(ctx context.Context) error {
+	if t.bucket == nil {
+		return errors.New("bucket is not specified, Sync should not be invoked")
+	}
+
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -185,7 +197,6 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 		if s == nil {
 			continue
 		}
-
 		wg.Add(1)
 		go func() {
 			if uploaded, err := s.Sync(ctx); err != nil {
@@ -196,7 +207,6 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 			wg.Done()
 		}()
 	}
-
 	wg.Wait()
 	return merr.Err()
 }
@@ -213,6 +223,42 @@ func (t *MultiTSDB) TSDBStores() map[string]*store.TSDBStore {
 		}
 	}
 	return res
+}
+
+func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
+	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
+	lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
+	dataDir := path.Join(t.dataDir, tenantID)
+
+	level.Info(logger).Log("msg", "opening TSDB")
+	opts := *t.tsdbOpts
+	s, err := tsdb.Open(
+		dataDir,
+		logger,
+		&UnRegisterer{Registerer: reg},
+		&opts,
+	)
+	if err != nil {
+		t.mtx.Lock()
+		delete(t.tenants, tenantID)
+		t.mtx.Unlock()
+		return err
+	}
+	var ship *shipper.Shipper
+	if t.bucket != nil {
+		ship = shipper.New(
+			logger,
+			reg,
+			dataDir,
+			t.bucket,
+			func() labels.Labels { return lbls },
+			metadata.ReceiveSource,
+			t.allowOutOfOrderUpload,
+		)
+	}
+	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lbls), s, ship)
+	level.Info(logger).Log("msg", "TSDB is now ready")
+	return nil
 }
 
 func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
@@ -234,67 +280,20 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		return tenant, nil
 	}
 
-	tenant = newTenant(t.tsdbOpts)
+	tenant = newTenant()
 	t.tenants[tenantID] = tenant
 	t.mtx.Unlock()
 
-	var err error
-	startTSDB := func() {
-		reg := prometheus.WrapRegistererWith(prometheus.Labels{
-			"tenant": tenantID,
-		}, t.reg)
-		logger := log.With(t.logger, "tenant", tenantID)
-		lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
-		dataDir := path.Join(t.dataDir, tenantID)
-
-		var ship *shipper.Shipper
-		if t.bucket != nil {
-			ship = shipper.New(
-				logger,
-				reg,
-				dataDir,
-				t.bucket,
-				func() labels.Labels { return lbls },
-				metadata.ReceiveSource,
-			)
-		}
-
-		s := NewFlushableStorage(
-			dataDir,
-			logger,
-			reg,
-			t.tsdbOpts,
-		)
-
-		// Assign to outer error to report in blocking case.
-		if err = s.Open(); err != nil {
-			level.Error(logger).Log("msg", "failed to open tsdb", "err", err)
-			t.mtx.Lock()
-			delete(t.tenants, tenantID)
-			t.mtx.Unlock()
-			runutil.CloseWithLogOnErr(logger, s, "failed to close tsdb")
-			return
-		}
-
-		tenant.set(
-			store.NewTSDBStore(
-				logger,
-				reg,
-				s.Get(),
-				component.Receive,
-				lbls,
-			),
-			s,
-			ship,
-		)
-	}
+	logger := log.With(t.logger, "tenant", tenantID)
 	if !blockingStart {
-		go startTSDB()
+		go func() {
+			if err := t.startTSDB(logger, tenantID, tenant); err != nil {
+				level.Error(logger).Log("msg", "failed to start tsdb asynchronously", "err", err)
+			}
+		}()
 		return tenant, nil
 	}
-
-	startTSDB()
-	return tenant, err
+	return tenant, t.startTSDB(logger, tenantID, tenant)
 }
 
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
@@ -317,11 +316,11 @@ type ReadyStorage struct {
 }
 
 // Set the storage.
-func (s *ReadyStorage) Set(db *tsdb.DB, startTimeMargin int64) {
+func (s *ReadyStorage) Set(db *tsdb.DB) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	s.a = &adapter{db: db, startTimeMargin: startTimeMargin}
+	s.a = &adapter{db: db}
 }
 
 // Get the storage.
@@ -341,10 +340,7 @@ func (s *ReadyStorage) get() *adapter {
 
 // StartTime implements the Storage interface.
 func (s *ReadyStorage) StartTime() (int64, error) {
-	if x := s.get(); x != nil {
-		return x.StartTime()
-	}
-	return int64(model.Latest), ErrNotReady
+	return 0, errors.New("not implemented")
 }
 
 // Querier implements the Storage interface.
@@ -373,22 +369,12 @@ func (s *ReadyStorage) Close() error {
 
 // adapter implements a storage.Storage around TSDB.
 type adapter struct {
-	db              *tsdb.DB
-	startTimeMargin int64
+	db *tsdb.DB
 }
 
 // StartTime implements the Storage interface.
 func (a adapter) StartTime() (int64, error) {
-	var startTime int64
-
-	if len(a.db.Blocks()) > 0 {
-		startTime = a.db.Blocks()[0].Meta().MinTime
-	} else {
-		startTime = time.Now().Unix() * 1000
-	}
-
-	// Add a safety margin as it may take a few minutes for everything to spin up.
-	return startTime + a.startTimeMargin, nil
+	return 0, errors.New("not implemented")
 }
 
 func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
@@ -407,4 +393,28 @@ func (a adapter) Appender() (storage.Appender, error) {
 // Close closes the storage and all its underlying resources.
 func (a adapter) Close() error {
 	return a.db.Close()
+}
+
+// UnRegisterer is a Prometheus registerer that
+// ensures that collectors can be registered
+// by unregistering already-registered collectors.
+// FlushableStorage uses this registerer in order
+// to not lose metric values between DB flushes.
+type UnRegisterer struct {
+	prometheus.Registerer
+}
+
+func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
+	for _, c := range cs {
+		if err := u.Register(c); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+				if ok = u.Unregister(c); !ok {
+					panic("unable to unregister existing collector")
+				}
+				u.Registerer.MustRegister(c)
+				continue
+			}
+			panic(err)
+		}
+	}
 }

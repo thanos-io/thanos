@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -660,7 +662,7 @@ func TestQuerierStrict(t *testing.T) {
 	testutil.Equals(t, 2, len(storeSet.stores), "two static clients must remain available")
 	testutil.Equals(t, curMin, storeSet.stores[staticStoreAddr].minTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, curMax, storeSet.stores[staticStoreAddr].maxTime, "minimum time reported by the store node is different")
-	testutil.NotOk(t, storeSet.storeStatuses[staticStoreAddr].LastError)
+	testutil.NotOk(t, storeSet.storeStatuses[staticStoreAddr].LastError.originalErr)
 }
 
 func TestStoreSet_Update_Rules(t *testing.T) {
@@ -777,4 +779,29 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 			testutil.Equals(t, tc.expectedRules, gotRules)
 		})
 	}
+}
+
+type weirdError struct {
+	originalErr error
+}
+
+// MarshalJSON marshals the error and returns weird results.
+func (e *weirdError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]string{})
+}
+
+// Error returns the original, underlying string.
+func (e *weirdError) Error() string {
+	return e.originalErr.Error()
+}
+
+func TestStringError(t *testing.T) {
+	weirdError := &weirdError{originalErr: errors.New("test")}
+	properErr := &stringError{originalErr: weirdError}
+	storestatusMock := map[string]error{}
+	storestatusMock["weird"] = weirdError
+	storestatusMock["proper"] = properErr
+	b, err := json.Marshal(storestatusMock)
+	testutil.Ok(t, err)
+	testutil.Equals(t, []byte(`{"proper":"test","weird":{}}`), b, "expected to get proper results")
 }

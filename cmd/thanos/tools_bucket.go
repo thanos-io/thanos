@@ -84,7 +84,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		Short('r').Default("false").Bool()
 	issuesToVerify := cmd.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
-	idWhitelist := cmd.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
+	ids := cmd.Flag("id", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	deleteDelay := modelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
 		"If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket. "+
@@ -153,18 +153,18 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
-		if len(*idWhitelist) > 0 {
-			whilelistIDs := map[string]struct{}{}
-			for _, bid := range *idWhitelist {
+		if len(*ids) > 0 {
+			idsMap := map[string]struct{}{}
+			for _, bid := range *ids {
 				id, err := ulid.Parse(bid)
 				if err != nil {
-					return errors.Wrap(err, "invalid ULID found in --id-whitelist flag")
+					return errors.Wrap(err, "invalid ULID found in --id-allowlist flag")
 				}
-				whilelistIDs[id.String()] = struct{}{}
+				idsMap[id.String()] = struct{}{}
 			}
 
 			idMatcher = func(id ulid.ULID) bool {
-				if _, ok := whilelistIDs[id.String()]; !ok {
+				if _, ok := idsMap[id.String()]; !ok {
 					return false
 				}
 				return true
@@ -414,19 +414,17 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 // Provide a list of resolution, can not use Enum directly, since string does not implement int64 function.
 func listResLevel() []string {
 	return []string{
-		strconv.FormatInt(downsample.ResLevel0, 10),
-		strconv.FormatInt(downsample.ResLevel1, 10),
-		strconv.FormatInt(downsample.ResLevel2, 10)}
+		time.Duration(downsample.ResLevel0).String(),
+		time.Duration(downsample.ResLevel1).String(),
+		time.Duration(downsample.ResLevel2).String()}
 }
 
 func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
-	// TODO(bwplotka): Allow to replicate many resolution levels.
-	resolution := cmd.Flag("resolution", "Only blocks with this resolution will be replicated.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).HintAction(listResLevel).Int64()
-	// TODO(bwplotka): Allow to replicate many compaction levels.
-	compaction := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Int()
+	resolutions := cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationList()
+	compactions := cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").Ints()
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
 
@@ -434,6 +432,11 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse block label matchers")
+		}
+
+		var resolutionLevels []compact.ResolutionLevel
+		for _, lvl := range *resolutions {
+			resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl.Milliseconds()))
 		}
 
 		return replicate.RunReplicate(
@@ -444,8 +447,8 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			matchers,
-			compact.ResolutionLevel(*resolution),
-			*compaction,
+			resolutionLevels,
+			*compactions,
 			objStoreConfig,
 			toObjStoreConfig,
 			*singleRun,

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -24,6 +25,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -34,6 +36,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+func isEmptyDir(name string) (bool, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	_, err = f.Readdirnames(1)
+	if err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
 
 type blockDesc struct {
 	series  []labels.Labels
@@ -271,7 +287,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	s, err := e2e.NewScenario("e2e_test_compact")
 	testutil.Ok(t, err)
-	defer s.Close() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	dir := filepath.Join(s.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
@@ -290,7 +306,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel() // TODO(kakkoyun): Change with t.CleanUp after go 1.14 update.
+	t.Cleanup(cancel)
 
 	rawBlockIDs := map[ulid.ULID]struct{}{}
 	for _, b := range blocks {
@@ -379,12 +395,12 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil, "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	// Check if query detects current series, even if overlapped.
 	queryAndAssert(t, ctx, q.HTTPEndpoint(),
@@ -475,6 +491,12 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		// Expect compactor halted.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compactor_halted"))
 
+		// The compact directory is still there.
+		dataDir := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt")
+		empty, err := isEmptyDir(dataDir)
+		testutil.Ok(t, err)
+		testutil.Equals(t, false, empty, "directory %s should not be empty", dataDir)
+
 		// We expect no ops.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_iterations_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_cleaned_total"))
@@ -530,7 +552,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, s.Stop(c))
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, ctx, q.HTTPEndpoint(),
@@ -575,7 +597,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, s.Stop(c))
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, ctx, q.HTTPEndpoint(),

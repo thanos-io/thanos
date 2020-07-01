@@ -15,12 +15,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/tracing"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -141,7 +141,7 @@ type memcachedClient struct {
 	asyncQueue chan func()
 
 	// Gate used to enforce the max number of concurrent GetMulti() operations.
-	getMultiGate *gate.Gate
+	getMultiGate gate.Gate
 
 	// Wait group used to wait all workers on stopping.
 	workers sync.WaitGroup
@@ -209,10 +209,8 @@ func newMemcachedClient(
 		dnsProvider: dnsProvider,
 		asyncQueue:  make(chan func(), config.MaxAsyncBufferSize),
 		stop:        make(chan struct{}, 1),
-		getMultiGate: gate.NewGate(
-			config.MaxGetMultiConcurrency,
-			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
-		),
+		getMultiGate: gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg)).
+			NewGate(config.MaxGetMultiConcurrency),
 	}
 
 	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -271,7 +269,7 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
@@ -282,17 +280,18 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		var err error
-		tracing.DoInSpan(ctx, "memcached_set", func(ctx context.Context) {
-			err = c.client.Set(&memcache.Item{
-				Key:        key,
-				Value:      value,
-				Expiration: int32(time.Now().Add(ttl).Unix()),
-			})
+		err := c.client.Set(&memcache.Item{
+			Key:        key,
+			Value:      value,
+			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "err", err)
+
+			// If the PickServer will fail for any reason the server address will be nil
+			// and so missing in the logs. We're OK with that (it's a best effort).
+			serverAddr, _ := c.selector.PickServer(key)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", serverAddr, "err", err)
 			return
 		}
 
@@ -392,11 +391,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	// Wait until we get a free slot from the gate, if the max
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
-		tracing.DoInSpan(ctx, "memcached_getmulti_gate_ismyturn", func(ctx context.Context) {
-			// TODO(bwplotka): Consider putting span directly in gate.
-			err = c.getMultiGate.IsMyTurn(ctx)
-		})
-		if err != nil {
+		if err := c.getMultiGate.Start(ctx); err != nil {
 			return nil, errors.Wrapf(err, "failed to wait for turn")
 		}
 		defer c.getMultiGate.Done()
@@ -404,9 +399,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-	tracing.DoInSpan(ctx, "memcached_getmulti", func(ctx context.Context) {
-		items, err = c.client.GetMulti(keys)
-	})
+	items, err = c.client.GetMulti(keys)
 	if err != nil {
 		c.failures.WithLabelValues(opGetMulti).Inc()
 	} else {

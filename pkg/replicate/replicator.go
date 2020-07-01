@@ -69,8 +69,8 @@ func RunReplicate(
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	labelSelector labels.Selector,
-	resolution compact.ResolutionLevel,
-	compaction int,
+	resolutions []compact.ResolutionLevel,
+	compactions []int,
 	fromObjStoreConfig *extflag.PathOrContent,
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
@@ -159,8 +159,8 @@ func RunReplicate(
 	blockFilter := NewBlockFilter(
 		logger,
 		labelSelector,
-		resolution,
-		compaction,
+		resolutions,
+		compactions,
 	).Filter
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -5,7 +5,6 @@ package receive
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -25,13 +24,12 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)
-
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	dir, err := ioutil.TempDir("", "test")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	logger := log.NewNopLogger()
+	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("run fresh", func(t *testing.T) {
 		m := NewMultiTSDB(
 			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
@@ -43,8 +41,9 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 		)
-		defer testutil.Ok(t, m.Flush())
+		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
@@ -109,8 +108,9 @@ func TestMultiTSDB(t *testing.T) {
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
 			nil,
+			false,
 		)
-		defer testutil.Ok(t, m.Flush())
+		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
@@ -200,13 +200,11 @@ Outer:
 			if !ok {
 				break Outer
 			}
-			fmt.Println(r[0].String())
 			testutil.Equals(t, expectedFooResp, r)
 		case r, ok := <-respBar:
 			if !ok {
 				break Outer
 			}
-			fmt.Println(r[0].String())
 			testutil.Equals(t, expectedBarResp, r)
 		}
 	}

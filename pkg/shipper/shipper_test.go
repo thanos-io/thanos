@@ -26,7 +26,7 @@ func TestShipperTimestamps(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir))
 	}()
 
-	s := New(nil, nil, dir, nil, nil, metadata.TestSource)
+	s := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
 
 	// Missing thanos meta file.
 	_, _, err = s.Timestamps()
@@ -84,7 +84,6 @@ func TestShipperTimestamps(t *testing.T) {
 }
 
 func TestIterBlockMetas(t *testing.T) {
-	var metas []*metadata.Meta
 	dir, err := ioutil.TempDir("", "shipper-test")
 	testutil.Ok(t, err)
 	defer func() {
@@ -124,13 +123,9 @@ func TestIterBlockMetas(t *testing.T) {
 		},
 	}))
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource)
-	if err := shipper.iterBlockMetas(func(m *metadata.Meta) error {
-		metas = append(metas, m)
-		return nil
-	}); err != nil {
-		testutil.Ok(t, err)
-	}
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
+	metas, err := shipper.blockMetasFromOldest()
+	testutil.Ok(t, err)
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
 		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
 	}), true)
@@ -167,11 +162,8 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	})
 	b.ResetTimer()
 
-	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource)
-	if err := shipper.iterBlockMetas(func(m *metadata.Meta) error {
-		metas = append(metas, m)
-		return nil
-	}); err != nil {
-		testutil.Ok(b, err)
-	}
+	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false)
+
+	_, err = shipper.blockMetasFromOldest()
+	testutil.Ok(b, err)
 }

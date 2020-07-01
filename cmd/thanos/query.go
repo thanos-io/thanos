@@ -14,7 +14,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -39,7 +41,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerQuery registers a query command.
@@ -66,6 +67,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
+	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
+		Default("4").Int()
+
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
 
@@ -77,7 +81,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
-	rules := cmd.Flag("rule", "Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
+	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
+	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<rule>").Strings()
 
 	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
@@ -101,8 +106,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
-	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
+	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
+
+	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
+		Hidden().Default("true").Bool()
 
 	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
@@ -118,7 +126,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
 		}
 
-		if dup := firstDuplicate(*rules); dup != "" {
+		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
 		}
 
@@ -132,6 +140,19 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+
+		flagsMap := map[string]string{}
+
+		// Exclude kingpin default flags to expose only Thanos ones.
+		boilerplateFlags := kingpin.New("", "").Version("")
+
+		for _, f := range cmd.Model().Flags {
+			if boilerplateFlags.GetFlag(f.Name) != nil {
+				continue
+			}
+
+			flagsMap[f.Name] = f.Value.String()
+		}
 
 		return runQuery(
 			g,
@@ -154,14 +175,17 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
+			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
 			selectorLset,
+			flagsMap,
 			*stores,
-			*rules,
+			*ruleEndpoints,
 			*enableAutodownsampling,
-			*enablePartialResponse,
+			*enableQueryPartialResponse,
+			*enableRulePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -196,14 +220,17 @@ func runQuery(
 	webExternalPrefix string,
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
+	maxConcurrentSelects int,
 	queryTimeout time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
+	flagsMap map[string]string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	enableAutodownsampling bool,
-	enablePartialResponse bool,
+	enableQueryPartialResponse bool,
+	enableRulePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -273,7 +300,7 @@ func runQuery(
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		queryableCreator = query.NewQueryableCreator(logger, proxy)
+		queryableCreator = query.NewQueryableCreator(logger, reg, proxy, maxConcurrentSelects, queryTimeout)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger: logger,
@@ -387,11 +414,15 @@ func runQuery(
 			stores,
 			engine,
 			queryableCreator,
+			// NOTE: Will share the same replica label as the query for now.
+			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
 			enableAutodownsampling,
-			enablePartialResponse,
+			enableQueryPartialResponse,
+			enableRulePartialResponse,
 			queryReplicaLabels,
+			flagsMap,
 			instantDefaultMaxSourceResolution,
-			rules.NewGRPCClient(rulesProxy),
+			maxConcurrentQueries,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

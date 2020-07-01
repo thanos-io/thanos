@@ -1,6 +1,17 @@
 import React, { FC, useState } from 'react';
 import { Link } from '@reach/router';
-import { Collapse, Navbar, NavbarToggler, Nav, NavItem, NavLink } from 'reactstrap';
+import {
+  Collapse,
+  Navbar,
+  NavbarToggler,
+  Nav,
+  NavItem,
+  NavLink,
+  UncontrolledDropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownToggle,
+} from 'reactstrap';
 import PathPrefixProps from '../types/PathPrefixProps';
 import ThanosComponentProps from './types/ThanosComponentProps';
 
@@ -9,8 +20,17 @@ interface NavConfig {
   uri: string;
 }
 
-const navConfig: { [component: string]: NavConfig[] } = {
-  query: [{ name: 'Graph', uri: '/new/graph' }],
+interface NavDropDown {
+  name: string;
+  children: NavConfig[];
+}
+
+const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
+  query: [
+    { name: 'Graph', uri: '/new/graph' },
+    { name: 'Stores', uri: '/new/stores' },
+    { name: 'Status', children: [{ name: 'Command-Line Flags', uri: '/new/flags' }] },
+  ],
 };
 
 const Navigation: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {
@@ -26,12 +46,28 @@ const Navigation: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, th
       <Collapse isOpen={isOpen} navbar style={{ justifyContent: 'space-between' }}>
         <Nav className="ml-0" navbar>
           {navConfig[thanosComponent].map(config => {
+            if ('uri' in config)
+              return (
+                <NavItem key={config.uri}>
+                  <NavLink tag={Link} to={`${pathPrefix}${config.uri}`}>
+                    {config.name}
+                  </NavLink>
+                </NavItem>
+              );
+
             return (
-              <NavItem key={config.uri}>
-                <NavLink tag={Link} to={`${pathPrefix}${config.uri}`}>
+              <UncontrolledDropdown nav inNavbar>
+                <DropdownToggle nav caret>
                   {config.name}
-                </NavLink>
-              </NavItem>
+                </DropdownToggle>
+                <DropdownMenu>
+                  {config.children.map(c => (
+                    <DropdownItem tag={Link} to={`${pathPrefix}${c.uri}`}>
+                      {c.name}
+                    </DropdownItem>
+                  ))}
+                </DropdownMenu>
+              </UncontrolledDropdown>
             );
           })}
           <NavItem>

@@ -28,10 +28,10 @@ Thanos Querier essentially allows to aggregate and optionally deduplicate multip
 
 Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
 
-* Prometheus (see [Sidecar](sidecar.md))
-* Object Storage (see [Store Gateway](store.md))
-* Global alerting/recording rules evaluations (see [Ruler](rule.md))
-* Metrics received from Prometheus remote write streams (see [Thanos Receiver](../proposals/201812_thanos-remote-receive.md))
+* Prometheus (see [Sidecar](./sidecar.md))
+* Object Storage (see [Store Gateway](./store.md))
+* Global alerting/recording rules evaluations (see [Ruler](./rule.md))
+* Metrics received from Prometheus remote write streams (see [Receiver](./receive.md))
 * Another Querier (you can stack Queriers on top of each other)
 * Non-Prometheus systems!
     * e.g [OpenTSDB](../integrations.md#opentsdb)
@@ -216,6 +216,12 @@ type queryData struct {
 Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
 option controls if storeAPI unavailability is considered critical.
 
+### Concurrent Selects
+
+Thanos Querier has the ability to perform concurrent select request per query. It dissects given PromQL statement and executes selectors concurrently against the discovered StoreAPIs.
+The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
+Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
+
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path.
@@ -233,6 +239,25 @@ or [nginx](https://github.com/kubernetes/ingress-nginx/pull/1805).
 If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPrefixStrip`
 Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header.
 Then, `thanos query --web.prefix-header=X-Forwarded-Prefix` will serve correct HTTP redirects and links prefixed by the stripped path.
+
+## File SD
+
+`--store.sd-file` flag provides a path to a JSON or YAML formatted file, which contains a list of targets in [Prometheus target format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
+
+Example file SD file in YAML:
+
+```
+- targets:
+  - prometheus-0.thanos-sidecar:10901
+  - prometheus-1.thanos-sidecar:10901
+  - thanos-store:10901
+  - thanos-short-store:10901
+  - thanos-rule:10901
+- targets:
+  - prometheus-0.thanos-sidecar.infra:10901
+  - prometheus-1.thanos-sidecar.infra:10901
+  - thanos-store.infra:10901
+```
 
 
 ## Flags
@@ -314,6 +339,9 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.max-concurrent-select=4
+                                 Maximum number of select requests made
+                                 concurrently per a query.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be

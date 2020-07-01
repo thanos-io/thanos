@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -47,14 +48,30 @@ type RuleSpec interface {
 	Addr() string
 }
 
+// stringError forces the error to be a string
+// when marshalled into a JSON.
+type stringError struct {
+	originalErr error
+}
+
+// MarshalJSON marshals the error into a string form.
+func (e *stringError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.originalErr.Error())
+}
+
+// Error returns the original underlying error.
+func (e *stringError) Error() string {
+	return e.originalErr.Error()
+}
+
 type StoreStatus struct {
 	Name      string             `json:"name"`
-	LastCheck time.Time          `json:"last_check"`
-	LastError error              `json:"last_error"`
-	LabelSets []storepb.LabelSet `json:"label_sets"`
-	StoreType component.StoreAPI `json:"store_type"`
-	MinTime   int64              `json:"min_time"`
-	MaxTime   int64              `json:"max_time"`
+	LastCheck time.Time          `json:"lastCheck"`
+	LastError *stringError       `json:"lastError"`
+	LabelSets []storepb.LabelSet `json:"labelSets"`
+	StoreType component.StoreAPI `json:"-"`
+	MinTime   int64              `json:"minTime"`
+	MaxTime   int64              `json:"maxTime"`
 }
 
 type grpcStoreSpec struct {
@@ -510,7 +527,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = err
+	status.LastError = &stringError{originalErr: err}
 
 	if err == nil {
 		status.LastCheck = time.Now()
