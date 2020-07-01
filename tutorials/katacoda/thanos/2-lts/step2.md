@@ -1,34 +1,81 @@
-# Thanos Store Gateway
+# Thanos Sidecars
 
-In this step, we will learn about Thanos Store Gateway, how to start and what problems are solved by it.
+At the end of this step, we will have two running Prometheus instances with sidecar each.
 
-## Thanos Components
+## Step 2 - Adding Thanos Sidecar
 
-Thanos is a single Go binary capable to run in different modes. Each mode represents a different component and can be invoked in a single command.
+Here, we will modify our configuration files to include the sidecars.
 
-Let's take a look at all the Thanos commands:
+Click `Copy To Editor` for each config to propagate the configs to each file.
 
-```docker run --rm quay.io/thanos/thanos:v0.12.2 --help```
+<pre class="file" data-filename="prometheus0_eu1.yml" data-target="replace">
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: eu1
+    replica: 0
 
-You should see multiple commands that solves different purposes, a block storage based long-term storage for Prometheus.
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+  - job_name: 'sidecar'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+</pre>
 
-In this step we will focus on thanos `store gateway`:
+and
+
+<pre class="file" data-filename="prometheus0_us1.yml" data-target="replace">
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: us1
+    replica: 0
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+  - job_name: 'sidecar'
+    static_configs:
+      - targets: ['127.0.0.1:19091']
+</pre>
+
+## Deployment
+
+Click snippets to add sidecars to each Prometheus instance.
+
+### Adding sidecar to "EU1" Prometheus
 
 ```
-  thanos store [<flags>]
-    Store node giving access to blocks in a bucket provider
+docker run -d --net=host --rm \
+    -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/prometheus.yml \
+    --name prometheus-0-sidecar-eu1 \
+    -u root \
+    quay.io/thanos/thanos:v0.12.2 \
+    sidecar \
+    --http-address 0.0.0.0:19090 \
+    --grpc-address 0.0.0.0:19190 \
+    --reloader.config-file /etc/prometheus/prometheus.yml \
+    --prometheus.url http://127.0.0.1:9090 && echo "Started sidecar for Prometheus 0 EU1"
+```{{execute}}
+
+### Adding sidecars to each replica of Prometheus in "US1"
+
 ```
+docker run -d --net=host --rm \
+    -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/prometheus.yml \
+    --name prometheus-0-sidecar-us1 \
+    -u root \
+    quay.io/thanos/thanos:v0.12.2 \
+    sidecar \
+    --http-address 0.0.0.0:19091 \
+    --grpc-address 0.0.0.0:19191 \
+    --reloader.config-file /etc/prometheus/prometheus.yml \
+    --prometheus.url http://127.0.0.1:9091 && echo "Started sidecar for Prometheus 0 US1"
+```{{execute}}
 
-
-
-## Store Gateway/ Store :
-
-* This component implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space.
-* It joins a Thanos cluster on startup and advertises the data it can access.
-* It keeps a small amount of information about all remote blocks on the local disk and keeps it in sync with the bucket.
-This data is generally safe to delete across restarts at the cost of increased startup times.
-
-
-You can read more about [Store](https://thanos.io/components/store.md/) here.
-
-### TODO: Show that queries are working, served by Thanos Store Gateway.
+TODO : Add verification taken from the katacoda
