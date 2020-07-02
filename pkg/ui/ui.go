@@ -81,7 +81,7 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 	prefix := GetWebPrefix(bu.logger, bu.externalPrefix, bu.prefixHeader, req)
 
 	tmpl, err := template.New("").Funcs(bu.tmplFuncs).
-		Funcs(template.FuncMap{"pathPrefix": func() string { return prefix }}).
+		Funcs(template.FuncMap{"pathPrefix": absolutePrefix(prefix)}).
 		Parse(string(file))
 
 	if err != nil {
@@ -143,7 +143,7 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix str
 	}
 
 	t, err := template.New("").Funcs(bu.tmplFuncs).
-		Funcs(template.FuncMap{"pathPrefix": func() string { return prefix }}).
+		Funcs(template.FuncMap{"pathPrefix": absolutePrefix(prefix)}).
 		Parse(text)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -151,6 +151,15 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix str
 	}
 	if err := t.Execute(w, data); err != nil {
 		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
+	}
+}
+
+func absolutePrefix(prefix string) func() string {
+	return func() string {
+		if prefix == "" {
+			return ""
+		}
+		return "/" + prefix
 	}
 }
 
@@ -169,12 +178,6 @@ func GetWebPrefix(logger log.Logger, externalPrefix, prefixHeader string, r *htt
 	prefix, err := SanitizePrefix(prefix)
 	if err != nil {
 		level.Warn(logger).Log("msg", "Could not parse value of UI external prefix", "prefix", prefix, "err", err)
-	}
-
-	// To use relative URLs we need the prefix to have trailing "/" so that we don't have to add the
-	// "/" everywhere in templates.
-	if prefix != "" {
-		prefix = prefix + "/"
 	}
 
 	return prefix
