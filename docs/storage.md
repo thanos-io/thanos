@@ -340,7 +340,7 @@ Various examples for OpenStack authentication can be found in the [official docu
 By default, OpenStack Swift has a limit for maximum file size of 5 GiB. Thanos index files are often larger than that.
 To resolve this issue, Thanos uses [Static Large Objects (SLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html)
 which are uploaded as segments. These are by default put into the `segments` directory of the same container.
-Default limit for using SLO is 1 GiB which is also maximal size of the segment.
+The default limit for using SLO is 1 GiB which is also the maximum size of the segment.
 If you don't want to use the same container for the segments
 (best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects)
 you can use the `large_file_segments_container_name` option to override the default and put the segments to other container.
