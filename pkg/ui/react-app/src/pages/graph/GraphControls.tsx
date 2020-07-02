@@ -13,11 +13,13 @@ interface GraphControlsProps {
   useLocalTime: boolean;
   resolution: number | null;
   stacked: boolean;
+  maxSourceResolution: string;
 
   onChangeRange: (range: number) => void;
   onChangeEndTime: (endTime: number | null) => void;
   onChangeResolution: (resolution: number | null) => void;
   onChangeStacking: (stacked: boolean) => void;
+  onChangeMaxSourceResolution: (maxSourceResolution: string) => void;
 }
 
 class GraphControls extends Component<GraphControlsProps> {
@@ -142,6 +144,19 @@ class GraphControls extends Component<GraphControlsProps> {
             <FontAwesomeIcon icon={faChartArea} fixedWidth />
           </Button>
         </ButtonGroup>
+
+        <Input
+          type="select"
+          value={this.props.maxSourceResolution}
+          onChange={e => this.props.onChangeMaxSourceResolution(e.target.value)}
+          className="max-source-resolution-input"
+          bsSize="sm"
+        >
+          <option value="auto">Auto downsampling</option>
+          <option value="0s">Only raw data</option>
+          <option value="5m">Max 5m downsampling</option>
+          <option value="1h">Max 1h downsampling</option>
+        </Input>
       </Form>
     );
   }

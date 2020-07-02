@@ -41,6 +41,7 @@ export interface PanelOptions {
   endTime: number | null; // Timestamp in milliseconds.
   resolution: number | null; // Resolution in seconds.
   stacked: boolean;
+  maxSourceResolution: string;
 }
 
 export enum PanelType {
@@ -55,6 +56,7 @@ export const PanelDefaultOptions: PanelOptions = {
   endTime: null,
   resolution: null,
   stacked: false,
+  maxSourceResolution: '0s',
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -74,12 +76,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps) {
-    const { endTime, range, resolution, type } = this.props.options;
+    const { endTime, range, resolution, type, maxSourceResolution } = this.props.options;
     if (
       prevOpts.endTime !== endTime ||
       prevOpts.range !== range ||
       prevOpts.resolution !== resolution ||
-      prevOpts.type !== type
+      prevOpts.type !== type ||
+      prevOpts.maxSourceResolution !== maxSourceResolution
     ) {
       this.executeQuery();
     }
@@ -125,6 +128,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('start', startTime.toString());
         params.append('end', endTime.toString());
         params.append('step', resolution.toString());
+        params.append('max_source_resolution', this.props.options.maxSourceResolution);
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
@@ -213,6 +217,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ resolution: resolution });
   };
 
+  handleChangeMaxSourceResolution = (maxSourceResolution: string) => {
+    this.setOptions({ maxSourceResolution });
+  };
+
   handleChangeType = (type: PanelType) => {
     this.setState({ data: null });
     this.setOptions({ type: type });
@@ -290,10 +298,12 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                       useLocalTime={this.props.useLocalTime}
                       resolution={options.resolution}
                       stacked={options.stacked}
+                      maxSourceResolution={options.maxSourceResolution}
                       onChangeRange={this.handleChangeRange}
                       onChangeEndTime={this.handleChangeEndTime}
                       onChangeResolution={this.handleChangeResolution}
                       onChangeStacking={this.handleChangeStacking}
+                      onChangeMaxSourceResolution={this.handleChangeMaxSourceResolution}
                     />
                     <GraphTabContent
                       data={this.state.data}
