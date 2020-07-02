@@ -196,13 +196,6 @@ test: check-git install-deps
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
-.PHONY: test-ci
-test-ci: ## Runs test for CI, so excluding object storage integrations that we don't have configured yet.
-test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
-test-ci:
-	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
-	$(MAKE) test
-
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
 test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
