@@ -40,9 +40,13 @@ jobs:
     working_directory: /home/circleci/.go_workspace/src/github.com/thanos-io/thanos
     environment:
       GOBIN: "/home/circleci/.go_workspace/go/bin"
+      PROMU_VERSION: "0.5.0"
     steps:
       - checkout
-      - run: make crossbuild
+      - run: mkdir -p ${GOBIN}
+      - run: curl -L "https://github.com/prometheus/promu/releases/download/v${PROMU_VERSION}/promu-${PROMU_VERSION}.$(go env GOOS)-$(go env GOARCH).tar.gz" | tar --strip-components=1 -xzf - -C ${GOBIN}
+      - run: mv -f ${GOBIN}/promu "${GOBIN}/promu-v${PROMU_VERSION}"
+      - run: make crossbuild -W ${GOBIN}/promu-v${PROMU_VERSION} # Ignore make dependency, it needs to be enforced somehow.
       - persist_to_workspace:
           root: .
           paths:
