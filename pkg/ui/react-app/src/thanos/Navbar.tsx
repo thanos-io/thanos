@@ -29,7 +29,13 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
   query: [
     { name: 'Graph', uri: '/new/graph' },
     { name: 'Stores', uri: '/new/stores' },
-    { name: 'Status', children: [{ name: 'Command-Line Flags', uri: '/new/flags' }] },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/new/status' },
+        { name: 'Command-Line Flags', uri: '/new/flags' },
+      ],
+    },
   ],
 };
 
