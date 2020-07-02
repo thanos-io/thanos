@@ -144,7 +144,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		if *webRoutePrefix != *webExternalPrefix {
-			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected. WebUI may not work without a reverse-proxy")
+			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
 
 		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))

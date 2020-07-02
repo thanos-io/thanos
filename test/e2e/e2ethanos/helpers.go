@@ -50,11 +50,6 @@ func NewSingleHostReverseProxy(target *url.URL, externalPrefix string) *httputil
 		} else {
 			req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
 		}
-
-		if _, ok := req.Header["User-Agent"]; !ok {
-			// Explicitly disable User-Agent so it's not set to default value.
-			req.Header.Set("User-Agent", "")
-		}
 	}
 	return &httputil.ReverseProxy{Director: director}
 }

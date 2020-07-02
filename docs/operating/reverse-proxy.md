@@ -7,7 +7,7 @@ slug: /reverse-proxy.md
 
 # Running Thanos behind a reverse proxy
 
-There are many reasons to use a [reverse proxy](https://www.nginx.com/resources/glossary/reverse-proxy-server/) in front of Thanos. For example, SSL termination (serve Thanos over HTTPS) and basic authentication. This small guide will tell you how to do that.
+There are many reasons to use a [reverse proxy](https://www.nginx.com/resources/glossary/reverse-proxy-server/) in front of Thanos, for example, TLS termination (serve Thanos over HTTPS) and basic authentication. This small guide will tell you how to do that.
 
 ## External Prefix and Route Prefix
 
