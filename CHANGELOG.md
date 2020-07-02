@@ -196,9 +196,10 @@ sse_config:
 - [#2739](https://github.com/thanos-io/thanos/pull/2739) Changed `bucket tool bucket verify` `--id-whitelist` flag to `--id`.
 - [#2748](https://github.com/thanos-io/thanos/pull/2748) Upgrade Prometheus to [@66dfb951c4ca](https://github.com/prometheus/prometheus/commit/66dfb951c4ca2c1dd3f266172a48a925403b13a5) which is after v2.19.0.
   - PromQL now allow us to executed concurrent selects.
-- [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift]() providing large objects support.
+- [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support.
    By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`.
    To change the defaults see [the docs](./docs/storage.md#openstack-swift).
+
 
 ### Added
 

@@ -31,6 +31,7 @@ import (
 const DirDelim = '/'
 
 var DefaultConfig = Config{
+	AuthVersion:    0, // Means autodetect of the auth API version by the library
 	ChunkSize:      1024 * 1024 * 1024,
 	Retries:        3,
 	ConnectTimeout: "10s",
