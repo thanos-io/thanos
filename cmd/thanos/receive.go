@@ -18,6 +18,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -205,8 +206,7 @@ func runReceive(
 	allowOutOfOrderUpload bool,
 ) error {
 	logger = log.With(logger, "component", "receive")
-	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
-
+	level.Warn(logger).Log("msg", "setting up receive")
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
 	if err != nil {
 		return err
@@ -285,8 +285,8 @@ func runReceive(
 
 	// dbReady signals when TSDB is ready and the Store gRPC server can start.
 	dbReady := make(chan struct{}, 1)
-	// updateDB signals when TSDB needs to be flushed and updated.
-	updateDB := make(chan struct{}, 1)
+	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
+	hashringChangedChan := make(chan struct{}, 1)
 	// uploadC signals when new blocks should be uploaded.
 	uploadC := make(chan struct{}, 1)
 	// uploadDone signals when uploading has finished.
@@ -294,16 +294,28 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
-		// TSDB.
+		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_attempted_total",
+			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
+		})
+		dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_completed_total",
+			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
+		})
+
+		// TSDBs reload logic, listening on hashring changes.
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
 
-			// Before quitting, ensure the WAL is flushed and the DB is closed.
+			// Before quitting, ensure the WAL is flushed and the DBs are closed.
 			defer func() {
 				if err := dbs.Flush(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
+				}
+				if err := dbs.Close(); err != nil {
+					level.Warn(logger).Log("err", err, "msg", "failed to close multi db")
 				}
 			}()
 
@@ -311,12 +323,12 @@ func runReceive(
 				select {
 				case <-cancel:
 					return nil
-				case _, ok := <-updateDB:
+				case _, ok := <-hashringChangedChan:
 					if !ok {
 						return nil
 					}
-
-					level.Info(logger).Log("msg", "updating DB")
+					dbUpdatesStarted.Inc()
+					level.Info(logger).Log("msg", "updating Multi DB")
 
 					if err := dbs.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
@@ -330,6 +342,7 @@ func runReceive(
 					}
 					statusProber.Ready()
 					level.Info(logger).Log("msg", "tsdb started, and server is ready to receive web requests")
+					dbUpdatesCompleted.Inc()
 					dbReady <- struct{}{}
 				}
 			}
@@ -373,7 +386,7 @@ func runReceive(
 
 		cancel := make(chan struct{})
 		g.Add(func() error {
-			defer close(updateDB)
+			defer close(hashringChangedChan)
 			for {
 				select {
 				case h, ok := <-updates:
@@ -384,7 +397,7 @@ func runReceive(
 					msg := "hashring has changed; server is not ready to receive web requests."
 					statusProber.NotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
-					updateDB <- struct{}{}
+					hashringChangedChan <- struct{}{}
 				case <-cancel:
 					return nil
 				}

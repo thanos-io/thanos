@@ -93,7 +93,7 @@ func (c *Container) Iter(ctx context.Context, dir string, f func(string) error) 
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	options := &objects.ListOpts{Full: false, Prefix: dir, Delimiter: DirDelim}
+	options := &objects.ListOpts{Full: true, Prefix: dir, Delimiter: DirDelim}
 	return objects.List(c.client, c.name, options).EachPage(func(page pagination.Page) (bool, error) {
 		objectNames, err := objects.ExtractNames(page)
 		if err != nil {
@@ -120,9 +120,17 @@ func (c *Container) Get(ctx context.Context, name string) (io.ReadCloser, error)
 
 // GetRange returns a new range reader for the given object name and range.
 func (c *Container) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	lowerLimit := ""
+	upperLimit := ""
+	if off >= 0 {
+		lowerLimit = fmt.Sprintf("%d", off)
+	}
+	if length > 0 {
+		upperLimit = fmt.Sprintf("%d", off+length-1)
+	}
 	options := objects.DownloadOpts{
 		Newest: true,
-		Range:  fmt.Sprintf("bytes=%d-%d", off, off+length-1),
+		Range:  fmt.Sprintf("bytes=%s-%s", lowerLimit, upperLimit),
 	}
 	response := objects.Download(c.client, c.name, name, options)
 	return response.Body, response.Err
@@ -251,7 +259,7 @@ func configFromEnv() SwiftConfig {
 		ProjectName:       os.Getenv("OS_PROJECT_NAME"),
 		UserDomainID:      os.Getenv("OS_USER_DOMAIN_ID"),
 		UserDomainName:    os.Getenv("OS_USER_DOMAIN_NAME"),
-		ProjectDomainID:   os.Getenv("OS_PROJET_DOMAIN_ID"),
+		ProjectDomainID:   os.Getenv("OS_PROJECT_DOMAIN_ID"),
 		ProjectDomainName: os.Getenv("OS_PROJECT_DOMAIN_NAME"),
 	}
 

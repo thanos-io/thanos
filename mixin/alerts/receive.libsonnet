@@ -102,14 +102,14 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              message: 'Thanos Receive {{$labels.job}} has not uploaded latest data to object storage.',
+              message: 'Thanos Receive {{ $labels.instance }} of {{$labels.job}} has not uploaded latest data to object storage.',
             },
             expr: |||
               (up{%(selector)s} - 1)
-              + on (instance) # filters to only alert on current instance last 2h
-              sum by (instance) (increase(thanos_shipper_uploads_total{%(selector)s}[2h]) == 0)
+              + on (instance) # filters to only alert on current instance last 3h
+              (sum by (instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
             ||| % thanos.receive,
-            'for': '2h',
+            'for': '3h',
             labels: {
               severity: 'critical',
             },

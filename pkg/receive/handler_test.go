@@ -183,8 +183,7 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 }
 
 func TestReceiveQuorum(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)
-
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
@@ -521,8 +520,7 @@ func TestReceiveQuorum(t *testing.T) {
 }
 
 func TestReceiveWithConsistencyDelay(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)
-
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }

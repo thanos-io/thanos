@@ -13,12 +13,21 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
+* [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: fix issue with missing Content-Type HTTP headers.
+
+### Changed
+
+## [v0.14.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
+
+### Fixed
+
 - [#2637](https://github.com/thanos-io/thanos/pull/2637) Compact: detect retryable errors that are inside of a wrapped `tsdb.MultiError`
 - [#2648](https://github.com/thanos-io/thanos/pull/2648) Store: allow index cache and caching bucket to be configured at the same time.
 - [#2705](https://github.com/thanos-io/thanos/pull/2705) minio-go: Added support for `af-south-1` and `eu-south-1` regions.
 - [#2728](https://github.com/thanos-io/thanos/pull/2728) Query: Fixed panics when using larger number of replica labels with short series label sets.
 - [#2787](https://github.com/thanos-io/thanos/pull/2787) Update Prometheus mod to pull in prometheus/prometheus#7414.
 - [#2807](https://github.com/thanos-io/thanos/pull/2807) Store: decreased memory allocations while querying block's index.
+- [#2809](https://github.com/thanos-io/thanos/pull/2809) Query: `/api/v1/stores` now guarantees to return a string in the `lastError` field.
 - [#2524](https://github.com/thanos-io/thanos/pull/2524) Apply webrouteprefix to debug endpoints.
 
 ### Changed
@@ -26,6 +35,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2658](https://github.com/thanos-io/thanos/pull/2658) [#2703](https://github.com/thanos-io/thanos/pull/2703) Upgrade to Prometheus [@3268eac2ddda](https://github.com/prometheus/prometheus/commit/3268eac2ddda) which is after v2.18.1.
     - TSDB now does memory-mapping of Head chunks and reduces memory usage.
 - [#2667](https://github.com/thanos-io/thanos/pull/2667) Store: removed support to the legacy `index.cache.json`. The hidden flag `--store.disable-index-header` was removed.
+- [#2613](https://github.com/thanos-io/thanos/pull/2613) Store: renamed the caching bucket config option `chunk_object_size_ttl` to `chunk_object_attrs_ttl`.
 - [#2667](https://github.com/thanos-io/thanos/pull/2667) Compact: the deprecated flag `--index.generate-missing-cache-file` and the metric `thanos_compact_generated_index_total` were removed.
 - [2603](https://github.com/thanos-io/thanos/pull/2603) Store/Querier: Significantly optimize cases where StoreAPIs or blocks returns exact overlapping chunks (e.g Store GW and sidecar or brute force Store Gateway HA).
 - [#2671](https://github.com/thanos-io/thanos/pull/2671) *breaking* Tools: bucket replicate flag `--resolution` is now in Go duration format.
