@@ -102,6 +102,7 @@ Each of the use case of the sub-part would be described and a possible implement
 Since Middlewares are a good chunk of the implementation, it makes sense to discuss briefly about -
 
 * How we are going to use the middlewares in our logging.
+* How can users can configure it?
 * Discuss the different types of middlewares that we plan to use.
 
 **Usage of Middlewares** : As it has been suggested by the diagram above, we plan to put in interceptors/middlewares to intercept the connection for a server implementation and client implementation.
@@ -118,6 +119,13 @@ The middlewares provide a nice abstraction to log the queries because we have th
 All of the goals are easily possible using grpc middlewares, as the grpc-ecosystem has a nice set of middlewares that makes the above possible, so we can just plug and play our middlewares
 
 For HTTP, all these nice middlewares are not present, so we need to code up our implementation performing the same logic.
+
+**User specific configurations** : Currently we are going to provide the following user facing configurations for using the request logger - 
+* Use pre-defined adaptive logging policy
+* The users can set the levels of adaptive and request logging. Error, however would be logged at the ERROR level.
+* Users can switch off the audit/adaptive logging by passing flags
+* All the audit/adaptive logging can be logged into the respective files by passing the path of the files as a cli argument.
+* Currently the policy for request logging is hardcoded, may be extended as a user based policy later.
 
 **Types of Middlewares** : We are going to use the following middlewares for achieving the above objectives -
 
@@ -167,6 +175,7 @@ adpativeLogger = log.With(logger, "component", component.StoreAPI)
 
 #### Use case 3:
 #### Common Use case to all
+
 * **Tracking queries across different components**
 The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
 
