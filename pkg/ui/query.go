@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
@@ -47,6 +48,7 @@ func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.St
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "<error retrieving current working directory>"
+		level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
 	}
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Query),

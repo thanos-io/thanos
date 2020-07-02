@@ -492,10 +492,11 @@ func runQuery(
 	return nil
 }
 
-func runtimeInfo() v1.RuntimeInfo {
+func runtimeInfo(logger log.Logger) v1.RuntimeInfo {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "<error retrieving current working directory>"
+		level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
 	}
 
 	status := v1.RuntimeInfo{
