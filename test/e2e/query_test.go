@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -100,7 +101,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -166,23 +167,87 @@ func TestQuery(t *testing.T) {
 	})
 }
 
-func TestQueryRoutePrefix(t *testing.T) {
+func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
+	externalPrefix := "test"
+
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
 		nil,
 		nil,
 		nil,
-		"test",
+		"",
+		externalPrefix,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
+	checkNetworkRequests(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryExternalPrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_external_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	externalPrefix := "thanos"
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		"",
+		externalPrefix,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
+
+	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
+
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_external_prefix_and_route_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	externalPrefix := "thanos"
+	routePrefix := "test"
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		routePrefix,
+		externalPrefix,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
+
+	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
+
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
 
@@ -196,9 +261,9 @@ func TestQueryRoutePrefix(t *testing.T) {
 		}
 	})
 
-	err = chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		network.Enable(),
-		chromedp.Navigate("http://"+q.HTTPEndpoint()+"/test/graph"),
+		chromedp.Navigate(addr),
 		chromedp.WaitVisible(`body`),
 	)
 	testutil.Ok(t, err)

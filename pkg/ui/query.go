@@ -103,7 +103,7 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 func (q *Query) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r)
 
-	http.Redirect(w, r, path.Join(prefix, "/graph"), http.StatusFound)
+	http.Redirect(w, r, path.Join("/", prefix, "/graph"), http.StatusFound)
 }
 
 func (q *Query) graph(w http.ResponseWriter, r *http.Request) {
