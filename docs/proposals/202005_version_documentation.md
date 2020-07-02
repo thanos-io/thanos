@@ -14,9 +14,9 @@ The Thanos website contains the docs area which is built by rendering the markdo
 
 This proposal aims to solve this by:
 
-1. Build a Version Picker that serves as a tool which will aid easy access to other versions of the documentation. This picker will include links to change version (the version must be in the URL).
-2. A robust documentation structure.
-3. Design a workflow for managing docs that integrates with Thanos's Git workflow, i.e. updating corresponding docs on pull requests, cherry-picks, etc.
+1. building a version picker that serves as a tool which will aid easy access to other versions of the documentation. This picker will include links to change version (the version must be in the URL).
+2. providing a documentation structure.
+3. designing a workflow for managing docs that integrates with Thanos's Git workflow, i.e. updating corresponding docs on pull requests, cherry-picks, etc.
 
 ## Motivation
 
@@ -28,7 +28,7 @@ Many users (mostly developers) often want to look through the docs of previous r
 #### User Story (Latest)
 
 * As a Thanos developer, I want to be able to just write docs for my current `master` version.
-* As a Thanos developer, I want to build website with versioned docs with a single action.
+* As a Thanos developer, I want to build the website with versioned docs with a single action.
 * As a Thanos developer, I don't want to store duplicated docs in a single repository version.
 
 #### User Story (Previous release)
@@ -42,13 +42,13 @@ Many users (mostly developers) often want to look through the docs of previous r
 Thanos developers, Hugo developers, and general users.
 
 ##### Precondition
-The user visits the Thanos Documentation Page.
+The user visits the Thanos documentation page.
 
 ##### Basic Course Of Events
 
 1. The user indicates that the site is to show a list of docs (both latest and previous releases) by clicking the version picker (dropdown).
 2. The site responds by displaying a list of versions allowing the user to make a selection.
-3. The user makes selection and the required docs are rendered on the page/site.
+3. The user makes a selection and the required docs are rendered on the page/site.
 
 ##### Postcondition
 
@@ -75,7 +75,7 @@ Directory Sub branching means creating different sub branches in the `versioned`
         |- public
         |- docs-pre-processed
 ```
-We want to add aditional `versioned` folder within the website's `tmp` directory. For example:
+We want to add an additional `versioned` folder within the website's `tmp` directory. For example:
 
 ```|- website
     |- archetypes
@@ -104,8 +104,8 @@ Creating a plugin that can automate these processes would save us a lot of devel
 
 1. The developer makes all the necessary edits in `/docs` on master.
 2. The developer proceeds by committing a new release (i.e Release 0.x).
-3. CI run some `make web` or `make web-serve`.
-4. Before anything, generates the docs and places them in a `versioned` tmp folder.
+3. CI run some `make web` or `make web-serve` command.
+4. Before anything, CI generates the docs and places them in a `versioned` tmp folder.
 5. the rest of the web command is executed.
 
 _NOTE: generated docs are not committed, just temporarily built._
@@ -131,10 +131,10 @@ We hope to have a single, flexible configuration file (`docs.yaml`) that will he
 
 We could have this file on master, so the current `make web` will
 
-1. Parse `docs.yaml` on master and decide.
-1. Go to that particular release (`i.e release-0.10`)
+1. Parse `docs.yaml` from master and use this as a default.
+1. Check out each release (e.g. `release-0.10`)
 1. Is there docs.yaml?
-    * Yes - parse and decide
+    * Yes - parse the file and use it
     * No - use docs.yaml from master
 
 The design of docs.yaml will look like this:
@@ -157,7 +157,7 @@ We will edit the particular release (release-0.12) branch and add a commit. The 
 
 ##### How does the tool discover the releases for fixes?
 
-With a regular expression. Instead of the developer manually checking out the individual release branches, the tool handles it for them by using a regex to select and clone valid release branches. The tool (config file) will have a `release-branch-regex` field. For Thanos, the regular expression would be something like `release-(.*)`.
+With a regular expression. Instead of the developer manually checking out the individual release branches, the tool handles it for them by using a regex to select and clone valid release branches. The config file for the tool will have a `release-branch-regex` field. For Thanos, the regular expression would be something like `release-(.*)`.
 
 ## Summary
 
