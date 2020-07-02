@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -404,6 +407,15 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
+		buildInfo := &v1.ThanosVersion{
+			Version:   version.Version,
+			Revision:  version.Revision,
+			Branch:    version.Branch,
+			BuildUser: version.BuildUser,
+			BuildDate: version.BuildDate,
+			GoVersion: version.GoVersion,
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
@@ -423,6 +435,8 @@ func runQuery(
 			flagsMap,
 			instantDefaultMaxSourceResolution,
 			maxConcurrentQueries,
+			runtimeInfo,
+			buildInfo,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
@@ -468,6 +482,24 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
+}
+
+func runtimeInfo() v1.RuntimeInfo {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "<error retrieving current working directory>"
+	}
+
+	status := v1.RuntimeInfo{
+		StartTime:      time.Now().UTC(),
+		CWD:            cwd,
+		GoroutineCount: runtime.NumGoroutine(),
+		GOMAXPROCS:     runtime.GOMAXPROCS(0),
+		GOGC:           os.Getenv("GOGC"),
+		GODEBUG:        os.Getenv("GODEBUG"),
+	}
+
+	return status
 }
 
 func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
