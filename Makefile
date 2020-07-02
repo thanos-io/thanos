@@ -113,7 +113,7 @@ build: check-git deps $(PROMU)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
-crossbuild: $(PROMU)
+crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
