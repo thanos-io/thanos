@@ -1318,7 +1318,7 @@ func TestRulesHandler(t *testing.T) {
 			Type:           "recording",
 		},
 		testpromcompatibility.AlertingRule{
-			State:          all[2].GetAlert().State.String(),
+			State:          strings.ToLower(all[2].GetAlert().State.String()),
 			Name:           all[2].GetAlert().Name,
 			Query:          all[2].GetAlert().Query,
 			Labels:         storepb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
@@ -1332,7 +1332,7 @@ func TestRulesHandler(t *testing.T) {
 				{
 					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
 					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
-					State:                   all[2].GetAlert().Alerts[0].State.String(),
+					State:                   strings.ToLower(all[2].GetAlert().Alerts[0].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[0].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
@@ -1340,7 +1340,7 @@ func TestRulesHandler(t *testing.T) {
 				{
 					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
 					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
-					State:                   all[2].GetAlert().Alerts[1].State.String(),
+					State:                   strings.ToLower(all[2].GetAlert().Alerts[1].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[1].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[1].PartialResponseStrategy.String(),
@@ -1349,7 +1349,7 @@ func TestRulesHandler(t *testing.T) {
 			Type: "alerting",
 		},
 		testpromcompatibility.AlertingRule{
-			State:          all[3].GetAlert().State.String(),
+			State:          strings.ToLower(all[3].GetAlert().State.String()),
 			Name:           all[3].GetAlert().Name,
 			Query:          all[3].GetAlert().Query,
 			Labels:         storepb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),

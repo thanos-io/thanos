@@ -247,7 +247,7 @@ func (x *AlertState) UnmarshalJSON(entry []byte) error {
 }
 
 func (x *AlertState) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(x.String())), nil
+	return []byte(strconv.Quote(strings.ToLower(x.String()))), nil
 }
 
 // Compare compares alert state x and y and returns:

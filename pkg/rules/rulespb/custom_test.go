@@ -207,7 +207,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 										Annotations: labels.Labels{
 											{Name: "annotation1", Value: "2"},
 										},
-										State:                   "INACTIVE",
+										State:                   "inactive",
 										ActiveAt:                nil,
 										Value:                   "1",
 										PartialResponseStrategy: "WARN",
@@ -215,7 +215,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 									{
 										Labels:                  nil,
 										Annotations:             nil,
-										State:                   "FIRING",
+										State:                   "firing",
 										ActiveAt:                &twoHoursAgo,
 										Value:                   "2143",
 										PartialResponseStrategy: "ABORT",
@@ -223,7 +223,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								},
 								LastError:      "1",
 								Duration:       60,
-								State:          "PENDING",
+								State:          "pending",
 								LastEvaluation: now.Add(-1 * time.Minute),
 								EvaluationTime: 1.1,
 							},
