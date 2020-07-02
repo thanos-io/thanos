@@ -14,6 +14,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 * [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: fix issue with missing Content-Type HTTP headers.
+- [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`
 
 ### Changed
 
@@ -27,7 +28,6 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2728](https://github.com/thanos-io/thanos/pull/2728) Query: Fixed panics when using larger number of replica labels with short series label sets.
 - [#2787](https://github.com/thanos-io/thanos/pull/2787) Update Prometheus mod to pull in prometheus/prometheus#7414.
 - [#2807](https://github.com/thanos-io/thanos/pull/2807) Store: decreased memory allocations while querying block's index.
-- [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`
 - [#2809](https://github.com/thanos-io/thanos/pull/2809) Query: `/api/v1/stores` now guarantees to return a string in the `lastError` field.
 
 ### Changed
