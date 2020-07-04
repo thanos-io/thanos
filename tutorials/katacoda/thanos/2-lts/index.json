@@ -1,17 +1,25 @@
 {
   "title": "Intro: Downsampling and unlimited metric retention for Prometheus",
   "description": "Learn how to extend you metric retention in a cheap way with Thanos.",
+  "difficulty": "Beginner",
+  "time": "15-20 Minutes",
   "details": {
     "steps": [
+      {
+        "title": "Start initial Prometheus servers",
+        "text": "step1.md",
+        "verify": "step1-verify.sh"
+      },
+      {
+        "title": "Thanos Sidecars",
+        "text": "step2.md",
+        "verify": "step2-verify.sh"
+      }
     ],
     "intro": {
       "text": "intro.md",
       "courseData": "courseBase.sh"
     }
-  },
-  "environment": {
-    "uilayout": "editor-terminal",
-    "uisettings": "yaml"
   },
   "files": [
     "prometheus0_eu1.yml",
