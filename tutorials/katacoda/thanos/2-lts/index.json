@@ -13,6 +13,19 @@
     "uilayout": "editor-terminal",
     "uisettings": "yaml"
   },
+  "files": [
+    "prometheus0_eu1.yml",
+    "prometheus0_us1.yml"
+  ],
+  "environment": {
+    "uilayout": "editor-terminal",
+    "uisettings": "yaml",
+    "showdashboard": true,
+    "dashboards": [
+      {"name": "Prometheus 0 EU1", "port": 9090},
+      {"name": "Prometheus 0 US1", "port": 9091}
+    ]
+  },
   "backend": {
     "imageid": "docker-direct"
   }
