@@ -14,6 +14,11 @@
         "title": "Thanos Sidecars",
         "text": "step2.md",
         "verify": "step2-verify.sh"
+      },
+      {
+        "title": "Thanos Store Gateway",
+        "text": "step3.md",
+        "verify": "step3-verify.sh"
       }
     ],
     "intro": {
