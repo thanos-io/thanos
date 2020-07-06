@@ -527,8 +527,6 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = &stringError{originalErr: err}
-
 	if err == nil {
 		status.LastCheck = time.Now()
 		mint, maxt := store.TimeRange()
@@ -536,6 +534,8 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.StoreType = store.StoreType()
 		status.MinTime = mint
 		status.MaxTime = maxt
+	} else {
+		status.LastError = &stringError{originalErr: err}
 	}
 
 	s.storeStatuses[store.addr] = &status
