@@ -527,7 +527,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = &stringError{originalErr: err}
+	if err != nil {
+		status.LastError = &stringError{originalErr: err}
+	}
 
 	if err == nil {
 		status.LastCheck = time.Now()
