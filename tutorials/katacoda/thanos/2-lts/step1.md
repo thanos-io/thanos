@@ -1,8 +1,12 @@
-# Step 1 - Start initial Prometheus servers
+# Step 1 - Initial Prometheus Setup
+
+Thanos builds upon vanilla Prometheus instances which states it seamlessly integrates into existing Prometheus setups.
 
 In this tutorial, we will be using two Prometheus Servers.
 
 * We have one Prometheus server in eu1 region and one Prometheus servers scraping the same target in us1 region.
+
+Let's start this initial Prometheus setup, ready?
 
 ## Prometheus Configuration Files
 
@@ -96,3 +100,7 @@ Once started you should be able to reach all of those Prometheus instances:
 
 * [Prometheus-0 EU1](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/)
 * [Prometheus-1 US1](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/)
+
+## Next
+
+Voila ! We have 2 Prometheus instances running. In the next steps, we will learn how to transform Prometheus servers to solve various problems that will result into long term retention.
