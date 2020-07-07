@@ -1,4 +1,4 @@
-# Thanos Store Gateway
+# Step 3 - Installing Thanos Store
 
 In this step, we will learn about Thanos Store Gateway, how to start and what problems are solved by it.
 
@@ -15,11 +15,9 @@ You should see multiple commands that solves different purposes, a block storage
 In this step we will focus on thanos `store gateway`:
 
 ```
-  thanos store [<flags>]
+  store [<flags>]
     Store node giving access to blocks in a bucket provider
 ```
-
-
 
 ## Store Gateway/ Store :
 
@@ -31,4 +29,58 @@ This data is generally safe to delete across restarts at the cost of increased s
 
 You can read more about [Store](https://thanos.io/components/store.md/) here.
 
-### TODO: Show that queries are working, served by Thanos Store Gateway.
+## Installation
+
+Here, we will modify our configuration files to include the store gateway and querier.
+
+Click `Copy To Editor` for each config to propagate the configs to each file.
+
+<pre class="file" data-filename="prometheus0_eu1.yml" data-target="replace">
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: eu1
+    replica: 0
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+  - job_name: 'sidecar'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+  - job_name: 'store_gateway'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+  - job_name: 'querier'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+</pre>
+
+and
+
+<pre class="file" data-filename="prometheus0_us1.yml" data-target="replace">
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: us1
+    replica: 0
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+  - job_name: 'sidecar'
+    static_configs:
+      - targets: ['127.0.0.1:19091']
+  - job_name: 'store_gateway'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+  - job_name: 'querier'
+    static_configs:
+      - targets: ['127.0.0.1:19090']
+</pre>
+
+TODO : DEPLOYMENT PROCESS

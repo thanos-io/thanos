@@ -1,0 +1,1 @@
+### TODO: Show that queries are working, served by Thanos Store Gateway.
