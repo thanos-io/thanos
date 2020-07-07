@@ -58,7 +58,7 @@ Current object storage client implementations:
 | [Google Cloud Storage](./storage.md#gcs) | Stable  (production usage)             | yes       | @bwplotka   |
 | [AWS/S3](./storage.md#s3) | Stable  (production usage)               | yes        | @bwplotka          |
 | [Azure Storage Account](./storage.md#azure) | Stable  (production usage) | no       | @vglafirov   |
-| [OpenStack Swift](./storage.md#openstack-swift)      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
+| [OpenStack Swift](./storage.md#openstack-swift)      | Beta  (working PoCs, testing usage)               | yes       | @sudhi-vm   |
 | [Tencent COS](./storage.md#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
 | [AliYun OSS](./storage.md#aliyun-oss)           | Beta  (testing usage)                   | no        | @shaulboozhiao,@wujinhu      |
 | [Local Filesystem](./storage.md#filesystem) | Beta  (testing usage)             | yes       | @bwplotka   |
