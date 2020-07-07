@@ -836,3 +836,25 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 		testutil.Equals(t, tc.ExpectedLastErr, string(b))
 	}
 }
+
+func TestUpdateStoreStateForgetsPreviousErrors(t *testing.T) {
+	mockStoreSet := &StoreSet{
+		storeStatuses: map[string]*StoreStatus{},
+	}
+	mockStoreRef := &storeRef{
+		addr: "testStore",
+	}
+
+	mockStoreSet.updateStoreStatus(mockStoreRef, errors.New("test err"))
+
+	b, err := json.Marshal(mockStoreSet.storeStatuses["testStore"].LastError)
+	testutil.Ok(t, err)
+	testutil.Equals(t, `"test err"`, string(b))
+
+	// updating status without and error should clear the previous one.
+	mockStoreSet.updateStoreStatus(mockStoreRef, nil)
+
+	b, err = json.Marshal(mockStoreSet.storeStatuses["testStore"].LastError)
+	testutil.Ok(t, err)
+	testutil.Equals(t, `null`, string(b))
+}
