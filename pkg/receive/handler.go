@@ -533,28 +533,39 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 	h.mtx.RUnlock()
 
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
-	defer func() {
-		// If there is no error, let forward requests optimistically run until timeout.
-		if err != nil {
-			cancel()
-		}
+	var (
+		quorum       = h.writeQuorum()
+		fctx, cancel = context.WithTimeout(context.Background(), h.options.ForwardTimeout) //nolint:govet
+		errChan      = make(chan error)
+	)
+	go func() {
+		defer close(errChan)
+		errChan <- h.fanoutForward(fctx, tenant, replicas, wreqs, quorum)
 	}()
 
-	quorum := h.writeQuorum()
-	err = h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
-	if countCause(err, isNotReady) >= quorum {
-		return tsdb.ErrNotReady
-	}
-	if countCause(err, isConflict) >= quorum {
-		return errors.Wrap(conflictErr, "did not meet success threshold due to conflict")
-	}
-	if err != nil {
-		return errors.Wrap(err, "replicate")
-	}
+	select {
+	case err := <-errChan:
+		if err != nil {
+			// fanoutForward only returns an error if successThreshold (quorum) is not reached.
+			// Cancel all in-flight requests.
+			cancel()
 
-	return nil
+			if countCause(err, isNotReady) >= quorum {
+				return errors.Wrap(tsdb.ErrNotReady, "replicate: quorum not reached")
+			}
+			if countCause(err, isConflict) >= quorum {
+				return errors.Wrap(conflictErr, "replicate: quorum not reached")
+			}
+
+			return errors.Wrap(err, "unexpected error")
+		}
+
+		// If there is no error, quorum reached, let forward requests optimistically run until timeout.
+		return nil //nolint:govet
+	case <-ctx.Done():
+		cancel()
+		return errors.Wrap(ctx.Err(), "context cancelled, before quorum is reached")
+	}
 }
 
 // RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
