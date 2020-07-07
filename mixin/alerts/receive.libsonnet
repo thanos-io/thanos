@@ -3,6 +3,7 @@
   receive+:: {
     selector: error 'must provide selector for Thanos Receive alerts',
     httpErrorThreshold: 5,
+    forwardErrorThreshold: 20,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
   },
@@ -46,16 +47,18 @@
             },
           },
           {
-            alert: 'ThanosReceiveHighForwardRequestFailures',
+            alert: 'ThanosReceiveHighReplicationFailures',
             annotations: {
-              message: 'Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize }}% of requests.',
+              message: 'Thanos Receive {{$labels.job}} is failing to replicate {{ $value | humanize }}% of requests.',
             },
             expr: |||
+              thanos_receive_replication_factor > 1
+                and
               (
                 (
-                  sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
+                  sum by (job) (rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
                 /
-                  sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
+                  sum by (job) (rate(thanos_receive_replications_total{%(selector)s}[5m]))
                 )
                 >
                 (
@@ -64,6 +67,23 @@
                   max by (job) (thanos_receive_hashring_nodes{%(selector)s})
                 )
               ) * 100
+            ||| % thanos.receive,
+            'for': '5m',
+            labels: {
+              severity: 'warning',
+            },
+          },
+          {
+            alert: 'ThanosReceiveHighForwardRequestFailures',
+            annotations: {
+              message: 'Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize }}% of requests.',
+            },
+            expr: |||
+              (
+                sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
+              /
+                sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
+              ) * 100 > %(forwardErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
             labels: {

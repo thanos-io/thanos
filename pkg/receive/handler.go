@@ -109,7 +109,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		replications: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
-				Help: "The number of replication operation.",
+				Help: "The number of replication operations started by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
 		replicationFactor: promauto.With(o.Registry).NewGauge(

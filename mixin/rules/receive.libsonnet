@@ -56,6 +56,18 @@
             },
           },
           {
+            record: ':thanos_receive_replication_failure_per_requests:sum_rate',
+            expr: |||
+              (
+                sum(rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
+              /
+                sum(rate(thanos_receive_replications_total{%(selector)s}[5m]))
+              )
+            ||| % thanos.receive,
+            labels: {
+            },
+          },
+          {
             record: ':thanos_receive_forward_failure_per_requests:sum_rate',
             expr: |||
               (
