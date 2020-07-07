@@ -91,13 +91,13 @@ Click snippets to deploy thanos store to each Prometheus instance.
 
 ```
 docker run -d --net=host --rm \
-    -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/bucket.yml \
+    -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-store-eu1 \
     -u root \
     store \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
-    --objstore.config-file=/etc/prometheus/bucket.yml \
+    --objstore.config-file=/etc/prometheus/prometheus.yml \
     --prometheus.url http://127.0.0.1:9090 && echo "Deployed store gateway for Prometheus 0 EU1"
 ```{{execute}}
 
@@ -105,13 +105,13 @@ docker run -d --net=host --rm \
 
 ```
 docker run -d --net=host --rm \
-    -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/bucket.yml \
+    -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-store-us1 \
     -u root \
     store \
     --http-address 0.0.0.0:19091 \
     --grpc-address 0.0.0.0:19191 \
-    --objstore.config-file=/etc/prometheus/bucket.yml \
+    --objstore.config-file=/etc/prometheus/prometheus.yml \
     --prometheus.url http://127.0.0.1:9091 && echo "Deployed store gateway for Prometheus 0 US1"
 ```{{execute}}
 
