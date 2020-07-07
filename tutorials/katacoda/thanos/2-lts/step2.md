@@ -1,8 +1,8 @@
-# Thanos Sidecars
+# Step 2 - Installing Thanos sidecar
 
-At the end of this step, we will have two running Prometheus instances with sidecar each.
+At the end of this step, we will have two running Prometheus instances with sidecar each. You can read more about sidecar [here](https://thanos.io/components/sidecar.md/).
 
-## Step 2 - Adding Thanos Sidecar
+## Installation
 
 Here, we will modify our configuration files to include the sidecars.
 
@@ -78,4 +78,4 @@ docker run -d --net=host --rm \
     --prometheus.url http://127.0.0.1:9091 && echo "Started sidecar for Prometheus 0 US1"
 ```{{execute}}
 
-TODO : Add verification taken from the katacoda
+Now, you should have sidecars running well. Since now Prometheus has access to sidecar metrics we can query for [`thanos_sidecar_prometheus_up`](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.expr=thanos_sidecar_prometheus_up&g0.tab=1) to check if sidecar has access to Prometheus.
