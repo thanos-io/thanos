@@ -84,9 +84,9 @@ type Handler struct {
 	hashring Hashring
 	peers    *peerGroup
 
-	// Metrics.
-	forwardRequestsTotal *prometheus.CounterVec
-	replicationFactor    prometheus.Gauge
+	forwardRequests   *prometheus.CounterVec
+	replications      *prometheus.CounterVec
+	replicationFactor prometheus.Gauge
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -100,10 +100,16 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		router:  route.New(),
 		options: o,
 		peers:   newPeerGroup(o.DialOpts...),
-		forwardRequestsTotal: promauto.With(o.Registry).NewCounterVec(
+		forwardRequests: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
+			}, []string{"result"},
+		),
+		replications: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_replications_total",
+				Help: "The number of replication operation.",
 			}, []string{"result"},
 		),
 		replicationFactor: promauto.With(o.Registry).NewGauge(
@@ -386,16 +392,21 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
 				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
+					h.replications.WithLabelValues("error").Inc()
 					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
 					return
 				}
+
+				h.replications.WithLabelValues("success").Inc()
 				ec <- nil
 			}(endpoint)
+
 			continue
 		}
 
@@ -408,6 +419,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
 				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
 					err = h.writer.Write(tenant, wreqs[endpoint])
@@ -428,8 +440,8 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					return
 				}
 				ec <- nil
-
 			}(endpoint)
+
 			continue
 		}
 
@@ -444,10 +456,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			defer func() {
 				// This is an actual remote forward request so report metric here.
 				if err != nil {
-					h.forwardRequestsTotal.WithLabelValues("error").Inc()
+					h.forwardRequests.WithLabelValues("error").Inc()
 					return
 				}
-				h.forwardRequestsTotal.WithLabelValues("success").Inc()
+				h.forwardRequests.WithLabelValues("success").Inc()
 			}()
 
 			cl, err = h.peers.get(fctx, endpoint)
