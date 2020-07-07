@@ -4,10 +4,13 @@ version: 2
 defaults: &defaults
   docker:
     # Built by Thanos make docker-ci
-    - image: quay.io/thanos/thanos-ci:v1.2-go1.14.2-node
+    - image: &default-docker-image quay.io/thanos/thanos-ci:v1.2-go1.14.2-node
+
 jobs:
   test:
-    <<: *defaults
+    docker:
+      - image: *default-docker-image
+      - image: beaukode/docker-swift-onlyone-authv2-keystone
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
@@ -26,13 +29,21 @@ jobs:
             fi
       - run:
           name: "Run unit tests."
+          environment:
+            THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS
+            # Variables for Swift testing.
+            OS_AUTH_URL: http://127.0.0.1:5000/v2.0
+            OS_PASSWORD: s3cr3t
+            OS_PROJECT_NAME: admin
+            OS_REGION_NAME: RegionOne
+            OS_USERNAME: admin
           # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then
-              taskset 2 make test-local
-              exit
+              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP},GCS,S3
             fi
-            taskset 2 make test-ci
+            echo "Skipping tests for object storages: ${THANOS_TEST_OBJSTORE_SKIP}"
+            taskset 2 make test
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
