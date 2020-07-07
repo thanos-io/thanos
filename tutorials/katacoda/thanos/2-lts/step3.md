@@ -77,12 +77,44 @@ scrape_configs:
       - targets: ['127.0.0.1:19091']
   - job_name: 'store_gateway'
     static_configs:
-      - targets: ['127.0.0.1:19090']
+      - targets: ['127.0.0.1:19091']
   - job_name: 'querier'
     static_configs:
-      - targets: ['127.0.0.1:19090']
+      - targets: ['127.0.0.1:19091']
 </pre>
 
 ## Deployment
 
-to be added
+Click snippets to deploy thanos store to each Prometheus instance.
+
+### Deploying store to "EU1" Prometheus
+
+```
+docker run -d --net=host --rm \
+    -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/bucket.yml \
+    --name prometheus-0-store-eu1 \
+    -u root \
+    store \
+    --http-address 0.0.0.0:19090 \
+    --grpc-address 0.0.0.0:19190 \
+    --objstore.config-file=/etc/prometheus/bucket.yml \
+    --prometheus.url http://127.0.0.1:9090 && echo "Deployed store gateway for Prometheus 0 EU1"
+```{{execute}}
+
+### Deploying store to "US1" Prometheus
+
+```
+docker run -d --net=host --rm \
+    -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/bucket.yml \
+    --name prometheus-0-store-us1 \
+    -u root \
+    store \
+    --http-address 0.0.0.0:19091 \
+    --grpc-address 0.0.0.0:19191 \
+    --objstore.config-file=/etc/prometheus/bucket.yml \
+    --prometheus.url http://127.0.0.1:9091 && echo "Deployed store gateway for Prometheus 0 US1"
+```{{execute}}
+
+## Next
+
+Voila ! In the next step, we will talk about downsampling, why it's important and see how queries are still working served by Thanos Store Gateway.
