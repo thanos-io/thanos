@@ -7,7 +7,7 @@ Definitions of our courses for Katacoda.
 Process of adding / editing tutorials:
 
 1. Sign up to [Katacoda website](https://katacoda.com).
-1. Link your fork of Thanos to your account, see [this](https://katacoda.com/docs/configure-git).
+1. Link your fork of Thanos to your account, see [this](https://www.katacoda.community/author-profile.html).
 1. Add / edit tutorials.
 1. Push to `master` of your fork.
    * You should see the updated preview of the tutorials on https://katacoda.com/<your-profile>.
