@@ -63,7 +63,7 @@ docker run -d --net=host --rm \
     --prometheus.url http://127.0.0.1:9090 && echo "Started sidecar for Prometheus 0 EU1"
 ```{{execute}}
 
-### Adding sidecars to each replica of Prometheus in "US1"
+### Adding sidecar to "US1" Prometheus
 
 ```
 docker run -d --net=host --rm \
