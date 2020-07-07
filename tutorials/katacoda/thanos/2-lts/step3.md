@@ -83,4 +83,6 @@ scrape_configs:
       - targets: ['127.0.0.1:19090']
 </pre>
 
-TODO : DEPLOYMENT PROCESS
+## Deployment
+
+to be added
