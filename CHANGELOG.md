@@ -17,6 +17,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`
 
 ### Changed
+- [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 
 ## [v0.14.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 

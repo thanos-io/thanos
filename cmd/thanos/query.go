@@ -429,10 +429,10 @@ func runQuery(
 			CWD = "<error retrieving current working directory>"
 			level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
 		}
-		
+
 		birth := time.Now()
 
-		var runtimeInfo v1.RuntimeInfoFn = func (logger log.Logger) v1.RuntimeInfo {
+		var runtimeInfo v1.RuntimeInfoFn = func(logger log.Logger) v1.RuntimeInfo {
 			status := v1.RuntimeInfo{
 				StartTime:      birth,
 				CWD:            CWD,

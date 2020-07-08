@@ -34,15 +34,6 @@ type Query struct {
 	now     func() model.Time
 }
 
-type thanosVersion struct {
-	Version   string `json:"version"`
-	Revision  string `json:"revision"`
-	Branch    string `json:"branch"`
-	BuildUser string `json:"buildUser"`
-	BuildDate string `json:"buildDate"`
-	GoVersion string `json:"goVersion"`
-}
-
 func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo func(log.Logger) v1.RuntimeInfo, buildInfo v1.ThanosVersion) *Query {
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Query),
