@@ -2,6 +2,7 @@ import moment from 'moment-timezone';
 
 import { PanelOptions, PanelType, PanelDefaultOptions } from '../pages/graph/Panel';
 import { PanelMeta } from '../pages/graph/PanelList';
+import { queryURL } from '../thanos/config';
 
 export const generateID = () => {
   return `_${Math.random()
@@ -201,6 +202,12 @@ export const encodePanelOptionsToQueryString = (panels: PanelMeta[]) => {
 export const createExpressionLink = (expr: string) => {
   return `../graph?g0.expr=${encodeURIComponent(expr)}&g0.tab=1&g0.stacked=0&g0.range_input=1h`;
 };
+
+export const createExternalExpressionLink = (expr: string) => {
+  const expLink = createExpressionLink(expr);
+  return `${queryURL}${expLink.replace(/^\.\./, '')}`;
+};
+
 export const mapObjEntries = <T, key extends keyof T, Z>(
   o: T,
   cb: ([k, v]: [string, T[key]], i: number, arr: [string, T[key]][]) => Z
