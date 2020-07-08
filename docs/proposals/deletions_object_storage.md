@@ -4,7 +4,7 @@ type: proposal
 menu: proposals
 status: draft
 owner: bwplotka, Harshitha1234, metalmatze
---- 
+---
 
 ### Ticket: https://github.com/thanos-io/thanos/issues/1598
 ## Summary
@@ -47,7 +47,7 @@ The main motivation for considering deletions in the object storage are the foll
     *   **Performing deletes on already compacted blocks:** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.)
 *   For undoing deletions of a time series there are two proposed ways
     *   API to undelete a time series - maybe delete the whole tombstones file?
-    *   “Imaginary” deletion that can delete other tombstones 
+    *   “Imaginary” deletion that can delete other tombstones
 
 Considerations :
 
