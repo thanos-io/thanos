@@ -41,7 +41,7 @@ The main motivation for considering deletions in the object storage are the foll
 *   **Perspectives to deal with Compaction of blocks having tombstones:**
     *   **Block with tombstones** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.) We solve the tombstones, if the tombstones are greater than than the threshold and then perform compaction. If not we attach the tombstone file to the new block. If multiple blocks are being compacted, we merge the tombstone files of the blocks whose threshold is not met.
     *   **Block with deletion-mark.json i.e., entire block marked for deletion:** Returns an error message as the entire block is going to be deleted.
-*   **Perspectives to deal with Downsampling of blocks having tombstones:** 
+*   **Perspectives to deal with Downsampling of blocks having tombstones:**
     *   **Block with tombstones:** If the tombstones are less than the threshold we copy the tombstone file and attach it to the new downsampled block else we solve the tombstones and downsample the block. And the downsampled block with tombstones during its next compaction would again have the same cases as with the compaction of a block with tombstones.
     *   **Blocks without tombstones:** Downsampling happens...
 
