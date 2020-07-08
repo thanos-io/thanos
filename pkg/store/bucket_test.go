@@ -574,7 +574,7 @@ func TestBucketStore_Info(t *testing.T) {
 		noopCache{},
 		nil,
 		2e5,
-		0,
+		NewChunksLimiterFactory(0),
 		false,
 		20,
 		allowAllFilterConf,
@@ -823,7 +823,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				noopCache{},
 				nil,
 				0,
-				0,
+				NewChunksLimiterFactory(0),
 				false,
 				20,
 				allowAllFilterConf,
@@ -1248,8 +1248,8 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{blocks}},
 		},
-		queryGate:      noopGate{},
-		samplesLimiter: noopLimiter{},
+		queryGate:            noopGate{},
+		chunksLimiterFactory: NewChunksLimiterFactory(0),
 	}
 
 	for _, block := range blocks {
@@ -1329,10 +1329,6 @@ type noopGate struct{}
 
 func (noopGate) Start(context.Context) error { return nil }
 func (noopGate) Done()                       {}
-
-type noopLimiter struct{}
-
-func (noopLimiter) Check(uint64) error { return nil }
 
 // Regression test against: https://github.com/thanos-io/thanos/issues/2147.
 func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
@@ -1456,8 +1452,8 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			b1.meta.ULID: b1,
 			b2.meta.ULID: b2,
 		},
-		queryGate:      noopGate{},
-		samplesLimiter: noopLimiter{},
+		queryGate:            noopGate{},
+		chunksLimiterFactory: NewChunksLimiterFactory(0),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1571,7 +1567,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		indexCache,
 		nil,
 		1000000,
-		10000,
+		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		false,
 		10,
 		nil,
@@ -1680,7 +1676,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		indexCache,
 		nil,
 		1000000,
-		10000,
+		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		false,
 		10,
 		nil,
