@@ -118,7 +118,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 
 	tsdbs := map[string]*TSDBStore{}
 	for i, db := range dbs {
-		tsdbs[fmt.Sprintf("%v", i)] = &TSDBStore{db: db, logger: logger, maxSamplesPerChunk: 120} // On production we have math.MaxInt64
+		tsdbs[fmt.Sprintf("%v", i)] = &TSDBStore{db: db, logger: logger}
 	}
 
 	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]*TSDBStore { return tsdbs })
