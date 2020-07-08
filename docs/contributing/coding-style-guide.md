@@ -1022,7 +1022,7 @@ Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246
 
 All comments should be full sentences. They should start with an uppercase letter and end with a period.
 
-Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L194).
+Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L300) using [golangci-lint](https://github.com/golangci/golangci-lint) / [godot](https://github.com/tetafro/godot).
 
 # Bash
 
