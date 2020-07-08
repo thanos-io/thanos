@@ -27,6 +27,9 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -34,8 +37,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
@@ -477,7 +478,8 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 }
 
 // encodeChunk translates the sample pairs into a chunk.
-func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) {
+// TODO(kakkoyun): Linter - result 0 (github.com/thanos-io/thanos/pkg/store/storepb.Chunk_Encoding) is always 0.
+func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) { //nolint:unparam
 	c := chunkenc.NewXORChunk()
 
 	a, err := c.Appender()
