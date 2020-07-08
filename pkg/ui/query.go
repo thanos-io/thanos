@@ -6,21 +6,19 @@ package ui
 import (
 	"html/template"
 	"net/http"
-	"os"
 	"path"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	v1 "github.com/thanos-io/thanos/pkg/query/api"
 )
 
 type Query struct {
@@ -29,10 +27,11 @@ type Query struct {
 
 	externalPrefix, prefixHeader string
 
-	cwd   string
-	birth time.Time
-	reg   prometheus.Registerer
-	now   func() model.Time
+	cwd     string
+	birth   time.Time
+	version v1.ThanosVersion
+	reg     prometheus.Registerer
+	now     func() model.Time
 }
 
 type thanosVersion struct {
@@ -44,19 +43,15 @@ type thanosVersion struct {
 	GoVersion string `json:"goVersion"`
 }
 
-func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string) *Query {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "<error retrieving current working directory>"
-		level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
-	}
+func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo func(log.Logger) v1.RuntimeInfo, buildInfo v1.ThanosVersion) *Query {
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Query),
 		storeSet:       storeSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
-		cwd:            cwd,
-		birth:          time.Now(),
+		cwd:            runtimeInfo(logger).CWD,
+		birth:          runtimeInfo(logger).StartTime,
+		version:        buildInfo,
 		reg:            reg,
 		now:            model.Now,
 	}
@@ -120,18 +115,11 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 	q.executeTemplate(w, "status.html", prefix, struct {
 		Birth   time.Time
 		CWD     string
-		Version thanosVersion
+		Version v1.ThanosVersion
 	}{
-		Birth: q.birth,
-		CWD:   q.cwd,
-		Version: thanosVersion{
-			Version:   version.Version,
-			Revision:  version.Revision,
-			Branch:    version.Branch,
-			BuildUser: version.BuildUser,
-			BuildDate: version.BuildDate,
-			GoVersion: version.GoVersion,
-		},
+		Birth:   q.birth,
+		CWD:     q.cwd,
+		Version: q.version,
 	})
 }
 

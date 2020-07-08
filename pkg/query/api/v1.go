@@ -107,6 +107,9 @@ type RuntimeInfo struct {
 	GODEBUG        string    `json:"GODEBUG"`
 }
 
+// RuntimeInfoFn returns updated runtime information about Thanos.
+type RuntimeInfoFn func(log.Logger) RuntimeInfo
+
 type response struct {
 	Status    status      `json:"status"`
 	Data      interface{} `json:"data,omitempty"`

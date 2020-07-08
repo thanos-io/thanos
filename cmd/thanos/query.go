@@ -424,9 +424,29 @@ func runQuery(
 			GoVersion: version.GoVersion,
 		}
 
+		CWD, err := os.Getwd()
+		if err != nil {
+			CWD = "<error retrieving current working directory>"
+			level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
+		}
+		
+		birth := time.Now()
+
+		var runtimeInfo v1.RuntimeInfoFn = func (logger log.Logger) v1.RuntimeInfo {
+			status := v1.RuntimeInfo{
+				StartTime:      birth,
+				CWD:            CWD,
+				GoroutineCount: runtime.NumGoroutine(),
+				GOMAXPROCS:     runtime.GOMAXPROCS(0),
+				GOGC:           os.Getenv("GOGC"),
+				GODEBUG:        os.Getenv("GODEBUG"),
+			}
+			return status
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName, runtimeInfo, *buildInfo).Register(router, ins)
 
 		api := v1.NewAPI(
 			logger,
@@ -490,25 +510,6 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
-}
-
-func runtimeInfo(logger log.Logger) v1.RuntimeInfo {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "<error retrieving current working directory>"
-		level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
-	}
-
-	status := v1.RuntimeInfo{
-		StartTime:      time.Now().UTC(),
-		CWD:            cwd,
-		GoroutineCount: runtime.NumGoroutine(),
-		GOMAXPROCS:     runtime.GOMAXPROCS(0),
-		GOGC:           os.Getenv("GOGC"),
-		GODEBUG:        os.Getenv("GODEBUG"),
-	}
-
-	return status
 }
 
 func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
