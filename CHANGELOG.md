@@ -19,11 +19,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2866](https://github.com/thanos-io/thanos/pull/2866) Receive, Querier: Fixed leaks on receive and qwuerier Store API Series, which were leaking on errors.
 
 ### Added
+
 - [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 
 - [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 
-## [v0.14.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.14.0-rc.0) - 2020.07.01
+## [v0.14.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.14.0-rc.1) - 2020.07.07
 
 ### Fixed
 
