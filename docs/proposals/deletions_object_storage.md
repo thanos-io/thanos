@@ -2,7 +2,7 @@
 title: Delete series for object storage
 type: proposal
 menu: proposals
-status: draft
+status: approved
 owner: bwplotka, Harshitha1234, metalmatze
 ---
 
@@ -23,9 +23,8 @@ The main motivation for considering deletions in the object storage are the foll
 ## Goals
 
 *   Unblock users and allow series deletion in the object storage using tombstones.
-*   Allowing undeletes for a default time duration and extending it as per the user requirements.
-*   Dealing with already downsampled and to be downsampled blocks with tombstones.
-*   Performing all the above operations at admin level.
+*   Deal with compaction and downsampling of blocks with tombstones.
+*   Performing deletions at admin level.
 
 ## Proposed Approach
 
@@ -35,19 +34,16 @@ The main motivation for considering deletions in the object storage are the foll
     *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
-    *   **maximum waiting duration for performing deletions** where a default value is considered if explicitly not specified by the user. (only after this time passes the deletions are performed by the compactor in the next compaction cycle)
 *   The details are entered via a deletions API and they are processed by the compactor to create a tombstone file, if there’s a match for the details entered. Afterwards the tombstone file is uploaded to object storage making it accessible to other components.
 *   **Why Compactor**? : The compactor is one of the very few components (next to Sidecar, Receiver, Ruler) that has write capabilities to object storage. At the same time it is only ever running once per object storage, so that we have a single writer to the deletion tombstones.
 *   If the data with the requested details couldn’t be found in the storage an error message is returned back as a response to the request.
 *   Store Gateway masks the series on processing the tombstones from the object storage.
-*   **Perspectives to deal with Downsampling of blocks having tombstones:**
-    *   **Block with tombstones and max duration to perform deletes passed:** The compactor should first check the maximum duration to perform deletions for that block and if the proposed maxtime passed the deletions are first performed and then the downsampling occurs.
-    *   **Block with tombstones and max duration still hasn’t passed:** Perform compaction.
+*   **Perspectives to deal with Compaction of blocks having tombstones:**
+    *   **Block with tombstones** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.) We solve the tombstones, if the tombstones are greater than than the threshold and then perform compaction. If not we attach the tombstone file to the new block. If multiple blocks are being compacted, we merge the tombstone files of the blocks whose threshold is not met.
     *   **Block with deletion-mark.json i.e., entire block marked for deletion:** Returns an error message as the entire block is going to be deleted.
-    *   **Performing deletes on already compacted blocks:** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.)
-*   For undoing deletions of a time series there are two proposed ways
-    *   API to undelete a time series - maybe delete the whole tombstones file?
-    *   “Imaginary” deletion that can delete other tombstones
+*   **Perspectives to deal with Downsampling of blocks having tombstones:** 
+    *   **Block with tombstones:** If the tombstones are less than the threshold we copy the tombstone file and attach it to the new downsampled block else we solve the tombstones and downsample the block. And the downsampled block with tombstones during its next compaction would again have the same cases as with the compaction of a block with tombstones.
+    *   **Blocks without tombstones:** Downsampling happens...
 
 Considerations :
 
@@ -64,3 +60,11 @@ Considerations :
 
 *   Add the deletion API (probably compactor) that only creates tombstones
 *   Store Gateway should be able to mask based on the tombstones from object storage
+*   Compactor solves the tombstones as per the proposed approach
+
+## Future Work
+
+*   Have a max waiting duration feature for performing deletions where a default value is considered if explicitly not specified by the user. (only after this time passes the deletions are performed by the compactor in the next compaction cycle)
+*   Have the undoing deletions feature and there are two proposed ways
+    *   API to undelete a time series - maybe delete the whole tombstones file?
+    *   “Imaginary” deletion that can delete other tombstones
