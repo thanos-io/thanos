@@ -24,14 +24,15 @@ import (
 )
 
 // MultiTSDBStore implements the Store interface backed by multiple TSDBStore instances.
+// TODO(bwplotka): Remove this and use Proxy instead. Details: https://github.com/thanos-io/thanos/issues/2864
 type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
-	tsdbStores func() map[string]*TSDBStore
+	tsdbStores func() map[string]storepb.StoreServer
 }
 
 // NewMultiTSDBStore creates a new MultiTSDBStore.
-func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]*TSDBStore) *MultiTSDBStore {
+func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]storepb.StoreServer) *MultiTSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -97,6 +98,8 @@ type tenantSeriesSetServer struct {
 	tenant string
 }
 
+// TODO(bwplotka): Remove tenant awareness; keep it simple with single functionality.
+// Details https://github.com/thanos-io/thanos/issues/2864.
 func newTenantSeriesSetServer(
 	ctx context.Context,
 	tenant string,
@@ -110,11 +113,9 @@ func newTenantSeriesSetServer(
 	}
 }
 
-func (s *tenantSeriesSetServer) Context() context.Context {
-	return s.ctx
-}
+func (s *tenantSeriesSetServer) Context() context.Context { return s.ctx }
 
-func (s *tenantSeriesSetServer) Series(store *TSDBStore, r *storepb.SeriesRequest) {
+func (s *tenantSeriesSetServer) Series(store storepb.StoreServer, r *storepb.SeriesRequest) {
 	var err error
 	tracing.DoInSpan(s.ctx, "multitsdb_tenant_series", func(_ context.Context) {
 		err = store.Series(r, s)
@@ -202,7 +203,6 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 				defer wg.Done()
 				ss.Series(store, r)
 			}()
-
 			seriesSet = append(seriesSet, ss)
 		}
 

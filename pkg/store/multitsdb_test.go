@@ -4,6 +4,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -11,8 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -21,6 +25,8 @@ import (
 )
 
 func TestMultiTSDBSeries(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		if ok := t.Run("headOnly", func(t testutil.TB) {
@@ -116,12 +122,12 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 		dbs[j] = &mockedStartTimeDB{DBReadOnly: db, startTime: int64(j * samplesPerSeriesPerTSDB * seriesPerTSDB)}
 	}
 
-	tsdbs := map[string]*TSDBStore{}
+	tsdbs := map[string]storepb.StoreServer{}
 	for i, db := range dbs {
 		tsdbs[fmt.Sprintf("%v", i)] = &TSDBStore{db: db, logger: logger, maxSamplesPerChunk: 120} // On production we have math.MaxInt64
 	}
 
-	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]*TSDBStore { return tsdbs })
+	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]storepb.StoreServer { return tsdbs })
 
 	var expected []storepb.Series
 	lastLabels := storepb.Series{}
@@ -153,4 +159,136 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 			ExpectedSeries: expected,
 		},
 	)
+}
+
+type mockedStoreServer struct {
+	storepb.StoreServer
+
+	responses []*storepb.SeriesResponse
+}
+
+func (m *mockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	for _, r := range m.responses {
+		if err := server.Send(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Regression test against https://github.com/thanos-io/thanos/issues/2823.
+func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
+	t.Run("exhausted StoreSet", func(t *testing.T) {
+		defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+		s := newTenantSeriesSetServer(context.Background(), "a", nil)
+
+		resps := []*storepb.SeriesResponse{
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+		}
+
+		m := &mockedStoreServer{responses: resps}
+
+		go func() {
+			s.Series(m, &storepb.SeriesRequest{PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT})
+		}()
+
+		testutil.Ok(t, s.Err())
+		i := 0
+		for s.Next() {
+			l, c := s.At()
+
+			testutil.Equals(t, resps[i].GetSeries().Labels, l)
+			testutil.Equals(t, resps[i].GetSeries().Chunks, c)
+
+			i++
+		}
+		testutil.Ok(t, s.Err())
+		testutil.Equals(t, 3, i)
+	})
+
+	t.Run("cancelled, not exhausted StoreSet", func(t *testing.T) {
+		defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		s := newTenantSeriesSetServer(ctx, "a", nil)
+
+		m := &mockedStoreServer{responses: []*storepb.SeriesResponse{
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+		}}
+		go func() {
+			s.Series(m, &storepb.SeriesRequest{PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT})
+		}()
+
+		testutil.Ok(t, s.Err())
+		testutil.Equals(t, true, s.Next())
+		cancel()
+	})
+}
+
+type mockedSeriesServer struct {
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	send func(*storepb.SeriesResponse) error
+}
+
+func (s *mockedSeriesServer) Send(r *storepb.SeriesResponse) error {
+	return s.send(r)
+}
+func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
+
+// Regression test against https://github.com/thanos-io/thanos/issues/2823.
+// This is different leak than in TestTenantSeriesSetServert_NotLeakingIfNotExhausted
+func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	m := NewMultiTSDBStore(log.NewNopLogger(), nil, component.Receive, func() map[string]storepb.StoreServer {
+		return map[string]storepb.StoreServer{
+			// Ensure more than 10 (internal respCh channel).
+			"a": &mockedStoreServer{responses: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("a", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			}},
+			"b": &mockedStoreServer{responses: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labels.FromStrings("b", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "d"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "e"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "f"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "g"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "h"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "i"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+				storeSeriesResponse(t, labels.FromStrings("b", "j"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+			}},
+		}
+	})
+
+	if ok := t.Run("failing send", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		// We mimic failing series server, but practically context cancel will do the same.
+		testutil.NotOk(t, m.Series(&storepb.SeriesRequest{PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
+			ctx: ctx,
+			send: func(*storepb.SeriesResponse) error {
+				cancel()
+				return ctx.Err()
+			},
+		}))
+		testutil.NotOk(t, ctx.Err())
+	}); !ok {
+		return
+	}
 }
