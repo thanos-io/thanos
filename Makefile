@@ -159,14 +159,9 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"check documentation")
 
-.PHONY: check-comments
-check-comments: ## Checks Go code comments if they have trailing period (excludes protobuffers and vendor files). Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
-	@printf ">> checking Go comments trailing periods\n\n\n"
-	@./scripts/build-check-comments.sh
-
 .PHONY: format
 format: ## Formats Go code including imports and cleans up white noise.
-format: $(GOIMPORTS) check-comments
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
 	@gofmt -s -w $(FILES_TO_FMT)
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
