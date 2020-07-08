@@ -100,12 +100,6 @@ $(MINIO): .bingo/minio.mod
 	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da"
 	@cd .bingo && $(GO) build -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da "github.com/minio/minio"
 
-MISSPELL := $(GOBIN)/misspell-v0.3.4
-$(MISSPELL): .bingo/misspell.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/misspell-v0.3.4"
-	@cd .bingo && $(GO) build -modfile=misspell.mod -o=$(GOBIN)/misspell-v0.3.4 "github.com/client9/misspell/cmd/misspell"
-
 PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200507164740-ecee9c8abfd1
 $(PROMETHEUS_ARRAY): .bingo/prometheus.mod .bingo/prometheus.1.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.

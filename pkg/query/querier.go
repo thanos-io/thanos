@@ -26,7 +26,7 @@ import (
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
-// partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
+// partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
 type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -196,7 +196,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		matchers[i] = m.String()
 	}
 
-	// The querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
+	// The querier has a context but it gets canceled, as soon as query evaluation is completed, by the engine.
 	// We want to prevent this from happening for the async storea API calls we make while preserving tracing context.
 	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
 	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)

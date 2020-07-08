@@ -14,13 +14,14 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var testGRPCOpts = []grpc.DialOption{
@@ -795,7 +796,7 @@ func (e *errThatMarshalsToEmptyDict) Error() string {
 	return e.msg
 }
 
-// Test highlights that without wrapping the error, it is marshalled to empty dict {}, not its message.
+// Test highlights that without wrapping the error, it is marshaled to empty dict {}, not its message.
 func TestStringError(t *testing.T) {
 	dictErr := &errThatMarshalsToEmptyDict{msg: "Error message"}
 	stringErr := &stringError{originalErr: dictErr}

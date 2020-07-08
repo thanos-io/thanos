@@ -1016,7 +1016,7 @@ Misspell is amazing, it catches typos in comments and docs.
 
 No Grammarly plugin for this yet ): (We wish).
 
-Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L317).
+Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L#300), using [golangci-lint](https://github.com/golangci/golangci-lint) / [misspell](https://github.com/client9/misspell).
 
 #### Comments Should be Full Sentences
 
