@@ -18,7 +18,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2834](https://github.com/thanos-io/thanos/pull/2834) Query: Fix rendered JSON state value for rules and alerts should be in lowercase
 - [#2866](https://github.com/thanos-io/thanos/pull/2866) Receive, Querier: Fixed leaks on receive and qwuerier Store API Series, which were leaking on errors.
 
-### Changed
+### Added
+- [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 
 - [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 
