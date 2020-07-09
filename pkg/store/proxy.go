@@ -294,6 +294,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			return nil
 		}
 
+		// TODO(bwplotka): Currently we stream into big frames. Consider ensuring 1MB maximum.
+		// This however does not matter much when used with QueryAPI. Matters for federated Queries a lot.
+		// https://github.com/thanos-io/thanos/issues/2332
+		// Series are not necessarily merged across themselves.
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
 			var series storepb.Series

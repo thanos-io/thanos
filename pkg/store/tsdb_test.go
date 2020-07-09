@@ -34,7 +34,20 @@ func TestTSDBStore_Info(t *testing.T) {
 
 	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
-	testutil.Equals(t, int64(0), resp.MinTime)
+	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
+	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
+
+	app := db.Appender()
+	_, err = app.Add(labels.FromStrings("a", "a"), 12, 0.1)
+	testutil.Ok(t, err)
+	testutil.Ok(t, app.Commit())
+
+	resp, err = tsdbStore.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
+	testutil.Equals(t, int64(12), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 }
 
