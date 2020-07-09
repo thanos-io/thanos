@@ -186,12 +186,12 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 
 	// Allow to buffer max 10 series response.
 	// Each might be quite large (multi chunk long series given by sidecar).
-	respSender, respCh := newCancellableRespChannel(gctx, 10)
+	respSender, respCh := newCancelableRespChannel(gctx, 10)
 
 	g.Go(func() error {
 		// This go routine is responsible for calling store's Series concurrently. Merged results
 		// are passed to respCh and sent concurrently to client (if buffer of 10 have room).
-		// When this go routine finishes or is cancelled, respCh channel is closed.
+		// When this go routine finishes or is canceled, respCh channel is closed.
 
 		var (
 			seriesSet []storepb.SeriesSet

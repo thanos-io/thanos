@@ -209,7 +209,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 		testutil.Equals(t, 3, i)
 	})
 
-	t.Run("cancelled, not exhausted StoreSet", func(t *testing.T) {
+	t.Run("canceled, not exhausted StoreSet", func(t *testing.T) {
 		defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 		ctx, cancel := context.WithCancel(context.Background())
