@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/common/route"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -112,7 +113,8 @@ func TestRespondError(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &BaseAPI{}
-	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
+	logMiddleware := logging.NewHTTPServerMiddleware(log.NewNopLogger())
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware(), logMiddleware)
 
 	s := httptest.NewServer(r)
 	defer s.Close()

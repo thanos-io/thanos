@@ -13,6 +13,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/api"
 	qapi "github.com/thanos-io/thanos/pkg/api/query"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 )
@@ -47,10 +48,10 @@ func NewRuleAPI(
 	}
 }
 
-func (rapi *RuleAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
-	rapi.baseAPI.Register(r, tracer, logger, ins)
+func (rapi *RuleAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
+	rapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
 
 	r.Get("/alerts", instr("alerts", func(r *http.Request) (interface{}, []error, *api.ApiError) {
 		return struct{ Alerts []*rulespb.AlertInstance }{Alerts: rapi.alerts.Active()}, nil, nil

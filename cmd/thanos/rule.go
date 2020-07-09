@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -586,11 +587,17 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func(_ string) logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap)
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),

@@ -35,6 +35,8 @@ import (
 	"github.com/prometheus/common/version"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -142,8 +144,8 @@ func NewBaseAPI(logger log.Logger, flagsMap map[string]string) *BaseAPI {
 }
 
 // Register registers the common API endpoints.
-func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
-	instr := GetInstr(tracer, logger, ins)
+func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
+	instr := GetInstr(tracer, logger, ins, logMiddleware)
 
 	r.Options("/*path", instr("options", api.options))
 
@@ -196,6 +198,7 @@ func GetInstr(
 	tracer opentracing.Tracer,
 	logger log.Logger,
 	ins extpromhttp.InstrumentationMiddleware,
+	logMiddleware *logging.HTTPServerMiddleware,
 ) InstrFunc {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +211,7 @@ func GetInstr(
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return ins.NewHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
+		return ins.NewHandler(name, logMiddleware.HTTPMiddleware(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(middleware.RequestID(hf)))))
 	}
 	return instr
 }
