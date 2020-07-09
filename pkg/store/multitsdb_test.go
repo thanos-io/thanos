@@ -243,7 +243,7 @@ func (s *mockedSeriesServer) Send(r *storepb.SeriesResponse) error {
 func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/2823.
-// This is different leak than in TestTenantSeriesSetServert_NotLeakingIfNotExhausted
+// This is different leak than in TestTenantSeriesSetServert_NotLeakingIfNotExhausted.
 func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -277,7 +277,7 @@ func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		}
 	})
 
-	if ok := t.Run("failing send", func(t *testing.T) {
+	t.Run("failing send", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// We mimic failing series server, but practically context cancel will do the same.
 		testutil.NotOk(t, m.Series(&storepb.SeriesRequest{PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}, &mockedSeriesServer{
@@ -288,7 +288,5 @@ func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
 			},
 		}))
 		testutil.NotOk(t, ctx.Err())
-	}); !ok {
-		return
-	}
+	})
 }

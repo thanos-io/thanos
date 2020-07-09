@@ -144,8 +144,8 @@ func (s *tenantSeriesSetServer) Send(r *storepb.SeriesResponse) error {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case s.recv <- series:
+		return nil
 	}
-	return nil
 }
 
 func (s *tenantSeriesSetServer) Next() (ok bool) {
