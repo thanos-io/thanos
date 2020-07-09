@@ -23,6 +23,12 @@ interface GraphControlsProps {
 }
 
 class GraphControls extends Component<GraphControlsProps> {
+  constructor(props: GraphControlsProps) {
+    super(props);
+
+    this.handleMaxSourceResChange = this.handleMaxSourceResChange.bind(this);
+  }
+
   private rangeRef = React.createRef<HTMLInputElement>();
   private resolutionRef = React.createRef<HTMLInputElement>();
 
@@ -89,6 +95,10 @@ class GraphControls extends Component<GraphControlsProps> {
     }
   }
 
+  handleMaxSourceResChange(event: React.ChangeEvent<HTMLInputElement>): void {
+    this.props.onChangeMaxSourceResolution(event.target.value);
+  }
+
   render() {
     return (
       <Form inline className="graph-controls" onSubmit={e => e.preventDefault()}>
@@ -148,7 +158,7 @@ class GraphControls extends Component<GraphControlsProps> {
         <Input
           type="select"
           value={this.props.maxSourceResolution}
-          onChange={e => this.props.onChangeMaxSourceResolution(e.target.value)}
+          onChange={this.handleMaxSourceResChange}
           className="max-source-resolution-input"
           bsSize="sm"
         >
