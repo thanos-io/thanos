@@ -139,11 +139,19 @@ func (s *tenantSeriesSetServer) Send(r *storepb.SeriesResponse) error {
 		s.directCh.send(r)
 		return nil
 	}
+
+	// TODO(bwplotka): Consider avoid copying / learn why it has to copied.
+	chunks := make([]storepb.AggrChunk, len(series.Chunks))
+	copy(chunks, series.Chunks)
+
 	// For series, pass it to our AggChunkSeriesSet.
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
-	case s.recv <- series:
+	case s.recv <- &storepb.Series{
+		Labels: series.Labels,
+		Chunks: chunks,
+	}:
 		return nil
 	}
 }

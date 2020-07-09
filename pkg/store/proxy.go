@@ -195,7 +195,7 @@ func newCancellableRespChannel(ctx context.Context, buffer int) (*cancellableRes
 	return &cancellableRespSender{ctx: ctx, ch: respCh}, respCh
 }
 
-// send or returns on cancel.
+// send or return on cancel.
 func (s cancellableRespSender) send(r *storepb.SeriesResponse) {
 	select {
 	case <-s.ctx.Done():
