@@ -29,24 +29,23 @@ output:
 
 linters:
   enable:
+    # Sorted alphabetically.
     - deadcode
     - errcheck
     - goconst
+    - godot
     - gofmt
     - goimports
     - gosimple
     - govet
     - ineffassign
+    - misspell
     - staticcheck
     - structcheck
     - typecheck
-    - unused
-    - varcheck
-    - godot
     - unparam
     - unused
     - varcheck
-    - misspell
 
 linters-settings:
   errcheck:
