@@ -43,6 +43,9 @@ linters:
     - unused
     - varcheck
     - godot
+    - unparam
+    - unused
+    - varcheck
 
 linters-settings:
   errcheck:

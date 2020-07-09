@@ -20,9 +20,10 @@ import (
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
-	"gopkg.in/yaml.v2"
 )
 
 // Part size for multi part upload.
@@ -300,7 +301,7 @@ func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) 
 	return opt, nil
 }
 
-func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+func (b *Bucket) getRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if len(name) == 0 {
 		return nil, errors.New("given object name should not empty")
 	}
