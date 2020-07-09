@@ -432,7 +432,7 @@ func runQuery(
 
 		birth := time.Now()
 
-		var runtimeInfo v1.RuntimeInfoFn = func(logger log.Logger) v1.RuntimeInfo {
+		var runtimeInfo v1.RuntimeInfoFn = func() v1.RuntimeInfo {
 			status := v1.RuntimeInfo{
 				StartTime:      birth,
 				CWD:            CWD,

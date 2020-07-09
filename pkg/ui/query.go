@@ -34,14 +34,14 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo func(log.Logger) v1.RuntimeInfo, buildInfo v1.ThanosVersion) *Query {
+func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo v1.RuntimeInfoFn, buildInfo v1.ThanosVersion) *Query {
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Query),
 		storeSet:       storeSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
-		cwd:            runtimeInfo(logger).CWD,
-		birth:          runtimeInfo(logger).StartTime,
+		cwd:            runtimeInfo().CWD,
+		birth:          runtimeInfo().StartTime,
 		version:        buildInfo,
 		reg:            reg,
 		now:            model.Now,

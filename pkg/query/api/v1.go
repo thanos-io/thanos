@@ -108,7 +108,7 @@ type RuntimeInfo struct {
 }
 
 // RuntimeInfoFn returns updated runtime information about Thanos.
-type RuntimeInfoFn func(log.Logger) RuntimeInfo
+type RuntimeInfoFn func() RuntimeInfo
 
 type response struct {
 	Status    status      `json:"status"`
@@ -142,7 +142,7 @@ type API struct {
 	enableRulePartialResponse  bool
 	replicaLabels              []string
 	flagsMap                   map[string]string
-	runtimeInfo                func(log.Logger) RuntimeInfo
+	runtimeInfo                RuntimeInfoFn
 	buildInfo                  *ThanosVersion
 
 	storeSet                               *query.StoreSet
@@ -166,7 +166,7 @@ func NewAPI(
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	maxConcurrentQueries int,
-	runtimeInfo func(log.Logger) RuntimeInfo,
+	runtimeInfo RuntimeInfoFn,
 	buildInfo *ThanosVersion,
 ) *API {
 	return &API{
@@ -715,7 +715,7 @@ func (api *API) flags(r *http.Request) (interface{}, []error, *ApiError) {
 }
 
 func (api *API) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError) {
-	return api.runtimeInfo(api.logger), nil, nil
+	return api.runtimeInfo(), nil, nil
 }
 
 func (api *API) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError) {
