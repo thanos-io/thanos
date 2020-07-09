@@ -355,7 +355,7 @@ func (h *Handler) writeQuorum() int {
 }
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
-// requests succeeds or fails or if context is cancelled.
+// requests succeeds or fails or if context is canceled.
 func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
 	logger := log.With(h.logger, "tenant", tenant)
 	if id, ok := middleware.RequestIDFromContext(ctx); ok {
@@ -467,7 +467,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is cancelled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
 			for err := range ec {

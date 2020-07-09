@@ -124,7 +124,7 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 	return c, nil
 }
 
-// Run starts the ConfigWatcher until the given context is cancelled.
+// Run starts the ConfigWatcher until the given context is canceled.
 func (cw *ConfigWatcher) Run(ctx context.Context) {
 	defer cw.stop()
 
