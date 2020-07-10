@@ -47,6 +47,8 @@ require (
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.10.0
+	// When upgrading prometheus please open a PR on github.com/cortexproject/cortex
+	// to upgrade it there as well with the same version.
 	github.com/prometheus/prometheus v1.8.2-0.20200629082805-315564210816
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/uber/jaeger-client-go v2.23.1+incompatible
