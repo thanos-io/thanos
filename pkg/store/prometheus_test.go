@@ -545,7 +545,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(456), resp.MaxTime)
 }
 
-func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
+func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
 	baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
 
 	offset := int64(2*math.MaxUint16 + 5)
@@ -580,30 +580,30 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appe
 		{Name: "region", Value: "eu-west"},
 	}, firstSeries.Labels)
 
-	testutil.Equals(t, 3, len(firstSeries.Chunks))
+	testutil.Equals(t, 1093, len(firstSeries.Chunks))
 
 	chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[0].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
+	testutil.Equals(t, 120, chunk.NumSamples())
 
 	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[1].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
+	testutil.Equals(t, 120, chunk.NumSamples())
 
-	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[2].Raw.Data)
+	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[len(firstSeries.Chunks)-1].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, 5, chunk.NumSamples())
+	testutil.Equals(t, 35, chunk.NumSamples())
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/396.
-func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
+func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t, p.Appender(), func() storepb.StoreServer {
+	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, p.Appender(), func() storepb.StoreServer {
 		testutil.Ok(t, p.Start())
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))

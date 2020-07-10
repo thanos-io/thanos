@@ -32,11 +32,10 @@ type TSDBReader interface {
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
-	logger             log.Logger
-	db                 TSDBReader
-	component          component.StoreAPI
-	externalLabels     labels.Labels
-	maxSamplesPerChunk int
+	logger         log.Logger
+	db             TSDBReader
+	component      component.StoreAPI
+	externalLabels labels.Labels
 }
 
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.
@@ -55,11 +54,6 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, com
 		db:             db,
 		component:      component,
 		externalLabels: externalLabels,
-		// NOTE: XOR encoding supports a max size of 2^16 - 1 samples, so we need
-		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/thanos-io/thanos/pull/1038.
-		// TODO(bwplotka): Consider 120 samples?
-		maxSamplesPerChunk: math.MaxUint16,
 	}
 }
 
@@ -133,7 +127,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		if !r.SkipChunks {
 			// TODO(fabxc): An improvement over this trivial approach would be to directly
 			// use the chunks provided by TSDB in the response.
-			c, err := s.encodeChunks(series.Iterator(), s.maxSamplesPerChunk)
+			c, err := s.encodeChunks(series.Iterator(), maxSamplesPerChunk)
 			if err != nil {
 				return status.Errorf(codes.Internal, "encode chunk: %s", err)
 			}
