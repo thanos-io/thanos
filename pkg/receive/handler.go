@@ -356,9 +356,21 @@ func (h *Handler) writeQuorum() int {
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
-func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+	var errs terrors.MultiError
+
+	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
+	defer func() {
+		if errs.Err() != nil {
+			// NOTICE: The cancel function is not used on all paths intentionally,
+			// if there is no error when quorum successThreshold is reached,
+			// let forward requests to optimistically run until timeout.
+			cancel()
+		}
+	}()
+
 	logger := log.With(h.logger, "tenant", tenant)
-	if id, ok := middleware.RequestIDFromContext(ctx); ok {
+	if id, ok := middleware.RequestIDFromContext(pctx); ok {
 		logger = log.With(logger, "request-id", id)
 	}
 
@@ -375,7 +387,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 			go func(endpoint string) {
 				defer wg.Done()
 				var err error
-				tracing.DoInSpan(ctx, "receive_replicate", func(ctx context.Context) {
+				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
@@ -397,7 +409,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 			go func(endpoint string) {
 				defer wg.Done()
 				var err error
-				tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
+				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
 					err = h.writer.Write(tenant, wreqs[endpoint])
 				})
 				if err != nil {
@@ -438,13 +450,13 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 				h.forwardRequestsTotal.WithLabelValues("success").Inc()
 			}()
 
-			cl, err = h.peers.get(ctx, endpoint)
+			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
 				ec <- errors.Wrapf(err, "get peer connection for endpoint %v", endpoint)
 				return
 			}
 			// Create a span to track the request made to another receive node.
-			tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
 				// Actually make the request against the endpoint we determined should handle these time series.
 				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
 					Timeseries: wreqs[endpoint].Timeseries,
@@ -478,14 +490,11 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		}()
 	}()
 
-	var (
-		success int
-		errs    terrors.MultiError
-	)
+	var success int
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-fctx.Done():
+			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
 				return errs
@@ -533,25 +542,16 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 	h.mtx.RUnlock()
 
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
-	defer func() {
-		// If there is no error, let forward requests optimistically run until timeout.
-		if err != nil {
-			cancel()
-		}
-	}()
-
 	quorum := h.writeQuorum()
-	err = h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
-	if countCause(err, isNotReady) >= quorum {
-		return tsdb.ErrNotReady
-	}
-	if countCause(err, isConflict) >= quorum {
-		return errors.Wrap(conflictErr, "did not meet success threshold due to conflict")
-	}
-	if err != nil {
-		return errors.Wrap(err, "replicate")
+	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
+	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
+		if countCause(err, isNotReady) >= quorum {
+			return errors.Wrap(tsdb.ErrNotReady, "replicate: quorum not reached")
+		}
+		if countCause(err, isConflict) >= quorum {
+			return errors.Wrap(conflictErr, "replicate: quorum not reached")
+		}
+		return errors.Wrap(err, "unexpected error, before quorum is reached")
 	}
 
 	return nil
