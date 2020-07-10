@@ -219,6 +219,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 		if err := r.apply(ctx); err != nil {
 			// Critical error.
+			// TODO(bwplotka): There is no need to get process down in this case and decrease availability, handle the error in different way.
 			return err
 		}
 	}
