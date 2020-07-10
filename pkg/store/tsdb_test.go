@@ -303,7 +303,6 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	}
 
 	tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
 	now := time.Now()
 	head := db.Head()
 	for _, tc := range []struct {

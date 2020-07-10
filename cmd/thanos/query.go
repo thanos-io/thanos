@@ -151,7 +151,6 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		flagsMap := getFlagsMap(cmd.Model().Flags)
-
 		return runQuery(
 			g,
 			logger,
