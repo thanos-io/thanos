@@ -17,8 +17,6 @@
                 rate(grpc_server_started_total{%(selector)s, grpc_type="unary"}[5m])
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
           {
             record: ':grpc_server_failures_per_stream:sum_rate',
@@ -29,8 +27,6 @@
                 rate(grpc_server_started_total{%(selector)s, grpc_type="server_stream"}[5m])
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
           {
             record: ':http_failure_per_request:sum_rate',
@@ -41,8 +37,6 @@
                 rate(http_requests_total{handler="receive", %(selector)s}[5m])
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
           {
             record: ':http_request_duration_seconds:histogram_quantile',
@@ -64,8 +58,6 @@
                 sum(rate(thanos_receive_replications_total{%(selector)s}[5m]))
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
           {
             record: ':thanos_receive_forward_failure_per_requests:sum_rate',
@@ -76,8 +68,6 @@
                 sum(rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
           {
             record: ':thanos_receive_hashring_file_failure_per_refresh:sum_rate',
@@ -88,8 +78,6 @@
                 sum(rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               )
             ||| % thanos.receive,
-            labels: {
-            },
           },
         ],
       },

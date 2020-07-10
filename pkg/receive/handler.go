@@ -49,6 +49,9 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// Labels for metrics.
+	labelSuccess = "success"
+	labelError   = "error"
 )
 
 // conflictErr is returned whenever an operation fails due to any conflict-type error.
@@ -109,7 +112,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		replications: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
-				Help: "The number of replication operations started by the receiver. The success of replication is fulfilled when a quorum is met.",
+				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
 		replicationFactor: promauto.With(o.Registry).NewGauge(
@@ -398,12 +401,12 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
-					h.replications.WithLabelValues("error").Inc()
+					h.replications.WithLabelValues(labelError).Inc()
 					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
 					return
 				}
 
-				h.replications.WithLabelValues("success").Inc()
+				h.replications.WithLabelValues(labelSuccess).Inc()
 				ec <- nil
 			}(endpoint)
 
@@ -456,10 +459,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			defer func() {
 				// This is an actual remote forward request so report metric here.
 				if err != nil {
-					h.forwardRequests.WithLabelValues("error").Inc()
+					h.forwardRequests.WithLabelValues(labelError).Inc()
 					return
 				}
-				h.forwardRequests.WithLabelValues("success").Inc()
+				h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			}()
 
 			cl, err = h.peers.get(fctx, endpoint)
