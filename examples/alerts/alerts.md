@@ -412,16 +412,18 @@ rules:
   for: 10m
   labels:
     severity: critical
-- alert: ThanosReceiveHighForwardRequestFailures
+- alert: ThanosReceiveHighReplicationFailures
   annotations:
-    message: Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize
+    message: Thanos Receive {{$labels.job}} is failing to replicate {{ $value | humanize
       }}% of requests.
   expr: |
+    thanos_receive_replication_factor > 1
+      and
     (
       (
-        sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+        sum by (job) (rate(thanos_receive_replications_total{result="error", job=~"thanos-receive.*"}[5m]))
       /
-        sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+        sum by (job) (rate(thanos_receive_replications_total{job=~"thanos-receive.*"}[5m]))
       )
       >
       (
@@ -430,6 +432,19 @@ rules:
         max by (job) (thanos_receive_hashring_nodes{job=~"thanos-receive.*"})
       )
     ) * 100
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosReceiveHighForwardRequestFailures
+  annotations:
+    message: Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize
+      }}% of requests.
+  expr: |
+    (
+      sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+    /
+      sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+    ) * 100 > 20
   for: 5m
   labels:
     severity: warning

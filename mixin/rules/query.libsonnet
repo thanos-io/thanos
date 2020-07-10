@@ -17,8 +17,6 @@
                 sum(rate(grpc_client_started_total{%(selector)s, grpc_type="unary"}[5m]))
               )
             ||| % thanos.query,
-            labels: {
-            },
           },
           {
             record: ':grpc_client_failures_per_stream:sum_rate',
@@ -29,8 +27,6 @@
                 sum(rate(grpc_client_started_total{%(selector)s, grpc_type="server_stream"}[5m]))
               )
             ||| % thanos.query,
-            labels: {
-            },
           },
           {
             record: ':thanos_querier_store_apis_dns_failures_per_lookup:sum_rate',
@@ -41,8 +37,6 @@
                 sum(rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
               )
             ||| % thanos.query,
-            labels: {
-            },
           },
           {
             record: ':query_duration_seconds:histogram_quantile',

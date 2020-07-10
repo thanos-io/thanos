@@ -42,6 +42,23 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.collapse
       )
       .addRow(
+        g.row('Replication')
+        .addPanel(
+          g.panel('Rate', 'Shows rate of replications to other receive nodes.') +
+          g.queryPanel(
+            'sum(rate(thanos_receive_replications_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'all {{job}}',
+          )
+        )
+        .addPanel(
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of replications to other receive nodes.') +
+          g.qpsErrTotalPanel(
+            'thanos_receive_replications_total{namespace="$namespace",job=~"$job",result="error"}',
+            'thanos_receive_replications_total{namespace="$namespace",job=~"$job"}',
+          )
+        )
+      )
+      .addRow(
         g.row('Forward Request')
         .addPanel(
           g.panel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
@@ -56,7 +73,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'thanos_receive_forward_requests_total{namespace="$namespace",job=~"$job",result="error"}',
             'thanos_receive_forward_requests_total{namespace="$namespace",job=~"$job"}',
           )
-        )
+        ) +
+        g.collapse
       )
       .addRow(
         g.row('gRPC (Unary)')
