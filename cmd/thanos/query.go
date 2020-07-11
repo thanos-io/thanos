@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -412,9 +415,38 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
+		buildInfo := &v1.ThanosVersion{
+			Version:   version.Version,
+			Revision:  version.Revision,
+			Branch:    version.Branch,
+			BuildUser: version.BuildUser,
+			BuildDate: version.BuildDate,
+			GoVersion: version.GoVersion,
+		}
+
+		CWD, err := os.Getwd()
+		if err != nil {
+			CWD = "<error retrieving current working directory>"
+			level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
+		}
+
+		birth := time.Now()
+
+		var runtimeInfo v1.RuntimeInfoFn = func() v1.RuntimeInfo {
+			status := v1.RuntimeInfo{
+				StartTime:      birth,
+				CWD:            CWD,
+				GoroutineCount: runtime.NumGoroutine(),
+				GOMAXPROCS:     runtime.GOMAXPROCS(0),
+				GOGC:           os.Getenv("GOGC"),
+				GODEBUG:        os.Getenv("GODEBUG"),
+			}
+			return status
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName, runtimeInfo, *buildInfo).Register(router, ins)
 
 		api := v1.NewAPI(
 			logger,
@@ -431,6 +463,8 @@ func runQuery(
 			flagsMap,
 			instantDefaultMaxSourceResolution,
 			maxConcurrentQueries,
+			runtimeInfo,
+			buildInfo,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

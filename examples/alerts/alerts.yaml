@@ -47,7 +47,7 @@ groups:
   - alert: ThanosCompactHasNotRun
     annotations:
       message: Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.
-    expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compact.*"}))
+    expr: (time() - max(max_over_time(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compact.*"}[24h])))
       / 60 / 60 > 24
     labels:
       severity: warning
@@ -173,16 +173,18 @@ groups:
     for: 10m
     labels:
       severity: critical
-  - alert: ThanosReceiveHighForwardRequestFailures
+  - alert: ThanosReceiveHighReplicationFailures
     annotations:
-      message: Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize
-        }}% of requests.
+      message: Thanos Receive {{$labels.job}} is failing to replicate {{ $value |
+        humanize }}% of requests.
     expr: |
+      thanos_receive_replication_factor > 1
+        and
       (
         (
-          sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+          sum by (job) (rate(thanos_receive_replications_total{result="error", job=~"thanos-receive.*"}[5m]))
         /
-          sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+          sum by (job) (rate(thanos_receive_replications_total{job=~"thanos-receive.*"}[5m]))
         )
         >
         (
@@ -191,6 +193,19 @@ groups:
           max by (job) (thanos_receive_hashring_nodes{job=~"thanos-receive.*"})
         )
       ) * 100
+    for: 5m
+    labels:
+      severity: warning
+  - alert: ThanosReceiveHighForwardRequestFailures
+    annotations:
+      message: Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize
+        }}% of requests.
+    expr: |
+      (
+        sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+      /
+        sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+      ) * 100 > 20
     for: 5m
     labels:
       severity: warning

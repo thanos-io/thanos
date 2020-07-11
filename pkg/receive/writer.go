@@ -149,7 +149,8 @@ type fakeAppender struct {
 
 var _ storage.Appender = &fakeAppender{}
 
-func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender {
+// TODO(kakkoyun): Linter - `addFastErr` always receives `nil`.
+func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
 	if addErr == nil {
 		addErr = nilErrFn
 	}

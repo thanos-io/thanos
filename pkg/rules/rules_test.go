@@ -11,6 +11,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -61,8 +62,8 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 			Name: "thanos-receive.rules",
 			File: filepath.Join(dir, "alerts.yaml"),
 			Rules: []*rulespb.Rule{
-				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
-				someRecording, someRecording, someRecording, someRecording, someRecording, someRecording,
+				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
+				someRecording, someRecording, someRecording, someRecording, someRecording, someRecording, someRecording,
 			},
 			Interval:                          60,
 			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,

@@ -159,14 +159,9 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"check documentation")
 
-.PHONY: check-comments
-check-comments: ## Checks Go code comments if they have trailing period (excludes protobuffers and vendor files). Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
-	@printf ">> checking Go comments trailing periods\n\n\n"
-	@./scripts/build-check-comments.sh
-
 .PHONY: format
 format: ## Formats Go code including imports and cleans up white noise.
-format: $(GOIMPORTS) check-comments
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
 	@gofmt -s -w $(FILES_TO_FMT)
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
@@ -195,13 +190,6 @@ test: check-git install-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
-
-.PHONY: test-ci
-test-ci: ## Runs test for CI, so excluding object storage integrations that we don't have configured yet.
-test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
-test-ci:
-	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
-	$(MAKE) test
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
@@ -268,7 +256,7 @@ lint: go-lint react-app-lint
 #      --mem-profile-path string   Path to memory profile output file
 # to debug big allocations during linting.
 .PHONY: go-lint
-go-lint: check-git deps $(GOLANGCI_LINT) $(MISSPELL) $(FAILLINT)
+go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
 	$(call require_clean_work_tree,"detected not clean master before running lint")
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
@@ -280,12 +268,8 @@ github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCoun
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}" ./...
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
-	@echo ">> examining all of the Go files"
-	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run
-	@echo ">> detecting misspells"
-	@find . -type f | grep -v vendor/ | grep -v pkg/ui/react-app/node_modules | grep -v pkg/ui/static | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"detected white noise")

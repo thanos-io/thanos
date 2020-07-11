@@ -87,6 +87,29 @@ func (e *ApiError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Typ, e.Err)
 }
 
+// ThanosVersion contains build information about Thanos.
+type ThanosVersion struct {
+	Version   string `json:"version"`
+	Revision  string `json:"revision"`
+	Branch    string `json:"branch"`
+	BuildUser string `json:"buildUser"`
+	BuildDate string `json:"buildDate"`
+	GoVersion string `json:"goVersion"`
+}
+
+// RuntimeInfo contains runtime information about Thanos.
+type RuntimeInfo struct {
+	StartTime      time.Time `json:"startTime"`
+	CWD            string    `json:"CWD"`
+	GoroutineCount int       `json:"goroutineCount"`
+	GOMAXPROCS     int       `json:"GOMAXPROCS"`
+	GOGC           string    `json:"GOGC"`
+	GODEBUG        string    `json:"GODEBUG"`
+}
+
+// RuntimeInfoFn returns updated runtime information about Thanos.
+type RuntimeInfoFn func() RuntimeInfo
+
 type response struct {
 	Status    status      `json:"status"`
 	Data      interface{} `json:"data,omitempty"`
@@ -119,6 +142,8 @@ type API struct {
 	enableRulePartialResponse  bool
 	replicaLabels              []string
 	flagsMap                   map[string]string
+	runtimeInfo                RuntimeInfoFn
+	buildInfo                  *ThanosVersion
 
 	storeSet                               *query.StoreSet
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -141,6 +166,8 @@ func NewAPI(
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	maxConcurrentQueries int,
+	runtimeInfo RuntimeInfoFn,
+	buildInfo *ThanosVersion,
 ) *API {
 	return &API{
 		logger:          logger,
@@ -157,6 +184,8 @@ func NewAPI(
 		flagsMap:                               flagsMap,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		runtimeInfo:                            runtimeInfo,
+		buildInfo:                              buildInfo,
 
 		now: time.Now,
 	}
@@ -195,6 +224,8 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Post("/labels", instr("label_names", api.labelNames))
 
 	r.Get("/status/flags", instr("status_flags", api.flags))
+	r.Get("/status/runtimeinfo", instr("status_runtime", api.serveRuntimeInfo))
+	r.Get("/status/buildinfo", instr("status_build", api.serveBuildInfo))
 
 	r.Get("/stores", instr("stores", api.stores))
 
@@ -681,6 +712,14 @@ func (api *API) stores(r *http.Request) (interface{}, []error, *ApiError) {
 
 func (api *API) flags(r *http.Request) (interface{}, []error, *ApiError) {
 	return api.flagsMap, nil, nil
+}
+
+func (api *API) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError) {
+	return api.runtimeInfo(), nil, nil
+}
+
+func (api *API) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError) {
+	return api.buildInfo, nil, nil
 }
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules

@@ -13,10 +13,15 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
-* [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: fix issue with missing Content-Type HTTP headers.
+- [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: fix issue with missing Content-Type HTTP headers.
 - [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`
+- [#2834](https://github.com/thanos-io/thanos/pull/2834) Query: Fix rendered JSON state value for rules and alerts should be in lowercase
+- [#2866](https://github.com/thanos-io/thanos/pull/2866) Receive, Querier: Fixed leaks on receive and qwuerier Store API Series, which were leaking on errors.
 
-### Changed
+### Added
+- [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
+
+- [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 
 ## [v0.14.0](https://github.com/thanos-io/thanos/releases) - IN PROGRESS
 

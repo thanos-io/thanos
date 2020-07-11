@@ -73,7 +73,7 @@
             annotations: {
               message: 'Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.',
             },
-            expr: '(time() - max(thanos_objstore_bucket_last_successful_upload_time{%(selector)s})) / 60 / 60 > 24' % thanos.compact,
+            expr: '(time() - max(max_over_time(thanos_objstore_bucket_last_successful_upload_time{%(selector)s}[24h]))) / 60 / 60 > 24' % thanos.compact,
             labels: {
               severity: 'warning',
             },

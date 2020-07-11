@@ -49,6 +49,9 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// Labels for metrics.
+	labelSuccess = "success"
+	labelError   = "error"
 )
 
 // conflictErr is returned whenever an operation fails due to any conflict-type error.
@@ -84,9 +87,9 @@ type Handler struct {
 	hashring Hashring
 	peers    *peerGroup
 
-	// Metrics.
-	forwardRequestsTotal *prometheus.CounterVec
-	replicationFactor    prometheus.Gauge
+	forwardRequests   *prometheus.CounterVec
+	replications      *prometheus.CounterVec
+	replicationFactor prometheus.Gauge
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -100,10 +103,16 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		router:  route.New(),
 		options: o,
 		peers:   newPeerGroup(o.DialOpts...),
-		forwardRequestsTotal: promauto.With(o.Registry).NewCounterVec(
+		forwardRequests: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
+			}, []string{"result"},
+		),
+		replications: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_replications_total",
+				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
 		replicationFactor: promauto.With(o.Registry).NewGauge(
@@ -355,10 +364,22 @@ func (h *Handler) writeQuorum() int {
 }
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
-// requests succeeds or fails or if context is cancelled.
-func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+// requests succeeds or fails or if context is canceled.
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+	var errs terrors.MultiError
+
+	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
+	defer func() {
+		if errs.Err() != nil {
+			// NOTICE: The cancel function is not used on all paths intentionally,
+			// if there is no error when quorum successThreshold is reached,
+			// let forward requests to optimistically run until timeout.
+			cancel()
+		}
+	}()
+
 	logger := log.With(h.logger, "tenant", tenant)
-	if id, ok := middleware.RequestIDFromContext(ctx); ok {
+	if id, ok := middleware.RequestIDFromContext(pctx); ok {
 		logger = log.With(logger, "request-id", id)
 	}
 
@@ -374,16 +395,21 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
-				tracing.DoInSpan(ctx, "receive_replicate", func(ctx context.Context) {
+				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
+					h.replications.WithLabelValues(labelError).Inc()
 					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
 					return
 				}
+
+				h.replications.WithLabelValues(labelSuccess).Inc()
 				ec <- nil
 			}(endpoint)
+
 			continue
 		}
 
@@ -396,8 +422,9 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
-				tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
+				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
 					err = h.writer.Write(tenant, wreqs[endpoint])
 				})
 				if err != nil {
@@ -416,8 +443,8 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 					return
 				}
 				ec <- nil
-
 			}(endpoint)
+
 			continue
 		}
 
@@ -432,19 +459,19 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 			defer func() {
 				// This is an actual remote forward request so report metric here.
 				if err != nil {
-					h.forwardRequestsTotal.WithLabelValues("error").Inc()
+					h.forwardRequests.WithLabelValues(labelError).Inc()
 					return
 				}
-				h.forwardRequestsTotal.WithLabelValues("success").Inc()
+				h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			}()
 
-			cl, err = h.peers.get(ctx, endpoint)
+			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
 				ec <- errors.Wrapf(err, "get peer connection for endpoint %v", endpoint)
 				return
 			}
 			// Create a span to track the request made to another receive node.
-			tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
 				// Actually make the request against the endpoint we determined should handle these time series.
 				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
 					Timeseries: wreqs[endpoint].Timeseries,
@@ -467,7 +494,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is cancelled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
 			for err := range ec {
@@ -478,14 +505,11 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		}()
 	}()
 
-	var (
-		success int
-		errs    terrors.MultiError
-	)
+	var success int
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-fctx.Done():
+			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
 				return errs
@@ -533,25 +557,16 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 	h.mtx.RUnlock()
 
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
-	defer func() {
-		// If there is no error, let forward requests optimistically run until timeout.
-		if err != nil {
-			cancel()
-		}
-	}()
-
 	quorum := h.writeQuorum()
-	err = h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
-	if countCause(err, isNotReady) >= quorum {
-		return tsdb.ErrNotReady
-	}
-	if countCause(err, isConflict) >= quorum {
-		return errors.Wrap(conflictErr, "did not meet success threshold due to conflict")
-	}
-	if err != nil {
-		return errors.Wrap(err, "replicate")
+	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
+	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
+		if countCause(err, isNotReady) >= quorum {
+			return errors.Wrap(tsdb.ErrNotReady, "replicate: quorum not reached")
+		}
+		if countCause(err, isConflict) >= quorum {
+			return errors.Wrap(conflictErr, "replicate: quorum not reached")
+		}
+		return errors.Wrap(err, "unexpected error, before quorum is reached")
 	}
 
 	return nil

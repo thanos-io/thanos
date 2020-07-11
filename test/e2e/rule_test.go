@@ -531,7 +531,7 @@ func mustUrlParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-// Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
+// Test Ruler behavior on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 

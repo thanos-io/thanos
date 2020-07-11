@@ -64,11 +64,7 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 		c.Tags = parseTags(conf.Tags)
 	}
 
-	if s, err := samplerConfigFromConfig(*conf); err == nil {
-		c.Sampler = s
-	} else {
-		return nil, errors.Wrap(err, "cannot obtain sampler config from YAML")
-	}
+	c.Sampler = samplerConfigFromConfig(*conf)
 
 	if r, err := reporterConfigFromConfig(*conf); err == nil {
 		c.Reporter = r
@@ -80,7 +76,7 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 }
 
 // samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.
-func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
+func samplerConfigFromConfig(cfg Config) *config.SamplerConfig {
 	sc := &config.SamplerConfig{}
 
 	if cfg.SamplerType != "" {
@@ -103,7 +99,7 @@ func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
 		sc.SamplingRefreshInterval = cfg.SamplerRefreshInterval
 	}
 
-	return sc, nil
+	return sc
 }
 
 // reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config.
