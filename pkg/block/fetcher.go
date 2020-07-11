@@ -715,10 +715,16 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 type ConsistencyDelayMetaFilter struct {
 	logger           log.Logger
 	consistencyDelay time.Duration
+	bkt              objstore.InstrumentedBucketReader
 }
 
 // NewConsistencyDelayMetaFilter creates ConsistencyDelayMetaFilter.
-func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Duration, reg prometheus.Registerer) *ConsistencyDelayMetaFilter {
+func NewConsistencyDelayMetaFilter(
+	logger log.Logger,
+	consistencyDelay time.Duration,
+	bkt objstore.InstrumentedBucketReader,
+	reg prometheus.Registerer,
+) *ConsistencyDelayMetaFilter {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -732,16 +738,27 @@ func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Dura
 	return &ConsistencyDelayMetaFilter{
 		logger:           logger,
 		consistencyDelay: consistencyDelay,
+		bkt:              bkt,
 	}
 }
 
 // Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
-func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+func (f *ConsistencyDelayMetaFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+	// If consistencyDelay is 0, skip filtering.
+	if f.consistencyDelay == 0 {
+		return nil
+	}
+
 	for id, meta := range metas {
+		metaFile := path.Join(id.String(), MetaFilename)
+		attributes, err := f.bkt.Attributes(ctx, metaFile)
+		if err != nil {
+			return errors.Wrapf(err, "get object attributes of %s", metaFile)
+		}
+
 		// TODO(khyatisoneji): Remove the checks about Thanos Source
 		//  by implementing delete delay to fetch metas.
-		// TODO(bwplotka): Check consistency delay based on file upload / modification time instead of ULID.
-		if ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond) &&
+		if ulid.Now()-ulid.Timestamp(attributes.LastModified) < uint64(f.consistencyDelay.Milliseconds()) &&
 			meta.Thanos.Source != metadata.BucketRepairSource &&
 			meta.Thanos.Source != metadata.CompactorSource &&
 			meta.Thanos.Source != metadata.CompactorRepairSource {

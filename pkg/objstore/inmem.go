@@ -26,12 +26,37 @@ type InMemBucket struct {
 	attrs   map[string]ObjectAttributes
 }
 
+// ObjectWithAttrs is a struct defines object name, content and attributes.
+// Can be used together with NewInMemBucketWithObjectsAndAttrs for mocking.
+type ObjectWithAttrs struct {
+	Name    string
+	Content []byte
+	ObjectAttributes
+}
+
 // NewInMemBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
 func NewInMemBucket() *InMemBucket {
 	return &InMemBucket{
 		objects: map[string][]byte{},
 		attrs:   map[string]ObjectAttributes{},
+	}
+}
+
+// NewInMemBucketWithObjectsAndAttrs returns a new in memory Bucket with pre-defined objects.
+// NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
+func NewInMemBucketWithObjectsAndAttrs(input []ObjectWithAttrs) *InMemBucket {
+	objects := make(map[string][]byte, len(input))
+	attrs := make(map[string]ObjectAttributes, len(input))
+
+	for _, objWithAttrs := range input {
+		objects[objWithAttrs.Name] = objWithAttrs.Content
+		attrs[objWithAttrs.Name] = objWithAttrs.ObjectAttributes
+	}
+
+	return &InMemBucket{
+		objects: objects,
+		attrs:   attrs,
 	}
 }
 

@@ -238,7 +238,8 @@ func runCompact(
 		cf := baseMetaFetcher.NewMetaFetcher(
 			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 				block.NewLabelShardedMetaFilter(relabelConfig),
-				block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+				block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, bkt,
+					extprom.WrapRegistererWithPrefix("thanos_", reg)),
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,

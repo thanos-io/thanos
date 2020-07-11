@@ -78,13 +78,11 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0)
+	id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
 	testutil.Ok(t, err)
-	id2, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset2, 0)
+	id2, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
 	testutil.Ok(t, err)
-	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0)
-	testutil.Ok(t, err)
-	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
+	id3, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset3, 0)
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
@@ -99,11 +97,10 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id2.String()), id2.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id4.String()), id4.String()))
 
 	// Wait for store to sync blocks.
-	// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta.
-	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4), "thanos_blocks_meta_synced"))
+	// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta.
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(3), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_blocks_loaded"))
@@ -157,8 +154,8 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, bkt.Delete(ctx, filepath.Join(id1.String(), block.MetaFilename)))
 
 		// Wait for store to sync blocks.
-		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4), "thanos_blocks_meta_synced"))
+		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x noMeta.
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(3), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_blocks_loaded"))
@@ -181,14 +178,14 @@ func TestStoreGateway(t *testing.T) {
 		)
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4+1), "thanos_bucket_store_series_blocks_queried"))
 	})
-	t.Run("upload block id5, similar to id1", func(t *testing.T) {
-		id5, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0)
+	t.Run("upload block id4, similar to id1", func(t *testing.T) {
+		id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset4, 0)
 		testutil.Ok(t, err)
-		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id5.String()), id5.String()))
+		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id4.String()), id4.String()))
 
 		// Wait for store to sync blocks.
-		// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(5), "thanos_blocks_meta_synced"))
+		// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x noMeta.
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_blocks_loaded"))
@@ -220,7 +217,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, block.Delete(ctx, l, bkt, id2))
 
 		// Wait for store to sync blocks.
-		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
+		// thanos_blocks_meta_synced: 1x loadedMeta 1x labelExcludedMeta 1x noMeta.
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
