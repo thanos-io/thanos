@@ -29,9 +29,10 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		expectedJSONOutput string // If empty, expected same one as marshaled input.
 	}{
 		{
-			name:          "Empty JSON",
-			input:         &testpromcompatibility.RuleDiscovery{},
-			expectedProto: &RuleGroups{},
+			name:               "Empty JSON",
+			input:              &testpromcompatibility.RuleDiscovery{},
+			expectedProto:      &RuleGroups{},
+			expectedJSONOutput: `{"groups":[]}`,
 		},
 		{
 			name: "one empty group",
@@ -164,6 +165,78 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				},
 			},
 			expectedErr: errors.New("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,WARN"),
+		},
+		{
+			name: "one valid group with 1 alerting rule containing no alerts.",
+			input: &testpromcompatibility.RuleDiscovery{
+				RuleGroups: []*testpromcompatibility.RuleGroup{
+					{
+						Name: "group1",
+						Rules: []testpromcompatibility.Rule{
+							testpromcompatibility.AlertingRule{
+								Type:  RuleAlertingType,
+								Name:  "alert1",
+								Query: "up == 0",
+								Labels: labels.Labels{
+									{Name: "a2", Value: "b2"},
+									{Name: "c2", Value: "d2"},
+								},
+								Annotations: labels.Labels{
+									{Name: "ann1", Value: "ann44"},
+									{Name: "ann2", Value: "ann33"},
+								},
+								Health:         "health2",
+								LastError:      "1",
+								Duration:       60,
+								State:          "pending",
+								EvaluationTime: 1.1,
+							},
+						},
+						File:                              "file1.yml",
+						Interval:                          2442,
+						EvaluationTime:                    2.1,
+						DeprecatedPartialResponseStrategy: "WARN",
+						PartialResponseStrategy:           "ABORT",
+					},
+				},
+			},
+			expectedProto: &RuleGroups{
+				Groups: []*RuleGroup{
+					{
+						Name: "group1",
+						Rules: []*Rule{
+							NewAlertingRule(&Alert{
+								Name:  "alert1",
+								Query: "up == 0",
+								Labels: PromLabels{
+									Labels: []storepb.Label{
+										{Name: "a2", Value: "b2"},
+										{Name: "c2", Value: "d2"},
+									},
+								},
+								Annotations: PromLabels{
+									Labels: []storepb.Label{
+										{Name: "ann1", Value: "ann44"},
+										{Name: "ann2", Value: "ann33"},
+									},
+								},
+								DurationSeconds:           60,
+								State:                     AlertState_PENDING,
+								LastError:                 "1",
+								Health:                    "health2",
+								EvaluationDurationSeconds: 1.1,
+							}),
+						},
+						File:                              "file1.yml",
+						Interval:                          2442,
+						EvaluationDurationSeconds:         2.1,
+						DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+						PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
+					},
+				},
+			},
+			// Different than input due to the alerts slice being initialized to a zero-length slice instead of nil.
+			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","partial_response_strategy":"WARN","partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",
@@ -353,7 +426,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				testutil.Equals(t, tcase.expectedJSONOutput, string(jsonProto))
 				return
 			}
-			testutil.Equals(t, jsonInput, jsonProto)
+			testutil.Equals(t, string(jsonInput), string(jsonProto))
 		})
 	}
 }

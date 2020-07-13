@@ -177,6 +177,15 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 	return 0
 }
 
+func (r *RuleGroups) MarshalJSON() ([]byte, error) {
+	if r.Groups == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		return []byte(`{"groups":[]}`), nil
+	}
+	type plain RuleGroups
+	return json.Marshal((*plain)(r))
+}
+
 func (m *Rule) UnmarshalJSON(entry []byte) error {
 	decider := struct {
 		Type string `json:"type"`
@@ -219,6 +228,10 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 		})
 	}
 	a := m.GetAlert()
+	if a.Alerts == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		a.Alerts = make([]*AlertInstance, 0)
+	}
 	return json.Marshal(struct {
 		*Alert
 		Type string `json:"type"`
