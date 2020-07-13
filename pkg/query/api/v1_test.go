@@ -1359,6 +1359,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
 			Annotations:    nil,
+			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
 	}
