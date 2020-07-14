@@ -203,7 +203,7 @@ func (c *Container) Name() string {
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (c *Container) Iter(ctx context.Context, dir string, f func(string) error) error {
+func (c *Container) Iter(_ context.Context, dir string, f func(string) error) error {
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, string(DirDelim)) + string(DirDelim)
 	}
@@ -233,11 +233,11 @@ func (c *Container) get(name string, headers swift.Headers, checkHash bool) (io.
 }
 
 // Get returns a reader for the given object name.
-func (c *Container) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+func (c *Container) Get(_ context.Context, name string) (io.ReadCloser, error) {
 	return c.get(name, swift.Headers{}, true)
 }
 
-func (c *Container) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+func (c *Container) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	// Set Range HTTP header, see the docs https://docs.openstack.org/api-ref/object-store/?expanded=show-container-details-and-list-objects-detail,get-object-content-and-metadata-detail#id76.
 	bytesRange := fmt.Sprintf("bytes=%d-", off)
 	if length != -1 {
@@ -247,7 +247,7 @@ func (c *Container) GetRange(ctx context.Context, name string, off, length int64
 }
 
 // Attributes returns information about the specified object.
-func (c *Container) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+func (c *Container) Attributes(_ context.Context, name string) (objstore.ObjectAttributes, error) {
 	if name == "" {
 		return objstore.ObjectAttributes{}, errors.New("Object name cannot be empty")
 	}
@@ -262,7 +262,7 @@ func (c *Container) Attributes(ctx context.Context, name string) (objstore.Objec
 }
 
 // Exists checks if the given object exists.
-func (c *Container) Exists(ctx context.Context, name string) (bool, error) {
+func (c *Container) Exists(_ context.Context, name string) (bool, error) {
 	_, _, err := c.connection.Object(c.name, name)
 	if c.IsObjNotFoundErr(err) {
 		err = nil
@@ -279,7 +279,7 @@ func (c *Container) IsObjNotFoundErr(err error) bool {
 }
 
 // Upload writes the contents of the reader as an object into the container.
-func (c *Container) Upload(ctx context.Context, name string, r io.Reader) error {
+func (c *Container) Upload(_ context.Context, name string, r io.Reader) error {
 	size, err := objstore.TryToGetSize(r)
 	if err != nil {
 		level.Warn(c.logger).Log("msg", "could not guess file size, using large object to avoid issues if the file is larger than limit", "name", name, "err", err)
@@ -320,7 +320,7 @@ func (c *Container) Upload(ctx context.Context, name string, r io.Reader) error 
 }
 
 // Delete removes the object with the given name.
-func (c *Container) Delete(ctx context.Context, name string) error {
+func (c *Container) Delete(_ context.Context, name string) error {
 	return errors.Wrap(c.connection.LargeObjectDelete(c.name, name), "swift delete object")
 }
 
