@@ -508,16 +508,15 @@ func runReceive(
 
 			if err := dbs.Sync(ctx); err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
-			} else {
-				level.Debug(logger).Log("msg", "upload done", "elapsed", time.Since(start))
+				return err
 			}
-
+			level.Debug(logger).Log("msg", "upload done", "elapsed", time.Since(start))
 			return nil
 		}
 		{
 			level.Info(logger).Log("msg", "upload enabled, starting initial sync")
 			if err := upload(context.Background()); err != nil {
-				return errors.Wrapf(err, "initial upload failed")
+				return errors.Wrap(err, "initial upload failed")
 			}
 			level.Info(logger).Log("msg", "initial sync done")
 		}
