@@ -433,7 +433,7 @@ func runQuery(
 		birth := time.Now()
 
 		var runtimeInfo v1.RuntimeInfoFn = func() v1.RuntimeInfo {
-			status := v1.RuntimeInfo{
+			return v1.RuntimeInfo{
 				StartTime:      birth,
 				CWD:            CWD,
 				GoroutineCount: runtime.NumGoroutine(),
@@ -441,7 +441,6 @@ func runQuery(
 				GOGC:           os.Getenv("GOGC"),
 				GODEBUG:        os.Getenv("GODEBUG"),
 			}
-			return status
 		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
