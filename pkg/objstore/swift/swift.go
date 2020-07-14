@@ -28,7 +28,10 @@ import (
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
-const DirDelim = '/'
+const (
+	DirDelim    = '/'
+	SegmentsDir = "segments/"
+)
 
 var DefaultConfig = Config{
 	AuthVersion:    0, // Means autodetect of the auth API version by the library.
@@ -213,6 +216,9 @@ func (c *Container) Iter(_ context.Context, dir string, f func(string) error) er
 			return objects, errors.Wrap(err, "swift list object names")
 		}
 		for _, object := range objects {
+			if object == SegmentsDir {
+				continue
+			}
 			if err := f(object); err != nil {
 				return objects, errors.Wrap(err, "swift iteration over objects")
 			}
@@ -263,14 +269,13 @@ func (c *Container) Attributes(_ context.Context, name string) (objstore.ObjectA
 
 // Exists checks if the given object exists.
 func (c *Container) Exists(_ context.Context, name string) (bool, error) {
+	found := true
 	_, _, err := c.connection.Object(c.name, name)
 	if c.IsObjNotFoundErr(err) {
 		err = nil
+		found = false
 	}
-	if err != nil {
-		return false, errors.Wrap(err, "swift check if file exists")
-	}
-	return true, nil
+	return found, err
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
