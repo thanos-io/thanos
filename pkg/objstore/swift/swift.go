@@ -151,21 +151,20 @@ func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 	return NewContainerFromConfig(logger, sc, false)
 }
 
-func ensureContainer(connection *swift.Connection, name string, createIfNotExist bool) (string, error) {
+func ensureContainer(connection *swift.Connection, name string, createIfNotExist bool) error {
 	if _, _, err := connection.Container(name); err != nil {
 		if err != swift.ContainerNotFound {
-			return "", errors.Wrapf(err, "swift verify container %s", name)
+			return errors.Wrapf(err, "swift verify container %s", name)
 		}
 		if !createIfNotExist {
-			return "", fmt.Errorf("unable to find the expected container %s", name)
+			return fmt.Errorf("unable to find the expected container %s", name)
 		}
-		var newContainer swift.Container
 		if err = connection.ContainerCreate(name, swift.Headers{}); err != nil {
-			return "", errors.Wrapf(err, "create container %s", name)
+			return errors.Wrapf(err, "create container %s", name)
 		}
-		return newContainer.Name, nil
+		return nil
 	}
-	return "", nil
+	return nil
 }
 
 func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool) (*Container, error) {
@@ -178,12 +177,12 @@ func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool)
 		return nil, errors.Wrap(err, "swift authentication")
 	}
 
-	if _, err := ensureContainer(connection, sc.ContainerName, createContainer); err != nil {
+	if err := ensureContainer(connection, sc.ContainerName, createContainer); err != nil {
 		return nil, err
 	}
 	if sc.SegmentContainerName == "" {
 		sc.SegmentContainerName = sc.ContainerName
-	} else if _, err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
+	} else if err := ensureContainer(connection, sc.SegmentContainerName, createContainer); err != nil {
 		return nil, err
 	}
 
