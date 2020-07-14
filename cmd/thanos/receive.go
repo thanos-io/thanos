@@ -15,13 +15,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -83,6 +83,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
 	forwardTimeout := modelDuration(cmd.Flag("receive-forward-timeout", "Timeout for forward requests.").Default("5s").Hidden())
+
+	uploadTimeout := modelDuration(cmd.Flag("receive.upload-timeout", "Timeout for the initial and last upload request.").Default("10m").Hidden())
 
 	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
@@ -163,8 +165,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicaHeader,
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
-			comp,
+			time.Duration(*uploadTimeout),
 			*allowOutOfOrderUpload,
+			comp,
 		)
 	}
 }
@@ -202,8 +205,9 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
-	comp component.SourceStoreAPI,
+	uploadTimeout time.Duration,
 	allowOutOfOrderUpload bool,
+	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
@@ -294,6 +298,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
+		log.With(logger, "component", "storage")
 		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_receive_multi_db_updates_attempted_total",
 			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
@@ -311,12 +316,15 @@ func runReceive(
 
 			// Before quitting, ensure the WAL is flushed and the DBs are closed.
 			defer func() {
+				level.Info(logger).Log("msg", "shutting down Multi TSDB")
 				if err := dbs.Flush(); err != nil {
-					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
+					level.Error(logger).Log("err", err, "msg", "failed to flush storage")
 				}
 				if err := dbs.Close(); err != nil {
-					level.Warn(logger).Log("err", err, "msg", "failed to close multi db")
+					level.Error(logger).Log("err", err, "msg", "failed to close storage")
+					return
 				}
+				level.Info(logger).Log("msg", "Multi TSDB is closed")
 			}()
 
 			for {
@@ -328,7 +336,7 @@ func runReceive(
 						return nil
 					}
 					dbUpdatesStarted.Inc()
-					level.Info(logger).Log("msg", "updating Multi DB")
+					level.Info(logger).Log("msg", "updating Multi TSDB")
 
 					if err := dbs.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
@@ -341,7 +349,7 @@ func runReceive(
 						<-uploadDone
 					}
 					statusProber.Ready()
-					level.Info(logger).Log("msg", "tsdb started, and server is ready to receive web requests")
+					level.Info(logger).Log("msg", "Multi TSDB started, and server is ready to receive web requests")
 					dbUpdatesCompleted.Inc()
 					dbReady <- struct{}{}
 				}
@@ -394,7 +402,7 @@ func runReceive(
 						return nil
 					}
 					webHandler.Hashring(h)
-					msg := "hashring has changed; server is not ready to receive web requests."
+					msg := "hashring has changed; server is not ready to receive web requests"
 					statusProber.NotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
 					hashringChangedChan <- struct{}{}
@@ -489,20 +497,27 @@ func runReceive(
 	}
 
 	if upload {
-		level.Debug(logger).Log("msg", "upload enabled")
-		if err := dbs.Sync(context.Background()); err != nil {
-			level.Warn(logger).Log("msg", "initial upload failed", "err", err)
+		logger := log.With(logger, "component", "uploader")
+		{
+			level.Info(logger).Log("msg", "upload enabled, starting initial sync")
+			ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+			if err := dbs.Sync(ctx); err != nil {
+				cancel()
+				level.Warn(logger).Log("msg", "initial upload failed", "err", err)
+			}
+			cancel()
+			level.Info(logger).Log("msg", "initial sync done")
 		}
-
 		{
 			// Run the uploader in a loop.
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+					level.Debug(logger).Log("msg", "recurring upload starting")
 					if err := dbs.Sync(ctx); err != nil {
-						level.Warn(logger).Log("msg", "interval upload failed", "err", err)
+						level.Warn(logger).Log("msg", "recurring upload failed", "err", err)
 					}
-
+					level.Debug(logger).Log("msg", "upload done")
 					return nil
 				})
 			}, func(error) {
@@ -521,9 +536,15 @@ func runReceive(
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
 					<-uploadC
-					if err := dbs.Sync(context.Background()); err != nil {
-						level.Warn(logger).Log("msg", "on demnad upload failed", "err", err)
+					level.Info(logger).Log("msg", "uploading the last cut block before exiting")
+					dctx, dCancel := context.WithTimeout(context.Background(), uploadTimeout)
+					if err := dbs.Sync(dctx); err != nil {
+						dCancel()
+						level.Error(logger).Log("msg", "on demand upload failed", "err", err)
+						return
 					}
+					dCancel()
+					level.Info(logger).Log("msg", "the last cut block is uploaded")
 				}()
 				defer close(uploadDone)
 				for {
