@@ -261,14 +261,14 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
 	b, err := yaml.Marshal(c)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `groups:
-  - name: something1
-    rules:
-      - alert: some
-        expr: up
-  - name: something2
-    rules:
-      - alert: some
-        expr: rate(some_metric[1h:5m] offset 1d)
+    - name: something1
+      rules:
+        - alert: some
+          expr: up
+    - name: something2
+      rules:
+        - alert: some
+          expr: rate(some_metric[1h:5m] offset 1d)
 `, string(b))
 }
 
