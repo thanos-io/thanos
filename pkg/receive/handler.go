@@ -123,6 +123,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
+	h.forwardRequests.WithLabelValues(labelSuccess)
+	h.forwardRequests.WithLabelValues(labelError)
+	h.replications.WithLabelValues(labelSuccess)
+	h.replications.WithLabelValues(labelError)
+
 	if o.ReplicationFactor > 1 {
 		h.replicationFactor.Set(float64(o.ReplicationFactor))
 	} else {
