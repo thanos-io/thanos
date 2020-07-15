@@ -234,7 +234,7 @@ func downsampleBucket(
 				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
+			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 		}
 	}
 	return nil
