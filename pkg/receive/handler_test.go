@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -29,34 +31,25 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func TestCountCause(t *testing.T) {
+func TestCause(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		err  error
-		f    func(error) bool
-		out  int
+		name      string
+		err       error
+		threshold int
+		exp       error
 	}{
 		{
 			name: "nil",
-			f:    isConflict,
-			out:  0,
 		},
 		{
 			name: "nil multierror",
 			err:  errutil.MultiError([]error{}),
-			f:    isConflict,
-			out:  0,
 		},
 		{
-			name: "matching nil",
-			f:    func(err error) bool { return err == nil },
-			out:  1,
-		},
-		{
-			name: "matching simple",
-			err:  conflictErr,
-			f:    isConflict,
-			out:  1,
+			name:      "matching simple",
+			err:       errConflict,
+			threshold: 1,
+			exp:       errConflict,
 		},
 		{
 			name: "non-matching multierror",
@@ -64,8 +57,7 @@ func TestCountCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
-			f:   isConflict,
-			out: 0,
+			exp: errors.New("unexpected error: 2 errors: foo; bar"),
 		},
 		{
 			name: "nested non-matching multierror",
@@ -73,8 +65,8 @@ func TestCountCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
-			f:   isConflict,
-			out: 0,
+			threshold: 1,
+			exp:       errors.New("unexpected error: baz: 2 errors: foo; bar"),
 		},
 		{
 			name: "deep nested non-matching multierror",
@@ -85,8 +77,8 @@ func TestCountCause(t *testing.T) {
 					errors.New("qux"),
 				}),
 			}), "baz"),
-			f:   isConflict,
-			out: 0,
+			threshold: 1,
+			exp:       errors.New("unexpected error: baz: 2 errors: foo; 2 errors: bar; qux"),
 		},
 		{
 			name: "matching multierror",
@@ -95,47 +87,137 @@ func TestCountCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
-			f:   isConflict,
-			out: 1,
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
+			name: "matching but below threshold multierror",
+			err: errutil.MultiError([]error{
+				storage.ErrOutOfOrderSample,
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			threshold: 2,
+			exp:       errors.New("unexpected error: 3 errors: out of order sample; foo; bar"),
 		},
 		{
 			name: "matching multierror many",
 			err: errutil.MultiError([]error{
 				storage.ErrOutOfOrderSample,
-				conflictErr,
-				errors.New(strconv.Itoa(http.StatusConflict)),
+				errConflict,
+				status.Error(codes.AlreadyExists, "conflict"),
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
-			f:   isConflict,
-			out: 3,
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
+			name: "matching multierror many, one above threshold",
+			err: errutil.MultiError([]error{
+				storage.ErrOutOfOrderSample,
+				errConflict,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       tsdb.ErrNotReady,
+		},
+		{
+			name: "matching multierror many, both above threshold, conflict have precedence",
+			err: errutil.MultiError([]error{
+				storage.ErrOutOfOrderSample,
+				errConflict,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				status.Error(codes.AlreadyExists, "conflict"),
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       errConflict,
 		},
 		{
 			name: "nested matching multierror",
-			err: errors.Wrap(errutil.MultiError([]error{
+			err: errors.Wrap(errors.Wrap(errutil.MultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
-			}), "baz"),
-			f:   isConflict,
-			out: 0,
+			}), "baz"), "qux"),
+			threshold: 1,
+			exp:       errConflict,
 		},
 		{
 			name: "deep nested matching multierror",
 			err: errors.Wrap(errutil.MultiError([]error{
 				errutil.MultiError([]error{
 					errors.New("qux"),
-					errors.New(strconv.Itoa(http.StatusConflict)),
+					status.Error(codes.AlreadyExists, "conflict"),
+					status.Error(codes.AlreadyExists, "conflict"),
 				}),
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
-			f:   isConflict,
-			out: 0,
+			threshold: 1,
+			exp:       errConflict,
 		},
 	} {
-		if n := countCause(tc.err, tc.f); n != tc.out {
-			t.Errorf("test case %s: expected %d, got %d", tc.name, tc.out, n)
+		got := cause(tc.err, tc.threshold)
+		if got == nil {
+			if tc.exp != nil {
+				t.Errorf("case %q: got nil, expected: %v", tc.name, tc.exp)
+				continue
+			}
+			continue
+		}
+		if got.Error() != tc.exp.Error() {
+			t.Errorf("case %q: got: %v, expected: %v", tc.name, got, tc.exp)
+			continue
+		}
+	}
+}
+
+func TestRootCause(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		exp  error
+	}{
+		{
+			name: "nested matching multierror",
+			err: errors.Wrap(errors.Wrap(errutil.MultiError([]error{
+				tsdb.ErrNotReady,
+				errors.New("foo"),
+				errors.New("bar"),
+			}), "baz"), "qux"),
+			exp: tsdb.ErrNotReady,
+		},
+		{
+			name: "deep nested matching multierror",
+			err: errors.Wrap(errutil.MultiError([]error{
+				errutil.MultiError([]error{
+					errors.New("qux"),
+					status.Error(codes.AlreadyExists, "conflict"),
+				}),
+				errors.New("foo"),
+				errors.New("bar"),
+			}), "baz"),
+			exp: errConflict,
+		},
+	} {
+		got := rootCause(tc.err)
+		if got == nil {
+			if tc.exp != nil {
+				t.Errorf("case %q: got nil, expected: %v", tc.name, tc.exp)
+				continue
+			}
+			continue
+		}
+		if got.Error() != tc.exp.Error() {
+			t.Errorf("case %q: got: %v, expected: %v", tc.name, got, tc.exp)
+			continue
 		}
 	}
 }

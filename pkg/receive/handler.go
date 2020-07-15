@@ -11,6 +11,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -56,8 +57,8 @@ const (
 )
 
 var (
-	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr = errors.New("conflict")
+	// errConflict is returned whenever an operation fails due to any conflict-type error.
+	errConflict = errors.New("conflict")
 
 	errBadReplica  = errors.New("replica count exceeds replication factor")
 	errNotReady    = errors.New("target not ready")
@@ -269,13 +270,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	// Forward any time series as necessary. All time series
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
-	if err := h.forward(ctx, tenant, r, wreq); err != nil {
-		if countCause(err, isConflict) > 0 {
-			return conflictErr
-		}
-		return err
-	}
-	return nil
+	return h.forward(ctx, tenant, r, wreq)
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -316,14 +311,18 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	switch err {
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+
+	switch rootCause(err) {
 	case nil:
 		return
 	case errNotReady:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errUnavailable:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case conflictErr:
+	case errConflict:
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -425,7 +424,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
+					ec <- errors.Wrapf(err, "replicate write request for endpoint %v", endpoint)
 					return
 				}
 
@@ -453,16 +452,8 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
-					if errs, ok := err.(errutil.MultiError); ok {
-						if countCause(errs, isConflict) > 0 {
-							err = errors.Wrap(conflictErr, errs.Error())
-						} else if countCause(errs, isNotReady) > 0 {
-							err = errNotReady
-						} else {
-							err = errors.New(errs.Error())
-						}
-					}
-					ec <- errors.Wrapf(err, "storing locally, endpoint %v", endpoint)
+					level.Debug(h.logger).Log("msg", "local tsdb write failed", "err", err.Error())
+					ec <- errors.Wrapf(cause(err, 1), "store locally for endpoint %v", endpoint)
 					return
 				}
 				ec <- nil
@@ -614,18 +605,8 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		if countCause(err, isNotReady) >= quorum {
-			return errors.Wrap(errNotReady, "replicate: quorum not reached")
-		}
-		if countCause(err, isConflict) >= quorum {
-			return errors.Wrap(conflictErr, "replicate: quorum not reached")
-		}
-		if countCause(err, isUnavailable) >= quorum {
-			return errors.Wrap(errUnavailable, "replicate: quorum not reached")
-		}
-		return errors.Wrap(err, "unexpected error, before quorum is reached")
+		return errors.Wrap(cause(err, quorum), "quorum not reached")
 	}
-
 	return nil
 }
 
@@ -635,14 +616,17 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	defer span.Finish()
 
 	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
-	switch err {
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+	switch rootCause(err) {
 	case nil:
 		return &storepb.WriteResponse{}, nil
 	case errNotReady:
 		return nil, status.Error(codes.Unavailable, err.Error())
 	case errUnavailable:
 		return nil, status.Error(codes.Unavailable, err.Error())
-	case conflictErr:
+	case errConflict:
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errBadReplica:
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -651,34 +635,15 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	}
 }
 
-// countCause counts the number of errors within the given error
-// whose causes satisfy the given function.
-// countCause will inspect the error's cause or, if the error is a MultiError,
-// the cause of each contained error but will not traverse any deeper.
-func countCause(err error, f func(error) bool) int {
-	errs, ok := err.(errutil.MultiError)
-	if !ok {
-		errs = []error{err}
-	}
-	var n int
-	for i := range errs {
-		if f(errors.Cause(errs[i])) {
-			n++
-		}
-	}
-	return n
-}
-
 // isConflict returns whether or not the given error represents a conflict.
 func isConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == conflictErr ||
+	return err == errConflict ||
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
-		err.Error() == strconv.Itoa(http.StatusConflict) ||
 		status.Code(err) == codes.AlreadyExists
 }
 
@@ -700,6 +665,84 @@ func isUnavailable(err error) bool {
 type retryState struct {
 	attempt     float64
 	nextAllowed time.Time
+}
+
+// countCause counts the number of errors within the given error slice
+// whose causes satisfy the given function.
+// cause will inspect the error's cause or, if the error is a MultiError,
+// the cause of each contained error but will not traverse any deeper.
+func countCause(errs []error, f func(error) bool) int {
+	var n int
+	for _, err := range errs {
+		errs, ok := err.(errutil.MultiError)
+		if ok {
+			n += countCause(errs, f)
+			continue
+		}
+
+		if f(errors.Cause(err)) {
+			n++
+		}
+	}
+	return n
+}
+
+type expectedErrors []*struct {
+	err   error
+	cause func(error) bool
+	count int
+}
+
+func (a expectedErrors) Len() int           { return len(a) }
+func (a expectedErrors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a expectedErrors) Less(i, j int) bool { return a[i].count < a[j].count }
+
+// cause returns a known error which has occurred more than the given threshold.
+// cause will inspect the error's cause or, if the error is a MultiError,
+// the cause of each contained error but will not traverse any deeper.
+func cause(err error, threshold int) error {
+	if err == nil {
+		return nil
+	}
+	unwrappedErr := errors.Cause(err)
+	errs, ok := unwrappedErr.(errutil.MultiError)
+	if !ok {
+		errs = []error{unwrappedErr}
+	}
+	if threshold > 0 {
+		expErrs := expectedErrors{
+			{err: errConflict, cause: isConflict},
+			{err: errNotReady, cause: isNotReady},
+			{err: errUnavailable, cause: isUnavailable},
+		}
+		for _, exp := range expErrs {
+			exp.count = countCause(errs, exp.cause)
+		}
+		sort.Sort(sort.Reverse(expErrs))
+		if exp := expErrs[0]; exp.count >= threshold {
+			return exp.err
+		}
+	}
+	if len(errs) == 1 {
+		return err
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Wrap(err, "unexpected error")
+}
+
+// rootCause extracts the root cause of a fan-out error.
+func rootCause(err error) error {
+	if err == nil {
+		return nil
+	}
+	err = errors.Cause(cause(err, 1))
+	errs, ok := err.(errutil.MultiError)
+	if !ok {
+		return err
+	}
+	return errors.New(errs.Error())
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
