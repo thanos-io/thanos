@@ -11,8 +11,8 @@ import { Stores, ErrorBoundary } from './thanos/pages';
 import './App.css';
 
 const defaultRouteConfig: { [component: string]: string } = {
-  query: '/new/graph',
-  rule: '/new/alerts',
+  query: '/graph',
+  rule: '/alerts',
 };
 
 const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {
@@ -25,7 +25,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
       />
       <Container fluid style={{ paddingTop: 70 }}>
         <Router basepath={`${pathPrefix}/new`}>
-          <Redirect from="/" to={`${pathPrefix}${defaultRouteConfig[thanosComponent]}`} />
+          <Redirect from="/" to={`${pathPrefix}/new${defaultRouteConfig[thanosComponent]}`} />
 
           {/*
             NOTE: Any route added here needs to also be added to the list of

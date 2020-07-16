@@ -35,8 +35,12 @@ type Query struct {
 }
 
 func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo v1.RuntimeInfoFn, buildInfo v1.ThanosVersion) *Query {
+	tmplVariables := map[string]string{
+		"Component": component.Query.String(),
+	}
+
 	return &Query{
-		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Query),
+		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), tmplVariables, externalPrefix, prefixHeader, component.Query),
 		storeSet:       storeSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,

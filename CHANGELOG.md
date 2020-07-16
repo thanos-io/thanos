@@ -27,6 +27,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 - [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 - [#2892](https://github.com/thanos-io/thanos/pull/2892) Receive: Receiver fails when the initial upload fails.
+- [#2865](https://github.com/thanos-io/thanos/pull/2865) ui: Migrate Thanos Ruler UI to React
 
 ### Changed
 

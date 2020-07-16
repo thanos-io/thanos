@@ -53,7 +53,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
       <NavbarToggler onClick={toggle} />
-      <Link className="navbar-brand" to={`${pathPrefix}${defaultRoute}`}>
+      <Link className="navbar-brand" to={`${pathPrefix}/new${defaultRoute}`}>
         Thanos - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
       </Link>
@@ -88,7 +88,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
             <NavLink href="https://thanos.io/getting-started.md/">Help</NavLink>
           </NavItem>
           <NavItem>
-            <NavLink href={`${pathPrefix}/graph${window.location.search}`}>Classic UI</NavLink>
+            <NavLink href={`${pathPrefix}${defaultRoute}${window.location.search}`}>Classic UI</NavLink>
           </NavItem>
         </Nav>
       </Collapse>
