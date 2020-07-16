@@ -52,7 +52,6 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	"gopkg.in/yaml.v2"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -805,9 +804,8 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 			}
-
-			var relabelConf []*relabel.Config
-			testutil.Ok(t, yaml.Unmarshal([]byte(sc.relabel), &relabelConf))
+			relabelConf, err := block.ParseRelabelConfig([]byte(sc.relabel))
+			testutil.Ok(t, err)
 
 			rec := &recorder{Bucket: bkt}
 			metaFetcher, err := block.NewMetaFetcher(logger, 20, objstore.WithNoopInstr(bkt), dir, nil, []block.MetadataFilter{

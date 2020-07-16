@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -31,7 +30,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
 )
 
 func newTestFetcherMetrics() *fetcherMetrics {
@@ -311,8 +309,8 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
       source_labels:
       - message
     `
-	var relabelConfig []*relabel.Config
-	testutil.Ok(t, yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig))
+	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml))
+	testutil.Ok(t, err)
 
 	f := NewLabelShardedMetaFilter(relabelConfig)
 
@@ -377,8 +375,8 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 `
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			var relabelConfig []*relabel.Config
-			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), &relabelConfig))
+			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)))
+			testutil.Ok(t, err)
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
 
@@ -1180,5 +1178,21 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 			}
 		})
 	}
+}
 
+func Test_ParseRelabelConfig(t *testing.T) {
+	_, err := ParseRelabelConfig([]byte(`
+    - action: drop
+      regex: "A"
+      source_labels:
+      - cluster
+    `))
+	testutil.Ok(t, err)
+
+	_, err = ParseRelabelConfig([]byte(`
+    - action: labelmap
+      regex: "A"
+    `))
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }
