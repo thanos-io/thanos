@@ -9,9 +9,8 @@ import DataTable from './DataTable';
 import { GraphTabContent } from './GraphTabContent';
 
 const defaultProps = {
+  id: 'abc123',
   useLocalTime: false,
-  useDeduplication: true,
-  usePartialResponse: false,
   options: {
     expr: 'prometheus_engine',
     type: PanelType.Table,
@@ -19,6 +18,9 @@ const defaultProps = {
     endTime: 1572100217898,
     resolution: 28,
     stacked: false,
+    maxSourceResolution: 'auto',
+    useDeduplication: true,
+    usePartialResponse: false,
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -91,6 +93,9 @@ describe('Panel', () => {
       endTime: 1572100217898,
       resolution: 28,
       stacked: false,
+      maxSourceResolution: 'auto',
+      useDeduplication: true,
+      usePartialResponse: false,
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);
@@ -101,6 +106,7 @@ describe('Panel', () => {
     expect(controls.prop('resolution')).toEqual(options.resolution);
     expect(controls.prop('stacked')).toEqual(options.stacked);
     expect(graph.prop('stacked')).toEqual(options.stacked);
+    expect(controls.prop('maxSourceResolution')).toEqual(options.maxSourceResolution);
   });
 
   describe('when switching between modes', () => {
