@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	kit "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
@@ -68,10 +69,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 	loggingOpts := []grpc_logging.Option{
-		logging.WithDecider(func(_ string, _ error) bool {
+		grpc_logging.WithDecider(func(_ string, _ error) bool {
 			return true
 		}),
-		logging.With
 	}
 
 	grpcOpts := []grpc.ServerOption{
@@ -79,13 +79,13 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
-			logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), opts...),
+			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
-			logging.StreamServerInterceptor(kit.InterceptorLogger(logger), opts...),
+			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	}
