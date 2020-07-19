@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
@@ -66,17 +67,25 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
 	}
+	loggingOpts := []grpc_logging.Option{
+		logging.WithDecider(func(_ string, _ error) bool {
+			return true
+		}),
+		logging.With
+	}
 
 	grpcOpts := []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
+			logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), opts...),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
+			logging.StreamServerInterceptor(kit.InterceptorLogger(logger), opts...),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	}

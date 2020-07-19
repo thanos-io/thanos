@@ -27,7 +27,7 @@ require (
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gophercloud/gophercloud v0.12.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2-eea22931456b8e9a0e9d68553897636e50f24eaf
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/leanovate/gopter v0.2.4
