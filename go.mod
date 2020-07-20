@@ -8,6 +8,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/armon/go-metrics v0.3.3
+	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
@@ -47,8 +48,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.10.0
-	github.com/prometheus/prometheus v1.8.2-0.20200707115909-30505a202a4c
-	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
+	github.com/prometheus/prometheus v1.8.2-0.20200711170716-492061b24c00
 	github.com/uber/jaeger-client-go v2.24.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0
@@ -71,6 +71,7 @@ require (
 // so that we don't get errors about being incompatible with the Go proxies.
 // See https://github.com/thanos-io/thanos/issues/1415
 replace (
+	github.com/cortexproject/cortex => github.com/kakkoyun/cortex v1.2.1-0.20200720132657-edee8cdf633f
 	// Make sure Cortex is not forcing us to some other Prometheus version.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200714083622-823b218e1b2e
 	k8s.io/klog => k8s.io/klog v0.3.1

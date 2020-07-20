@@ -75,7 +75,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 			"--log.level":                       logLevel,
 			"--web.listen-address":              ":9090",
 		})...),
-		e2e.NewReadinessProbe(9090, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 299),
 		9090,
 	)
 	prom.SetUser(strconv.Itoa(os.Getuid()))
@@ -103,7 +103,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 			"--tsdb.path":         dataDir,
 			"--log.level":         logLevel,
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 		9091,
 	)
@@ -171,7 +171,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 		9091,
 	)
@@ -222,7 +222,62 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
+		8080,
+		9091,
+		8081,
+	)
+	receiver.SetUser(strconv.Itoa(os.Getuid()))
+	receiver.SetBackoff(defaultBackoffConfig)
+
+	return receiver, nil
+}
+
+func NewReceiverWithTSDB(sharedDir string, networkName string, name string, replicationFactor int, dataDir, dataContainerDir string, hashring ...receive.HashringConfig) (*Service, error) {
+	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
+	if len(hashring) == 0 {
+		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
+	}
+
+	dir := filepath.Join(sharedDir, "data", "receive", name)
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return nil, errors.Wrap(err, "create receive dir")
+	}
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
+		return nil, errors.Wrap(err, "create receive data dir")
+	}
+	b, err := json.Marshal(hashring)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0666); err != nil {
+		return nil, errors.Wrap(err, "creating receive config")
+	}
+
+	receiver := NewService(
+		fmt.Sprintf("receive-%v", name),
+		DefaultImage(),
+		// TODO(bwplotka): BuildArgs should be interface.
+		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
+			"--debug.name":                              fmt.Sprintf("receive-%v", name),
+			"--grpc-address":                            ":9091",
+			"--grpc-grace-period":                       "0s",
+			"--http-address":                            ":8080",
+			"--remote-write.address":                    ":8081",
+			"--label":                                   fmt.Sprintf(`receive="%s"`, name),
+			"--tsdb.path":                               dataContainerDir,
+			"--log.level":                               logLevel,
+			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
+			"--receive.local-endpoint":                  localEndpoint,
+			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
+			"--receive.hashrings-file-refresh-interval": "5s",
+			"--tsdb.min-block-duration":                 "5s",
+			"--tsdb.max-block-duration":                 "5s",
+		})...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 		9091,
 		8081,
@@ -271,7 +326,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--query.sd-dns-interval":         "1s",
 			"--resend-delay":                  "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 		9091,
 	)
@@ -311,7 +366,7 @@ receivers:
 			"--web.get-concurrency": "1",
 			"--web.timeout":         "2m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 	)
 	s.SetUser(strconv.Itoa(os.Getuid()))
@@ -355,7 +410,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 		9091,
 	)
@@ -396,7 +451,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 299),
 		8080,
 	)
 	compactor.SetUser(strconv.Itoa(os.Getuid()))

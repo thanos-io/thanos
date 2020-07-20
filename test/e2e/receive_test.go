@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -57,11 +59,11 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, "", e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, "", e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
@@ -136,7 +138,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
@@ -208,7 +210,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
@@ -239,5 +241,184 @@ func TestReceive(t *testing.T) {
 				"tenant_id":  "default-tenant",
 			},
 		})
+	})
+}
+
+func TestReceiveShutdown(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dirty_shutdown", func(t *testing.T) {
+		t.Parallel()
+
+		networkName := "e2e_test_receive_dirty_shutdown"
+		s, err := e2e.NewScenario(networkName)
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1))
+
+		// Wait for a little bit to aggregate some samples.
+		time.Sleep(10 * time.Second)
+
+		testutil.Ok(t, r1.KillNow())
+		testutil.Ok(t, s.Unregister(r1))
+
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+	})
+
+	t.Run("healthy_shutdown_overlapping_blocks", func(t *testing.T) {
+		t.Parallel()
+
+		networkName := "e2e_test_receive_healthy_shutdown_overlapping_blocks"
+		s, err := e2e.NewScenario(networkName)
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r2))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1))
+
+		// Wait for a little bit to aggregate some samples.
+		time.Sleep(10 * time.Second)
+
+		testutil.Ok(t, s.Stop(r1))
+		testutil.Ok(t, s.Stop(r2))
+
+		dataDir1 := filepath.Join(s.SharedDir(), "data", "receive", "1", "data")
+		dataDir2 := filepath.Join(s.SharedDir(), "data", "receive", "2", "data")
+		e2eutil.Copy(t, dataDir2, dataDir1)
+
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		testutil.Ok(t, s.Stop(r1))
+	})
+
+	t.Run("dirty_shutdown_overlapping_blocks", func(t *testing.T) {
+		t.Parallel()
+
+		networkName := "e2e_test_receive_dirty_shutdown_overlapping_blocks"
+		s, err := e2e.NewScenario(networkName)
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r2))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1))
+
+		// // Wait for a little bit to aggregate some samples.
+		time.Sleep(10 * time.Second)
+
+		testutil.Ok(t, r1.KillNow())
+		testutil.Ok(t, s.Stop(r2))
+
+		dataDir1 := filepath.Join(s.SharedDir(), "data", "receive", "1", "data")
+		dataDir2 := filepath.Join(s.SharedDir(), "data", "receive", "2", "data")
+		e2eutil.Copy(t, dataDir2, dataDir1)
+
+		testutil.Ok(t, s.Unregister(r1))
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		testutil.Ok(t, s.Stop(r1))
+	})
+
+	t.Run("healthy_shutdown_concurrent_start", func(t *testing.T) {
+		t.Parallel()
+
+		networkName := "e2e_test_receive_healthy_shutdown_overlapping_blocks"
+		s, err := e2e.NewScenario(networkName)
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1))
+
+		// Wait for a little bit to aggregate some samples.
+		time.Sleep(10 * time.Second)
+
+		testutil.Ok(t, s.Unregister(r1))
+		r1_2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1_2))
+
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, "", e2ethanos.RemoteWriteEndpoint(r1_2.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom2))
+
+		testutil.Ok(t, s.Stop(r1))
+
+		testutil.Ok(t, s.Stop(r1_2))
+	})
+
+	t.Run("two_receivers_work_on_same_data_dir", func(t *testing.T) {
+		t.Parallel()
+
+		networkName := "e2e_test_receive_dirty_shutdown_overlapping_blocks"
+		s, err := e2e.NewScenario(networkName)
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		dir := filepath.Join(s.SharedDir(), "data", "receive", "shared")
+		dataDir := filepath.Join(dir, "data")
+		containerDir := filepath.Join(e2e.ContainerSharedDir, "data", "receive", "shared")
+
+		r1, err := e2ethanos.NewReceiverWithTSDB(s.SharedDir(), s.NetworkName(), "1", 1, dataDir, containerDir)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		r2, err := e2ethanos.NewReceiverWithTSDB(s.SharedDir(), s.NetworkName(), "2", 1, dataDir, containerDir)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r2))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "", e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081))), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1))
+
+		// Wait for a little bit to aggregate some samples.
+		time.Sleep(10 * time.Second)
+		testutil.Ok(t, s.Stop(r1))
+		testutil.Ok(t, s.Stop(r2))
+
+		r2, err = e2ethanos.NewReceiverWithTSDB(s.SharedDir(), s.NetworkName(), "2", 1, dataDir, containerDir)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r2))
+
+		r1, err = e2ethanos.NewReceiverWithTSDB(s.SharedDir(), s.NetworkName(), "1", 1, dataDir, containerDir)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1))
+
+		time.Sleep(10 * time.Second)
 	})
 }
