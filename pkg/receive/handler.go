@@ -674,12 +674,6 @@ type retryState struct {
 func countCause(errs []error, f func(error) bool) int {
 	var n int
 	for _, err := range errs {
-		errs, ok := err.(errutil.MultiError)
-		if ok {
-			n += countCause(errs, f)
-			continue
-		}
-
 		if f(errors.Cause(err)) {
 			n++
 		}

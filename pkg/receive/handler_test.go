@@ -161,7 +161,7 @@ func TestCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			threshold: 1,
-			exp:       errConflict,
+			exp:       errors.New("unexpected error: baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
 		got := cause(tc.err, tc.threshold)
@@ -204,7 +204,7 @@ func TestRootCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
-			exp: errConflict,
+			exp: errors.New("3 errors: 2 errors: qux; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
 		got := rootCause(tc.err)
