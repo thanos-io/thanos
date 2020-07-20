@@ -93,11 +93,14 @@ Flags:
                                  memory.
       --store.grpc.series-sample-limit=0
                                  Maximum amount of samples returned via a single
-                                 Series call. 0 means no limit. NOTE: For
-                                 efficiency we take 120 as the number of samples
-                                 in chunk (it cannot be bigger than that), so
-                                 the actual number of samples might be lower,
-                                 even though the maximum could be hit.
+                                 Series call. The Series call fails if this
+                                 limit is exceeded. 0 means no limit. NOTE: For
+                                 efficiency the limit is internally implemented
+                                 as 'chunks limit' considering each chunk
+                                 contains 120 samples (it's the max number of
+                                 samples each chunk can contain), so the actual
+                                 number of samples might be lower, even though
+                                 the maximum could be hit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --objstore.config-file=<file-path>

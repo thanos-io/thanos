@@ -127,7 +127,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		if !r.SkipChunks {
 			// TODO(fabxc): An improvement over this trivial approach would be to directly
 			// use the chunks provided by TSDB in the response.
-			c, err := s.encodeChunks(series.Iterator(), maxSamplesPerChunk)
+			c, err := s.encodeChunks(series.Iterator(), MaxSamplesPerChunk)
 			if err != nil {
 				return status.Errorf(codes.Internal, "encode chunk: %s", err)
 			}
