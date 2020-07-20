@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kit "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
@@ -73,17 +74,40 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			return true
 		}),
 	}
+	tagsOption := []tags.Option{
+		tags.WithFieldExtractor(func(_ string, req interface{})map[string]string{
+
+			var reqID string
+			ctx := req.Context()
+			md, ok := metadata.FromIncomingContext(ctx)
+
+			if !ok || len(md["request-id"]) == 0 {
+				
+				entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+				reqID = ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
+			} else {
+				reqID = md["request-id"][0]
+			}
+			
+			tagMap := make(map[string]string)
+			tagMap["request-id"] = reqID
+
+			return tagMap
+		})
+	}
 
 	grpcOpts := []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
+			tags.UnaryServerInterceptor(tagsOption...),
 			tracing.UnaryServerInterceptor(tracer),
 			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
+			tags.StreamServerInterceptor(tagsOption...),
 			tracing.StreamServerInterceptor(tracer),
 			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
