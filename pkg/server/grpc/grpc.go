@@ -6,17 +6,20 @@ package grpc
 import (
 	"context"
 	"math"
+	"math/rand"
 	"net"
 	"runtime/debug"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kit "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -74,26 +77,18 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			return true
 		}),
 	}
+
 	tagsOption := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, req interface{})map[string]string{
+		tags.WithFieldExtractor(func(_ string, _ interface{}) map[string]string {
 
-			var reqID string
-			ctx := req.Context()
-			md, ok := metadata.FromIncomingContext(ctx)
+			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
 
-			if !ok || len(md["request-id"]) == 0 {
-				
-				entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-				reqID = ulid.MustNew(ulid.Timestamp(time.Now()), entropy).String()
-			} else {
-				reqID = md["request-id"][0]
-			}
-			
 			tagMap := make(map[string]string)
-			tagMap["request-id"] = reqID
+			tagMap["request-id"] = reqID.String()
 
 			return tagMap
-		})
+		}),
 	}
 
 	grpcOpts := []grpc.ServerOption{
