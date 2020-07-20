@@ -80,7 +80,7 @@ func (s *Server) Shutdown(err error) {
 		level.Error(s.logger).Log("msg", "internal server shut down failed", "err", err)
 		return
 	}
-	level.Info(s.logger).Log("msg", "internal server is shutdown", "err", err)
+	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
 }
 
 // Handle registers the handler for the given pattern.

@@ -146,10 +146,11 @@ func (s *Server) Shutdown(err error) {
 	case <-ctx.Done():
 		level.Info(s.logger).Log("msg", "grace period exceeded enforcing shutdown")
 		s.srv.Stop()
+		return
 	case <-stopped:
 		cancel()
 	}
-	level.Info(s.logger).Log("msg", "internal server is shutdown", "err", err)
+	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
 }
 
 // ReadWriteStoreServer is a StoreServer and a WriteableStoreServer.
