@@ -84,8 +84,6 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	forwardTimeout := modelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
-	uploadTimeout := modelDuration(cmd.Flag("receive.upload-timeout", "Timeout for each block upload request.").Default("10m").Hidden())
-
 	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
 	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
@@ -165,7 +163,6 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicaHeader,
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
-			time.Duration(*uploadTimeout),
 			*allowOutOfOrderUpload,
 			comp,
 		)
@@ -205,7 +202,6 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
-	uploadTimeout time.Duration,
 	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
 ) error {
@@ -503,8 +499,6 @@ func runReceive(
 		upload := func(ctx context.Context) error {
 			level.Debug(logger).Log("msg", "upload starting")
 			start := time.Now()
-			ctx, cancel := context.WithTimeout(ctx, uploadTimeout)
-			defer cancel()
 
 			if err := dbs.Sync(ctx); err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
@@ -532,13 +526,13 @@ func runReceive(
 				defer func() {
 					<-uploadC // Closed by storage routine when it's done.
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
-					dctx, dCancel := context.WithTimeout(context.Background(), uploadTimeout)
-					if err := dbs.Sync(dctx); err != nil {
-						dCancel()
+					ctx, cancel := context.WithCancel(context.Background())
+					if err := dbs.Sync(ctx); err != nil {
+						cancel()
 						level.Error(logger).Log("msg", "the final upload failed", "err", err)
 						return
 					}
-					dCancel()
+					cancel()
 					level.Info(logger).Log("msg", "the final cut block was uploaded")
 				}()
 
