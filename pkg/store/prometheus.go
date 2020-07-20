@@ -239,7 +239,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 			continue
 		}
 
-		aggregatedChunks, err := p.chunkSamples(e, maxSamplesPerChunk)
+		aggregatedChunks, err := p.chunkSamples(e, MaxSamplesPerChunk)
 		if err != nil {
 			return err
 		}
