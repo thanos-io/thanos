@@ -114,7 +114,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
-			NoLockfile:        true,
+			NoLockfile:        false,
 			WALCompression:    *walCompression,
 		}
 
