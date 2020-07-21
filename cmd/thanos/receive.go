@@ -304,6 +304,11 @@ func runReceive(
 			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
 		})
 
+		level.Debug(logger).Log("msg", "cleaning storage lock files")
+		if err := dbs.Clean(); err != nil {
+			return errors.Wrap(err, "cleaning storage lock files")
+		}
+
 		// TSDBs reload logic, listening on hashring changes.
 		cancel := make(chan struct{})
 		g.Add(func() error {
