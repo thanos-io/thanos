@@ -25,9 +25,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	tsdb "github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -51,7 +53,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -134,7 +135,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			NoLockfile:        true,
+			NoLockfile:        false,
 			WALCompression:    *walCompression,
 		}
 
