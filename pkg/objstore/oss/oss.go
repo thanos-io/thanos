@@ -144,7 +144,7 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 		return objstore.ObjectAttributes{}, err
 	}
 
-	mod, err := clientutil.ParseLastModified(m)
+	mod, err := clientutil.ParseLastModified(m, time.RFC1123)
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}

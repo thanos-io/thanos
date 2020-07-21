@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/mozillazg/go-cos"
@@ -105,7 +106,7 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 		return objstore.ObjectAttributes{}, err
 	}
 
-	mod, err := clientutil.ParseLastModified(resp.Header)
+	mod, err := clientutil.ParseLastModified(resp.Header, time.RFC1123)
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}

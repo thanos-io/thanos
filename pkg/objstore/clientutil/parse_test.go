@@ -13,10 +13,12 @@ import (
 )
 
 func TestParseLastModified(t *testing.T) {
+	location, _ := time.LoadLocation("GMT")
 	tests := map[string]struct {
 		headerValue string
 		expectedVal time.Time
 		expectedErr string
+		format      string
 	}{
 		"no header": {
 			expectedErr: "Last-Modified header not found",
@@ -29,6 +31,16 @@ func TestParseLastModified(t *testing.T) {
 			headerValue: "2015-11-06T10:07:11.000Z",
 			expectedVal: time.Date(2015, time.November, 6, 10, 7, 11, 0, time.UTC),
 		},
+		"valid oss/cos  header value": {
+			headerValue: "Fri, 24 Feb 2012 06:07:48 GMT",
+			expectedVal: time.Date(2012, time.February, 24, 6, 7, 48, 0, location),
+			format:      time.RFC1123,
+		},
+		"invalid oss/cos header value": {
+			headerValue: "invalid",
+			expectedErr: `parse Last-Modified: parsing time "invalid" as "Mon, 02 Jan 2006 15:04:05 MST": cannot parse "invalid" as "Mon"`,
+			format:      time.RFC1123,
+		},
 	}
 
 	for testName, testData := range tests {
@@ -38,7 +50,16 @@ func TestParseLastModified(t *testing.T) {
 				meta.Add(alioss.HTTPHeaderLastModified, testData.headerValue)
 			}
 
-			actual, err := ParseLastModified(meta)
+			var (
+				actual time.Time
+				err    error
+			)
+
+			if len(testData.format) == 0 {
+				actual, err = ParseLastModified(meta)
+			} else {
+				actual, err = ParseLastModified(meta, testData.format)
+			}
 
 			if testData.expectedErr != "" {
 				testutil.NotOk(t, err)
