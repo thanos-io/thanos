@@ -218,8 +218,6 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 
 		if err := r.apply(ctx); err != nil {
-			// Critical error.
-			// TODO(bwplotka): There is no need to get process down in this case and decrease availability, handle the error in different way.
 			return err
 		}
 	}
@@ -277,40 +275,20 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 	}
 
-	h := sha256.New()
-	for _, ruleDir := range r.ruleDirs {
-		walkDir, err := filepath.EvalSymlinks(ruleDir)
+	// Retry calculating the rule hash for a short while. This can hit errors due symlinks changing,
+	// especially if reading the config from a k8s volume mounted configmap
+	hashCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := runutil.RetryWithLog(r.logger, 1*time.Second, hashCtx.Done(), func() error {
+		var err error
+		ruleHash, err = hashRules(r.ruleDirs)
 		if err != nil {
-			return errors.Wrap(err, "ruleDir symlink eval")
+			return err
 		}
-		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// filepath.Walk uses Lstat to retrieve os.FileInfo. Lstat does not
-			// follow symlinks. Make sure to follow a symlink before checking
-			// if it is a directory.
-			targetFile, err := os.Stat(path)
-			if err != nil {
-				return err
-			}
-
-			if targetFile.IsDir() {
-				return nil
-			}
-
-			if err := hashFile(h, path); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			return errors.Wrap(err, "build hash")
-		}
-	}
-	if len(r.ruleDirs) > 0 {
-		ruleHash = h.Sum(nil)
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastRuleHash, ruleHash) {
@@ -342,6 +320,49 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func hashRules(ruleDirs []string) ([]byte, error) {
+	ruleHash := []byte{}
+	h := sha256.New()
+
+	for _, ruleDir := range ruleDirs {
+		walkDir, err := filepath.EvalSymlinks(ruleDir)
+		if err != nil {
+			return nil, errors.Wrap(err, "ruleDir symlink eval")
+		}
+		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// filepath.Walk uses Lstat to retrieve os.FileInfo. Lstat does not
+			// follow symlinks. Make sure to follow a symlink before checking
+			// if it is a directory.
+			targetFile, err := os.Stat(path)
+			if err != nil {
+				return errors.Wrap(err, "stat")
+			}
+
+			if targetFile.IsDir() {
+				return nil
+			}
+
+			if err := hashFile(h, path); err != nil {
+				return errors.Wrap(err, "hashfile")
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(ruleDirs) > 0 {
+		ruleHash = h.Sum(nil)
+	}
+
+	return ruleHash, nil
 }
 
 func hashFile(h hash.Hash, fn string) error {

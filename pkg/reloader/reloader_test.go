@@ -257,3 +257,124 @@ func TestReloader_RuleApply(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, 5, reloads.Load().(int))
 }
+
+func TestReloader_SymlinkWatch(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir, err := ioutil.TempDir("", "reloader-watch-dir")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	// The following setup is similar to the one when k8s projects a configmap contents as a volume
+	// Directory setup ( -> = symlink):
+	// in/config.yaml -> in/data/config.yaml
+	// in/rules.yaml -> in/data/rules.yaml
+	// data -> first-config
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
+
+	// Setup first config
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in", "first-config"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "in", "first-config", "cfg.yaml"), []byte(`
+config:
+  a: a
+`), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "in", "first-config", "rule.yaml"), []byte(`rule1`), os.ModePerm))
+	// Setup data
+	testutil.Ok(t, os.Symlink(path.Join(dir, "in", "first-config"), path.Join(dir, "in", "data")))
+
+	// Setup config symlinks to data
+	testutil.Ok(t, os.Symlink(path.Join(dir, "in", "data", "cfg.yaml"), path.Join(dir, "in", "cfg.yaml")))
+	testutil.Ok(t, os.Symlink(path.Join(dir, "in", "data", "rule.yaml"), path.Join(dir, "in", "rule.yaml")))
+
+	reloader := New(nil, nil, reloadURL, path.Join(dir, "in", "cfg.yaml"), path.Join(dir, "out", "cfg.yaml"), []string{dir, path.Join(dir, "in")})
+
+	reloader.watchInterval = 100 * time.Millisecond
+	reloader.retryInterval = 100 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		defer cancel()
+
+		reloadsSeen := 0
+		init := false
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(300 * time.Millisecond):
+			}
+
+			rel := reloads.Load().(int)
+			if init && rel <= reloadsSeen {
+				continue
+			}
+			init = true
+
+			reloadsSeen = rel
+
+			t.Log("Performing step number", rel)
+
+			switch rel {
+			case 1:
+				// The following steps try to reproduce the file change behavior when k8s projects a configmap as a volume
+				// and the configmap changes. https://github.com/kubernetes/kubernetes/blob/release-1.19/pkg/volume/util/atomic_writer.go#L87-L120
+				// Setup second config
+				testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in", "second-config"), os.ModePerm))
+				testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "in", "second-config", "cfg.yaml"), []byte(`
+config:
+  b: b
+`), os.ModePerm))
+				testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "in", "second-config", "rule.yaml"), []byte(`rule2`), os.ModePerm))
+
+				// Create temp data dir
+				testutil.Ok(t, os.Symlink(path.Join(dir, "in", "second-config"), path.Join(dir, "in", "tmp_data")))
+
+				// Rename data
+				testutil.Ok(t, os.Rename(path.Join(dir, "in", "tmp_data"), path.Join(dir, "in", "data")))
+
+				// Remove first config
+				testutil.Ok(t, os.RemoveAll(path.Join(dir, "in", "first-config", "rule.yaml")))
+				testutil.Ok(t, os.RemoveAll(path.Join(dir, "in", "first-config", "cfg.yaml")))
+				testutil.Ok(t, os.RemoveAll(path.Join(dir, "in", "first-config")))
+			}
+
+			if rel > 1 {
+				// All good.
+				return
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	g.Wait()
+
+	testutil.Ok(t, err)
+	output, err := ioutil.ReadFile(path.Join(dir, "out", "cfg.yaml"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, output, []byte(`
+config:
+  b: b
+`))
+}

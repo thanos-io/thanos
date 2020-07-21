@@ -24,6 +24,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2956](https://github.com/thanos-io/thanos/pull/2956) Store: Fix fetching of chunks bigger than 16000 bytes.
 - [#2970](https://github.com/thanos-io/thanos/pull/2970) Store: Upgrade minio-go/v7 to fix slowness when running on EKS.
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
+- [#2952](https://github.com/thanos-io/thanos/pull/2952) Sidecar: Fix sidecar crashing with lstat errors during a reload from a configmap update
 
 ### Added
 
