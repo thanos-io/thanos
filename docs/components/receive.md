@@ -159,5 +159,6 @@ Flags:
                                  How many times to replicate incoming write
                                  requests.
       --tsdb.wal-compression     Compress the tsdb WAL.
+      --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
 
 ```
