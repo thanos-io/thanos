@@ -383,6 +383,8 @@ func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) er
 			continue
 		}
 
+		// https://github.com/gogo/protobuf/issues/519
+		g.LastEvaluation = g.LastEvaluation.UTC()
 		filtered := proto.Clone(g).(*rulespb.RuleGroup)
 		filtered.Rules = nil
 		for _, rule := range g.Rules {
