@@ -106,6 +106,8 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 		return objstore.ObjectAttributes{}, err
 	}
 
+	// tencent cos return Last-Modified header in RFC1123 format.
+	// see api doc for details: https://intl.cloud.tencent.com/document/product/436/7729
 	mod, err := clientutil.ParseLastModified(resp.Header, time.RFC1123)
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
