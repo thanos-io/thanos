@@ -20,7 +20,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2895](https://github.com/thanos-io/thanos/pull/2895) Compact: Fix increment of `thanos_compact_downsample_total` metric for downsample of 5m resolution blocks.
 
 ### Added
-
+- [#2907](https://github.com/thanos-io/thanos/pull/2907) Request Logging: Added request logging for grpc server endpoints.
 - [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 - [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 
