@@ -144,7 +144,9 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 		return objstore.ObjectAttributes{}, err
 	}
 
-	mod, err := clientutil.ParseLastModified(m)
+	// aliyun oss return Last-Modified header in RFC1123 format.
+	// see api doc for details: https://www.alibabacloud.com/help/doc-detail/31985.htm
+	mod, err := clientutil.ParseLastModified(m, time.RFC1123)
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}
