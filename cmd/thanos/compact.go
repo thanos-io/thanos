@@ -23,7 +23,9 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
+	v1 "github.com/thanos-io/thanos/pkg/compact/api"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -81,13 +83,14 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	conf.registerFlag(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runCompact(g, logger, reg, component.Compact, *conf)
+		return runCompact(g, logger, tracer, reg, component.Compact, *conf)
 	}
 }
 
 func runCompact(
 	g *run.Group,
 	logger log.Logger,
+	tracer opentracing.Tracer,
 	reg *prometheus.Registry,
 	component component.Component,
 	conf compactConfig,
@@ -387,10 +390,16 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, path.Join(conf.webConf.externalPrefix, "/global"), conf.webConf.prefixHeaderName)
 		global.Register(r, ins)
 
+		api := v1.NewAPI(logger, conf.label)
+		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins)
+
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
 		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
-		f.UpdateOnChange(global.Set)
+		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			global.Set(blocks, err)
+			api.Set(blocks, err)
+		})
 
 		srv.Handle("/", r)
 
