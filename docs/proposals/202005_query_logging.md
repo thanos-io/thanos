@@ -97,48 +97,51 @@ The proposal for Query Logging has been divided into two major parts - Audit Log
 
 Each of the use case of the sub-part would be described and a possible implementation would be discussed -
 
-#### Using Middlewares -
+#### Using Middlewares
 
 Since Middlewares are a good chunk of the implementation, it makes sense to discuss briefly about -
 
 * How we are going to use the middlewares in our logging.
 * How can users can configure it?
-* Discuss the different types of middlewares that we plan to use.
+* Discuss the policy of logging by the middlewares.
 
-**Usage of Middlewares** : As it has been suggested by the diagram above, we plan to put in interceptors/middlewares to intercept the connection for a server implementation and client implementation.
+**Usage of Middlewares** : As it has been suggested by the diagram above, we plan to put in interceptors/middlewares to intercept the connection for a server implementation.
 
 The middlewares helps in intercepting the queries flowing before a client, and all the queries leaving the server.
 
 The middlewares provide a nice abstraction to log the queries because we have the following objective from the logging -
 
-* Log all the queries
-* Log some specific queries
-* Logging at a certain level(Debug / Info)
-* Have a same request-id for a given request
+* Log all the queries.
+* Log some specific queries.
+* Logging at a certain level(Debug / Info).
+* Have a same request-id for a given request.
 
 All of the goals are easily possible using grpc middlewares, as the grpc-ecosystem has a nice set of middlewares that makes the above possible, so we can just plug and play our middlewares
 
 For HTTP, all these nice middlewares are not present, so we need to code up our implementation performing the same logic.
 
-**User specific configurations** : Currently we are going to provide the following user facing configurations for using the request logger - 
+**User specific configurations** : Currently we are going to provide the following user facing configurations for using the request logger -
 * Use pre-defined adaptive logging policy.
 * The Adaptive Logging policy plans to include logging of only requests that return an error, or crosses a specific duration of time.
-* The level for high latency requests is `DEBUG`. Error, however would be logged at the `ERROR` level.
-* We would add in a flag to turn on/off request logging, and another flag to accept the log file path where we can log the details.
-* All the audit/adaptive logging can be logged into the respective files by passing the path of the files as a cli argument.
+* The level for all requests is `INFO`. Error, however would be logged at the `ERROR` level.
+* We would add in a flag to turn on/off request logging.
 * Request Logging would be turned off by default, and default logging would be in stdout. For logging all the requests, we would accept a flag for the enabling the same.
-* Currently the policy for request logging is hardcoded, may be extended as a user based policy later.
+* *Currently the policy for request logging is hard-coded, may be extended as a user based policy later.*
 
-**Types of Middlewares** : We are going to use the following middlewares for achieving the above objectives -
+**Policy of Request Logging** : We are going to use the following middleware decider for achieving the above objectives -
 
-* [`logging.WithDecider`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L51) - This `grpc.Option` would help us in deciding the logic whether a given request should be logged or not. This should help in logging specific / all queries
-* [`logging.WithLevels`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L58) - This `grpc.Option` would help us in fixating the level of query that we might want to log. So based on a query hitting a certain criteria, we can switch the levels of it
+* [`logging.WithDecider`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L51) - This `option` would help us in deciding the logic whether a given request should be logged or not. This should help in logging specific / all queries. It is all pre request interception.
+* [`logging.WithLevels`](https://github.com/grpc-ecosystem/go-grpc-middleware/blob/v2/interceptors/logging/options.go#L58) - This `option` would help us in fixating the level of query that we might want to log. So based on a query hitting a certain criteria, we can switch the levels of it.
 * For using the request-id, we can store the request-id in the metadata of the `context`, and while logging, we can use it.
-* Same equivalent for the HTTP can be implemented for mirroring the logic of gRPC middlewares
+* Same equivalent for the HTTP can be implemented for mirroring the logic of *gRPC middlewares*.
+* So we would generally have request logging and options:
+  1. No request logging.
+  2. Log Finish call of the request.
+  4. Log start and finish call - Audit Log.
 
 #### Request Logging
 
-Query Logging in Thanos would be implemented as a one logger, Request Logger. This is done in considering that Adaptive is a specific case of Audit Logging, and would make sense to keep the similar logical components together, rather than creating another distinction between them.
+**Query Logging** in Thanos would be implemented as a one logger, **Request Logger**. This is done in considering that Adaptive is a specific case of Audit Logging, and would make sense to keep the similar logical components together, rather than creating another distinction between them.
 We might however discuss the specific sub-cases of the request logging, namely adaptive and audit logging for enumerating the purpose of it.
 
 #### Use case 1: Audit Logging
@@ -149,18 +152,10 @@ From a developer’s perspective, audit logs can keep you sane by giving you som
 
 #### Implementation:
 
-
-```go
-// The request-id would be used from the context of the request
-log.With(logger, "component", component.StoreAPI).Log("request-id",reqID)
-
-// The decider logic would be implemented in the middleware itself
-```
-
 * Currently, we are looking to implement Audit Logging at the **StoreAPI** level.
 * We will use a **middleware** to intercept all the queries made to the StoreAPI.
 * As StoreAPI is interconnected with each of the other components, we can leverage this to provide a Global overview of different queries which would be useful for auditing purposes.
-* We will have a *different logger* derived from the base logger, and would log the queries separately.
+* We would use a custom decider for logging all the requests.
 
 #### Use case 2: Adaptive Logging
 
@@ -168,19 +163,13 @@ log.With(logger, "component", component.StoreAPI).Log("request-id",reqID)
 
 #### Implementation:
 
-```go
-// The request-id would be used from the context of the request
-log.With(logger, "component", component.StoreAPI).Log("request-id",reqID)
-
-// The decider logic would be implemented in the middleware itself
-```
-
 * Along with audit logging, we are looking to implement the Adaptive Logging at the **StoreAPI** level.
 * We can leverage **middlewares** to intercept and filter the queries for logging, which satisfies the given policy.
 * We can achieve **Global overview** of the logs, due to the StoreAPI being interconnected with the other components.
-* We can maintain map of **Prometheus metrics** corresponding to each of the queries, so we can get the total number of latency queries and 404 queries as a Prometheus metric, that are logged in adaptive logging
+* We would use a custom decider to log certain methods, based on the logging policy defined.
 
 #### Use case 3:
+
 #### Common Use case to all
 
 * **Tracking queries across different components**
@@ -197,9 +186,9 @@ The current implementation provides addition for tracking requests across differ
 
 This is not possible due to the **distributed nature** of Thanos. It has a lot of moving parts, and with the current implementation of *ActiveQueryLogging*, it is best used as a local logger for each component.
 
-#### Integrating the Query Logging with the current logging
+#### Adding logfiles for storing the logs of request logging separately
 
-The current logger is a bit different from the other loggers described above. These three loggers are aimed at providing debugging/insights about the queries made, and it makes sense to separate the logic of the usual logger with the above ones.
+The implementation of request logger makes it logical to log the request logs into a separate file. However, we should not embed the log writing logic inside Thanos, described here - https://12factor.net/logs
 
 #### Don't add anything
 
@@ -250,9 +239,6 @@ This algorithm has been heavily derived from this pull request[[3]](https://gith
 0. Complete the proposal.
 1. Roll out grpc-middlewareV2.
 2. Implement a grpc-interceptor for Store API currently(this might be extended for other APIs as well).
-3. Write up the Audit Logger derived from the base logger.
-4. Configure the Audit Logger along with the grpc-interceptor.
-5. Write up the Adaptive Logger derived from the base logger.
-6. Configure the Adaptive Logger along with the grpc-interceptor.
-7. Write up the Active Logger derived from the base logger.
-8. Set it up as a standalone logger for each component.
+3. Write up the grpc logging middleware along with the policies.
+4. Write up an equivalent http middleware for the logging of requests in http APIs.
+5. Finish up with the tests if required.
