@@ -2,7 +2,7 @@
 title: Query Logging for Thanos
 type: proposal
 menu: proposals
-status: proposed
+status: approved
 owner: yashrsharma44
 ---
 
@@ -152,7 +152,7 @@ From a developer’s perspective, audit logs can keep you sane by giving you som
 
 ```go
 // The request-id would be used from the context of the request
-log.With(logger, "component", component.StoreAPI).Log("request-id",reqId)
+log.With(logger, "component", component.StoreAPI).Log("request-id",reqID)
 
 // The decider logic would be implemented in the middleware itself
 ```
@@ -170,7 +170,7 @@ log.With(logger, "component", component.StoreAPI).Log("request-id",reqId)
 
 ```go
 // The request-id would be used from the context of the request
-log.With(logger, "component", component.StoreAPI).Log("request-id",reqId)
+log.With(logger, "component", component.StoreAPI).Log("request-id",reqID)
 
 // The decider logic would be implemented in the middleware itself
 ```
@@ -247,6 +247,7 @@ This algorithm has been heavily derived from this pull request[[3]](https://gith
 
 ## Work Plan
 
+0. Complete the proposal.
 1. Roll out grpc-middlewareV2.
 2. Implement a grpc-interceptor for Store API currently(this might be extended for other APIs as well).
 3. Write up the Audit Logger derived from the base logger.
