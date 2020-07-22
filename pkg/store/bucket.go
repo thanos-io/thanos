@@ -206,9 +206,12 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.cachedPostingsCompressionErrors.WithLabelValues(labelDecode)
 
 	m.cachedPostingsCompressionTimeSeconds = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_cached_postings_compression_time_seconds",
+		Name: "thanos_bucket_store_cached_postings_compression_time_seconds_total",
 		Help: "Time spent compressing postings before storing them into postings cache.",
 	}, []string{"op"})
+	m.cachedPostingsCompressionTimeSeconds.WithLabelValues(labelEncode)
+	m.cachedPostingsCompressionTimeSeconds.WithLabelValues(labelDecode)
+
 	m.cachedPostingsOriginalSizeBytes = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_cached_postings_original_size_bytes_total",
 		Help: "Original size of postings stored into cache.",

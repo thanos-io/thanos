@@ -307,7 +307,7 @@ func runCompact(
 			for _, meta := range sy.Metas() {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
-				downsampleMetrics.downsamples.WithLabelValues(groupKey)
+				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
 			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
