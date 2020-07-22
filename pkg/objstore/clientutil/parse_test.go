@@ -31,7 +31,7 @@ func TestParseLastModified(t *testing.T) {
 			headerValue: "2015-11-06T10:07:11.000Z",
 			expectedVal: time.Date(2015, time.November, 6, 10, 7, 11, 0, time.UTC),
 		},
-		"valid oss/cos  header value": {
+		"valid oss/cos header value": {
 			headerValue: "Fri, 24 Feb 2012 06:07:48 GMT",
 			expectedVal: time.Date(2012, time.February, 24, 6, 7, 48, 0, location),
 			format:      time.RFC1123,
@@ -66,7 +66,7 @@ func TestParseLastModified(t *testing.T) {
 				testutil.Equals(t, testData.expectedErr, err.Error())
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, testData.expectedVal, actual)
+				testutil.Assert(t, testData.expectedVal.Equal(actual))
 			}
 		})
 	}
