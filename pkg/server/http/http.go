@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
 )
@@ -60,15 +61,15 @@ func (s *Server) ListenAndServe() error {
 // Shutdown gracefully shuts down the server by waiting,
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
+	level.Info(s.logger).Log("msg", "internal server is shutting down", "err", err)
 	if err == http.ErrServerClosed {
 		level.Warn(s.logger).Log("msg", "internal server closed unexpectedly")
 		return
 	}
 
-	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
-
 	if s.opts.gracePeriod == 0 {
 		s.srv.Close()
+		level.Info(s.logger).Log("msg", "internal server is shutdown", "err", err)
 		return
 	}
 
@@ -77,7 +78,9 @@ func (s *Server) Shutdown(err error) {
 
 	if err := s.srv.Shutdown(ctx); err != nil {
 		level.Error(s.logger).Log("msg", "internal server shut down failed", "err", err)
+		return
 	}
+	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
 }
 
 // Handle registers the handler for the given pattern.

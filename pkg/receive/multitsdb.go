@@ -18,13 +18,14 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"golang.org/x/sync/errgroup"
 )
 
 type MultiTSDB struct {
@@ -57,7 +58,7 @@ func NewMultiTSDB(
 
 	return &MultiTSDB{
 		dataDir:               dataDir,
-		logger:                l,
+		logger:                log.With(l, "component", "multi-tsdb"),
 		reg:                   reg,
 		tsdbOpts:              tsdbOpts,
 		mtx:                   &sync.RWMutex{},
