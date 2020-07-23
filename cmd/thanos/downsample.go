@@ -231,7 +231,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
+				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
 			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
