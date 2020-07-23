@@ -57,10 +57,11 @@ const (
 
 var (
 	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr   = errors.New("conflict")
-	errBadReplica = errors.New("replica count exceeds replication factor")
+	conflictErr = errors.New("conflict")
 
-	errNotReady = errors.New("target not ready")
+	errBadReplica  = errors.New("replica count exceeds replication factor")
+	errNotReady    = errors.New("target not ready")
+	errUnavailable = errors.New("target not available")
 )
 
 // Options for the web Handler.
@@ -91,7 +92,7 @@ type Handler struct {
 	hashring   Hashring
 	peers      *peerGroup
 	expBackoff backoff.Backoff
-	backoffs   map[string]*peerState
+	peerStates map[string]*retryState
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -169,7 +170,7 @@ func (h *Handler) Hashring(hashring Hashring) {
 
 	h.hashring = hashring
 	h.expBackoff.Reset()
-	h.backoffs = make(map[string]*peerState)
+	h.peerStates = make(map[string]*retryState)
 }
 
 // Verifies whether the server is ready or not.
@@ -314,6 +315,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	case nil:
 		return
 	case errNotReady:
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	case errUnavailable:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case conflictErr:
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -486,13 +489,16 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				return
 			}
 
-			b, ok := h.backoffs[endpoint]
+			h.mtx.RLock()
+			b, ok := h.peerStates[endpoint]
 			if ok {
 				if time.Now().Before(b.nextAllowed) {
-					ec <- errors.Wrapf(errNotReady, "backing off forward request for endpoint %v", endpoint)
+					h.mtx.RUnlock()
+					ec <- errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint)
 					return
 				}
 			}
+			h.mtx.RUnlock()
 
 			// Create a span to track the request made to another receive node.
 			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
@@ -509,13 +515,13 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				if st, ok := status.FromError(err); ok {
 					if st.Code() == codes.Unavailable {
 						h.mtx.Lock()
-						if b, ok := h.backoffs[endpoint]; ok {
+						if b, ok := h.peerStates[endpoint]; ok {
 							b.attempt++
 							dur := h.expBackoff.ForAttempt(b.attempt)
 							b.nextAllowed = time.Now().Add(dur)
 							level.Debug(h.logger).Log("msg", "target unavailable backing off", "for", dur)
 						} else {
-							h.backoffs[endpoint] = &peerState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
+							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
 						}
 						h.mtx.Unlock()
 					}
@@ -523,6 +529,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				ec <- errors.Wrapf(err, "forwarding request to endpoint %v", endpoint)
 				return
 			}
+			h.mtx.Lock()
+			delete(h.peerStates, endpoint)
+			h.mtx.Unlock()
+
 			ec <- nil
 		}(endpoint)
 	}
@@ -605,6 +615,9 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 		if countCause(err, isConflict) >= quorum {
 			return errors.Wrap(conflictErr, "replicate: quorum not reached")
 		}
+		if countCause(err, isUnavailable) >= quorum {
+			return errors.Wrap(errUnavailable, "replicate: quorum not reached")
+		}
 		return errors.Wrap(err, "unexpected error, before quorum is reached")
 	}
 
@@ -621,6 +634,8 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	case nil:
 		return &storepb.WriteResponse{}, nil
 	case errNotReady:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errUnavailable:
 		return nil, status.Error(codes.Unavailable, err.Error())
 	case conflictErr:
 		return nil, status.Error(codes.AlreadyExists, err.Error())
@@ -669,9 +684,15 @@ func isNotReady(err error) bool {
 		status.Code(err) == codes.Unavailable
 }
 
-// peerState encapsulates the number of request attempt made against a peer and,
+// isUnavailable returns whether or not the given error represents an unavailable error.
+func isUnavailable(err error) bool {
+	return err == errUnavailable ||
+		status.Code(err) == codes.Unavailable
+}
+
+// retryState encapsulates the number of request attempt made against a peer and,
 // next allowed time for the next attempt.
-type peerState struct {
+type retryState struct {
 	attempt     float64
 	nextAllowed time.Time
 }
