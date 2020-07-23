@@ -31,6 +31,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/server/http"
 )
 
+const (
+	// Labels for metrics.
+	labelSuccess = "success"
+	labelError   = "error"
+)
+
 // ParseFlagMatchers parse flag into matchers.
 func ParseFlagMatchers(s []string) ([]*labels.Matcher, error) {
 	matchers := make([]*labels.Matcher, 0, len(s))
@@ -145,11 +151,15 @@ func RunReplicate(
 		Name: "thanos_replicate_replication_runs_total",
 		Help: "The number of replication runs split by success and error.",
 	}, []string{"result"})
+	replicationRunCounter.WithLabelValues(labelSuccess)
+	replicationRunCounter.WithLabelValues(labelError)
 
 	replicationRunDuration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name: "thanos_replicate_replication_run_duration_seconds",
 		Help: "The Duration of replication runs split by success and error.",
 	}, []string{"result"})
+	replicationRunDuration.WithLabelValues(labelSuccess)
+	replicationRunDuration.WithLabelValues(labelError)
 
 	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg, nil, nil)
 	if err != nil {
@@ -196,14 +206,14 @@ func RunReplicate(
 			start := time.Now()
 			if err := replicateFn(); err != nil {
 				level.Error(logger).Log("msg", "running replication failed", "err", err)
-				replicationRunCounter.WithLabelValues("error").Inc()
-				replicationRunDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
+				replicationRunCounter.WithLabelValues(labelError).Inc()
+				replicationRunDuration.WithLabelValues(labelError).Observe(time.Since(start).Seconds())
 
 				// No matter the error we want to repeat indefinitely.
 				return nil
 			}
-			replicationRunCounter.WithLabelValues("success").Inc()
-			replicationRunDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
+			replicationRunCounter.WithLabelValues(labelSuccess).Inc()
+			replicationRunDuration.WithLabelValues(labelSuccess).Observe(time.Since(start).Seconds())
 			level.Info(logger).Log("msg", "ran replication successfully")
 
 			return nil

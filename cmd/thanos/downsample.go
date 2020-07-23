@@ -106,6 +106,12 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
+
+			for _, meta := range metas {
+				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				metrics.downsamples.WithLabelValues(groupKey)
+				metrics.downsampleFailures.WithLabelValues(groupKey)
+			}
 			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
