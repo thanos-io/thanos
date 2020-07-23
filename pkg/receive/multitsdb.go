@@ -214,7 +214,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) Clean() error {
+func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	fis, err := ioutil.ReadDir(t.dataDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -228,12 +228,14 @@ func (t *MultiTSDB) Clean() error {
 		if !fi.IsDir() {
 			continue
 		}
-		if err = os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
+		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
 			merr.Add(err)
+			continue
 		}
+		level.Info(t.logger).Log("msg", "a leftover lockfile found and removed", "tenant", fi.Name())
 	}
 	return merr.Err()
 }

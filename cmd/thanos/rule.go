@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -78,7 +79,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("2h"))
 	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
 		Default("48h"))
-	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory.").Default("false").Bool()
+	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
@@ -351,6 +352,12 @@ func runRule(
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
+
+	level.Debug(logger).Log("msg", "removing storage lock file if any")
+	if err := removeLockfileIfAny(logger, dataDir); err != nil {
+		return errors.Wrap(err, "remove storage lock files")
+	}
+
 	{
 		done := make(chan struct{})
 		g.Add(func() error {
@@ -640,6 +647,21 @@ func runRule(
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
+	return nil
+}
+
+func removeLockfileIfAny(logger log.Logger, dataDir string) error {
+	absdir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(absdir, "lock")); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	level.Info(logger).Log("msg", "a leftover lockfile found and removed")
 	return nil
 }
 

@@ -87,7 +87,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
-	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory.").Default("false").Bool()
+	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 
 	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
@@ -304,9 +304,9 @@ func runReceive(
 			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
 		})
 
-		level.Debug(logger).Log("msg", "cleaning storage lock files")
-		if err := dbs.Clean(); err != nil {
-			return errors.Wrap(err, "cleaning storage lock files")
+		level.Debug(logger).Log("msg", "removing storage lock files if any")
+		if err := dbs.RemoveLockFilesIfAny(); err != nil {
+			return errors.Wrap(err, "remove storage lock files")
 		}
 
 		// TSDBs reload logic, listening on hashring changes.

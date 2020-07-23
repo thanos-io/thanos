@@ -160,5 +160,7 @@ Flags:
                                  requests.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
+                                 In any case, the lockfiles will be deleted on
+                                 next startup.
 
 ```
