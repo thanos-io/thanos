@@ -24,6 +24,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2832](https://github.com/thanos-io/thanos/pull/2832) ui: React: Add runtime and build info page
 - [#2305](https://github.com/thanos-io/thanos/pull/2305) Receive,Sidecar,Ruler: Propagate correct (stricter) MinTime for no-block TSDBs.
 
+### Changed
+
+- [#2902](https://github.com/thanos-io/thanos/pull/2902) ui: React: Separate dedupe and partial response checkboxes per panel.
+
 ## [v0.14.0](https://github.com/thanos-io/thanos/releases/tag/v0.14.0) - 2020.07.10
 
 ### Fixed
