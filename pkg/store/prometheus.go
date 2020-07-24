@@ -419,6 +419,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
+	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
 	preq.Header.Set("User-Agent", thanoshttp.ThanosUserAgent)
 	tracing.DoInSpan(ctx, "query_prometheus_request", func(ctx context.Context) {
