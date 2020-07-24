@@ -15,12 +15,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"go.uber.org/atomic"
 )
 
 func TestReloader_ConfigApply(t *testing.T) {
