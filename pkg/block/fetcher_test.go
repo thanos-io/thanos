@@ -1091,9 +1091,9 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		},
 	}
 
-	// input is a metadata map, works as an input parameter for Filter method
+	// input is a metadata map, works as an input parameter for Filter method.
 	input := make(map[ulid.ULID]*metadata.Meta, len(objs))
-	// objectsWithAttrs is an array of object content and attributes, used for buckets mocking
+	// objectsWithAttrs is an array of object content and attributes, used for buckets mocking.
 	objectsWithAttrs := make([]objstore.ObjectWithAttrs, 0, len(objs))
 
 	for _, obj := range objs {
@@ -1133,7 +1133,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Only certain sources and those with 30m or more age go through.
 		for i, obj := range objectsWithAttrs {
-			// obj.Name is Ulid/meta.json, the block id is the dir name
+			// obj.Name is Ulid/meta.json, the block id is the dir name.
 			id, err := ulid.Parse(path.Dir(obj.Name))
 			testutil.Ok(t, err)
 

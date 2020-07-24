@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -141,49 +140,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
-
-		// File stats are gathered.
-		testutil.Equals(t, fmt.Sprintf(`{
-	"ulid": "%s",
-	"minTime": 0,
-	"maxTime": 1000,
-	"stats": {
-		"numSamples": 500,
-		"numSeries": 5,
-		"numChunks": 5
-	},
-	"compaction": {
-		"level": 1,
-		"sources": [
-			"%s"
-		]
-	},
-	"version": 1,
-	"thanos": {
-		"labels": {
-			"ext1": "val1"
-		},
-		"downsample": {
-			"resolution": 124
-		},
-		"source": "test",
-		"files": [
-			{
-				"rel_path": "chunks/000001",
-				"size_bytes": 3751
-			},
-			{
-				"rel_path": "index",
-				"size_bytes": 401
-			},
-			{
-				"rel_path": "meta.json"
-			}
-		]
-	}
-}
-`, b1.String(), b1.String()), string(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 407, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Test Upload is idempotent.
@@ -191,7 +148,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 407, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.

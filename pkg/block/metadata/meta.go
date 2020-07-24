@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
@@ -88,6 +89,9 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	// LastModified records the last modified time of meta.json
+	LastModified time.Time `json:"-"`
 }
 
 type Rewrite struct {
