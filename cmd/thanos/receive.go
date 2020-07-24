@@ -70,7 +70,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	refreshInterval := modelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
-	local := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
+	localEndpoint := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
 
 	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).String()
 
@@ -120,14 +120,14 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 		// Local is empty, so try to generate a local endpoint
 		// based on the hostname and the listening port.
-		if *local == "" {
+		if *localEndpoint == "" {
 			hostname, err := os.Hostname()
 			if hostname == "" || err != nil {
 				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
 			}
-			parts := strings.Split(*rwAddress, ":")
+			parts := strings.Split(*grpcBindAddr, ":")
 			port := parts[len(parts)-1]
-			*local = fmt.Sprintf("http://%s:%s/api/v1/receive", hostname, port)
+			*localEndpoint = fmt.Sprintf("%s:%s", hostname, port)
 		}
 
 		return runReceive(
@@ -156,7 +156,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*ignoreBlockSize,
 			lset,
 			cw,
-			*local,
+			*localEndpoint,
 			*tenantHeader,
 			*defaultTenantID,
 			*tenantLabelName,
