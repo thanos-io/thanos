@@ -86,10 +86,10 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
-	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
-
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
+	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 
+	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
 		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
@@ -114,7 +114,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
-			NoLockfile:        true,
+			NoLockfile:        *noLockFile,
 			WALCompression:    *walCompression,
 		}
 
@@ -303,6 +303,11 @@ func runReceive(
 			Name: "thanos_receive_multi_db_updates_completed_total",
 			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
 		})
+
+		level.Debug(logger).Log("msg", "removing storage lock files if any")
+		if err := dbs.RemoveLockFilesIfAny(); err != nil {
+			return errors.Wrap(err, "remove storage lock files")
+		}
 
 		// TSDBs reload logic, listening on hashring changes.
 		cancel := make(chan struct{})
