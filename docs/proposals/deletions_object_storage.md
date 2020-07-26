@@ -50,6 +50,7 @@ During the implementation phase of this proposal one of the first problems we ca
 
 ##### Proposed Alternative Approaches: 
 (1) To have a separate store like component with index cache.
+
 (2) To have a different format for the tombstones. Instead of having <seriesRef, min, max> maybe we can have <matcher, min, max>
 * **Idea 1:** Having a CLI tool for dealing with deletions.
 * **Idea 2:** To have all tombstones at some single place and they are used while performing compaction or during query time.
