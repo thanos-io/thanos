@@ -297,8 +297,12 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
 
-	if err := getMetaAttrFunc(bucketReaderWithExpectedErrs, m); err != nil {
-		return nil, err
+	// meta.json from Prometheus block doesn't have lastModified time.
+	// We can set lastModified field in tests to mock block delay.
+	if m.Thanos.LastModified.IsZero() {
+		if err := getMetaAttrFunc(bucketReaderWithExpectedErrs, m); err != nil {
+			return nil, err
+		}
 	}
 
 	// Best effort cache in local dir.
