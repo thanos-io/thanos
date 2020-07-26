@@ -41,11 +41,24 @@ The main motivation for considering deletions in the object storage are the foll
 *   **Perspectives to deal with Compaction of blocks having tombstones:**
     *   **Block with tombstones** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.) We solve the tombstones, if the tombstones are greater than than the threshold and then perform compaction. If not we attach the tombstone file to the new block. If multiple blocks are being compacted, we merge the tombstone files of the blocks whose threshold is not met.
     *   **Block with deletion-mark.json i.e., entire block marked for deletion:** Returns an error message as the entire block is going to be deleted.
-*   **Perspectives to deal with Downsampling of blocks having tombstones:**
+*   **Perspectives to deal with Downsampling of blocks:**
     *   **Block with tombstones:** If the tombstones are less than the threshold we copy the tombstone file and attach it to the new downsampled block else we solve the tombstones and downsample the block. And the downsampled block with tombstones during its next compaction would again have the same cases as with the compaction of a block with tombstones.
     *   **Blocks without tombstones:** Downsampling happens...
 
-Considerations :
+##### Problems during implementations and possible ideas to solve :
+During the implementation phase of this proposal one of the first problems we came across was that we had to pull the index of all the blocks for creating or appending a tombstone.
+
+##### Proposed Alternative Approaches: 
+(1) To have a separate store like component with index cache.
+(2) To have a different format for the tombstones. Instead of having <seriesRef, min, max> maybe we can have <matcher, min, max>
+* **Idea 1:** Having a CLI tool for dealing with deletions.
+* **Idea 2:** To have all tombstones at some single place and they are used while performing compaction or during query time.
+* **Idea 3:** If we want to have an API for deletions, one way is to have the Store API configured in such a way that the compactor can use it to check for a match.
+*Edge case:* Do we rebuild all the rows of a tombstone? Because we need to be aware that the tombstone is being included(or not) in the given Store API call.
+
+*We're starting with (2) Idea 2*
+
+#### Considerations :
 
 *   Tombstones should be append only, so that we can solve tombstones and rewrite the blocks by performing changes. The old block and the tombstones are deleted during compaction.
 *   We don’t want to add this feature to the sidecar. The sidecar is expected to be kept lightweight.
