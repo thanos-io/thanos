@@ -48,7 +48,7 @@ The main motivation for considering deletions in the object storage are the foll
 ##### Problems during implementations and possible ideas to solve :
 During the implementation phase of this proposal one of the first problems we came across was that we had to pull the index of all the blocks for creating or appending a tombstone.
 
-##### Proposed Alternative Approaches: 
+##### Proposed Alternative Approaches:
 (1) To have a separate store like component with index cache.
 
 (2) To have a different format for the tombstones. Instead of having <seriesRef, min, max> maybe we can have <matcher, min, max>
