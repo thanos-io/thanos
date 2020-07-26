@@ -288,7 +288,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 				return err
 			}
 
-			// filepath.Walk uses Lstat to retriev os.FileInfo. Lstat does not
+			// filepath.Walk uses Lstat to retrieve os.FileInfo. Lstat does not
 			// follow symlinks. Make sure to follow a symlink before checking
 			// if it is a directory.
 			targetFile, err := os.Stat(path)
