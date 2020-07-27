@@ -453,7 +453,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					level.Debug(h.logger).Log("msg", "local tsdb write failed", "err", err.Error())
-					ec <- errors.Wrapf(cause(err, 1), "store locally for endpoint %v", endpoint)
+					ec <- errors.Wrapf(findCause(err, 1), "store locally for endpoint %v", endpoint)
 					return
 				}
 				ec <- nil
@@ -605,7 +605,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		return errors.Wrap(cause(err, quorum), "quorum not reached")
+		return errors.Wrap(findCause(err, quorum), "quorum not reached")
 	}
 	return nil
 }
@@ -667,20 +667,6 @@ type retryState struct {
 	nextAllowed time.Time
 }
 
-// countCause counts the number of errors within the given error slice
-// whose causes satisfy the given function.
-// cause will inspect the error's cause or, if the error is a MultiError,
-// the cause of each contained error but will not traverse any deeper.
-func countCause(errs []error, f func(error) bool) int {
-	var n int
-	for _, err := range errs {
-		if f(errors.Cause(err)) {
-			n++
-		}
-	}
-	return n
-}
-
 type expectedErrors []*struct {
 	err   error
 	cause func(error) bool
@@ -691,10 +677,10 @@ func (a expectedErrors) Len() int           { return len(a) }
 func (a expectedErrors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a expectedErrors) Less(i, j int) bool { return a[i].count < a[j].count }
 
-// cause returns a known error which has occurred more than the given threshold.
-// cause will inspect the error's cause or, if the error is a MultiError,
-// the cause of each contained error but will not traverse any deeper.
-func cause(err error, threshold int) error {
+// findCause returns a sentinel error that has occurred more than the given threshold.
+// It will inspect the error's cause if the error is a MultiError,
+// It will return cause of each contained error but will not traverse any deeper.
+func findCause(err error, threshold int) error {
 	if err == nil {
 		return nil
 	}
@@ -710,33 +696,27 @@ func cause(err error, threshold int) error {
 			{err: errUnavailable, cause: isUnavailable},
 		}
 		for _, exp := range expErrs {
-			exp.count = countCause(errs, exp.cause)
+			exp.count = 0
+			for _, err := range errs {
+				if exp.cause(errors.Cause(err)) {
+					exp.count++
+				}
+			}
 		}
 		sort.Sort(sort.Reverse(expErrs))
 		if exp := expErrs[0]; exp.count >= threshold {
 			return exp.err
 		}
 	}
-	if len(errs) == 1 {
-		return err
-	}
 	if len(errs) == 0 {
 		return nil
 	}
-	return errors.Wrap(err, "unexpected error")
+	return err
 }
 
 // rootCause extracts the root cause of a fan-out error.
 func rootCause(err error) error {
-	if err == nil {
-		return nil
-	}
-	err = errors.Cause(cause(err, 1))
-	errs, ok := err.(errutil.MultiError)
-	if !ok {
-		return err
-	}
-	return errors.New(errs.Error())
+	return errors.Cause(findCause(err, 1))
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {

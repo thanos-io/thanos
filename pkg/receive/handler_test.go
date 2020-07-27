@@ -29,9 +29,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestCause(t *testing.T) {
+func TestFindCause(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		err       error
@@ -57,7 +58,7 @@ func TestCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
-			exp: errors.New("unexpected error: 2 errors: foo; bar"),
+			exp: errors.New("2 errors: foo; bar"),
 		},
 		{
 			name: "nested non-matching multierror",
@@ -66,7 +67,7 @@ func TestCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("unexpected error: baz: 2 errors: foo; bar"),
+			exp:       errors.New("baz: 2 errors: foo; bar"),
 		},
 		{
 			name: "deep nested non-matching multierror",
@@ -78,7 +79,7 @@ func TestCause(t *testing.T) {
 				}),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("unexpected error: baz: 2 errors: foo; 2 errors: bar; qux"),
+			exp:       errors.New("baz: 2 errors: foo; 2 errors: bar; qux"),
 		},
 		{
 			name: "matching multierror",
@@ -98,7 +99,7 @@ func TestCause(t *testing.T) {
 				errors.New("bar"),
 			}),
 			threshold: 2,
-			exp:       errors.New("unexpected error: 3 errors: out of order sample; foo; bar"),
+			exp:       errors.New("3 errors: out of order sample; foo; bar"),
 		},
 		{
 			name: "matching multierror many",
@@ -123,7 +124,7 @@ func TestCause(t *testing.T) {
 				errors.New("foo"),
 			}),
 			threshold: 2,
-			exp:       tsdb.ErrNotReady,
+			exp:       errNotReady,
 		},
 		{
 			name: "matching multierror many, both above threshold, conflict have precedence",
@@ -161,21 +162,17 @@ func TestCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("unexpected error: baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
+			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
-		got := cause(tc.err, tc.threshold)
-		if got == nil {
-			if tc.exp != nil {
-				t.Errorf("case %q: got nil, expected: %v", tc.name, tc.exp)
-				continue
-			}
+
+		err := findCause(tc.err, tc.threshold)
+		if tc.exp != nil {
+			testutil.NotOk(t, err)
+			testutil.Equals(t, tc.exp.Error(), err.Error())
 			continue
 		}
-		if got.Error() != tc.exp.Error() {
-			t.Errorf("case %q: got: %v, expected: %v", tc.name, got, tc.exp)
-			continue
-		}
+		testutil.Ok(t, err)
 	}
 }
 
@@ -192,7 +189,7 @@ func TestRootCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"), "qux"),
-			exp: tsdb.ErrNotReady,
+			exp: errNotReady,
 		},
 		{
 			name: "deep nested matching multierror",
@@ -207,18 +204,13 @@ func TestRootCause(t *testing.T) {
 			exp: errors.New("3 errors: 2 errors: qux; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
-		got := rootCause(tc.err)
-		if got == nil {
-			if tc.exp != nil {
-				t.Errorf("case %q: got nil, expected: %v", tc.name, tc.exp)
-				continue
-			}
+		err := rootCause(tc.err)
+		if tc.exp != nil {
+			testutil.NotOk(t, err)
+			testutil.Equals(t, tc.exp.Error(), err.Error())
 			continue
 		}
-		if got.Error() != tc.exp.Error() {
-			t.Errorf("case %q: got: %v, expected: %v", tc.name, got, tc.exp)
-			continue
-		}
+		testutil.Ok(t, err)
 	}
 }
 
