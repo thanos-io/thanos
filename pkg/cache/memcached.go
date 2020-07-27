@@ -68,7 +68,7 @@ func (c *MemcachedCache) Store(ctx context.Context, data map[string][]byte, ttl 
 	}
 
 	if firstErr != nil {
-		level.Warn(c.logger).Log("msg", "failed to store one or more items into memcached", "failed", failed, "firstErr", firstErr)
+		level.Debug(c.logger).Log("msg", "failed to store one or more items into memcached", "failed", failed, "firstErr", firstErr)
 	}
 }
 
