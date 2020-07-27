@@ -11,7 +11,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     'receive.json':
       g.dashboard(thanos.receive.title)
       .addRow(
-        g.row('Incoming Request')
+        g.row('WRITE - Incoming Request')
         .addPanel(
           g.panel('Rate', 'Shows rate of incoming requests.') +
           g.httpQpsPanel('http_requests_total', 'handler="receive",namespace="$namespace",job=~"$job"')
@@ -26,7 +26,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Replication')
+        g.row('WRITE - Replication')
         .addPanel(
           g.panel('Rate', 'Shows rate of replications to other receive nodes.') +
           g.queryPanel(
@@ -43,7 +43,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Forward Request')
+        g.row('WRITE - Forward Request')
         .addPanel(
           g.panel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
           g.queryPanel(
@@ -57,26 +57,40 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'thanos_receive_forward_requests_total{namespace="$namespace",job=~"$job",result="error"}',
             'thanos_receive_forward_requests_total{namespace="$namespace",job=~"$job"}',
           )
-        ) +
-        g.collapse
+        )
       )
       .addRow(
-        g.row('gRPC (Unary)')
+        g.row('WRITE - gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
       )
       .addRow(
-        g.row('gRPC (Stream)')
+        g.row('READ - gRPC (Unary)')
+        .addPanel(
+          g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
+        )
+        .addPanel(
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
+        )
+        .addPanel(
+          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
+        )
+      )
+      .addRow(
+        g.row('READ - gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
           g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
