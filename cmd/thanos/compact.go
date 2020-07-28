@@ -22,10 +22,10 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
+	v1 "github.com/thanos-io/thanos/pkg/api/compact"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
-	v1 "github.com/thanos-io/thanos/pkg/compact/api"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -83,7 +83,19 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	conf.registerFlag(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runCompact(g, logger, tracer, reg, component.Compact, *conf)
+		flagsMap := map[string]string{}
+
+		// Exclude kingpin default flags to expose only Thanos ones.
+		boilerplateFlags := kingpin.New("", "").Version("")
+
+		for _, f := range cmd.Model().Flags {
+			if boilerplateFlags.GetFlag(f.Name) != nil {
+				continue
+			}
+			flagsMap[f.Name] = f.Value.String()
+		}
+
+		return runCompact(g, logger, tracer, reg, component.Compact, *conf, flagsMap)
 	}
 }
 
@@ -94,6 +106,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	component component.Component,
 	conf compactConfig,
+	flagsMap map[string]string,
 ) error {
 	deleteDelay := time.Duration(conf.deleteDelay)
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
@@ -390,7 +403,7 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, path.Join(conf.webConf.externalPrefix, "/global"), conf.webConf.prefixHeaderName)
 		global.Register(r, ins)
 
-		api := v1.NewAPI(logger, conf.label)
+		api := v1.NewCompactAPI(logger, conf.label, flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		// Separate fetcher for global view.

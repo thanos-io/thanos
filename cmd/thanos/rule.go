@@ -28,7 +28,9 @@ import (
 	tsdb "github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
+
 	"github.com/thanos-io/thanos/pkg/alert"
+	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -41,7 +43,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
-	v1 "github.com/thanos-io/thanos/pkg/rules/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -168,6 +169,19 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
+		flagsMap := map[string]string{}
+
+		// Exclude kingpin default flags to expose only Thanos ones.
+		boilerplateFlags := kingpin.New("", "").Version("")
+
+		for _, f := range cmd.Model().Flags {
+			if boilerplateFlags.GetFlag(f.Name) != nil {
+				continue
+			}
+
+			flagsMap[f.Name] = f.Value.String()
+		}
+
 		return runRule(g,
 			logger,
 			reg,
@@ -204,6 +218,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			comp,
 			*allowOutOfOrderUpload,
+			flagsMap,
 		)
 	}
 }
@@ -291,6 +306,7 @@ func runRule(
 	dnsSDResolver string,
 	comp component.Component,
 	allowOutOfOrderUpload bool,
+	flagsMap map[string]string,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -577,7 +593,7 @@ func runRule(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr)
+		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
