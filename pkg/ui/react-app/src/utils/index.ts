@@ -171,6 +171,15 @@ export const parseOption = (param: string): Partial<PanelOptions> => {
     case 'step_input':
       const resolution = parseInt(decodedValue);
       return resolution > 0 ? { resolution } : {};
+
+    case 'max_source_resolution':
+      return { maxSourceResolution: decodedValue };
+
+    case 'deduplicate':
+      return { useDeduplication: decodedValue === '1' };
+
+    case 'partial_response':
+      return { usePartialResponse: decodedValue === '1' };
   }
   return {};
 };
@@ -181,13 +190,26 @@ export const formatParam = (key: string) => (paramName: string, value: number | 
 
 export const toQueryString = ({ key, options }: PanelMeta) => {
   const formatWithKey = formatParam(key);
-  const { expr, type, stacked, range, endTime, resolution } = options;
+  const {
+    expr,
+    type,
+    stacked,
+    range,
+    endTime,
+    resolution,
+    maxSourceResolution,
+    useDeduplication,
+    usePartialResponse,
+  } = options;
   const time = isPresent(endTime) ? formatTime(endTime) : false;
   const urlParams = [
     formatWithKey('expr', expr),
     formatWithKey('tab', type === PanelType.Graph ? 0 : 1),
     formatWithKey('stacked', stacked ? 1 : 0),
     formatWithKey('range_input', formatRange(range)),
+    formatWithKey('max_source_resolution', maxSourceResolution),
+    formatWithKey('deduplicate', useDeduplication ? 1 : 0),
+    formatWithKey('partial_response', usePartialResponse ? 1 : 0),
     time ? `${formatWithKey('end_input', time)}&${formatWithKey('moment_input', time)}` : '',
     isPresent(resolution) ? formatWithKey('step_input', resolution) : '',
   ];
