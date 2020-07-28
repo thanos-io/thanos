@@ -172,7 +172,7 @@ export const parseOption = (param: string): Partial<PanelOptions> => {
       const resolution = parseInt(decodedValue);
       return resolution > 0 ? { resolution } : {};
 
-    case 'max_source_res':
+    case 'max_source_resolution':
       return { maxSourceResolution: decodedValue };
 
     case 'deduplicate':
@@ -207,7 +207,7 @@ export const toQueryString = ({ key, options }: PanelMeta) => {
     formatWithKey('tab', type === PanelType.Graph ? 0 : 1),
     formatWithKey('stacked', stacked ? 1 : 0),
     formatWithKey('range_input', formatRange(range)),
-    formatWithKey('max_source_res', maxSourceResolution),
+    formatWithKey('max_source_resolution', maxSourceResolution),
     formatWithKey('deduplicate', useDeduplication ? 1 : 0),
     formatWithKey('partial_response', usePartialResponse ? 1 : 0),
     time ? `${formatWithKey('end_input', time)}&${formatWithKey('moment_input', time)}` : '',
