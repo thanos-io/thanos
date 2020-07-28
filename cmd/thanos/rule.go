@@ -28,6 +28,7 @@ import (
 	tsdb "github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
+	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
@@ -52,7 +53,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
