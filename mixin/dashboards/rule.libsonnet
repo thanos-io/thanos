@@ -72,22 +72,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        ) +
-        g.collapse
-      )
-      .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
@@ -101,22 +85,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
           g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
-      )
-      .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        ) +
-        g.collapse
       )
       .addRow(
         g.resourceUtilizationRow()
