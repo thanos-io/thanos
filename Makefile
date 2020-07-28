@@ -285,7 +285,7 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
-# Check https://github.com/coreos/prometheus-operator/blob/master/scripts/jsonnet/Dockerfile for the image.
+# Check https://github.com/coreos/prometheus-operator/blob/v0.40.0/scripts/tooling/Dockerfile for the image.
 JSONNET_CONTAINER_CMD:=docker run --rm \
 		-u="$(shell id -u):$(shell id -g)" \
 		-v "$(shell go env GOCACHE):/.cache/go-build" \
@@ -293,7 +293,7 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 		-w "/go/src/github.com/thanos-io/thanos" \
 		-e USER=deadbeef \
 		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci:release-0.36
+		quay.io/coreos/jsonnet-ci:release-0.40
 
 .PHONY: examples-in-container
 examples-in-container:
