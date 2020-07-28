@@ -1,6 +1,6 @@
 {
   "title": "Learn Thanos",
-  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities.",
+  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities. Course version: 29.07.2020T00:24",
   "icon": "fa-thanos",
   "courses": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "course_id": "4-cross-cluster-comm",
-      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup.",
+      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup",
       "description": "In progress. Stay Tuned!"
     },
     {
@@ -40,13 +40,13 @@
     },
     {
       "course_id": "8-prom-operator-demo",
-      "title": "Kubernetes: Seamless Global Thanos Deployment via Prometheus Operator (Sidecar Mode)",
-      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in Global, pull mode."
+      "title": "Kubernetes: Seamless Global Thanos via Prometheus Operator",
+      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in global, pull mode with Thanos Sidecar."
     },
     {
       "course_id": "9-prom-operator-demo2",
-      "title": "Kubernetes: Seamless Centralized, Streaming Thanos Deployment via Prometheus Operator (Receive Mode)",
-      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, streaming model."
+      "title": "Kubernetes: Seamless Streaming Thanos via Prometheus Operator",
+      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, push mode with Thanos Receive."
     }
   ]
 }
