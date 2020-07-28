@@ -3,13 +3,12 @@
   "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in global, pull mode with Thanos Sidecar.",
   "details": {
     "steps": [
-      {
-        "title": "Step 1",
-        "text": "step1.md"
-      }
+      {"title": "Step 1","text": "step1.md"},
+      {"title": "Step 2","text": "step2.md"},
+      {"title": "Step 3","text": "step3.md"}
     ],
     "assets": {
-      "controlplane": [
+      "master": [
         {"file": "monitoring.coreos.com_alertmanagers.yaml", "target": "/root/manifests/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_podmonitors.yaml", "target": "/root/manifests/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_probes.yaml", "target": "/root/manifests/", "chmod": "+rw"},
