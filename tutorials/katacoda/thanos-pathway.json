@@ -1,6 +1,6 @@
 {
   "title": "Learn Thanos",
-  "description": "Introduction to CNCF Thanos: Global, Scalable and Highly Available Prometheus setup.",
+  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities.",
   "icon": "fa-thanos",
   "courses": [
     {
@@ -32,6 +32,21 @@
       "course_id": "6-caching",
       "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
       "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "7-multi-tenancy",
+      "title": "Advanced: Achieving Multi-Tenancy with Thanos",
+      "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "8-prom-operator-demo",
+      "title": "Kubernetes: Seamless Global Thanos Deployment via Prometheus Operator (Sidecar Mode)",
+      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in Global, pull mode."
+    },
+    {
+      "course_id": "9-prom-operator-demo2",
+      "title": "Kubernetes: Seamless Centralized, Streaming Thanos Deployment via Prometheus Operator (Receive Mode)",
+      "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, streaming model."
     }
   ]
 }

@@ -1,4 +1,4 @@
-Welcome to the Thanos introduction!
+# Welcome to the Thanos introduction!
 
 [Thanos](https://thanos.io) is a set of components that can be composed into a highly available metric system with unlimited storage capacity.
 It can be added seamlessly on top of existing Prometheus deployments.
@@ -16,3 +16,8 @@ This tutorial will take us from transforming vanilla Prometheus to basic Thanos 
 * Seamless handling of Highly Available Prometheus (multiple replicas)
 
 Let's jump in! 🤓
+
+## Feedback
+
+Any feedback? Anything obsolete or not working? 
+Let us know on https://github.com/thanos-io/thanos or #thanos slack channel linked on https://thanos.io
