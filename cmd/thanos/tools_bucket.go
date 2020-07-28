@@ -24,10 +24,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
+	v1 "github.com/thanos-io/thanos/pkg/api/compact"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
-	v1 "github.com/thanos-io/thanos/pkg/compact/api"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -348,7 +348,19 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
 		bucketUI.Register(router, ins)
 
-		api := v1.NewAPI(logger, *label)
+		flagsMap := map[string]string{}
+
+		// Exclude kingpin default flags to expose only Thanos ones.
+		boilerplateFlags := kingpin.New("", "").Version("")
+
+		for _, f := range cmd.Model().Flags {
+			if boilerplateFlags.GetFlag(f.Name) != nil {
+				continue
+			}
+			flagsMap[f.Name] = f.Value.String()
+		}
+
+		api := v1.NewCompactAPI(logger, *label, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv.Handle("/", router)
