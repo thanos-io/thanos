@@ -1801,6 +1801,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	}
 	srv := newStoreSeriesServer(context.Background())
 	testutil.Ok(t, store.Series(req, srv))
+	testutil.Equals(t, 1, len(srv.SeriesSet))
 }
 
 // This method relies on a bug in TSDB Compactor which will just merge overlapping chunks into one big chunk.

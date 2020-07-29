@@ -2026,21 +2026,29 @@ func (r *bucketChunkReader) preload() error {
 	return g.Wait()
 }
 
+// loadChunks will read range [start, end] from the segment file with sequence number seq.
+// This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq int, start, end uint32) error {
-	begin := time.Now()
+	fetchBegin := time.Now()
 
 	b, err := r.block.readChunkRange(ctx, seq, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrapf(err, "read range for %d", seq)
 	}
 
+	locked := true
 	r.mtx.Lock()
-	defer r.mtx.Unlock()
+
+	defer func() {
+		if locked {
+			r.mtx.Unlock()
+		}
+	}()
 
 	r.chunkBytes = append(r.chunkBytes, b)
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(offs)
-	r.stats.chunksFetchDurationSum += time.Since(begin)
+	r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
@@ -2050,11 +2058,44 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 		if n < 1 {
 			return errors.New("reading chunk length failed")
 		}
-		if len(cb) < n+int(l)+1 {
-			return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)
+
+		chunkRef := uint64(seq<<32) | uint64(o)
+
+		// Chunk length is n (number of bytes used to encode chunk data), 1 for chunk encoding and l for actual chunk data.
+		// There is also crc32 after the chunk, but we ignore that.
+		chLen := n + 1 + int(l)
+		if len(cb) >= chLen {
+			r.chunks[chunkRef] = rawChunk(cb[n:chLen])
+			continue
 		}
-		cid := uint64(seq<<32) | uint64(o)
-		r.chunks[cid] = rawChunk(cb[n : n+int(l)+1])
+
+		// If we didn't fetch enough data for the chunk, fetch more. This can only really happen for last
+		// chunk in the list of fetched chunks, otherwise partitioner would merge fetch ranges together.
+		r.mtx.Unlock()
+		locked = false
+
+		fetchBegin = time.Now()
+
+		// Read entire chunk into new buffer.
+		nb, err := r.block.readChunkRange(ctx, seq, int64(o), int64(chLen))
+		if err != nil {
+			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chLen)
+		}
+
+		cb = *nb
+		if len(cb) != chLen {
+			return errors.Errorf("preloaded chunk too small, expecting %d", chLen)
+		}
+
+		r.mtx.Lock()
+		locked = true
+
+		r.chunkBytes = append(r.chunkBytes, nb)
+		r.stats.chunksFetchCount++
+		r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
+		r.stats.chunksFetchedSizeSum += len(cb)
+
+		r.chunks[chunkRef] = rawChunk(cb[n:])
 	}
 	return nil
 }
