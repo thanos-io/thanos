@@ -4,7 +4,7 @@
   "details": {
     "steps": [
       {"title": "Configure Prometheus Operator", "text": "step1.md"},
-      {"title": "Configure Prometheus Resource","text": "step1.md"},
+      {"title": "Configure Prometheus Resource","text": "step2.md"},
       {"title": "Configure Thanos!","text": "step3.md"}
     ],
     "assets": {
