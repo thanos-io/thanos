@@ -31,7 +31,7 @@ spec:
         - --configmap-name=thanos-receive-controller-tenants
         - --configmap-generated-name=thanos-receive-controller-tenants-generated
         - --file-name=hashrings.json
-        - --namespace=default
+        - --namespace=$(NAMESPACE)
         env:
         - name: NAMESPACE
           valueFrom:

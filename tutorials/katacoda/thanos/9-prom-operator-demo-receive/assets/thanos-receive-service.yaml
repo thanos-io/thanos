@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: thanos-receive
   namespace: default
+  labels:
+    app: thanos-receive
 spec:
   ports:
   - name: grpc

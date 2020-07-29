@@ -15,4 +15,7 @@ spec:
       role: prometheus-rulefiles
       prometheus: k8s
   thanos:
-    version: v0.11.0
+    version: v0.14.0
+  remoteWrite:
+    - name: thanos-receive
+      url: http://thanos-receive.default.svc.cluster.local:19291

@@ -4,7 +4,7 @@
   "details": {
     "steps": [
       {"text": "step1.md"},
-      {"title": "The End","text": "step2.md"}
+      {"title": "The End","text": "step4.md"}
     ],
     "assets": {
       "master": [
