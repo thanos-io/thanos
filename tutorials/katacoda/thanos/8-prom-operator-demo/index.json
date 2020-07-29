@@ -9,28 +9,25 @@
     ],
     "assets": {
       "master": [
-        {"file": "monitoring.coreos.com_alertmanagers.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_podmonitors.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_probes.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_prometheuses.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_prometheusrules.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_servicemonitors.yaml", "target": "/root/manifests/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/", "chmod": "+rw"}
+        {"file": "monitoring.coreos.com_alertmanagers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_podmonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_probes.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_prometheuses.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_prometheusrules.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_servicemonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"}
       ]
     },
     "intro": {
       "text": "intro.md",
       "courseData": "courseBase.sh",
-      "credits": "https://thanos.io"
+      "credits": "https://thanos.io",
+      "code": "foreground.sh"
     },
     "finish": {
       "text": "finish.md"
     }
   },
-  "files": [
-    "/root/manifests/monitoring.coreos.com_servicemonitors.yaml",
-    "/root/manifests/monitoring.coreos.com_prometheuses.yaml"
-  ],
   "environment": {
     "uilayout": "editor-terminal",
     "uisettings": "yaml",

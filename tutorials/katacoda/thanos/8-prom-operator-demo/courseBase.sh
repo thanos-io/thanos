@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-mkdir /root/manifests
+mkdir -p /root/manifests/crds

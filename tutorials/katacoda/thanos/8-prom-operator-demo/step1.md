@@ -7,13 +7,24 @@ Thanos, while mostly built from stateless components, is well integrated with Pr
 
 This quick demo will show you quickly how to deploy Prometheuses with Thanos with seamless HA support. 
 
-## Apply Prometheus-Operator Custom Resource Definitions.
+## It would be nice to just have Prometheus type, right?
 
 ```
-ls /root/mainfests/monitoring.coreos.com_*
+kubectl get prometheus
 ```{{execute}}
 
+## Apply Prometheus-Operator Custom Resource Definitions
 
 ```
-kubectl apply -f /root/mainfests/monitoring.coreos.com_*
+ls -l /root/manifests/crds
+```{{execute}}
+
+```
+kubectl apply -f /root/manifests/monitoring.coreos.com_*
+```{{execute}}
+
+## Let's test them out!
+
+```
+kubectl get prometheus
 ```{{execute}}
