@@ -241,6 +241,15 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (r *RuleGroup) MarshalJSON() ([]byte, error) {
+	if r.Rules == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		r.Rules = make([]*Rule, 0)
+	}
+	type plain RuleGroup
+	return json.Marshal((*plain)(r))
+}
+
 func (x *AlertState) UnmarshalJSON(entry []byte) error {
 	fieldStr, err := strconv.Unquote(string(entry))
 	if err != nil {

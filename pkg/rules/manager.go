@@ -39,10 +39,14 @@ type Group struct {
 
 func (g Group) toProto() *rulespb.RuleGroup {
 	ret := &rulespb.RuleGroup{
-		Name:                    g.Name(),
-		File:                    g.OriginalFile,
-		Interval:                g.Interval().Seconds(),
-		PartialResponseStrategy: g.PartialResponseStrategy,
+		Name:                              g.Name(),
+		File:                              g.OriginalFile,
+		Interval:                          g.Interval().Seconds(),
+		PartialResponseStrategy:           g.PartialResponseStrategy,
+		DeprecatedPartialResponseStrategy: g.PartialResponseStrategy,
+		// https://github.com/gogo/protobuf/issues/519
+		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
+		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
 	}
 
 	for _, r := range g.Rules() {
@@ -65,7 +69,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// https://github.com/gogo/protobuf/issues/519
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		case *rules.RecordingRule:
 			ret.Rules = append(ret.Rules, &rulespb.Rule{
@@ -76,7 +81,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// https://github.com/gogo/protobuf/issues/519
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		default:
 			// We cannot do much, let's panic, API will recover.
