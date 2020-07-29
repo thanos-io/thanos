@@ -626,7 +626,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, allowOutOfOrderUpload)
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, false, allowOutOfOrderUpload)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
