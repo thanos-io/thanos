@@ -15,7 +15,7 @@
         {"file": "monitoring.coreos.com_prometheuses.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_prometheusrules.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_servicemonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
-        {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"}
+        {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
 
         {"file": "prometheus-operator-cluster-role.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
         {"file": "prometheus-operator-cluster-role-binding.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
