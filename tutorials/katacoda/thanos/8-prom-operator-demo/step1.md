@@ -39,4 +39,64 @@ CRDs are defined!
 
 ## Create Roles for Prometheus Operator
 
-TBD..
+```
+kubectl apply -f /root/manifests/operator/prometheus-operator-cluster-role.yaml
+kubectl apply -f /root/manifests/operator/prometheus-operator-cluster-role-binding.yaml
+```{{execute}}
+
+## Create Service Account for Prometheus Operator
+
+```
+kubectl apply -f /root/manifests/operator/prometheus-operator-service-account.yaml
+```{{execute}}
+
+## Create Prometheus Operator resources
+
+```
+kubectl apply -f /root/manifests/operator/prometheus-operator-deployment.yaml
+kubectl apply -f /root/manifests/operator/prometheus-operator-service.yaml
+```{{execute}}
+
+## Create a Service Monitor to scrape Prometheus Operator
+
+```
+kubectl apply -f /root/manifests/operator/prometheus-operator-service-monitor.yaml
+```{{execute}}
+
+## Create Roles for Prometheus
+
+```
+kubectl apply -f /root/manifests/prometheus/prometheus-role.yaml
+kubectl apply -f /root/manifests/prometheus/prometheus-role-binding.yaml
+```{{execute}}
+
+## Create Prometheus and its Service
+
+```
+kubectl apply -f /root/manifests/prometheus/prometheus.yaml
+kubectl apply -f /root/manifests/prometheus/prometheus-service.yaml
+```{{execute}}
+
+## Create a Service Monitor to scrape Prometheus
+
+```
+kubectl apply -f /root/manifests/operator/prometheus-service-monitor.yaml
+```{{execute}}
+
+## Create a Thanos Sidecar service to make Sidecars discoverable
+
+```
+kubectl apply -f /root/manifests/sidecar
+```{{execute}}
+
+## Create Thanos Ruler
+
+```
+kubectl apply -f /root/manifests/ruler
+```{{execute}}
+
+## Create Thanos Query
+
+```
+kubectl apply -f /root/manifests/query
+```{{execute}}

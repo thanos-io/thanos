@@ -26,7 +26,7 @@
         {"file": "prometheus-role.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-role-binding.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
-        {"file": "prometheus-servicemonitor.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+        {"file": "prometheus-service-monitor.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
 
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},

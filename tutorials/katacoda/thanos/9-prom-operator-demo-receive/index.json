@@ -26,16 +26,16 @@
         {"file": "prometheus-role.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-role-binding.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
-        {"file": "prometheus-servicemonitor.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+        {"file": "prometheus-service-monitor.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
 
         {"file": "thanos-receive-controller-configmap.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-deployment.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-role.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
-        {"file": "thanos-receive-controller-roleBinding.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-role-binding.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-service.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
-        {"file": "thanos-receive-controller-serviceAccount.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-service-account.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
 
-        {"file": "thanos-receive-default-statefulSet.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
+        {"file": "thanos-receive-default-statefulset.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-default-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
 
