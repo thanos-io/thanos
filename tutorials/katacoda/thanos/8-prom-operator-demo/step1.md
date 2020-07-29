@@ -63,40 +63,4 @@ kubectl apply -f /root/manifests/operator/prometheus-operator-service.yaml
 kubectl apply -f /root/manifests/operator/prometheus-operator-service-monitor.yaml
 ```{{execute}}
 
-## Create Roles for Prometheus
-
-```
-kubectl apply -f /root/manifests/prometheus/prometheus-role.yaml
-kubectl apply -f /root/manifests/prometheus/prometheus-role-binding.yaml
-```{{execute}}
-
-## Create Prometheus and its Service
-
-```
-kubectl apply -f /root/manifests/prometheus/prometheus.yaml
-kubectl apply -f /root/manifests/prometheus/prometheus-service.yaml
-```{{execute}}
-
-## Create a Service Monitor to scrape Prometheus
-
-```
-kubectl apply -f /root/manifests/operator/prometheus-service-monitor.yaml
-```{{execute}}
-
-## Create a Thanos Sidecar service to make Sidecars discoverable
-
-```
-kubectl apply -f /root/manifests/sidecar
-```{{execute}}
-
-## Create Thanos Ruler
-
-```
-kubectl apply -f /root/manifests/ruler
-```{{execute}}
-
-## Create Thanos Query
-
-```
-kubectl apply -f /root/manifests/query
-```{{execute}}
+Prometheus Operator Deployed!

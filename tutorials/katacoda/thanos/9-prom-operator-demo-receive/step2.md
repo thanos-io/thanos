@@ -6,14 +6,17 @@ TBD
 ls -l /root/manifests/controller
 ```{{execute}}
 
+## Create Service Account for Thanos Receive Controller
+
 ```
-kubectl apply -f /root/manifests/controller/
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-service-account.yaml
 ```{{execute}}
 
-## Let's test them out!
+## Create Thanos Receive Controller resources
 
 ```
-kubectl get deployments -l app.kubernetes.io/name=thanos-receive-controller
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-deployment.yaml
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-service.yaml
 ```{{execute}}
 
 Controller deployed!

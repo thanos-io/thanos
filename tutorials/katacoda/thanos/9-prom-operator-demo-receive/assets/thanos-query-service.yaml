@@ -10,5 +10,5 @@ spec:
     app: thanos-query
   ports:
   - name: http
-    port: 9090
+    port: 9093
     targetPort: http

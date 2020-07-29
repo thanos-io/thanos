@@ -4,7 +4,7 @@
   "details": {
     "steps": [
       {"text": "step1.md"},
-      {"title": "The End","text": "step4.md"}
+      {"title": "The End","text": "step5.md"}
     ],
     "assets": {
       "master": [
@@ -23,6 +23,7 @@
         {"file": "prometheus-operator-service-account.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
         {"file": "prometheus-operator-service-monitor.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
 
+        {"file": "prometheus.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-role.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-role-binding.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
@@ -59,7 +60,7 @@
     "dashboards": [
       {"name": "Prometheus 0 EU1", "port": 9090},
       {"name": "Prometheus 1 EU1", "port": 9091},
-      {"name": "Thanos Query", "port": 29090}
+      {"name": "Thanos Query", "port": 9093}
     ]
   },
   "backend": {
