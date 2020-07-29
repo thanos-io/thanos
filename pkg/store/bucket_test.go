@@ -1732,8 +1732,6 @@ func TestBigEndianPostingsCount(t *testing.T) {
 }
 
 func TestBlockWithLargeChunks(t *testing.T) {
-	tb := testutil.NewTB(t)
-
 	tmpDir, err := ioutil.TempDir(os.TempDir(), "large-chunk-test")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
@@ -1741,7 +1739,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	})
 
 	blockDir := filepath.Join(tmpDir, "block")
-	b := createBlockWithLargeChunk(t, tb, blockDir, labels.FromStrings("__name__", "test"), rand.New(rand.NewSource(0)))
+	b := createBlockWithLargeChunk(testutil.NewTB(t), blockDir, labels.FromStrings("__name__", "test"), rand.New(rand.NewSource(0)))
 
 	thanosMeta := metadata.Thanos{
 		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
@@ -1807,14 +1805,14 @@ func TestBlockWithLargeChunks(t *testing.T) {
 // This method relies on a bug in TSDB Compactor which will just merge overlapping chunks into one big chunk.
 // If compactor is fixed in the future, we may need a different way of generating the block, or commit
 // existing block to the repository.
-func createBlockWithLargeChunk(t *testing.T, tb testutil.TB, dir string, lbls labels.Labels, random *rand.Rand) ulid.ULID {
+func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, random *rand.Rand) ulid.ULID {
 	// Block covering time [0 ... 10000)
-	b1 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 10000, random, 1)
+	b1 := createBlockWithOneSeriesWithStep(t, dir, lbls, 0, 10000, random, 1)
 
 	// This block has only 11 samples that fit into one chunk, but it completely overlaps entire first block.
 	// Last sample has higher timestamp than last sample in b1.
 	// This will make compactor to merge all chunks into one.
-	b2 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 11, random, 1000)
+	b2 := createBlockWithOneSeriesWithStep(t, dir, lbls, 0, 11, random, 1000)
 
 	// Merge the blocks together.
 	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil)
