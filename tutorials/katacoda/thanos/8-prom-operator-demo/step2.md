@@ -1,7 +1,5 @@
 TBD
 
-## Apply Thanos Receive manifests
-
 ## Create Roles for Prometheus
 
 ```
@@ -19,7 +17,7 @@ kubectl apply -f /root/manifests/prometheus/prometheus-service.yaml
 ## Create a Service Monitor to scrape Prometheus
 
 ```
-kubectl apply -f /root/manifests/operator/prometheus-service-monitor.yaml
+kubectl apply -f /root/manifests/prometheus/prometheus-service-monitor.yaml
 ```{{execute}}
 
 

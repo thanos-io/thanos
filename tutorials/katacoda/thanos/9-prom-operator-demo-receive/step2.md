@@ -6,6 +6,13 @@ TBD
 ls -l /root/manifests/controller
 ```{{execute}}
 
+## Create Roles for Prometheus Operator
+
+```
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-role.yaml
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-role-binding.yaml
+```{{execute}}
+
 ## Create Service Account for Thanos Receive Controller
 
 ```
