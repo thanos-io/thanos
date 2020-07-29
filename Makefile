@@ -278,6 +278,8 @@ NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewH
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
+	@echo ">> verifying that we are not using restricted packages"
+	@./scripts/check_restricted_imports.sh
 
 .PHONY: web-serve
 web-serve: ## Builds and serves Thanos website on localhost.
