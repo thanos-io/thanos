@@ -44,7 +44,7 @@
       "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in global, pull mode with Thanos Sidecar."
     },
     {
-      "course_id": "9-prom-operator-demo2",
+      "course_id": "9-prom-operator-demo-receive",
       "title": "Kubernetes: Seamless Streaming Thanos via Prometheus Operator",
       "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, push mode with Thanos Receive."
     }

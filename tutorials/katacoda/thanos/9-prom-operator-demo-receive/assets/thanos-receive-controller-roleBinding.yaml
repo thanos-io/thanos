@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: kubernetes-controller
+    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/name: thanos-receive-controller
+    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/version: master-2020-02-06-b66e0c8
+  name: thanos-receive-controller
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: thanos-receive-controller
+subjects:
+- kind: ServiceAccount
+  name: thanos-receive-controller
+  namespace: default

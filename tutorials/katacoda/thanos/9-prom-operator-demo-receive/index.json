@@ -1,0 +1,52 @@
+{
+  "title": "Kubernetes: Seamless Streaming Thanos via Prometheus Operator",
+  "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, push mode with Thanos Receive.",
+  "details": {
+    "steps": [
+      {"text": "step1.md"},
+      {"title": "The End","text": "step2.md"}
+    ],
+    "assets": {
+      "master": [
+        {"file": "monitoring.coreos.com_alertmanagers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_podmonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_probes.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_prometheuses.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_prometheusrules.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_servicemonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-configmap.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-deployment.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-role.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-roleBinding.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-service.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-serviceAccount.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-default-statefulSet.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
+        {"file": "thanos-receive-default-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
+        {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"
+        }
+      ]
+    },
+    "intro": {
+      "text": "intro.md",
+      "courseData": "courseBase.sh",
+      "credits": "https://thanos.io"
+    },
+    "finish": {
+      "text": "finish.md"
+    }
+  },
+  "environment": {
+    "uilayout": "editor-terminal",
+    "uisettings": "yaml",
+    "showdashboard": true,
+    "dashboards": [
+      {"name": "Prometheus 0 EU1", "port": 9090},
+      {"name": "Prometheus 1 EU1", "port": 9091},
+      {"name": "Thanos Query", "port": 29090}
+    ]
+  },
+  "backend": {
+    "imageid": "kubernetes-cluster-running:1.18"
+  }
+}

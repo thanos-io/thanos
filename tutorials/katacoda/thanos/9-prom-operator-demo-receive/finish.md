@@ -1,6 +1,8 @@
-# Kubernetes: Seamless Streaming Thanos via Prometheus Operator
+# Summary
 
-TBD
+Congratulations! 🎉🎉🎉
+
+You completed our Prometheus-Operator with Thanos demo!
 
 ### Feedback
 

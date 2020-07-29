@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: database-write-hashring
+    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/name: thanos-receive
+    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/version: master-2020-05-24-079ad427
+    controller.receive.thanos.io/hashring: default
+  name: thanos-receive-default
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+  - name: grpc
+    port: 10901
+    targetPort: 10901
+  - name: http
+    port: 10902
+    targetPort: 10902
+  - name: remote-write
+    port: 19291
+    targetPort: 19291
+  selector:
+    app.kubernetes.io/component: database-write-hashring
+    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/name: thanos-receive
+    app.kubernetes.io/part-of: katacode
+    controller.receive.thanos.io/hashring: default
