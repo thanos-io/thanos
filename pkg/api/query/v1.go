@@ -144,7 +144,7 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 		var err error
 		enableDeduplication, err = strconv.ParseBool(val)
 		if err != nil {
-			return false, &api.ApiError{api.ErrorBadData, errors.Wrapf(err, "'%s' parameter", dedupParam)}
+			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", dedupParam)}
 		}
 	}
 	return enableDeduplication, nil
@@ -153,7 +153,7 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
 	const replicaLabelsParam = "replicaLabels[]"
 	if err := r.ParseForm(); err != nil {
-		return nil, &api.ApiError{api.ErrorInternal, errors.Wrap(err, "parse form")}
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
 	replicaLabels = qapi.replicaLabels
@@ -176,7 +176,7 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
-			return 0, &api.ApiError{api.ErrorBadData, errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
 		}
 	}
 

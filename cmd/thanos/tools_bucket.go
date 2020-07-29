@@ -24,7 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
-	v1 "github.com/thanos-io/thanos/pkg/api/compact"
+	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -360,7 +360,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			flagsMap[f.Name] = f.Value.String()
 		}
 
-		api := v1.NewCompactAPI(logger, *label, flagsMap)
+		api := v1.NewBlocksAPI(logger, *label, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		srv.Handle("/", router)

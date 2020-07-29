@@ -22,7 +22,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
-	v1 "github.com/thanos-io/thanos/pkg/api/compact"
+	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -403,7 +403,7 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, path.Join(conf.webConf.externalPrefix, "/global"), conf.webConf.prefixHeaderName)
 		global.Register(r, ins)
 
-		api := v1.NewCompactAPI(logger, conf.label, flagsMap)
+		api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins)
 
 		// Separate fetcher for global view.
