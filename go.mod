@@ -54,6 +54,7 @@ require (
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
+	go.uber.org/atomic v1.6.0
 	go.uber.org/automaxprocs v1.2.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
