@@ -15,6 +15,26 @@
         {"file": "monitoring.coreos.com_prometheusrules.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_servicemonitors.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"},
         {"file": "monitoring.coreos.com_thanosrulers.yaml", "target": "/root/manifests/crds/", "chmod": "+rw"}
+
+        {"file": "prometheus-operator-cluster-role.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+        {"file": "prometheus-operator-cluster-role-binding.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+        {"file": "prometheus-operator-deployment.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+        {"file": "prometheus-operator-service.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+        {"file": "prometheus-operator-service-account.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+        {"file": "prometheus-operator-service-monitor.yaml", "target": "/root/manifests/operator/", "chmod": "+rw"},
+
+        {"file": "prometheus-role.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+        {"file": "prometheus-role-binding.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+        {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+        {"file": "prometheus-servicemonitor.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
+
+        {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
+        {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
+
+        {"file": "thanos-sidecar-service.yaml", "target": "/root/manifests/sidecar/", "chmod": "+rw"},
+
+        {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
+        {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
       ]
     },
     "intro": {
