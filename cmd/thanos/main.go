@@ -243,3 +243,19 @@ func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error 
 		}
 	}
 }
+
+func getFlagsMap(flags []*kingpin.FlagModel) map[string]string {
+	flagsMap := map[string]string{}
+
+	// Exclude kingpin default flags to expose only Thanos ones.
+	boilerplateFlags := kingpin.New("", "").Version("")
+
+	for _, f := range flags {
+		if boilerplateFlags.GetFlag(f.Name) != nil {
+			continue
+		}
+		flagsMap[f.Name] = f.Value.String()
+	}
+
+	return flagsMap
+}

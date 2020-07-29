@@ -348,17 +348,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
 		bucketUI.Register(router, ins)
 
-		flagsMap := map[string]string{}
-
-		// Exclude kingpin default flags to expose only Thanos ones.
-		boilerplateFlags := kingpin.New("", "").Version("")
-
-		for _, f := range cmd.Model().Flags {
-			if boilerplateFlags.GetFlag(f.Name) != nil {
-				continue
-			}
-			flagsMap[f.Name] = f.Value.String()
-		}
+		flagsMap := getFlagsMap(cmd.Model().Flags)
 
 		api := v1.NewBlocksAPI(logger, *label, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

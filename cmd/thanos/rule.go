@@ -169,18 +169,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
-		flagsMap := map[string]string{}
-
-		// Exclude kingpin default flags to expose only Thanos ones.
-		boilerplateFlags := kingpin.New("", "").Version("")
-
-		for _, f := range cmd.Model().Flags {
-			if boilerplateFlags.GetFlag(f.Name) != nil {
-				continue
-			}
-
-			flagsMap[f.Name] = f.Value.String()
-		}
+		flagsMap := getFlagsMap(cmd.Model().Flags)
 
 		return runRule(g,
 			logger,

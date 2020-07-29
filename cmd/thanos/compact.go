@@ -83,17 +83,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	conf.registerFlag(cmd)
 
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		flagsMap := map[string]string{}
-
-		// Exclude kingpin default flags to expose only Thanos ones.
-		boilerplateFlags := kingpin.New("", "").Version("")
-
-		for _, f := range cmd.Model().Flags {
-			if boilerplateFlags.GetFlag(f.Name) != nil {
-				continue
-			}
-			flagsMap[f.Name] = f.Value.String()
-		}
+		flagsMap := getFlagsMap(cmd.Model().Flags)
 
 		return runCompact(g, logger, tracer, reg, component.Compact, *conf, flagsMap)
 	}
