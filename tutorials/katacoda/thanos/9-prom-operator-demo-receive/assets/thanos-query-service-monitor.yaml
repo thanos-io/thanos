@@ -4,7 +4,7 @@ metadata:
   name: thanos-query
   namespace: default
   labels:
-    app: thanos-query
+    app: prometheus
 spec:
   endpoints:
   - honorLabels: true

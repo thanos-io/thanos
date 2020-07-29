@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/name: thanos-receive
     app.kubernetes.io/part-of: katacoda
     app.kubernetes.io/version: master-2020-05-24-079ad427
+    app: prometheus
   name: thanos-receive-default
   namespace: default
 spec:
