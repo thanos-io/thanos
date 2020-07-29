@@ -18,16 +18,17 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // A Server defines parameters to serve RPC requests, a wrapper around grpc.Server.
@@ -123,10 +124,11 @@ func (s *Server) ListenAndServe() error {
 // Shutdown gracefully shuts down the server by waiting,
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
-	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
+	level.Info(s.logger).Log("msg", "internal server is shutting down", "err", err)
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Stop()
+		level.Info(s.logger).Log("msg", "internal server is shutdown", "err", err)
 		return
 	}
 
@@ -144,9 +146,11 @@ func (s *Server) Shutdown(err error) {
 	case <-ctx.Done():
 		level.Info(s.logger).Log("msg", "grace period exceeded enforcing shutdown")
 		s.srv.Stop()
+		return
 	case <-stopped:
 		cancel()
 	}
+	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
 }
 
 // ReadWriteStoreServer is a StoreServer and a WriteableStoreServer.

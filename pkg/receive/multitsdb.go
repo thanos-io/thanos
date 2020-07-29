@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -18,13 +19,14 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"golang.org/x/sync/errgroup"
 )
 
 type MultiTSDB struct {
@@ -57,7 +59,7 @@ func NewMultiTSDB(
 
 	return &MultiTSDB{
 		dataDir:               dataDir,
-		logger:                l,
+		logger:                log.With(l, "component", "multi-tsdb"),
 		reg:                   reg,
 		tsdbOpts:              tsdbOpts,
 		mtx:                   &sync.RWMutex{},
@@ -212,6 +214,32 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 	return merr.Err()
 }
 
+func (t *MultiTSDB) RemoveLockFilesIfAny() error {
+	fis, err := ioutil.ReadDir(t.dataDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	merr := terrors.MultiError{}
+	for _, fi := range fis {
+		if !fi.IsDir() {
+			continue
+		}
+		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			merr.Add(err)
+			continue
+		}
+		level.Info(t.logger).Log("msg", "a leftover lockfile found and removed", "tenant", fi.Name())
+	}
+	return merr.Err()
+}
+
 func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
@@ -229,7 +257,7 @@ func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
 	lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
-	dataDir := path.Join(t.dataDir, tenantID)
+	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
@@ -254,12 +282,17 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.bucket,
 			func() labels.Labels { return lbls },
 			metadata.ReceiveSource,
+			false,
 			t.allowOutOfOrderUpload,
 		)
 	}
 	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lbls), s, ship)
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
+}
+
+func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
+	return path.Join(t.dataDir, tenantID)
 }
 
 func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
