@@ -318,7 +318,7 @@ available space and just reuses that no? (: Well, it's not that easy. TL;DR is t
 <tr><td>
 
 ```go
-var messages []string{}
+var messages []string
 for _, msg := range recv {
     messages = append(messages, msg)
 
@@ -328,7 +328,7 @@ for _, msg := range recv {
         // will be garbage collected only after
         // some time (seconds), which
         // can create enormous memory pressure.
-        messages = []string{}
+        messages = []string
     }
 }
 ```
@@ -338,7 +338,7 @@ for _, msg := range recv {
 <tr><td>
 
 ```go
-var messages []string{}
+var messages []string
 for _, msg := range recv {
     messages = append(messages, msg)
 
