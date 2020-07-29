@@ -1764,10 +1764,10 @@ func TestBlockWithLargeChunks(t *testing.T) {
 
 	// Instance a real bucket store we'll use to query the series.
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
-	testutil.Ok(tb, err)
+	testutil.Ok(t, err)
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
-	testutil.Ok(tb, err)
+	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
 		logger,
@@ -1787,8 +1787,8 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		DefaultPostingOffsetInMemorySampling,
 		true,
 	)
-	testutil.Ok(tb, err)
-	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+	testutil.Ok(t, err)
+	testutil.Ok(t, store.SyncBlocks(context.Background()))
 
 	req := &storepb.SeriesRequest{
 		MinTime: math.MinInt64,
