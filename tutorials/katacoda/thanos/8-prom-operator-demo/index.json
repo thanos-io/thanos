@@ -3,9 +3,8 @@
   "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in global, pull mode with Thanos Sidecar.",
   "details": {
     "steps": [
-      {"title": "Step 1","text": "step1.md"},
-      {"title": "Step 2","text": "step2.md"},
-      {"title": "Step 3","text": "step3.md"}
+      {"text": "step1.md"},
+      {"title": "The End","text": "step2.md"}
     ],
     "assets": {
       "master": [
@@ -21,8 +20,7 @@
     "intro": {
       "text": "intro.md",
       "courseData": "courseBase.sh",
-      "credits": "https://thanos.io",
-      "code": "foreground.sh"
+      "credits": "https://thanos.io"
     },
     "finish": {
       "text": "finish.md"
@@ -34,8 +32,7 @@
     "showdashboard": true,
     "dashboards": [
       {"name": "Prometheus 0 EU1", "port": 9090},
-      {"name": "Prometheus 0 US1", "port": 9091},
-      {"name": "Prometheus 1 US1", "port": 9092},
+      {"name": "Prometheus 1 EU1", "port": 9091},
       {"name": "Thanos Query", "port": 29090}
     ]
   },

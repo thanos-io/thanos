@@ -7,6 +7,8 @@ Thanos, while mostly built from stateless components, is well integrated with Pr
 
 This quick demo will show you quickly how to deploy Prometheuses with Thanos with seamless HA support. 
 
+TODO: Probably split it each section to each step...
+
 ## It would be nice to just have Prometheus type, right?
 
 ```
@@ -16,11 +18,15 @@ kubectl get prometheus
 ## Apply Prometheus-Operator Custom Resource Definitions
 
 ```
+/root/manifests/crds/monitoring.coreos.com_prometheuses.yaml
+```{{open}}
+
+```
 ls -l /root/manifests/crds
 ```{{execute}}
 
 ```
-kubectl apply -f /root/manifests/monitoring.coreos.com_*
+kubectl apply -f /root/manifests/crds/
 ```{{execute}}
 
 ## Let's test them out!
@@ -28,3 +34,9 @@ kubectl apply -f /root/manifests/monitoring.coreos.com_*
 ```
 kubectl get prometheus
 ```{{execute}}
+
+CRDs are defined!
+
+## Create Roles for Prometheus Operator
+
+TBD..
