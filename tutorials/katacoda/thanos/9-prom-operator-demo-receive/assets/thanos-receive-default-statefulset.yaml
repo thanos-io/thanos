@@ -3,9 +3,9 @@ kind: StatefulSet
 metadata:
   labels:
     app.kubernetes.io/component: database-write-hashring
-    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/instance: katacoda-default
     app.kubernetes.io/name: thanos-receive
-    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/part-of: katacoda
     app.kubernetes.io/version: master-2020-05-24-079ad427
     controller.receive.thanos.io: thanos-receive-controller
     controller.receive.thanos.io/hashring: default
@@ -16,18 +16,18 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/component: database-write-hashring
-      app.kubernetes.io/instance: katacode-default
+      app.kubernetes.io/instance: katacoda-default
       app.kubernetes.io/name: thanos-receive
-      app.kubernetes.io/part-of: katacode
+      app.kubernetes.io/part-of: katacoda
       controller.receive.thanos.io/hashring: default
   serviceName: thanos-receive-default
   template:
     metadata:
       labels:
         app.kubernetes.io/component: database-write-hashring
-        app.kubernetes.io/instance: katacode-default
+        app.kubernetes.io/instance: katacoda-default
         app.kubernetes.io/name: thanos-receive
-        app.kubernetes.io/part-of: katacode
+        app.kubernetes.io/part-of: katacoda
         app.kubernetes.io/version: master-2020-05-24-079ad427
         controller.receive.thanos.io/hashring: default
     spec:
@@ -40,7 +40,7 @@ spec:
                 - key: app.kubernetes.io/instance
                   operator: In
                   values:
-                  - katacode-default
+                  - katacoda-default
               namespaces:
               - default
               topologyKey: kubernetes.io/hostname
@@ -51,7 +51,7 @@ spec:
                 - key: app.kubernetes.io/instance
                   operator: In
                   values:
-                  - katacode-default
+                  - katacoda-default
               namespaces:
               - default
               topologyKey: topology.kubernetes.io/zone

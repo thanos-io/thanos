@@ -3,9 +3,9 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/component: database-write-hashring
-    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/instance: katacoda-default
     app.kubernetes.io/name: thanos-receive
-    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/part-of: katacoda
     app.kubernetes.io/version: master-2020-05-24-079ad427
     controller.receive.thanos.io/hashring: default
   name: thanos-receive-default
@@ -24,7 +24,7 @@ spec:
     targetPort: 19291
   selector:
     app.kubernetes.io/component: database-write-hashring
-    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/instance: katacoda-default
     app.kubernetes.io/name: thanos-receive
-    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/part-of: katacoda
     controller.receive.thanos.io/hashring: default

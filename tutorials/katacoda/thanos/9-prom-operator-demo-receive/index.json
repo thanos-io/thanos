@@ -36,8 +36,9 @@
         {"file": "thanos-receive-controller-deployment.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-role.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-role-binding.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
-        {"file": "thanos-receive-controller-service.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-service-account.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-service.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
+        {"file": "thanos-receive-controller-service-monitor.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
 
         {"file": "minio-pvc.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
         {"file": "minio-deployment.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
@@ -46,10 +47,12 @@
 
         {"file": "thanos-receive-default-statefulset.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-default-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
+        {"file": "thanos-receive-default-service-monitor.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
 
         {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
-        {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"}
+        {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
+        {"file": "thanos-query-service-monitor.yaml", "target": "/root/manifests/query/", "chmod": "+rw"}
       ]
     },
     "intro": {

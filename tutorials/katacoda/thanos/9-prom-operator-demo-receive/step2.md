@@ -27,4 +27,10 @@ kubectl apply -f /root/manifests/controller/thanos-receive-controller-service.ya
 kubectl apply -f /root/manifests/controller/thanos-receive-controller-configmap.yaml
 ```{{execute}}
 
+## Create a Service Monitor to scrape Thanos Receive Controller
+
+```
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-service-monitor.yaml
+```{{execute}}
+
 Controller deployed!

@@ -3,9 +3,9 @@ kind: Role
 metadata:
   labels:
     app.kubernetes.io/component: kubernetes-controller
-    app.kubernetes.io/instance: katacode-default
+    app.kubernetes.io/instance: katacoda-default
     app.kubernetes.io/name: thanos-receive-controller
-    app.kubernetes.io/part-of: katacode
+    app.kubernetes.io/part-of: katacoda
     app.kubernetes.io/version: master-2020-02-06-b66e0c8
   name: thanos-receive-controller
   namespace: default
