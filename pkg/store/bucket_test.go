@@ -1729,3 +1729,120 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	}
 	testutil.Equals(t, count, c)
 }
+
+func TestBlockWithLargeChunks(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir, err := ioutil.TempDir(os.TempDir(), "large-chunk-test")
+	testutil.Ok(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	blockDir := filepath.Join(tmpDir, "block")
+	b := createBlockWithLargeChunk(t, tb, blockDir, labels.FromStrings("__name__", "test"), rand.New(rand.NewSource(0)), err)
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, b.String()), thanosMeta, nil)
+	testutil.Ok(t, err)
+
+	bucketDir := filepath.Join(os.TempDir(), "bkt")
+	bkt, err := filesystem.NewBucket(bucketDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(bucketDir)
+	})
+
+	logger := log.NewNopLogger()
+	instrBkt := objstore.WithNoopInstr(bkt)
+
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, b.String())))
+
+	// Instance a real bucket store we'll use to query the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		logger,
+		nil,
+		instrBkt,
+		fetcher,
+		tmpDir,
+		indexCache,
+		nil,
+		1000000,
+		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		false,
+		10,
+		nil,
+		false,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	req := &storepb.SeriesRequest{
+		MinTime: math.MinInt64,
+		MaxTime: math.MaxInt64,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+		},
+	}
+	srv := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, store.Series(req, srv))
+}
+
+// This method relies on a bug in TSDB Compactor which will just merge overlapping chunks into one big chunk.
+// If compactor is fixed in the future, we may need a different way of generating the block, or commit
+// existing block to the repository.
+func createBlockWithLargeChunk(t *testing.T, tb testutil.TB, dir string, lbls labels.Labels, random *rand.Rand, err error) ulid.ULID {
+	// Block covering time [0 ... 10000)
+	b1 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 10000, random, 1)
+
+	// This block has only 10 samples, but it completely overlaps entire first block.
+	// This will make compactor to merge all chunks into one.
+	b2 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 11, random, 1000)
+
+	// Merge the blocks together.
+	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil)
+	testutil.Ok(t, err)
+
+	blocksToCompact := []string{filepath.Join(dir, b1.String()), filepath.Join(dir, b2.String())}
+	newBlock, err := compactor.Compact(dir, blocksToCompact, nil)
+	testutil.Ok(t, err)
+
+	for _, b := range blocksToCompact {
+		err := os.RemoveAll(b)
+		testutil.Ok(t, err)
+	}
+
+	return newBlock
+}
+
+func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
+	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples)*step, dir, nil, tsdb.DefaultStripeSize, nil)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, h.Close()) }()
+
+	app := h.Appender()
+
+	ts := int64(blockIndex * totalSamples)
+	ref, err := app.Add(lbls, ts, random.Float64())
+	testutil.Ok(t, err)
+	for i := 1; i < totalSamples; i++ {
+		testutil.Ok(t, app.AddFast(ref, ts+step*int64(i), random.Float64()))
+	}
+	testutil.Ok(t, app.Commit())
+
+	return createBlockFromHead(t, dir, h)
+}
