@@ -39,6 +39,11 @@
         {"file": "thanos-receive-controller-service.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
         {"file": "thanos-receive-controller-service-account.yaml", "target": "/root/manifests/controller/", "chmod": "+rw"},
 
+        {"file": "minio-pvc.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
+        {"file": "minio-deployment.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
+        {"file": "minio-service.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
+        {"file": "minio-secret-thanos.yaml", "target": "/root/manifests/minio/", "chmod": "+rw"},
+
         {"file": "thanos-receive-default-statefulset.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-default-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
         {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receive/", "chmod": "+rw"},
