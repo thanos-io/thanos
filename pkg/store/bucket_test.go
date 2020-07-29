@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -1809,7 +1810,8 @@ func createBlockWithLargeChunk(t *testing.T, tb testutil.TB, dir string, lbls la
 	// Block covering time [0 ... 10000)
 	b1 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 10000, random, 1)
 
-	// This block has only 10 samples, but it completely overlaps entire first block.
+	// This block has only 11 samples that fit into one chunk, but it completely overlaps entire first block.
+	// Last sample has higher timestamp than last sample in b1.
 	// This will make compactor to merge all chunks into one.
 	b2 := createBlockWithOneSeriesWithStep(tb, dir, lbls, 0, 11, random, 1000)
 
@@ -1825,6 +1827,19 @@ func createBlockWithLargeChunk(t *testing.T, tb testutil.TB, dir string, lbls la
 		err := os.RemoveAll(b)
 		testutil.Ok(t, err)
 	}
+
+	db, err := tsdb.Open(dir, nil, nil, tsdb.DefaultOptions())
+	testutil.Ok(t, err)
+	bs := db.Blocks()
+	testutil.Equals(t, 1, len(bs))
+	cr, err := bs[0].Chunks()
+	testutil.Ok(t, err)
+	// Ref is (<segment file index> << 32 + offset in the file). In TSDB v1 first chunk is always at offset 8.
+	c, err := cr.Chunk(8)
+	testutil.Ok(t, err)
+
+	// Make sure that this is really a big chunk, otherwise this method makes a false promise.
+	testutil.Equals(t, 10001, c.NumSamples())
 
 	return newBlock
 }
