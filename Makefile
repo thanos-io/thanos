@@ -268,6 +268,7 @@ github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCoun
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}" ./...
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
+	@$(FAILLINT) -paths "sync/atomic" ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run
 	@echo ">> detecting white noise"
@@ -278,8 +279,6 @@ NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewH
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
-	@echo ">> verifying that we are not using restricted packages"
-	@./scripts/check_restricted_imports.sh
 
 .PHONY: web-serve
 web-serve: ## Builds and serves Thanos website on localhost.
