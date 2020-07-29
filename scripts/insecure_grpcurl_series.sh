@@ -52,11 +52,10 @@ SERIES_REQUEST='{
 
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 
-pushd ${DIR}/../pkg/store/storepb/
+cd $DIR/../pkg/
 grpcurl \
   -import-path="${GOGOPROTO_ROOT}" \
   -import-path=. \
-  -proto=rpc.proto \
+  -proto=store/storepb/rpc.proto \
   -plaintext \
   -d="${SERIES_REQUEST}" "${STORE_API_HOSTPORT}" thanos.Store/Series
-popd
