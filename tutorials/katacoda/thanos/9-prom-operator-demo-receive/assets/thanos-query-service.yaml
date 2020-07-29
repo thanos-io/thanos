@@ -6,9 +6,10 @@ metadata:
   labels:
     app: thanos-query
 spec:
+  type: NodePort
   selector:
     app: thanos-query
   ports:
   - name: http
-    port: 9093
+    port: 9090
     targetPort: http

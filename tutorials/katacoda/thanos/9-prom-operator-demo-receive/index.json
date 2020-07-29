@@ -69,9 +69,7 @@
     "uisettings": "yaml",
     "showdashboard": true,
     "dashboards": [
-      {"name": "Prometheus 0 EU1", "port": 9090},
-      {"name": "Prometheus 1 EU1", "port": 9091},
-      {"name": "Thanos Query", "port": 9093}
+      {"name": "Thanos Query", "port": 9090}
     ]
   },
   "backend": {
