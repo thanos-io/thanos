@@ -24,6 +24,7 @@ kubectl apply -f /root/manifests/controller/thanos-receive-controller-service-ac
 ```
 kubectl apply -f /root/manifests/controller/thanos-receive-controller-deployment.yaml
 kubectl apply -f /root/manifests/controller/thanos-receive-controller-service.yaml
+kubectl apply -f /root/manifests/controller/thanos-receive-controller-configmap.yaml
 ```{{execute}}
 
 Controller deployed!
