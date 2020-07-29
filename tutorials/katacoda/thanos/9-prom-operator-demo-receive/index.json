@@ -3,8 +3,11 @@
   "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in centralized, push mode with Thanos Receive.",
   "details": {
     "steps": [
-      {"text": "step1.md"},
-      {"title": "The End","text": "step5.md"}
+      {"title": "Configure Prometheus Operator", "text": "step1.md"},
+      {"title": "Configure Thanos Receive Controller", "text": "step2.md"},
+      {"title": "Configure Thanos Receive", "text": "step3.md"},
+      {"title": "Configure Prometheus", "text": "step4.md"},
+      {"title": "Let's test", "text": "step5.md"}
     ],
     "assets": {
       "master": [
