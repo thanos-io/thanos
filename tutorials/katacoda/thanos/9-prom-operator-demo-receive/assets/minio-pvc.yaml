@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: minio
   name: minio
-  namespace: minio
+  namespace: default
 spec:
   accessModes:
   - ReadWriteOnce

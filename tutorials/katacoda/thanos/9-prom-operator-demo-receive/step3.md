@@ -10,12 +10,6 @@ ls -l /root/manifests/minio
 kubectl apply -f /root/manifests/minio/
 ```{{execute}}
 
-## Let's test them out!
-
-```
-kubectl get statefulsets -l app.kubernetes.io/name=thanos-receive
-```{{execute}}
-
 Minio deployed!
 
 ## Apply Thanos Receive manifests
