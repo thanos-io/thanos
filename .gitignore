@@ -21,6 +21,7 @@ test/e2e/e2e_integration_test*
 
 /.idea
 /*.iml
+/.vscode
 
 website/public/
 website/docs-pre-processed/
