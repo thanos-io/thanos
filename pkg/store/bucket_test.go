@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,6 +51,7 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"go.uber.org/atomic"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -1281,10 +1281,10 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 
 	if !t.IsBenchmark() {
 		// Make sure the pool is correctly used. This is expected for 200k numbers.
-		testutil.Equals(t, numOfBlocks, int(chunkPool.(*mockedPool).gets))
+		testutil.Equals(t, numOfBlocks, int(chunkPool.(*mockedPool).gets.Load()))
 		// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
-		testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance))
-		chunkPool.(*mockedPool).gets = 0
+		testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance.Load()))
+		chunkPool.(*mockedPool).gets.Store(0)
 
 		for _, b := range blocks {
 			// NOTE(bwplotka): It is 4 x 1.0 for 100mln samples. Kind of make sense: long series.
@@ -1306,8 +1306,8 @@ func (m fakePool) Put(_ *[]byte) {}
 
 type mockedPool struct {
 	parent  pool.BytesPool
-	balance uint64
-	gets    uint64
+	balance atomic.Uint64
+	gets    atomic.Uint64
 }
 
 func (m *mockedPool) Get(sz int) (*[]byte, error) {
@@ -1315,13 +1315,13 @@ func (m *mockedPool) Get(sz int) (*[]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	atomic.AddUint64(&m.balance, uint64(cap(*b)))
-	atomic.AddUint64(&m.gets, uint64(1))
+	m.balance.Add(uint64(cap(*b)))
+	m.gets.Add(uint64(1))
 	return b, nil
 }
 
 func (m *mockedPool) Put(b *[]byte) {
-	atomic.AddUint64(&m.balance, ^uint64(cap(*b)-1))
+	m.balance.Sub(uint64(cap(*b)))
 	m.parent.Put(b)
 }
 

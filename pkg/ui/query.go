@@ -15,10 +15,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+
+	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
-	v1 "github.com/thanos-io/thanos/pkg/query/api"
 )
 
 type Query struct {
@@ -29,15 +30,16 @@ type Query struct {
 
 	cwd     string
 	birth   time.Time
-	version v1.ThanosVersion
+	version api.ThanosVersion
 	reg     prometheus.Registerer
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string, runtimeInfo v1.RuntimeInfoFn, buildInfo v1.ThanosVersion) *Query {
+func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
 	}
+	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), tmplVariables, externalPrefix, prefixHeader, component.Query),
@@ -46,7 +48,7 @@ func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.St
 		prefixHeader:   prefixHeader,
 		cwd:            runtimeInfo().CWD,
 		birth:          runtimeInfo().StartTime,
-		version:        buildInfo,
+		version:        *api.BuildInfo,
 		reg:            reg,
 		now:            model.Now,
 	}
@@ -110,7 +112,7 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 	q.executeTemplate(w, "status.html", prefix, struct {
 		Birth   time.Time
 		CWD     string
-		Version v1.ThanosVersion
+		Version api.ThanosVersion
 	}{
 		Birth:   q.birth,
 		CWD:     q.cwd,
