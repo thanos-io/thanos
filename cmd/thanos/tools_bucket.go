@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
+	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -328,7 +329,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
-	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		comp := component.Bucket
 		httpProbe := prober.NewHTTP()
 		statusProber := prober.Combine(
@@ -342,9 +343,16 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		)
 
 		router := route.New()
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
-		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		bucketUI.Register(router, ins)
+
+		flagsMap := getFlagsMap(cmd.Model().Flags)
+
+		api := v1.NewBlocksAPI(logger, *label, flagsMap)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+
 		srv.Handle("/", router)
 
 		if *interval < 5*time.Minute {
@@ -374,7 +382,10 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		if err != nil {
 			return err
 		}
-		fetcher.UpdateOnChange(bucketUI.Set)
+		fetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			bucketUI.Set(blocks, err)
+			api.Set(blocks, err)
+		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
