@@ -315,7 +315,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
 
-	switch rootCause(err) {
+	switch writeErrorCause(err) {
 	case nil:
 		return
 	case errNotReady:
@@ -453,7 +453,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					level.Debug(h.logger).Log("msg", "local tsdb write failed", "err", err.Error())
-					ec <- errors.Wrapf(findCause(err, 1), "store locally for endpoint %v", endpoint)
+					ec <- errors.Wrapf(writeErrorCause(err), "store locally for endpoint %v", endpoint)
 					return
 				}
 				ec <- nil
@@ -605,7 +605,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		return errors.Wrap(findCause(err, quorum), "quorum not reached")
+		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 	return nil
 }
@@ -619,7 +619,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
-	switch rootCause(err) {
+	switch writeErrorCause(err) {
 	case nil:
 		return &storepb.WriteResponse{}, nil
 	case errNotReady:
@@ -677,10 +677,10 @@ func (a expectedErrors) Len() int           { return len(a) }
 func (a expectedErrors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a expectedErrors) Less(i, j int) bool { return a[i].count < a[j].count }
 
-// findCause returns a sentinel error that has occurred more than the given threshold.
+// determineWriteErrorCause extracts a sentinel error that has occurred more than the given threshold from a given fan-out error.
 // It will inspect the error's cause if the error is a MultiError,
 // It will return cause of each contained error but will not traverse any deeper.
-func findCause(err error, threshold int) error {
+func determineWriteErrorCause(err error, threshold int) error {
 	if err == nil {
 		return nil
 	}
@@ -714,10 +714,8 @@ func findCause(err error, threshold int) error {
 	return err
 }
 
-// rootCause extracts the root cause of a fan-out error.
-func rootCause(err error) error {
-	return errors.Cause(findCause(err, 1))
-}
+// writeErrorCause extracts the root cause of a write error.
+func writeErrorCause(err error) error { return determineWriteErrorCause(err, 1) }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
 	return &peerGroup{

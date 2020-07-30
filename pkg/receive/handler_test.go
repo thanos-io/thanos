@@ -32,7 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestFindCause(t *testing.T) {
+func TestDetermineWriteErrorCause(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		err       error
@@ -166,7 +166,7 @@ func TestFindCause(t *testing.T) {
 		},
 	} {
 
-		err := findCause(tc.err, tc.threshold)
+		err := determineWriteErrorCause(tc.err, tc.threshold)
 		if tc.exp != nil {
 			testutil.NotOk(t, err)
 			testutil.Equals(t, tc.exp.Error(), err.Error())
@@ -176,7 +176,7 @@ func TestFindCause(t *testing.T) {
 	}
 }
 
-func TestRootCause(t *testing.T) {
+func TestWriteErrorCause(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -201,10 +201,10 @@ func TestRootCause(t *testing.T) {
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
-			exp: errors.New("3 errors: 2 errors: qux; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
+			exp: errors.New("baz: 3 errors: 2 errors: qux; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
-		err := rootCause(tc.err)
+		err := writeErrorCause(tc.err)
 		if tc.exp != nil {
 			testutil.NotOk(t, err)
 			testutil.Equals(t, tc.exp.Error(), err.Error())
