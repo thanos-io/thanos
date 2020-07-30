@@ -286,29 +286,6 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
-# Check https://github.com/coreos/prometheus-operator/blob/v0.40.0/scripts/tooling/Dockerfile for the image.
-JSONNET_CONTAINER_CMD:=docker run --rm \
-		-u="$(shell id -u):$(shell id -g)" \
-		-v "$(shell go env GOCACHE):/.cache/go-build" \
-		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
-		-w "/go/src/github.com/thanos-io/thanos" \
-		-e USER=deadbeef \
-		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci:release-0.40
-
-.PHONY: examples-in-container
-examples-in-container:
-	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JB='/go/bin/jb' jsonnet-vendor
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
-		EMBEDMD='/go/bin/embedmd' \
-		JSONNET='/go/bin/jsonnet' \
-		JB='/go/bin/jb' \
-		PROMTOOL='/go/bin/promtool' \
-		GOJSONTOYAML='/go/bin/gojsontoyaml' \
-		GOLANGCILINT='/go/bin/golangci-lint' \
-		examples
-
 .PHONY: examples
 examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
@@ -342,11 +319,6 @@ JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comm
 jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
-
-.PHONY: jsonnet-format-in-container
-jsonnet-format-in-container:
-	$(JSONNET_CONTAINER_CMD) find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
-		xargs -n 1 -- jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
 
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
