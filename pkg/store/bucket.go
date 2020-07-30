@@ -1966,14 +1966,15 @@ func (r *bucketIndexReader) Close() error {
 type bucketChunkReader struct {
 	ctx   context.Context
 	block *bucketBlock
-	stats *queryStats
 
 	preloads [][]uint32
-	mtx      sync.Mutex
-	chunks   map[uint64]chunkenc.Chunk
 
-	// Byte slice to return to the chunk pool on close.
-	chunkBytes []*[]byte
+	// Mutex protects access to following fields, when updated from chunks-loading goroutines.
+	// After chunks are loaded, mutex is no longer used.
+	mtx        sync.Mutex
+	chunks     map[uint64]chunkenc.Chunk
+	stats      *queryStats
+	chunkBytes []*[]byte // Byte slice to return to the chunk pool on close.
 }
 
 func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
