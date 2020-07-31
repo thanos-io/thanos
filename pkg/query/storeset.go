@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 )
 
 const (
@@ -48,6 +49,11 @@ type StoreSpec interface {
 
 type RuleSpec interface {
 	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+	Addr() string
+}
+
+type TargetSpec interface {
+	// Addr returns TargetsAPI Address for the targets spec. It is used as its ID.
 	Addr() string
 }
 
@@ -193,6 +199,7 @@ type StoreSet struct {
 	// accessible and we close gRPC client for it.
 	storeSpecs          func() []StoreSpec
 	ruleSpecs           func() []RuleSpec
+	targetSpecs         func() []TargetSpec
 	metadataSpecs       func() []MetadataSpec
 	exemplarSpecs       func() []ExemplarSpec
 	dialOpts            []grpc.DialOption
@@ -217,6 +224,7 @@ func NewStoreSet(
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
 	ruleSpecs func() []RuleSpec,
+	targetSpecs func() []TargetSpec,
 	metadataSpecs func() []MetadataSpec,
 	exemplarSpecs func() []ExemplarSpec,
 	dialOpts []grpc.DialOption,
@@ -236,6 +244,9 @@ func NewStoreSet(
 	if ruleSpecs == nil {
 		ruleSpecs = func() []RuleSpec { return nil }
 	}
+	if targetSpecs == nil {
+		targetSpecs = func() []TargetSpec { return nil }
+	}
 	if metadataSpecs == nil {
 		metadataSpecs = func() []MetadataSpec { return nil }
 	}
@@ -247,6 +258,7 @@ func NewStoreSet(
 		logger:                log.With(logger, "component", "storeset"),
 		storeSpecs:            storeSpecs,
 		ruleSpecs:             ruleSpecs,
+		targetSpecs:           targetSpecs,
 		metadataSpecs:         metadataSpecs,
 		exemplarSpecs:         exemplarSpecs,
 		dialOpts:              dialOpts,
@@ -273,6 +285,9 @@ type storeRef struct {
 	// If exemplar is not nil, then this store also support exemplars API.
 	exemplar exemplarspb.ExemplarsClient
 
+	// If target is not nil, then this store also supports targets API.
+	target targetspb.TargetsClient
+
 	// Meta (can change during runtime).
 	labelSets []labels.Labels
 	storeType component.StoreAPI
@@ -282,7 +297,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, metadata metadatapb.MetadataClient, exemplar exemplarspb.ExemplarsClient) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, target targetspb.TargetsClient, metadata metadatapb.MetadataClient, exemplar exemplarspb.ExemplarsClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -291,6 +306,7 @@ func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int6
 	s.minTime = minTime
 	s.maxTime = maxTime
 	s.rule = rule
+	s.target = target
 	s.metadata = metadata
 	s.exemplar = exemplar
 }
@@ -307,6 +323,13 @@ func (s *storeRef) HasRulesAPI() bool {
 	defer s.mtx.RUnlock()
 
 	return s.rule != nil
+}
+
+func (s *storeRef) HasTargetsAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.target != nil
 }
 
 func (s *storeRef) HasMetadataAPI() bool {
@@ -432,6 +455,10 @@ func (s *StoreSet) Update(ctx context.Context) {
 			level.Info(s.logger).Log("msg", "adding new exemplarsAPI to query storeset", "address", addr)
 		}
 
+		if st.HasTargetsAPI() {
+			level.Info(s.logger).Log("msg", "adding new targetsAPI to query storeset", "address", addr)
+		}
+
 		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 
@@ -452,6 +479,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 
 		storeAddrSet    = make(map[string]struct{})
 		ruleAddrSet     = make(map[string]struct{})
+		targetAddrSet   = make(map[string]struct{})
 		metadataAddrSet = make(map[string]struct{})
 		exemplarAddrSet = make(map[string]struct{})
 	)
@@ -459,6 +487,11 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 	// Gather active stores map concurrently. Build new store if does not exist already.
 	for _, ruleSpec := range s.ruleSpecs() {
 		ruleAddrSet[ruleSpec.Addr()] = struct{}{}
+	}
+
+	// Gather active targets map concurrently. Add a new target if it does not exist already.
+	for _, targetSpec := range s.targetSpecs() {
+		targetAddrSet[targetSpec.Addr()] = struct{}{}
 	}
 
 	// Gather active stores map concurrently. Build new store if does not exist already.
@@ -506,6 +539,11 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				rule = rulespb.NewRulesClient(st.cc)
 			}
 
+			var target targetspb.TargetsClient
+			if _, ok := targetAddrSet[addr]; ok {
+				target = targetspb.NewTargetsClient(st.cc)
+			}
+
 			var metadata metadatapb.MetadataClient
 			if _, ok := metadataAddrSet[addr]; ok {
 				metadata = metadatapb.NewMetadataClient(st.cc)
@@ -540,7 +578,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			s.updateStoreStatus(st, nil)
-			st.Update(labelSets, minTime, maxTime, storeType, rule, metadata, exemplar)
+			st.Update(labelSets, minTime, maxTime, storeType, rule, target, metadata, exemplar)
 
 			mtx.Lock()
 			defer mtx.Unlock()
@@ -622,6 +660,20 @@ func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 		}
 	}
 	return rules
+}
+
+// GetTargetsClients returns a list of all active targets clients.
+func (s *StoreSet) GetTargetsClients() []targetspb.TargetsClient {
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
+
+	targets := make([]targetspb.TargetsClient, 0, len(s.stores))
+	for _, st := range s.stores {
+		if st.HasTargetsAPI() {
+			targets = append(targets, st.target)
+		}
+	}
+	return targets
 }
 
 // GetMetadataClients returns a list of all active metadata clients.

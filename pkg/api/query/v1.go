@@ -53,6 +53,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -75,12 +77,14 @@ type QueryAPI struct {
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
 	queryEngine func(int64) *promql.Engine
 	ruleGroups  rules.UnaryClient
+	targets     targets.UnaryClient
 	metadatas   metadata.UnaryClient
 	exemplars   exemplars.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
 	enableRulePartialResponse           bool
+	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
@@ -100,11 +104,13 @@ func NewQueryAPI(
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
+	targets targets.UnaryClient,
 	metadatas metadata.UnaryClient,
 	exemplars exemplars.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
+	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
@@ -121,12 +127,14 @@ func NewQueryAPI(
 		queryableCreate: c,
 		gate:            gate,
 		ruleGroups:      ruleGroups,
+		targets:         targets,
 		metadatas:       metadatas,
 		exemplars:       exemplars,
 
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
+		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
@@ -160,6 +168,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 	r.Get("/stores", instr("stores", qapi.stores))
 
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
+
+	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
 
 	r.Get("/metadata", instr("metadata", NewMetricMetadataHandler(qapi.metadatas, qapi.enableMetricMetadataPartialResponse)))
 
@@ -660,6 +670,36 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
 	}
 	return statuses, nil, nil
+}
+
+func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		stateParam := r.URL.Query().Get("state")
+		state, ok := targetspb.TargetsRequest_State_value[strings.ToUpper(stateParam)]
+		if !ok {
+			if stateParam != "" {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid targets parameter state='%v'", stateParam)}
+			}
+			state = int32(targetspb.TargetsRequest_ANY)
+		}
+
+		req := &targetspb.TargetsRequest{
+			State:                   targetspb.TargetsRequest_State(state),
+			PartialResponseStrategy: ps,
+		}
+
+		t, warnings, err := client.Targets(r.Context(), req)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving targets")}
+		}
+
+		return t, warnings, nil
+	}
 }
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
