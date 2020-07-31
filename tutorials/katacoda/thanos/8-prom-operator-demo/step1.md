@@ -36,7 +36,7 @@ kubectl get prometheus
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 CRDs are defined!
@@ -48,7 +48,7 @@ kubectl apply -f /root/manifests/operator/
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Prometheus Operator Deployed!
@@ -64,12 +64,13 @@ Adding Thanos is as easy as adding two lines:
 <pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="  # Nice, but what about Thanos?">  thanos:
     version: v0.14.0
     # Thanos sidecar will be now included!</pre>
+
 ```
 kubectl apply -f /root/manifests/prometheus/
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Let's see what it scrapes: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-30090-[[KATACODA_HOST]].environments.katacoda.com/new/targets)
@@ -101,7 +102,7 @@ kubectl apply -f /root/manifests/query/
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Let's now query the data from both replicas: [Thanos Query UI](https://[[HOST_SUBDOMAIN]]-30093-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.range_input=1h&g0.max_source_resolution=0s&g0.expr=prometheus_tsdb_head_series&g0.tab=0)
@@ -115,7 +116,7 @@ kubectl apply -f /root/manifests/ruler/
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Let's now see the UI of Ruler: [Thanos Ruler UI](https://[[HOST_SUBDOMAIN]]-30094-[[KATACODA_HOST]].environments.katacoda.com)
@@ -124,9 +125,9 @@ Let's now see the UI of Ruler: [Thanos Ruler UI](https://[[HOST_SUBDOMAIN]]-3009
 
 This is as easy as small change to prometheus.yaml:
 
-<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="    # Thanos sidecar will be now included!">      objectStorageConfig:
-        key: thanos.yaml
-        name: thanos-objstore-config</pre>
+<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="    # Thanos sidecar will be now included!">    objectStorageConfig:
+      key: thanos.yaml
+      name: thanos-objstore-config</pre>
 
 And definining `thanos-objstore-config` secret with thanos.yaml` file:
 
@@ -158,22 +159,22 @@ kubectl apply -f /root/manifests/receiver/
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Now let's configure Prometheus to stream data to receive:
 
-<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="      objectStorageConfig:
-        key: thanos.yaml
-        name: thanos-objstore-config">     remoteWrite:
-      url: thanos-receiver-lb.svc.default.cluster.local:19291</pre>
+<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="    objectStorageConfig:
+      key: thanos.yaml
+      name: thanos-objstore-config">  remoteWrite:
+    url: thanos-receiver-lb.svc.default.cluster.local:19291</pre>
 
 ```
 kubectl apply -f /root/manifests/prometheus/prometheus.yaml
 ```{{execute}}
 
 ```
-watch -n kubectl get po
+watch -n 5 kubectl get po
 ```{{execute}}
 
 Let's check what we see in [Thanos Query UI](https://[[HOST_SUBDOMAIN]]-30093-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.range_input=1h&g0.max_source_resolution=0s&g0.expr=prometheus_tsdb_head_series&g0.tab=0)
