@@ -1,4 +1,4 @@
-## It would be nice to just have Prometheus type, right?
+## It would be nice to just have Kubernetes Prometheus type we can just kubectl "get", "apply" or "delete", right?
 
 ```
 kubectl get prometheus

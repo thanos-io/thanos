@@ -8,6 +8,7 @@
       {"text": "step3.md"},
       {"text": "step4.md"},
       {"text": "step5.md"},
+      {"text": "step5b.md"},
       {"text": "step6.md"},
       {"text": "step7.md"},
       {"text": "step8.md"},
@@ -39,14 +40,16 @@
 
         {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
         {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
-        {"file": "storeapis-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
+        {"file": "thanos-query-service-storeapi.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
 
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
+        {"file": "thanos-ruler-service-storeapi.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
 
         {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
         {"file": "thanos-receive-statefulset.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
-        {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
+        {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
+        {"file": "thanos-receiver-service-storeapi.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
       ]
     },
     "intro": {
