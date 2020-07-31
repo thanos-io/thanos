@@ -10,7 +10,7 @@ spec:
   selector:
     matchLabels:
       app: thanos-receiver
-  serviceName: thanos-receive
+  serviceName: thanos-receive-grpc
   template:
     metadata:
       labels:

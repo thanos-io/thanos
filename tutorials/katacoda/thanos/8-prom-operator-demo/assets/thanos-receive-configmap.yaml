@@ -6,9 +6,9 @@ data:
         "hashring": "default",
         "tenants": [],
         "endpoints": [
-          "thanos-receive-0.thanos-receive.default.svc.cluster.local:10901",
-          "thanos-receive-1.thanos-receive.default.svc.cluster.local:10901",
-          "thanos-receive-2.thanos-receive.default.svc.cluster.local:10901"
+          "thanos-receive-0.thanos-receive-grpc.default.svc.cluster.local:10901",
+          "thanos-receive-1.thanos-receive-grpc.default.svc.cluster.local:10901",
+          "thanos-receive-2.thanos-receive-grpc.default.svc.cluster.local:10901"
         ]
       }
     ]
