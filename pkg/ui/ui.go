@@ -42,15 +42,16 @@ type BaseUI struct {
 	logger                       log.Logger
 	menuTmpl                     string
 	tmplFuncs                    template.FuncMap
+	tmplVariables                map[string]string
 	externalPrefix, prefixHeader string
 	component                    component.Component
 }
 
-func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, externalPrefix, prefixHeader string, component component.Component) *BaseUI {
+func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, tmplVariables map[string]string, externalPrefix, prefixHeader string, component component.Component) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
 
-	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap, externalPrefix: externalPrefix, prefixHeader: prefixHeader, component: component}
+	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap, tmplVariables: tmplVariables, externalPrefix: externalPrefix, prefixHeader: prefixHeader, component: component}
 }
 func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
@@ -88,11 +89,7 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := tmpl.Execute(w, struct {
-		Component string
-	}{
-		Component: bu.component.String(),
-	}); err != nil {
+	if err := tmpl.Execute(w, bu.tmplVariables); err != nil {
 		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
 	}
 }

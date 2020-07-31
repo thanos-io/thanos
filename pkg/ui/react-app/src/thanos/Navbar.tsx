@@ -13,7 +13,6 @@ import {
   DropdownToggle,
 } from 'reactstrap';
 import PathPrefixProps from '../types/PathPrefixProps';
-import ThanosComponentProps from './types/ThanosComponentProps';
 
 interface NavConfig {
   name: string;
@@ -37,15 +36,24 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
       ],
     },
   ],
+  rule: [
+    { name: 'Alerts', uri: '/new/alerts' },
+    { name: 'Rules', uri: '/new/rules' },
+  ],
 };
 
-const Navigation: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {
+interface NavigationProps {
+  thanosComponent: string;
+  defaultRoute: string;
+}
+
+const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosComponent, defaultRoute }) => {
   const [isOpen, setIsOpen] = useState(false);
   const toggle = () => setIsOpen(!isOpen);
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
       <NavbarToggler onClick={toggle} />
-      <Link className="navbar-brand" to={`${pathPrefix}/new/graph`}>
+      <Link className="navbar-brand" to={`${pathPrefix}/new${defaultRoute}`}>
         Thanos - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
       </Link>
@@ -80,7 +88,7 @@ const Navigation: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, th
             <NavLink href="https://thanos.io/getting-started.md/">Help</NavLink>
           </NavItem>
           <NavItem>
-            <NavLink href={`${pathPrefix}/graph${window.location.search}`}>Classic UI</NavLink>
+            <NavLink href={`${pathPrefix}${defaultRoute}${window.location.search}`}>Classic UI</NavLink>
           </NavItem>
         </Nav>
       </Collapse>
