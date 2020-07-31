@@ -49,7 +49,7 @@
         {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
         {"file": "thanos-receive-statefulset.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
         {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
-        {"file": "thanos-receiver-service-storeapi.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
+        {"file": "thanos-receive-service-storeapi.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
       ]
     },
     "intro": {
