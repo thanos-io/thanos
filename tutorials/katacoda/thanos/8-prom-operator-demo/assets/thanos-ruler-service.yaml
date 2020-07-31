@@ -10,7 +10,7 @@ spec:
   selector:
     app: thanos-ruler
   ports:
-  - name: http
-    port: 9094
-    targetPort: http
+  - name: web
+    port: 10902
+    targetPort: web
     nodePort: 30094

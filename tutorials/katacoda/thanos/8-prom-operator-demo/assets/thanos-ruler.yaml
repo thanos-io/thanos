@@ -1,12 +1,12 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ThanosRuler
 metadata:
-  name: thanos-ruler
+  name: demo
   namespace: default
   labels:
     app: thanos-ruler
 spec:
-  image: quay.io/thanos/thanos:v0.4.0
+  image: quay.io/thanos/thanos:v0.14.0
   ruleSelector:
     matchLabels:
       role: thanos-rulefiles

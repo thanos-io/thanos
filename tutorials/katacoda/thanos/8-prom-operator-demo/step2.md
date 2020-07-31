@@ -1,24 +1,19 @@
-TBD
-
-## Create Roles for Prometheus
+## It would be nice to just have Prometheus type, right?
 
 ```
-kubectl apply -f /root/manifests/prometheus/prometheus-role.yaml
-kubectl apply -f /root/manifests/prometheus/prometheus-role-binding.yaml
+kubectl get prometheus
 ```{{execute}}
 
-## Create Prometheus and its Service
+## Apply Prometheus-Operator Custom Resource Definitions
+
+For example Prometheus CRD you can see here:
+
+`manifests/crds/monitoring.coreos.com_prometheuses.yaml`{{open}}
 
 ```
-kubectl apply -f /root/manifests/prometheus/prometheus.yaml
-kubectl apply -f /root/manifests/prometheus/prometheus-service.yaml
+ls -l /root/manifests/crds
 ```{{execute}}
-
-## Create a Service Monitor to scrape Prometheus
 
 ```
-kubectl apply -f /root/manifests/prometheus/prometheus-service-monitor.yaml
+kubectl apply -f /root/manifests/crds/
 ```{{execute}}
-
-
-Prometheus Deployed!

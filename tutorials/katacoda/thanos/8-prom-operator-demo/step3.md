@@ -1,21 +1,11 @@
-TBD
-
-## Create a Thanos Sidecar service to make Sidecars discoverable
+## Let's test them out!
 
 ```
-kubectl apply -f /root/manifests/sidecar
+kubectl get prometheus
 ```{{execute}}
-
-## Create Thanos Ruler
 
 ```
-kubectl apply -f /root/manifests/ruler
+kubectl get crd
 ```{{execute}}
 
-## Create Thanos Query
-
-```
-kubectl apply -f /root/manifests/query
-```{{execute}}
-
-Thanks Deployed!
+CRDs are defined!

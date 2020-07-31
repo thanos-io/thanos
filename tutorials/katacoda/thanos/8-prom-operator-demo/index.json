@@ -3,9 +3,16 @@
   "description": "Learn how to leverage Kubernetes and built-in Thanos support in Prometheus Operator to easily operate Prometheus integrated with Thanos in global, pull mode with Thanos Sidecar.",
   "details": {
     "steps": [
-      {"title": "Configure Prometheus Operator", "text": "step1.md"},
-      {"title": "Configure Prometheus Resource","text": "step2.md"},
-      {"title": "Configure Thanos!","text": "step3.md"}
+      {"text": "step1.md"},
+      {"text": "step2.md"},
+      {"text": "step3.md"},
+      {"text": "step4.md"},
+      {"text": "step5.md"},
+      {"text": "step6.md"},
+      {"text": "step7md"},
+      {"text": "step8.md"},
+      {"text": "step9.md"},
+      {"text": "step10.md"}
     ],
     "assets": {
       "master": [
@@ -37,6 +44,7 @@
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
 
+        {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
         {"file": "thanos-receive-statefulset.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
         {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
       ]
