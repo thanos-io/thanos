@@ -7,14 +7,16 @@ metadata:
   name: prometheus-demo
   namespace: default
 spec:
+  type: NodePort
   ports:
   - name: web
     port: 9090
     protocol: TCP
     targetPort: web
+    nodePort: 30090
   - name: thanos-http
     port: 19090
     protocol: TCP
-    targetPort: thnaos-http
+    targetPort: thanos-http
   selector:
     prometheus: demo

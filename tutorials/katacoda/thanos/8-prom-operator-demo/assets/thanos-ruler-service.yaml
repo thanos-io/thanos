@@ -6,9 +6,11 @@ metadata:
   labels:
     app: thanos-ruler
 spec:
+  type: NodePort
   selector:
     app: thanos-ruler
   ports:
   - name: http
     port: 9094
     targetPort: http
+    nodePort: 30094

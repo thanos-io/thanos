@@ -4,8 +4,7 @@ metadata:
   name: demo
   namespace: default
   labels:
-    storeapi: true
-    prometheus: name
+    prometheus: demo
 spec:
   replicas: 2
   serviceMonitorSelector:
@@ -15,4 +14,4 @@ spec:
     matchLabels:
       role: prometheus-rulefiles
       prometheus: k8s
-  # Nice
+  # Nice, but what about Thanos?

@@ -1,4 +1,3 @@
----
 apiVersion: monitoring.coreos.com/v1
 kind: ThanosRuler
 metadata:
@@ -12,7 +11,7 @@ spec:
     matchLabels:
       role: thanos-example
   queryEndpoints:
-  - dnssrv+_http._tcp.thanos-query.default.svc.cluster.local
+  - dns+thanos-query.default.svc.cluster.local
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule

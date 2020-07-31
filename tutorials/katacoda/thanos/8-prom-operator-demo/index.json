@@ -34,10 +34,12 @@
 
         {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
         {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
-        {"file": "thanos-storeapi-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
+        {"file": "storeapis-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
 
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"}
+
+
       ]
     },
     "intro": {

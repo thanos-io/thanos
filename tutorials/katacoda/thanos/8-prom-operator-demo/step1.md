@@ -61,14 +61,18 @@ Let's see how Prometheus definition looks like:
 
 Adding Thanos is as easy as adding two lines:
  
-<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="  # Nice">  thanos:
+<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="  # Nice, but what about Thanos?">  thanos:
     version: v0.14.0</pre>
 
 ```
 kubectl apply -f /root/manifests/prometheus/
 ```{{execute}}
 
-Let's see what it scrapes: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/targets)
+```
+kubectl get po
+```{{execute}}
+
+Let's see what it scrapes: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-30090-[[KATACODA_HOST]].environments.katacoda.com/targets)
 
 Nothing?
 
@@ -80,4 +84,10 @@ Nothing?
 kubectl apply -f /root/manifests/svcmonitors/
 ```{{execute}}
 
+Now we should see targets, and we can query: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-30090-[[KATACODA_HOST]].environments.katacoda.com/targets)
 
+## But there are two replicas. How to use them?
+
+Thanks to sidecars we have gRPC endpoints: 
+
+`/root/manifests/query/thanos-query-deployment.yaml`{{open}}
