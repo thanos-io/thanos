@@ -3,7 +3,7 @@
 `manifests/prometheus/prometheus.yaml`{{open}}
 
 <pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="  remoteWrite:
-    - url: http://thanos-receiver-lb.svc.default.cluster.local:19291/write"></pre>
+    - url: http://thanos-receiver-lb.default.svc.cluster.local:19291/api/v1/receive"></pre>
 
 ```
 kubectl apply -f /root/manifests/prometheus/prometheus.yaml

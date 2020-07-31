@@ -11,7 +11,7 @@ spec:
     matchLabels:
       role: thanos-rulefiles
   queryEndpoints:
-  - thanos-query.default.svc.cluster.local:http
+  - http://thanos-query.default.svc.cluster.local:9093
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
