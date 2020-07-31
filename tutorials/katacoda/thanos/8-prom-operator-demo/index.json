@@ -64,6 +64,7 @@
   "environment": {
     "uilayout": "editor-terminal",
     "uisettings": "yaml",
+    "showdashboard": true,
     "dashboards": [
       {"name": "Prometheus", "port": 30090},
       {"name": "Querier", "port": 30093},
