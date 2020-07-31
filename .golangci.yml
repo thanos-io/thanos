@@ -46,6 +46,7 @@ linters:
     - unparam
     - unused
     - varcheck
+    - exportloopref
 
 linters-settings:
   errcheck:
