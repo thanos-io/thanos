@@ -1,17 +1,5 @@
 TBD
 
-## Let's deploy as Minio Object Store
-
-```
-ls -l /root/manifests/minio
-```{{execute}}
-
-```
-kubectl apply -f /root/manifests/minio/
-```{{execute}}
-
-Minio deployed!
-
 ## Apply Thanos Receive manifests
 
 ```

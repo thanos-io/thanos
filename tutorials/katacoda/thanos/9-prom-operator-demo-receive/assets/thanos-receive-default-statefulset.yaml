@@ -63,7 +63,6 @@ spec:
         - --http-address=0.0.0.0:10902
         - --remote-write.address=0.0.0.0:19291
         - --receive.replication-factor=1
-        - --objstore.config=$(OBJSTORE_CONFIG)
         - --tsdb.path=/var/thanos/receive
         - --label=thanos_receive_replica="$(NAME)"
         - --label=receive="true"
@@ -80,11 +79,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: OBJSTORE_CONFIG
-          valueFrom:
-            secretKeyRef:
-              key: thanos.yaml
-              name: thanos-objectstorage
         - name: DEBUG
           value: ""
         image: quay.io/thanos/thanos:master-2020-05-24-079ad427
