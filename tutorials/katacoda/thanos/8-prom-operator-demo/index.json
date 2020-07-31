@@ -52,7 +52,7 @@
   },
   "environment": {
     "uilayout": "editor-terminal",
-    "uisettings": "yaml",
+    "uisettings": "yaml"
   },
   "backend": {
     "imageid": "kubernetes-cluster-running:1.18"
