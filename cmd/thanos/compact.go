@@ -22,6 +22,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -36,7 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -440,7 +441,7 @@ func runCompact(
 	return nil
 }
 
-type compactConfig struct {
+type compactConfig struct { //nolint:maligned
 	haltOnError                                    bool
 	acceptMalformedIndex                           bool
 	maxCompactionLevel                             int

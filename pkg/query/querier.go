@@ -53,18 +53,20 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 }
 
 type queryable struct {
-	logger               log.Logger
-	reg                  prometheus.Registerer
-	replicaLabels        []string
-	storeMatchers        [][]storepb.LabelMatcher
-	proxy                storepb.StoreServer
+	logger log.Logger
+	reg    prometheus.Registerer
+	proxy  storepb.StoreServer
+
 	deduplicate          bool
-	maxResolutionMillis  int64
 	partialResponse      bool
 	skipChunks           bool
-	gateKeeper           *gate.Keeper
+	maxResolutionMillis  int64
 	maxConcurrentSelects int
+	gateKeeper           *gate.Keeper
 	selectTimeout        time.Duration
+
+	replicaLabels []string
+	storeMatchers [][]storepb.LabelMatcher
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
@@ -73,20 +75,23 @@ func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Quer
 }
 
 type querier struct {
-	ctx                 context.Context
-	logger              log.Logger
-	reg                 prometheus.Registerer
-	cancel              func()
-	mint, maxt          int64
-	replicaLabels       map[string]struct{}
-	storeMatchers       [][]storepb.LabelMatcher
-	proxy               storepb.StoreServer
+	logger log.Logger
+	reg    prometheus.Registerer
+	ctx    context.Context
+
+	cancel func()
+	proxy  storepb.StoreServer
+
+	selectGate    gate.Gate
+	selectTimeout time.Duration
+
 	deduplicate         bool
-	maxResolutionMillis int64
 	partialResponse     bool
 	skipChunks          bool
-	selectGate          gate.Gate
-	selectTimeout       time.Duration
+	mint, maxt          int64
+	maxResolutionMillis int64
+	replicaLabels       map[string]struct{}
+	storeMatchers       [][]storepb.LabelMatcher
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy

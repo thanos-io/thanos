@@ -231,7 +231,7 @@ type FilterConfig struct {
 
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
-type BucketStore struct {
+type BucketStore struct { //nolint:maligned
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
 	bkt        objstore.InstrumentedBucketReader
@@ -1257,28 +1257,21 @@ func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.M
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.
 type bucketBlock struct {
-	logger     log.Logger
-	bkt        objstore.BucketReader
-	meta       *metadata.Meta
-	dir        string
-	indexCache storecache.IndexCache
-	chunkPool  pool.BytesPool
-
-	indexHeaderReader indexheader.Reader
-
-	chunkObjs []string
-
-	pendingReaders sync.WaitGroup
-
-	partitioner partitioner
-
-	seriesRefetches prometheus.Counter
-
-	enablePostingsCompression bool
-
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
-	relabelLabels labels.Labels
+	relabelLabels             labels.Labels
+	chunkObjs                 []string
+	logger                    log.Logger
+	indexCache                storecache.IndexCache
+	chunkPool                 pool.BytesPool
+	bkt                       objstore.BucketReader
+	indexHeaderReader         indexheader.Reader
+	partitioner               partitioner
+	seriesRefetches           prometheus.Counter
+	dir                       string
+	meta                      *metadata.Meta
+	pendingReaders            sync.WaitGroup
+	enablePostingsCompression bool
 }
 
 func newBucketBlock(

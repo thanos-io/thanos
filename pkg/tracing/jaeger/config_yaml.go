@@ -18,7 +18,7 @@ import (
 )
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
-type Config struct {
+type Config struct { //nolint:maligned
 	ServiceName            string        `yaml:"service_name"`
 	Disabled               bool          `yaml:"disabled"`
 	RPCMetrics             bool          `yaml:"rpc_metrics"`

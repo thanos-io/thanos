@@ -19,12 +19,13 @@ import (
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
-	set  storepb.SeriesSet
-	done bool
+	initiated bool
+	done      bool
 
 	mint, maxt int64
-	aggrs      []storepb.Aggr
-	initiated  bool
+
+	set   storepb.SeriesSet
+	aggrs []storepb.Aggr
 
 	currLset   []storepb.Label
 	currChunks []storepb.AggrChunk
@@ -349,14 +350,15 @@ func (it *chunkSeriesIterator) Err() error {
 }
 
 type dedupSeriesSet struct {
+	ok        bool
+	isCounter bool
+
 	set           storage.SeriesSet
 	replicaLabels map[string]struct{}
-	isCounter     bool
 
 	replicas []storage.Series
 	lset     labels.Labels
 	peek     storage.Series
-	ok       bool
 }
 
 func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, isCounter bool) storage.SeriesSet {
@@ -541,13 +543,13 @@ type dedupSeriesIterator struct {
 
 	aok, bok bool
 
+	useA       bool
+	penA, penB int64
+
 	// TODO(bwplotka): Don't base on LastT, but on detected scrape interval. This will allow us to be more
 	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
 	lastT int64
 	lastV float64
-
-	penA, penB int64
-	useA       bool
 }
 
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {

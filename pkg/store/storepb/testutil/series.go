@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wal"
+
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -38,7 +39,7 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 
 const RemoteReadFrameLimit = 1048576
 
-type HeadGenOptions struct {
+type HeadGenOptions struct { //nolint:maligned
 	Dir                      string
 	SamplesPerSeries, Series int
 

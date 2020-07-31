@@ -18,6 +18,7 @@ import (
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -27,13 +28,13 @@ import (
 // by writing chunks data right into the files, omitting keeping them in-memory. Index and meta data should be
 // sealed afterwards, when there aren't more series to process.
 type streamedBlockWriter struct {
-	blockDir       string
-	finalized      bool // Set to true, if Close was called.
 	logger         log.Logger
+	finalized      bool // Set to true, if Close was called.
 	ignoreFinalize bool // If true Close does not finalize block due to internal error.
-	meta           metadata.Meta
 	totalChunks    uint64
 	totalSamples   uint64
+	blockDir       string
+	meta           metadata.Meta
 
 	chunkWriter tsdb.ChunkWriter
 	indexWriter tsdb.IndexWriter

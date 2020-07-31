@@ -26,9 +26,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -46,7 +47,7 @@ var DefaultConfig = Config{
 }
 
 // Config stores the configuration for s3 bucket.
-type Config struct {
+type Config struct { //nolint:maligned
 	Bucket          string            `yaml:"bucket"`
 	Endpoint        string            `yaml:"endpoint"`
 	Region          string            `yaml:"region"`

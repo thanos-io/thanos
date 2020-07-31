@@ -32,6 +32,7 @@ linters:
     # Sorted alphabetically.
     - deadcode
     - errcheck
+    - exportloopref
     - goconst
     - godot
     - gofmt
@@ -39,6 +40,7 @@ linters:
     - gosimple
     - govet
     - ineffassign
+    - maligned
     - misspell
     - staticcheck
     - structcheck
@@ -46,7 +48,6 @@ linters:
     - unparam
     - unused
     - varcheck
-    - exportloopref
 
 linters-settings:
   errcheck:
