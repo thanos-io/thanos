@@ -9,9 +9,6 @@ spec:
   selector:
     app: thanos-ruler
   ports:
-  - name: grpc
-    port: 10901
-    targetPort: grpc
   - name: http
-    port: 10902
+    port: 9094
     targetPort: http

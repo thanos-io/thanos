@@ -11,4 +11,4 @@ spec:
       app: prometheus
   endpoints:
   - port: web
-    interval: 30s
+    interval: 15s

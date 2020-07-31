@@ -1,10 +1,11 @@
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 metadata:
-  name: self
+  name: demo
   namespace: default
   labels:
-    prometheus: self
+    storeapi: true
+    prometheus: name
 spec:
   replicas: 2
   serviceMonitorSelector:
@@ -14,5 +15,4 @@ spec:
     matchLabels:
       role: prometheus-rulefiles
       prometheus: k8s
-  thanos:
-    version: v0.11.0
+  # Nice

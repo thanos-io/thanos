@@ -17,14 +17,13 @@ spec:
     spec:
       containers:
       - name: thanos-query
-        image: quay.io/thanos/thanos:v0.11.0
+        image: quay.io/thanos/thanos:v0.14.0
         args:
         - query
         - --log.level=debug
         - --query.replica-label=prometheus_replica
         - --query.replica-label=thanos_ruler_replica
-        - --store=dnssrv+_grpc._tcp.thanos-sidecar.default.svc.cluster.local
-        - --store=dnssrv+_grpc._tcp.thanos-ruler.default.svc.cluster.local
+        - --store=dnssrv+_grpc._tcp.thanos-storeapi.default.svc.cluster.local
         ports:
         - name: http
           containerPort: 10902

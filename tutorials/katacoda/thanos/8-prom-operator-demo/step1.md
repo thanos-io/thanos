@@ -17,9 +17,9 @@ kubectl get prometheus
 
 ## Apply Prometheus-Operator Custom Resource Definitions
 
-```
-/root/manifests/crds/monitoring.coreos.com_prometheuses.yaml
-```{{open}}
+For example Prometheus CRD you can see here:
+
+`/root/manifests/crds/monitoring.coreos.com_prometheuses.yaml`{{open}}
 
 ```
 ls -l /root/manifests/crds
@@ -35,32 +35,49 @@ kubectl apply -f /root/manifests/crds/
 kubectl get prometheus
 ```{{execute}}
 
+```
+kubectl get crds
+```{{execute}}
+
 CRDs are defined!
 
-## Create Roles for Prometheus Operator
+## Create Prometheus Operatror
 
 ```
-kubectl apply -f /root/manifests/operator/prometheus-operator-cluster-role.yaml
-kubectl apply -f /root/manifests/operator/prometheus-operator-cluster-role-binding.yaml
+kubectl apply -f /root/manifests/operator/
 ```{{execute}}
 
-## Create Service Account for Prometheus Operator
-
 ```
-kubectl apply -f /root/manifests/operator/prometheus-operator-service-account.yaml
-```{{execute}}
-
-## Create Prometheus Operator resources
-
-```
-kubectl apply -f /root/manifests/operator/prometheus-operator-deployment.yaml
-kubectl apply -f /root/manifests/operator/prometheus-operator-service.yaml
-```{{execute}}
-
-## Create a Service Monitor to scrape Prometheus Operator
-
-```
-kubectl apply -f /root/manifests/operator/prometheus-operator-service-monitor.yaml
+kubectl get po
 ```{{execute}}
 
 Prometheus Operator Deployed!
+
+## Deploy 2 replicas of Prometheus through operator
+
+Let's see how Prometheus definition looks like:
+
+`/root/manifests/prometheus/prometheus.yaml`{{open}}
+
+Adding Thanos is as easy as adding two lines:
+ 
+<pre class="file" data-filename="/root/manifests/prometheus/prometheus.yaml" data-target="insert"  data-marker="  # Nice">  thanos:
+    version: v0.14.0</pre>
+
+```
+kubectl apply -f /root/manifests/prometheus/
+```{{execute}}
+
+Let's see what it scrapes: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/targets)
+
+Nothing?
+
+## Define what to scrape using Service Monitors
+
+`/root/manifests/svcmonitors/prometheus-service-monitor.yaml`{{open}}
+
+```
+kubectl apply -f /root/manifests/svcmonitors/
+```{{execute}}
+
+

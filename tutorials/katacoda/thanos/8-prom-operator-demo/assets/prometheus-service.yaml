@@ -3,8 +3,8 @@ kind: Service
 metadata:
   labels:
     app: prometheus
-    prometheus: self
-  name: prometheus-self
+    prometheus: demo
+  name: prometheus-demo
   namespace: default
 spec:
   ports:
@@ -12,5 +12,9 @@ spec:
     port: 9090
     protocol: TCP
     targetPort: web
+  - name: thanos-http
+    port: 19090
+    protocol: TCP
+    targetPort: thnaos-http
   selector:
-    prometheus: self
+    prometheus: demo

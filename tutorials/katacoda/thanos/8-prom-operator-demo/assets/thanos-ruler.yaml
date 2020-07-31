@@ -7,7 +7,7 @@ metadata:
   labels:
     app: thanos-ruler
 spec:
-  image: quay.io/thanos/thanos:v0.11.0
+  image: quay.io/thanos/thanos:v0.4.0
   ruleSelector:
     matchLabels:
       role: thanos-example
