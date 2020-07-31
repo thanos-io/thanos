@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -174,7 +175,7 @@ func toFloat64(t *testing.T, c prometheus.Collector) map[string]float64 {
 }
 
 func lbToString(pairs []*dto.LabelPair) string {
-	var ret []string
+	var ret []string //nolint:prealloc
 	for _, r := range pairs {
 		ret = append(ret, r.String())
 	}

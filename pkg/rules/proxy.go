@@ -10,11 +10,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // Proxy implements rulespb.Rules gRPC that fanouts requests to given rulespb.Rules and deduplication on the way.
@@ -35,7 +36,7 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 	var (
 		g, gctx  = errgroup.WithContext(srv.Context())
 		respChan = make(chan *rulespb.RuleGroup, 10)
-		groups   []*rulespb.RuleGroup
+		groups   = make([]*rulespb.RuleGroup, 0, len(s.rules()))
 	)
 
 	for _, rulesClient := range s.rules() {

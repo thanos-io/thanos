@@ -300,15 +300,15 @@ func runRule(
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []query.Config
+	var queryCfgs []query.Config
 	var err error
 	if len(queryConfigYAML) > 0 {
-		queryCfg, err = query.LoadConfigs(queryConfigYAML)
+		queryCfgs, err = query.LoadConfigs(queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = query.BuildQueryConfig(queryAddrs)
+		queryCfgs, err = query.BuildQueryConfig(queryAddrs)
 		if err != nil {
 			return err
 		}
@@ -320,7 +320,7 @@ func runRule(
 				Files:           querySDFiles,
 				RefreshInterval: model.Duration(querySDInterval),
 			})
-			queryCfg = append(queryCfg,
+			queryCfgs = append(queryCfgs,
 				query.Config{
 					EndpointsConfig: http_util.EndpointsConfig{
 						Scheme:        "http",
@@ -336,8 +336,8 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
-	var queryClients []*http_util.Client
-	for _, cfg := range queryCfg {
+	queryClients := make([]*http_util.Client, 0, len(queryCfgs))
+	for _, cfg := range queryCfgs {
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
@@ -399,7 +399,7 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
-	var alertmgrs []*alert.Alertmanager
+	alertmgrs := make([]*alert.Alertmanager, 0, len(alertingCfg.Alertmanagers))
 	for _, cfg := range alertingCfg.Alertmanagers {
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {

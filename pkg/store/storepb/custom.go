@@ -14,6 +14,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -378,7 +379,7 @@ func PrompbLabelsToLabelsUnsafe(lset []prompb.Label) []Label {
 }
 
 func LabelsToString(lset []Label) string {
-	var s []string
+	s := make([]string, 0, len(lset))
 	for _, l := range lset {
 		s = append(s, l.String())
 	}
@@ -386,7 +387,7 @@ func LabelsToString(lset []Label) string {
 }
 
 func LabelSetsToString(lsets []LabelSet) string {
-	s := []string{}
+	s := make([]string, 0, len(lsets))
 	for _, ls := range lsets {
 		s = append(s, LabelsToString(ls.Labels))
 	}

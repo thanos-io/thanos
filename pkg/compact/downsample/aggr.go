@@ -21,7 +21,7 @@ type AggrChunk []byte
 // EncodeAggrChunk encodes a new aggregate chunk from the array of chunks for each aggregate.
 // Each array entry corresponds to the respective AggrType number.
 func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
-	var b []byte
+	var b []byte //nolint:prealloc
 	buf := [8]byte{}
 
 	for _, c := range chks {

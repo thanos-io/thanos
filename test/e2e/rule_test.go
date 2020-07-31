@@ -101,7 +101,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 func writeTargets(t *testing.T, path string, addrs ...string) {
 	t.Helper()
 
-	var tgs []model.LabelSet
+	var tgs []model.LabelSet //nolint:prealloc
 	for _, a := range addrs {
 		tgs = append(
 			tgs,

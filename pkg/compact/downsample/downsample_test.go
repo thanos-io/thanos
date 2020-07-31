@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -678,7 +679,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 }
 
 func TestCounterSeriesIteratorSeek(t *testing.T) {
-	chunks := [][]sample{
+	chnks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 	}
 
@@ -686,8 +687,8 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 		{200, 20}, {300, 30}, {400, 40},
 	}
 
-	var its []chunkenc.Iterator
-	for _, c := range chunks {
+	var its []chunkenc.Iterator //nolint:prealloc
+	for _, c := range chnks {
 		its = append(its, newSampleIterator(c))
 	}
 
@@ -710,12 +711,12 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 }
 
 func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
-	chunks := [][]sample{
+	chnks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 	}
 
-	var its []chunkenc.Iterator
-	for _, c := range chunks {
+	var its []chunkenc.Iterator //nolint:prealloc
+	for _, c := range chnks {
 		its = append(its, newSampleIterator(c))
 	}
 
@@ -726,15 +727,15 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 }
 
 func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
-	chunks := [][]sample{
+	chnks := [][]sample{
 		{{100, 10}},
 	}
 	exp := []sample{
 		{100, 10},
 	}
 
-	var its []chunkenc.Iterator
-	for _, c := range chunks {
+	var its []chunkenc.Iterator //nolint:prealloc
+	for _, c := range chnks {
 		its = append(its, newSampleIterator(c))
 	}
 

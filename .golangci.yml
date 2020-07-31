@@ -32,6 +32,7 @@ linters:
     # Sorted alphabetically.
     - deadcode
     - errcheck
+    - exportloopref
     - goconst
     - godot
     - gofmt
@@ -40,13 +41,13 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - prealloc
     - staticcheck
     - structcheck
     - typecheck
     - unparam
     - unused
     - varcheck
-    - exportloopref
 
 linters-settings:
   errcheck:

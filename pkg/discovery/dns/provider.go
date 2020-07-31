@@ -157,7 +157,7 @@ func (p *Provider) Addresses() []string {
 	p.RLock()
 	defer p.RUnlock()
 
-	var result []string
+	result := make([]string, 0, len(p.resolved))
 	for _, addrs := range p.resolved {
 		result = append(result, addrs...)
 	}

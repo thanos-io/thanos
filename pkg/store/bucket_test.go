@@ -39,6 +39,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 
+	"go.uber.org/atomic"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -52,7 +54,6 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	"go.uber.org/atomic"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -1253,12 +1254,12 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 	}
 
-	for _, block := range blocks {
-		block.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, block.meta.ULID, DefaultPostingOffsetInMemorySampling)
+	for _, blck := range blocks {
+		blck.indexHeaderReader, err = indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, blck.meta.ULID, DefaultPostingOffsetInMemorySampling)
 		testutil.Ok(t, err)
 	}
 
-	var bCases []*storetestutil.SeriesCase
+	var bCases []*storetestutil.SeriesCase //nolint:prealloc
 	for _, p := range requestedRatios {
 		seriesCut := int(p * float64(numOfBlocks*seriesPerBlock))
 		if seriesCut == 0 {

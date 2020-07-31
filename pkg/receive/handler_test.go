@@ -23,9 +23,10 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 func TestCountCause(t *testing.T) {
@@ -145,7 +146,7 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 			Hashring: "test",
 		},
 	}
-	var handlers []*Handler
+	var handlers []*Handler //nolint:prealloc
 	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
 	// This removes the network from the tests and creates a more consistent testing harness.
 	peers := &peerGroup{

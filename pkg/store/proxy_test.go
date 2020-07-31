@@ -22,13 +22,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type testClient struct {
@@ -1584,7 +1585,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 	}
 
 	var allResps []*storepb.SeriesResponse
-	var expected []storepb.Series
+	var expected []storepb.Series //nolint:prealloc
 	lastLabels := storepb.Series{}
 	for _, c := range clients {
 		m := c.(*testClient).StoreClient.(*mockedStoreAPI)

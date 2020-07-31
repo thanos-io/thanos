@@ -5,6 +5,7 @@ package block
 
 import (
 	"github.com/oklog/ulid"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
@@ -24,7 +25,7 @@ func NewNode(meta *metadata.Meta) *Node {
 
 // getNonRootIDs returns list of ids which are not on root level.
 func getNonRootIDs(root *Node) []ulid.ULID {
-	var ulids []ulid.ULID
+	ulids := make([]ulid.ULID, 0, len(root.Children))
 	for _, node := range root.Children {
 		ulids = append(ulids, childrenToULIDs(node)...)
 		ulids = remove(ulids, node.ULID)

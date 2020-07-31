@@ -9,22 +9,22 @@ import (
 	"math"
 	"net"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/store"
 
-	"sort"
-
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 var testGRPCOpts = []grpc.DialOption{
@@ -66,32 +66,32 @@ type testStores struct {
 }
 
 func startTestStores(stores []testStoreMeta) (*testStores, error) {
-	st := &testStores{
+	tstore := &testStores{
 		srvs: map[string]*grpc.Server{},
 	}
 
-	for _, store := range stores {
+	for _, st := range stores {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			// Close so far started servers.
-			st.Close()
+			tstore.Close()
 			return nil, err
 		}
 
 		srv := grpc.NewServer()
-		storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: store.extlsetFn(listener.Addr().String()), StoreType: store.storeType.ToProto()}})
+		storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: st.extlsetFn(listener.Addr().String()), StoreType: st.storeType.ToProto()}})
 		go func() {
 			_ = srv.Serve(listener)
 		}()
 
-		st.srvs[listener.Addr().String()] = srv
+		tstore.srvs[listener.Addr().String()] = srv
 	}
 
-	return st, nil
+	return tstore, nil
 }
 
 func (s *testStores) StoreAddresses() []string {
-	var stores []string
+	var stores []string //nolint:prealloc
 	for addr := range s.srvs {
 		stores = append(stores, addr)
 	}
@@ -195,7 +195,7 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	testutil.Assert(t, len(storeSet.stores) == 2, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 5, len(storeSet.stores)))
 
 	// Sort result to be able to compare.
-	var existingStoreLabels [][][]storepb.Label
+	var existingStoreLabels [][][]storepb.Label //nolint:prealloc
 	for _, store := range storeSet.stores {
 		lset := [][]storepb.Label{}
 		for _, ls := range store.LabelSets() {

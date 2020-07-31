@@ -5,9 +5,7 @@ package verifier
 
 import (
 	"context"
-
 	"fmt"
-
 	"strings"
 	"time"
 
@@ -16,6 +14,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
@@ -151,7 +150,7 @@ func sameULIDSlices(a []ulid.ULID, b []ulid.ULID) bool {
 }
 
 func sprintMetas(ms []tsdb.BlockMeta) string {
-	var infos []string
+	infos := make([]string, 0, len(ms))
 	for _, m := range ms {
 		infos = append(infos, fmt.Sprintf("<ulid: %s, mint: %d, maxt: %d, range: %s>", m.ULID, m.MinTime, m.MaxTime, (time.Duration((m.MaxTime-m.MinTime)/1000)*time.Second).String()))
 	}

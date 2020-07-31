@@ -188,7 +188,7 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 		logger = log.NewNopLogger()
 	}
 
-	var discoverers []*file.Discovery
+	discoverers := make([]*file.Discovery, 0, len(cfg.FileSDConfigs))
 	for _, sdCfg := range cfg.FileSDConfigs {
 		fileSDCfg, err := sdCfg.convert()
 		if err != nil {
@@ -215,7 +215,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 // Endpoints returns the list of known endpoints.
 func (c *Client) Endpoints() []*url.URL {
-	var urls []*url.URL
+	urls := make([]*url.URL, 0, len(c.provider.Addresses()))
 	for _, addr := range c.provider.Addresses() {
 		urls = append(urls,
 			&url.URL{

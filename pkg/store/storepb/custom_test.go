@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -54,7 +55,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series 
 }
 
 func newListSeriesSet(tb testing.TB, raw []rawSeries) *listSeriesSet {
-	var series []Series
+	var series []Series //nolint:prealloc
 	for _, s := range raw {
 		series = append(series, newSeries(tb, s.lset, s.chunks))
 	}
@@ -338,7 +339,7 @@ func TestMergeSeriesSets(t *testing.T) {
 }
 
 func TestMergeSeriesSetError(t *testing.T) {
-	var input []SeriesSet
+	var input []SeriesSet //nolint:prealloc
 	for _, iss := range [][]rawSeries{{{
 		lset:   labels.FromStrings("a", "a"),
 		chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
@@ -494,7 +495,7 @@ func TestLabelsToPromLabelsUnsafe(t *testing.T) {
 }
 
 func TestPrompbLabelsToLabelsUnsafe(t *testing.T) {
-	var pb []prompb.Label
+	var pb []prompb.Label //nolint:prealloc
 	for _, l := range labels.FromMap(testLsetMap) {
 		pb = append(pb, prompb.Label{Name: l.Name, Value: l.Value})
 	}

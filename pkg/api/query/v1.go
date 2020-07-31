@@ -455,8 +455,9 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		end = maxTime
 	}
 
-	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form["match[]"] {
+	selectors := r.Form["match[]"]
+	matcherSets := make([][]*labels.Matcher, 0, len(selectors))
+	for _, s := range selectors {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -488,7 +489,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 
 	var (
 		metrics = []labels.Labels{}
-		sets    []storage.SeriesSet
+		sets    = make([]storage.SeriesSet, 0, len(matcherSets))
 	)
 	for _, mset := range matcherSets {
 		sets = append(sets, q.Select(false, nil, mset...))

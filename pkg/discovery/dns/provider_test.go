@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -36,7 +37,7 @@ func TestProvider(t *testing.T) {
 	testutil.Ok(t, err)
 	result := prv.Addresses()
 	sort.Strings(result)
-	testutil.Equals(t, []string(nil), result)
+	testutil.Equals(t, []string{}, result)
 	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 
@@ -63,7 +64,7 @@ func TestProvider(t *testing.T) {
 	testutil.Ok(t, err)
 	result = prv.Addresses()
 	sort.Strings(result)
-	testutil.Equals(t, []string(nil), result)
+	testutil.Equals(t, []string{}, result)
 	testutil.Equals(t, 1, promtestutil.CollectAndCount(prv.resolverAddrs))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(prv.resolverAddrs.WithLabelValues("any+x")))
 

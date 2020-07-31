@@ -562,7 +562,7 @@ func IsRetryError(err error) bool {
 }
 
 func (cg *Group) areBlocksOverlapping(include *metadata.Meta, excludeDirs ...string) error {
-	var (
+	var ( //nolint:prealloc
 		metas   []tsdb.BlockMeta
 		exclude = map[ulid.ULID]struct{}{}
 	)

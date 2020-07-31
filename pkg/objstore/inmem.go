@@ -66,7 +66,7 @@ func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error) 
 	}
 	b.mtx.RUnlock()
 
-	var keys []string
+	keys := make([]string, 0, len(unique))
 	for n := range unique {
 		keys = append(keys, n)
 	}

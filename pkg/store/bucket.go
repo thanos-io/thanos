@@ -1430,7 +1430,7 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, error) {
-	var (
+	var ( //nolint:prealloc
 		postingGroups []*postingGroup
 		allRequested  = false
 		hasAdds       = false
@@ -1610,7 +1610,7 @@ type postingPtr struct {
 // It returns one postings for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
-	var ptrs []postingPtr
+	var ptrs []postingPtr //nolint:prealloc
 
 	output := make([]index.Postings, len(keys))
 

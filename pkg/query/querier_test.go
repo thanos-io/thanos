@@ -607,7 +607,7 @@ func (q *querierResponseCatcher) Select(selectSorted bool, p *storage.SelectHint
 func (q querierResponseCatcher) Close() error { return nil }
 
 func (q *querierResponseCatcher) warns() []storage.Warnings {
-	var warns []storage.Warnings
+	var warns []storage.Warnings //nolint:prealloc
 	for _, r := range q.resp {
 		warns = append(warns, r.Warnings())
 	}

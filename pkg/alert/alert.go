@@ -281,7 +281,7 @@ func NewSender(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	var (
+	var ( //nolint:prealloc
 		versions       []APIVersion
 		versionPresent map[APIVersion]struct{}
 	)

@@ -19,11 +19,15 @@ import (
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -41,9 +45,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"github.com/thanos-io/thanos/pkg/verifier"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 const extpromPrefix = "thanos_bucket_"
@@ -485,7 +486,7 @@ func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, n
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
 	header := inspectColumns
 
-	var lines [][]string
+	var lines [][]string //nolint:prealloc
 	p := message.NewPrinter(language.English)
 
 	for _, blockMeta := range blockMetas {
@@ -499,8 +500,9 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		if until, err := compact.UntilNextDownsampling(blockMeta); err == nil {
 			untilDown = until.String()
 		}
-		var labels []string
-		for _, key := range getKeysAlphabetically(blockMeta.Thanos.Labels) {
+		keys := getKeysAlphabetically(blockMeta.Thanos.Labels)
+		labels := make([]string, 0, len(keys))
+		for _, key := range keys {
 			labels = append(labels, fmt.Sprintf("%s=%s", key, blockMeta.Thanos.Labels[key]))
 		}
 
@@ -521,7 +523,7 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		lines = append(lines, line)
 	}
 
-	var sortByColNum []int
+	sortByColNum := make([]int, 0, len(sortBy))
 	for _, col := range sortBy {
 		index := getIndex(header, col)
 		if index == -1 {
@@ -547,7 +549,7 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 }
 
 func getKeysAlphabetically(labels map[string]string) []string {
-	var keys []string
+	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
 	}
