@@ -23,9 +23,10 @@ spec:
         - --log.level=debug
         - --query.replica-label=prometheus_replica
         - --query.replica-label=thanos_ruler_replica
+        - --query.replica-label=thanos_receive_replica
         - --store=dnssrv+_grpc._tcp.prometheus-storeapi.default.svc.cluster.local
         - --store=dnssrv+_grpc._tcp.thanos-ruler-storeapi.default.svc.cluster.local
-        - --store=dnssrv+_grpc._tcp.thanos-receiver-storeapi.default.svc.cluster.local
+        - --store=dnssrv+_grpc._tcp.thanos-receiver-grpc.default.svc.cluster.local
         ports:
         - name: http
           containerPort: 10902

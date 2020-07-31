@@ -28,18 +28,17 @@
         {"file": "prometheus-role-binding.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
         {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
 
-        {"file": "prometheus-operator-service-monitor.yaml", "target": "/root/manifests/svcmonitors/", "chmod": "+rw"},
         {"file": "prometheus-service-monitor.yaml", "target": "/root/manifests/svcmonitors/", "chmod": "+rw"},
-        {"file": "other-service-monitors.yaml", "target": "/root/manifests/svcmonitors/", "chmod": "+rw"},
 
         {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
         {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
         {"file": "storeapis-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
 
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
-        {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"}
+        {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
 
-
+        {"file": "thanos-receive-statefulset.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
+        {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
       ]
     },
     "intro": {
@@ -54,12 +53,6 @@
   "environment": {
     "uilayout": "editor-terminal",
     "uisettings": "yaml",
-    "showdashboard": true,
-    "dashboards": [
-      {"name": "Prometheus 0 EU1", "port": 9090},
-      {"name": "Prometheus 1 EU1", "port": 9091},
-      {"name": "Thanos Query", "port": 9093}
-    ]
   },
   "backend": {
     "imageid": "kubernetes-cluster-running:1.18"

@@ -1,0 +1,20 @@
+apiVersion: v1
+data:
+  hashrings.json: |-
+    [
+      {
+        "hashring": "default",
+        "tenants": [],
+        "endpoints: [
+          "thanos-receive-0.thanos-receiver-grpc.default.svc.cluster.local:10901",
+          "thanos-receive-1.thanos-receiver-grpc.default.svc.cluster.local:10901",
+          "thanos-receive-2.thanos-receiver-grpc.default.svc.cluster.local:10901"
+        ]
+      }
+    ]
+kind: ConfigMap
+metadata:
+  labels:
+    app: thanos-receive
+  name: thanos-receive-tenants
+  namespace: default

@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: thanos-receiver
+  name: thanos-receive
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: thanos-receiver
+  serviceName: thanos-receive
+  template:
+    metadata:
+      labels:
+        app: thanos-receiver
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - katacoda-default
+              namespaces:
+              - default
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                  - katacoda-default
+              namespaces:
+              - default
+              topologyKey: topology.kubernetes.io/zone
+            weight: 100
+      containers:
+      - args:
+        - receive
+        - --grpc-address=0.0.0.0:10901
+        - --http-address=0.0.0.0:10902
+        - --remote-write.address=0.0.0.0:19291
+        - --receive.replication-factor=1
+        - --tsdb.path=/var/thanos/receive
+        - --label=thanos_receive_replica="$(NAME)"
+        - --label=receive="true"
+        - --receive.local-endpoint=$(NAME).thanos-receive.$(NAMESPACE).svc.cluster.local:10901
+        - --tsdb.retention=4d
+        - --receive.hashrings-file=/var/lib/thanos-receive/hashrings.json
+        - --log.level=info
+        env:
+        - name: NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: quay.io/thanos/thanos:v0.14.0
+        livenessProbe:
+          failureThreshold: 8
+          httpGet:
+            path: /-/healthy
+            port: 10902
+            scheme: HTTP
+          periodSeconds: 30
+        name: thanos-receive
+        ports:
+        - containerPort: 10901
+          name: grpc
+        - containerPort: 10902
+          name: http
+        - containerPort: 19291
+          name: remote-write
+        readinessProbe:
+          failureThreshold: 20
+          httpGet:
+            path: /-/ready
+            port: 10902
+            scheme: HTTP
+          periodSeconds: 5
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /var/thanos/receive
+          name: data
+          readOnly: false
+        - mountPath: /var/lib/thanos-receive
+          name: hashring-config
+      terminationGracePeriodSeconds: 900
+      volumes:
+      - emptyDir: {}
+        name: data
+      - configMap:
+          name: thanos-receive-tenants
+        name: hashring-config
+  volumeClaimTemplates: null

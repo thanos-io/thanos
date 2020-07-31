@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-receiver-lb
+  namespace: default
+spec:
+  ports:
+    - name: remote-write
+      port: 19291
+      protocol: TCP
+      targetPort: remote-write
+  selector:
+    app: thanos-receiver
+
+

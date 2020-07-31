@@ -31,7 +31,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: thanos-receiver-storeapi
+  name: thanos-receiver-grpc
   namespace: default
 spec:
   clusterIP: None
@@ -40,6 +40,11 @@ spec:
       port: 10901
       protocol: TCP
       targetPort: grpc
+    - name: remote-write
+      port: 19291
+      protocol: TCP
+      targetPort: remote-write
   selector:
     app: thanos-receiver
+
 

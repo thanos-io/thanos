@@ -9,9 +9,9 @@ spec:
   image: quay.io/thanos/thanos:v0.4.0
   ruleSelector:
     matchLabels:
-      role: thanos-example
+      role: thanos-rulefiles
   queryEndpoints:
-  - dns+thanos-query.default.svc.cluster.local
+  - thanos-query.default.svc.cluster.local:http
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -19,7 +19,7 @@ metadata:
   creationTimestamp: null
   labels:
     prometheus: example-alert
-    role: thanos-example
+    role: thanos-rulefiles
   name: prometheus-example-alerts
   namespace: default
 spec:
