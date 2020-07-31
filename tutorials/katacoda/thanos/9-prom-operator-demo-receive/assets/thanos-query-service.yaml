@@ -12,4 +12,5 @@ spec:
   ports:
   - name: http
     port: 9090
+    nodePort: 30090
     targetPort: http

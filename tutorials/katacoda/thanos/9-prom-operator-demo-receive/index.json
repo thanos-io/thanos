@@ -69,7 +69,7 @@
     "uisettings": "yaml",
     "showdashboard": true,
     "dashboards": [
-      {"name": "Thanos Query", "port": 9090}
+      {"name": "Thanos Query", "port": 30090}
     ]
   },
   "backend": {
