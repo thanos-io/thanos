@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
-if ! [[ "$0" =~ "scripts/websitepreprocess.sh" ]]; then
-	echo "must be run from repository root"
-	exit 255
+if ! [[ $0 == "scripts/websitepreprocess.sh" ]]; then
+  echo "must be run from repository root"
+  exit 255
 fi
 
 WEBSITE_DIR="website"
 ORIGINAL_CONTENT_DIR="docs"
 OUTPUT_CONTENT_DIR="${WEBSITE_DIR}/docs-pre-processed"
-COMMIT_SHA=`git rev-parse HEAD`
+COMMIT_SHA=$(git rev-parse HEAD)
 
 rm -rf ${OUTPUT_CONTENT_DIR}
 mkdir -p ${OUTPUT_CONTENT_DIR}
@@ -17,11 +17,11 @@ mkdir -p ${OUTPUT_CONTENT_DIR}
 cp -r ${ORIGINAL_CONTENT_DIR}/* ${OUTPUT_CONTENT_DIR}
 
 # Add edit footer to `docs/` md items.
-ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
-for file in ${ALL_DOC_CONTENT_FILES}
-do
+ALL_DOC_CONTENT_FILES=$(echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md")
+for file in ${ALL_DOC_CONTENT_FILES}; do
   relFile=${file##${OUTPUT_CONTENT_DIR}/}
-  echo "$(cat <<EOT
+  echo "$(
+    cat <<EOT
 
 ---
 
@@ -29,60 +29,65 @@ Found a typo, inconsistency or missing information in our docs?
 Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/master/docs/${relFile}) :heart:
 
 EOT
-)" >> ${file}
+  )" >>${file}
 
 done
 
 # Add headers to special CODE_OF_CONDUCT.md, CONTRIBUTING.md and CHANGELOG.md files.
-echo "$(cat <<EOT
+echo "$(
+  cat <<EOT
 ---
 title: Code of Conduct
 type: docs
 menu: contributing
 ---
 EOT
-)" > ${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
-cat CODE_OF_CONDUCT.md >> ${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
+)" >${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
+cat CODE_OF_CONDUCT.md >>${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
 
-echo "$(cat <<EOT
+echo "$(
+  cat <<EOT
 ---
 title: Contributing
 type: docs
 menu: contributing
 ---
 EOT
-)" > ${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
-cat CONTRIBUTING.md >> ${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
+)" >${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
+cat CONTRIBUTING.md >>${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
 
-echo "$(cat <<EOT
+echo "$(
+  cat <<EOT
 ---
 title: Changelog
 type: docs
 menu: thanos
 ---
 EOT
-)" > ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
-cat CHANGELOG.md >> ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
+)" >${OUTPUT_CONTENT_DIR}/CHANGELOG.md
+cat CHANGELOG.md >>${OUTPUT_CONTENT_DIR}/CHANGELOG.md
 
-echo "$(cat <<EOT
+echo "$(
+  cat <<EOT
 ---
 title: Maintainers
 type: docs
 menu: thanos
 ---
 EOT
-)" > ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
-cat MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
+)" >${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
+cat MAINTAINERS.md >>${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
 
-echo "$(cat <<EOT
+echo "$(
+  cat <<EOT
 ---
 title: Security
 type: docs
 menu: thanos
 ---
 EOT
-)" > ${OUTPUT_CONTENT_DIR}/SECURITY.md
-cat SECURITY.md >> ${OUTPUT_CONTENT_DIR}/SECURITY.md
+)" >${OUTPUT_CONTENT_DIR}/SECURITY.md
+cat SECURITY.md >>${OUTPUT_CONTENT_DIR}/SECURITY.md
 
 # Glob again to include new docs.
 ALL_DOC_CONTENT_FILES=$(echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md")
@@ -97,5 +102,3 @@ perl -pi -e 's/src=\"(?!http)/src=\"..\//g' ${ALL_DOC_CONTENT_FILES}
 # "Mask" bug in blackfriday that does not generate code snippets in tables.
 perl -pi -e 's/```([a-z]+)/{{< highlight $1 >}}/g' ${OUTPUT_CONTENT_DIR}/contributing/coding-style-guide.md
 perl -pi -e 's/```/{{< \/highlight >}}/g' ${OUTPUT_CONTENT_DIR}/contributing/coding-style-guide.md
-
-
