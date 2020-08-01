@@ -40,19 +40,19 @@ type testClient struct {
 	maxTime   int64
 }
 
-func (c *testClient) LabelSets() []storepb.LabelSet {
+func (c testClient) LabelSets() []storepb.LabelSet {
 	return c.labelSets
 }
 
-func (c *testClient) TimeRange() (int64, int64) {
+func (c testClient) TimeRange() (int64, int64) {
 	return c.minTime, c.maxTime
 }
 
-func (c *testClient) String() string {
+func (c testClient) String() string {
 	return "test"
 }
 
-func (c *testClient) Addr() string {
+func (c testClient) Addr() string {
 	return "testaddr"
 }
 
@@ -1215,6 +1215,60 @@ func TestProxyStore_LabelNames(t *testing.T) {
 	}
 }
 
+func TestProxyStore_storeMatch(t *testing.T) {
+	storeAPIs := []Client{
+		&testClient{
+			StoreClient: &mockedStoreAPI{
+				RespSeries: []*storepb.SeriesResponse{
+					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{4, 3}}, []sample{{0, 0}, {2, 1}, {3, 2}}),
+				},
+			},
+			minTime: 1,
+			maxTime: 300,
+		},
+	}
+	req := &storepb.SeriesRequest{
+		MinTime:  1,
+		MaxTime:  300,
+		Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+	}
+	expectedSeries := []rawSeries{
+		{
+			lset:   []storepb.Label{{Name: "a", Value: "a"}},
+			chunks: [][]sample{{{4, 3}}, {{0, 0}, {2, 1}, {3, 2}}}, // No sort merge.
+		},
+	}
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return storeAPIs },
+		component.Query,
+		nil,
+		0*time.Second,
+	)
+
+	ctx := context.Background()
+	s := newStoreSeriesServer(ctx)
+
+	err := q.Series(req, s)
+	testutil.Ok(t, err)
+	seriesEquals(t, expectedSeries, s.SeriesSet)
+
+	matcher := [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "nothisone"}}}
+	s = newStoreSeriesServer(context.WithValue(ctx, StoreMatcherKey, matcher))
+
+	err = q.Series(req, s)
+	testutil.Ok(t, err)
+	testutil.Equals(t, s.Warnings[0], "No StoreAPIs matched for this query")
+
+	matcher = [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "testaddr"}}}
+	s = newStoreSeriesServer(context.WithValue(ctx, StoreMatcherKey, matcher))
+
+	err = q.Series(req, s)
+	testutil.Ok(t, err)
+	seriesEquals(t, expectedSeries, s.SeriesSet)
+
+}
+
 type rawSeries struct {
 	lset   []storepb.Label
 	chunks [][]sample
@@ -1350,7 +1404,7 @@ func TestStoreMatches(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		ok, err := storeMatches(c.s, c.mint, c.maxt, c.ms...)
+		ok, err := storeMatches(c.s, c.mint, c.maxt, nil, c.ms...)
 		testutil.Ok(t, err)
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
 	}
@@ -1717,4 +1771,25 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		}))
 		testutil.NotOk(t, ctx.Err())
 	})
+}
+
+func TestProxyStore_allowListMatch(t *testing.T) {
+	c := testClient{}
+
+	lm := storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "testaddr"}
+	matcher := [][]storepb.LabelMatcher{{lm}}
+	match, err := storeMatchMetadata(c, matcher)
+	testutil.Ok(t, err)
+	testutil.Assert(t, match)
+
+	lm = storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "wrong"}
+	matcher = [][]storepb.LabelMatcher{{lm}}
+	match, err = storeMatchMetadata(c, matcher)
+	testutil.Ok(t, err)
+	testutil.Assert(t, !match)
+
+	matcher = [][]storepb.LabelMatcher{{}}
+	match, err = storeMatchMetadata(c, matcher)
+	testutil.Ok(t, err)
+	testutil.Assert(t, match)
 }

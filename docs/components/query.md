@@ -222,6 +222,26 @@ Thanos Querier has the ability to perform concurrent select request per query. I
 The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
 Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
 
+### Store filtering
+
+It's possible to provide a set of matchers to the Querier api to select specific stores to be used during the query using the `storeMatch[]` parameter. It is useful when debugging a slow/broken store.
+It uses the same format as the matcher of [Prometheus' federate api](https://prometheus.io/docs/prometheus/latest/querying/api/#finding-series-by-label-matchers).
+Note that at the moment the querier only supports the `__address__` which contain the address of the store as it is shown on the `/stores` endoint of the UI.
+
+Example:
+```
+- targets:
+  - prometheus-foo.thanos-sidecar:10901
+  - prometheus-bar.thanos-sidecar:10901
+```
+
+```
+http://localhost:10901/api/v1/query?query=up&dedup=true&partial_response=true&storeMatch={__address__=~"prometheus-foo.*"}
+```
+
+Will only return metrics from `prometheus-foo.thanos-sidecar:10901`
+
+
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path.
