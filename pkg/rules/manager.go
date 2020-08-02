@@ -39,11 +39,10 @@ type Group struct {
 
 func (g Group) toProto() *rulespb.RuleGroup {
 	ret := &rulespb.RuleGroup{
-		Name:                              g.Name(),
-		File:                              g.OriginalFile,
-		Interval:                          g.Interval().Seconds(),
-		PartialResponseStrategy:           g.PartialResponseStrategy,
-		DeprecatedPartialResponseStrategy: g.PartialResponseStrategy,
+		Name:                    g.Name(),
+		File:                    g.OriginalFile,
+		Interval:                g.Interval().Seconds(),
+		PartialResponseStrategy: g.PartialResponseStrategy,
 		// https://github.com/gogo/protobuf/issues/519
 		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
 		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),

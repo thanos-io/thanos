@@ -4,6 +4,7 @@
 package testpromcompatibility
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -24,8 +25,17 @@ type RuleGroup struct {
 	EvaluationTime float64   `json:"evaluationTime"`
 	LastEvaluation time.Time `json:"lastEvaluation"`
 
-	DeprecatedPartialResponseStrategy string `json:"partial_response_strategy"`
-	PartialResponseStrategy           string `json:"partialResponseStrategy"`
+	PartialResponseStrategy string `json:"partialResponseStrategy"`
+}
+
+// https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L1016
+// MarshalJSON marshals a rulegroup while ensuring that `rules' is always non-empty.
+func (r *RuleGroup) MarshalJSON() ([]byte, error) {
+	if r.Rules == nil {
+		r.Rules = make([]Rule, 0)
+	}
+	type plain RuleGroup
+	return json.Marshal((*plain)(r))
 }
 
 type Rule interface{}
