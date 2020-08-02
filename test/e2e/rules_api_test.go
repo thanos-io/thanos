@@ -150,6 +150,8 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, w
 		}
 
 		for ig, g := range res {
+			testutil.Assert(t, res[ig].LastEvaluation.IsZero() != true, "last evaluation is set to the zero value")
+			testutil.Assert(t, res[ig].EvaluationDurationSeconds != 0, "duration is set to zero")
 			res[ig].LastEvaluation = time.Time{}
 			res[ig].EvaluationDurationSeconds = 0
 			res[ig].Interval = 0
