@@ -427,7 +427,6 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
-	// Prometheus doesn't check this, do we need to?
 	if end.Before(start) {
 		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -479,6 +478,10 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	}
 	end, err := parseTimeParam(r, "end", maxTime)
 	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	if end.Before(start) {
+		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
