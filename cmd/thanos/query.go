@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -21,13 +19,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -36,7 +34,6 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
-	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -152,18 +149,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
 
-		flagsMap := map[string]string{}
-
-		// Exclude kingpin default flags to expose only Thanos ones.
-		boilerplateFlags := kingpin.New("", "").Version("")
-
-		for _, f := range cmd.Model().Flags {
-			if boilerplateFlags.GetFlag(f.Name) != nil {
-				continue
-			}
-
-			flagsMap[f.Name] = f.Value.String()
-		}
+		flagsMap := getFlagsMap(cmd.Model().Flags)
 
 		return runQuery(
 			g,
@@ -415,39 +401,11 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
-		buildInfo := &v1.ThanosVersion{
-			Version:   version.Version,
-			Revision:  version.Revision,
-			Branch:    version.Branch,
-			BuildUser: version.BuildUser,
-			BuildDate: version.BuildDate,
-			GoVersion: version.GoVersion,
-		}
-
-		CWD, err := os.Getwd()
-		if err != nil {
-			CWD = "<error retrieving current working directory>"
-			level.Warn(logger).Log("msg", "failed to retrieve current working directory", "err", err)
-		}
-
-		birth := time.Now()
-
-		var runtimeInfo v1.RuntimeInfoFn = func() v1.RuntimeInfo {
-			return v1.RuntimeInfo{
-				StartTime:      birth,
-				CWD:            CWD,
-				GoroutineCount: runtime.NumGoroutine(),
-				GOMAXPROCS:     runtime.GOMAXPROCS(0),
-				GOGC:           os.Getenv("GOGC"),
-				GODEBUG:        os.Getenv("GODEBUG"),
-			}
-		}
-
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName, runtimeInfo, *buildInfo).Register(router, ins)
+		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(
+		api := v1.NewQueryAPI(
 			logger,
 			reg,
 			stores,
@@ -462,8 +420,6 @@ func runQuery(
 			flagsMap,
 			instantDefaultMaxSourceResolution,
 			maxConcurrentQueries,
-			runtimeInfo,
-			buildInfo,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)

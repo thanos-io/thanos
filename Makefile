@@ -8,7 +8,6 @@ DOCKER_CI_TAG     ?= test
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
 GOPATH            ?= $(shell go env GOPATH)
-
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
 
@@ -21,6 +20,9 @@ GOPROXY           ?= https://proxy.golang.org
 export GOPROXY
 
 GOTEST_OPTS ?= -failfast -timeout 10m -v
+BIN_DIR ?= $(shell pwd)/tmp/bin
+OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
+ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
@@ -159,13 +161,22 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"check documentation")
 
-.PHONY: format
-format: ## Formats Go code including imports and cleans up white noise.
-format: $(GOIMPORTS)
-	@echo ">> formatting code"
+.PHONY:shell-format
+shell-format: $(SHFMT)
+	@echo ">> formatting shell scripts"
+	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
+
+.PHONY:format
+format: ## Formats code including imports and cleans up white noise.
+format: go-format shell-format
+	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+
+.PHONY: go-format
+go-format: ## Formats Go code including imports.
+go-format: $(GOIMPORTS)
+	@echo ">> formatting go code"
 	@gofmt -s -w $(FILES_TO_FMT)
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
-	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
@@ -218,9 +229,9 @@ install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
 docker-ci: install-deps
 	# Copy all to tmp local dir as this is required by docker.
-	@rm -rf ./tmp/bin
-	@mkdir -p ./tmp/bin
-	@cp -r $(GOBIN)/* ./tmp/bin
+	@rm -rf $(BIN_DIR)
+	@mkdir -p $(BIN_DIR)
+	@cp -r $(GOBIN)/* $(BIN_DIR)
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
 	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
@@ -248,7 +259,10 @@ web: web-pre-process $(HUGO)
 
 .PHONY:lint
 lint: ## Runs various static analysis against our code.
-lint: go-lint react-app-lint
+lint: go-lint react-app-lint shell-lint
+	@echo ">> detecting white noise"
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	$(call require_clean_work_tree,"detected white noise")
 
 # PROTIP:
 # Add
@@ -271,43 +285,23 @@ sync/atomic=go.uber.org/atomic" ./...
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run
-	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"detected white noise")
 	@echo ">> ensuring Copyright headers"
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
 
+.PHONY:shell-lint
+shell-lint: ## Runs static analysis against our shell scripts.
+shell-lint: $(SHELLCHECK)
+	@echo ">> linting all of the shell script files"
+	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
+
 .PHONY: web-serve
 web-serve: ## Builds and serves Thanos website on localhost.
 web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
-
-# Check https://github.com/coreos/prometheus-operator/blob/v0.40.0/scripts/tooling/Dockerfile for the image.
-JSONNET_CONTAINER_CMD:=docker run --rm \
-		-u="$(shell id -u):$(shell id -g)" \
-		-v "$(shell go env GOCACHE):/.cache/go-build" \
-		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
-		-w "/go/src/github.com/thanos-io/thanos" \
-		-e USER=deadbeef \
-		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci:release-0.40
-
-.PHONY: examples-in-container
-examples-in-container:
-	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JB='/go/bin/jb' jsonnet-vendor
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
-		EMBEDMD='/go/bin/embedmd' \
-		JSONNET='/go/bin/jsonnet' \
-		JB='/go/bin/jb' \
-		PROMTOOL='/go/bin/promtool' \
-		GOJSONTOYAML='/go/bin/gojsontoyaml' \
-		GOLANGCILINT='/go/bin/golangci-lint' \
-		examples
 
 .PHONY: examples
 examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
@@ -343,11 +337,6 @@ jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
-.PHONY: jsonnet-format-in-container
-jsonnet-format-in-container:
-	$(JSONNET_CONTAINER_CMD) find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
-		xargs -n 1 -- jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
-
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
@@ -363,6 +352,15 @@ examples-clean:
 	rm -f examples/alerts/rules.yaml
 	rm -f examples/dashboards/*.json
 	rm -f examples/tmp/*.yaml
+
+# non-phony targets
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+SHELLCHECK ?= $(BIN_DIR)/shellcheck
+$(SHELLCHECK): $(BIN_DIR)
+	@echo "Downloading Shellcheck"
+	curl -sNL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.$(OS).$(ARCH).tar.xz" | tar --strip-components=1 -xJf - -C $(BIN_DIR)
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)

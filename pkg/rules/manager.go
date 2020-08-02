@@ -23,10 +23,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"gopkg.in/yaml.v3"
+
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"gopkg.in/yaml.v3"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -100,7 +101,7 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 			Labels:                  rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
 			Annotations:             rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
-			ActiveAt:                &ruleAlert.ActiveAt,
+			ActiveAt:                &ruleAlert.ActiveAt, //nolint:exportloopref
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}

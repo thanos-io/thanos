@@ -2,8 +2,7 @@ import React, { FC } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import { APIResponse } from '../../hooks/useFetch';
 import { Alert, Table, Badge } from 'reactstrap';
-import { Link } from '@reach/router';
-import { formatRelative, createExpressionLink, humanizeDuration } from '../../utils';
+import { formatRelative, createExternalExpressionLink, humanizeDuration } from '../../utils';
 import { Rule } from '../../types/types';
 import { now } from 'moment';
 
@@ -27,9 +26,9 @@ const GraphExpressionLink: FC<{ expr: string; title: string }> = props => {
   return (
     <>
       <strong>{props.title}:</strong>
-      <Link className="ml-4" to={createExpressionLink(props.expr)}>
+      <a className="ml-4" href={createExternalExpressionLink(props.expr)}>
         {props.expr}
-      </Link>
+      </a>
       <br />
     </>
   );
