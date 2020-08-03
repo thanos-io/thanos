@@ -28,53 +28,70 @@ The main motivation for considering deletions in the object storage are the foll
 
 ## Proposed Approach
 
-*   We propose to implement deletions using the tombstones approach.
-*   To start off we use the Prometheus tombstone file format.
+*   We propose to implement deletions using the tombstones approach using a CLI tool.
+*   A tombstone is proposed to be a **Custom format global - single file per request**.
+*   **Why Custom format global - single file per request**? :
+    *   https://cloud-native.slack.com/archives/CL25937SP/p1595954850430300
+    *   We can easily have multiple writers
+    *   No need to have index data of the blocks
 *   A user is expected to enter the following details for performing deletions:
     *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
-*   The details are entered via a deletions API and they are processed by the compactor to create a tombstone file, if there’s a match for the details entered. Afterwards the tombstone file is uploaded to object storage making it accessible to other components.
-*   **Why Compactor**? : The compactor is one of the very few components (next to Sidecar, Receiver, Ruler) that has write capabilities to object storage. At the same time it is only ever running once per object storage, so that we have a single writer to the deletion tombstones.
-*   If the data with the requested details couldn’t be found in the storage an error message is returned back as a response to the request.
-*   Store Gateway masks the series on processing the tombstones from the object storage.
-*   **Perspectives to deal with Compaction of blocks having tombstones:**
-    *   **Block with tombstones** Have a threshold to perform deletions on the compacted blocks ([In Prometheus](https://github.com/prometheus/prometheus/blob/f0a439bfc5d1f49cec113ee9202993be4b002b1b/tsdb/compact.go#L213), the blocks with big enough time range, that have >5% tombstones, are considered for compaction.) We solve the tombstones, if the tombstones are greater than than the threshold and then perform compaction. If not we attach the tombstone file to the new block. If multiple blocks are being compacted, we merge the tombstone files of the blocks whose threshold is not met.
-    *   **Block with deletion-mark.json i.e., entire block marked for deletion:** Returns an error message as the entire block is going to be deleted.
-*   **Perspectives to deal with Downsampling of blocks:**
-    *   **Block with tombstones:** If the tombstones are less than the threshold we copy the tombstone file and attach it to the new downsampled block else we solve the tombstones and downsample the block. And the downsampled block with tombstones during its next compaction would again have the same cases as with the compaction of a block with tombstones.
-    *   **Blocks without tombstones:** Downsampling happens...
+*   The details are entered via a deletions API and they are processed by the CLI tool to create a tombstone file (unique for a request). After which the tombstone file is uploaded to object storage making it accessible to all components.
+*   Store Gateway masks the series on processing the global tombstone files from the object storage.
+*   During compaction or downsampling, we check if the blocks being considered have series corresponding to a tombstone file, if so we delete the data and continue with the process.
 
-##### Problems during implementations and possible ideas to solve :
-During the implementation phase of this proposal one of the first problems we came across was that we had to pull the index of all the blocks for creating or appending a tombstone.
+## Open Questions
+*   Optimization for file names?
+*   Do we create a tombstone irrespective of the presence of the series with the given matcher? Or should we check for the existence of series that corresponds to the deletion request?
+*   Should we consider having a threshold for compaction or downsampling where we check all the tombstones and calculate the percentage of deletions?
 
-##### Proposed Alternative Approaches:
-(1) To have a separate store like component with index cache.
+## Considerations
 
-(2) To have a different format for the tombstones. Instead of having <seriesRef, min, max> maybe we can have <matcher, min, max>
-* **Idea 1:** Having a CLI tool for dealing with deletions.
-* **Idea 2:** To have all tombstones at some single place and they are used while performing compaction or during query time.
-* **Idea 3:** If we want to have an API for deletions, one way is to have the Store API configured in such a way that the compactor can use it to check for a match.
-*Edge case:* Do we rebuild all the rows of a tombstone? Because we need to be aware that the tombstone is being included(or not) in the given Store API call.
-
-*We're starting with (2) Idea 2*
-
-#### Considerations :
-
-*   Tombstones should be append only, so that we can solve tombstones and rewrite the blocks by performing changes. The old block and the tombstones are deleted during compaction.
+*   The old blocks and the tombstones are deleted during compaction time.
 *   We don’t want to add this feature to the sidecar. The sidecar is expected to be kept lightweight.
 
 ## Alternatives
 
-1. A new component with write permission to the object storage, which creates the tombstones and exposes the deletions API. And the actual deletions are still performed by the compactor. To ensure object storage synchronization, a mutex lock system could be introduced. In this locking mechanism, when the new component or the compactor are operating on the object storage they start by first introducing a mutual exclusive lock to the block. This helps deal with the situation when the compactor and the new component are about to make changes to the same block.
+#### Where the deletion API sits
 
-**Advantages:** As the component has the write permission, it can perform immediate deletions.
+1. **Compactor:**
+ *  Pros: Easiest as it's single writer in Thanos (but not for Cortex)
+ *  Cons: Does not have quick access to querying or block indexes
+2. **Store:**
+ *  Pros: Does have quick access to querying or block indexes
+ *  Cons: There would be many writers, and store never was about to write things, it only needed read access
+
+#### How we store the tombstone and in what format
+
+1. Prometheus Format per block
+2. Prometheus Format global
+3. Custom format per block
+4. Custom format global - appendable file
+
+**Reasons for not choosing 1 & 2 i.e., Prometheus format:**
+*   In this format, for creation of a tombstone, we will need the series ID. To find the series ID we need to pull the index of all the blocks which will never scale.
+*   This is a mutable file in Prometheus and which is not the case in Thanos Object Store.
+
+**Reasons for not choosing 3:**
+*   This becomes the function of number of blocks which hinders scalability and adds complexity.
+
+**Reasons for not choosing 4:**
+*   Read-after-write consistency cannot be guaranteed.
 
 ## Action Plan
 
-*   Add the deletion API (probably compactor) that only creates tombstones
+*   Add the deletion API that only creates tombstones
 *   Store Gateway should be able to mask based on the tombstones from object storage
 *   Compactor solves the tombstones as per the proposed approach
+
+## Challenges
+
+*   How to "compact" / "remove" **Custom format global - single file per request** files when applied.
+*   Do we want those deletion to be applied only during compaction or also for already compacted blocks. If yes how? 5%? And how to tell that when is 5%? What component would do that?
+*   Any rate limiting, what if there are too many files? Would that scale?
+
 
 ## Future Work
 
