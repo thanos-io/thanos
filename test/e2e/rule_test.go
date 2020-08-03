@@ -29,6 +29,7 @@ import (
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -94,8 +95,36 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", ioutil.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
 	testutil.Ok(t, err)
 	testutil.Equals(t, 200, resp.StatusCode)
+}
+
+func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	testutil.Ok(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	testutil.Ok(t, err)
+
+	var data struct {
+		Status string
+		Data   *rulespb.RuleGroups
+	}
+
+	testutil.Ok(t, json.Unmarshal(body, &data))
+	testutil.Equals(t, "success", data.Status)
+
+	testutil.Assert(t, len(data.Data.Groups) > 0, "expected there to be some rule groups")
+
+	for _, g := range data.Data.Groups {
+		testutil.Assert(t, g.EvaluationDurationSeconds > 0, "expected it to take more than zero seconds to evaluate")
+		testutil.Assert(t, !g.LastEvaluation.IsZero(), "expected the rule group to be evaluated at least once")
+	}
 }
 
 func writeTargets(t *testing.T, path string, addrs ...string) {
@@ -462,6 +491,10 @@ func TestRule(t *testing.T) {
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
+	})
+
+	t.Run("rule groups have last evaluation and evaluation duration set", func(t *testing.T) {
+		rulegroupCorrectData(t, ctx, r.HTTPEndpoint())
 	})
 
 	t.Run("reload works", func(t *testing.T) {
