@@ -30,11 +30,12 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/jpillora/backoff v1.0.0
+	github.com/klauspost/cpuid v1.3.1 // indirect
 	github.com/leanovate/gopter v0.2.4
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.30
-	github.com/minio/minio-go/v6 v6.0.56
+	github.com/minio/minio-go/v7 v7.0.2
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
@@ -56,10 +57,11 @@ require (
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.6.0
 	go.uber.org/automaxprocs v1.2.0
-	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/text v0.3.2
+	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1 // indirect
+	golang.org/x/text v0.3.3
 	google.golang.org/api v0.29.0
 	google.golang.org/genproto v0.0.0-20200710124503-20a17af7bd0e
 	google.golang.org/grpc v1.30.0
