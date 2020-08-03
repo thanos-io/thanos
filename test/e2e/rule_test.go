@@ -95,8 +95,8 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", ioutil.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
 	testutil.Ok(t, err)
+	defer resp.Body.Close()
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
