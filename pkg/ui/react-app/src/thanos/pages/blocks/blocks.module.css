@@ -1,0 +1,93 @@
+.container {
+  display: flex;
+  min-height: calc(100vh - 80px);
+}
+
+.grid {
+  width: 100%;
+}
+
+.blockDetails {
+  width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+  max-width: 35vw;
+  padding: 1em;
+  box-sizing: border-box;
+  transition: min-width 0.2s ease-in-out;
+}
+
+.blockDetails.open {
+  min-width: 20vw;
+  border-left: solid 1px gray;
+}
+
+.detailsTop {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detailsTop > p {
+  margin: 0;
+  padding: 0;
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+.closeBtn {
+  border: none;
+  background: none;
+  font-size: 2em;
+}
+
+.source {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  box-sizing: border-box;
+  padding: 0 1em;
+}
+
+.title > h4 {
+  margin: 0;
+}
+
+.rowsContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 1em;
+  box-sizing: border-box;
+  border-left: solid 5px teal;
+}
+
+.row {
+  width: 100%;
+  position: relative;
+  height: 2em;
+  margin: 0.2em 0;
+}
+
+.blockSpan {
+  position: absolute;
+  background: turquoise;
+  border: none;
+  height: 100%;
+  min-width: 0.5%;
+  /* cursor: pointer; */
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.blockSpan:hover, .blockSpan:focus {
+  background: teal;
+  outline: none;
+}

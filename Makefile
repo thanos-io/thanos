@@ -76,7 +76,7 @@ $(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
-	   @./scripts/build-react-app.sh
+	   @scripts/build-react-app.sh
 
 .PHONY: assets
 assets: # Repacks all static assets into go file for easier deploy.

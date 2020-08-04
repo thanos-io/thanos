@@ -6,13 +6,15 @@ import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBSt
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
 import Navigation from './thanos/Navbar';
-import { Stores, ErrorBoundary } from './thanos/pages';
+import { Stores, ErrorBoundary, Blocks } from './thanos/pages';
 
 import './App.css';
 
 const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
   rule: '/alerts',
+  bucket: '/blocks',
+  compact: '/blocks',
 };
 
 const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {
@@ -41,6 +43,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
           <TSDBStatus path="/tsdb-status" pathPrefix={pathPrefix} />
           <Targets path="/targets" pathPrefix={pathPrefix} />
           <Stores path="/stores" pathPrefix={pathPrefix} />
+          <Blocks path="/blocks" pathPrefix={pathPrefix} />
         </Router>
       </Container>
     </ErrorBoundary>

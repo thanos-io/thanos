@@ -40,6 +40,8 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
     { name: 'Alerts', uri: '/new/alerts' },
     { name: 'Rules', uri: '/new/rules' },
   ],
+  bucket: [{ name: 'Blocks', uri: '/new/blocks' }],
+  compact: [{ name: 'Blocks', uri: '/new/blocks' }],
 };
 
 interface NavigationProps {
