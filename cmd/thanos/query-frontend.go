@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -104,12 +105,16 @@ func runQueryFrontend(
 	comp component.Component,
 ) error {
 
+	if len(conf.downstreamURL) == 0 {
+		return errors.New("downstream URL should be configured")
+	}
+
 	fe, err := frontend.New(frontend.Config{
 		DownstreamURL:     conf.downstreamURL,
 		CompressResponses: conf.compressResponses,
 	}, logger, reg)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "initialize query frontend")
 	}
 
 	limiter := queryfrontend.NewLimiter(

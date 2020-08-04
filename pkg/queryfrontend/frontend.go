@@ -14,6 +14,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -85,7 +86,7 @@ func NewTripperWare(
 			reg,
 		)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "create results cache middleware")
 		}
 
 		queryRangeMiddleware = append(
