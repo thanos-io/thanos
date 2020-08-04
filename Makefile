@@ -295,7 +295,7 @@ sync/atomic=go.uber.org/atomic" ./...
 shell-lint: ## Runs static analysis against our shell scripts.
 shell-lint: $(SHELLCHECK)
 	@echo ">> linting all of the shell script files"
-	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
+	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*" -not -path "*node_modules*")
 
 .PHONY: web-serve
 web-serve: ## Builds and serves Thanos website on localhost.

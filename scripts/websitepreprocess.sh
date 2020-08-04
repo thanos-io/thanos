@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if ! [[ $0 == "scripts/websitepreprocess.sh" ]]; then
+if ! [[ "scripts/websitepreprocess.sh" =~ $0 ]]; then
   echo "must be run from repository root"
   exit 255
 fi
