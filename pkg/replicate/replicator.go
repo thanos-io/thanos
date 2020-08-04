@@ -5,11 +5,12 @@ package replicate
 
 import (
 	"context"
-	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
+
+	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
