@@ -37,7 +37,6 @@ type queryRangeConfig struct {
 	respCacheConfig     responseCacheConfig
 	cacheResults        bool
 	splitInterval       time.Duration
-	disableStepAlign    bool
 	maxRetries          int
 	maxQueryParallelism int
 	maxQueryLength      time.Duration
@@ -63,9 +62,6 @@ func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&c.maxRetries)
-
-	cmd.Flag("query-range.disable-step-align", "Disable aligning incoming queries' start and end with their step.").
-		Default("true").BoolVar(&c.disableStepAlign)
 }
 
 func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
@@ -126,7 +122,6 @@ func runQueryFrontend(
 		limiter,
 		queryrange.PrometheusCodec,
 		queryrange.PrometheusResponseExtractor{},
-		conf.queryRangeConfig.disableStepAlign,
 		conf.queryRangeConfig.cacheResults,
 		conf.queryRangeConfig.splitInterval,
 		conf.queryRangeConfig.maxRetries,

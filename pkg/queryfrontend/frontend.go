@@ -28,7 +28,6 @@ func NewTripperWare(
 	limits queryrange.Limits,
 	codec queryrange.Codec,
 	cacheExtractor queryrange.Extractor,
-	disableStepAlign bool,
 	cacheResults bool,
 	splitQueryInterval time.Duration,
 	maxRetries int,
@@ -47,13 +46,12 @@ func NewTripperWare(
 	metrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 
-	if !disableStepAlign {
-		queryRangeMiddleware = append(
-			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("step_align", metrics),
-			queryrange.StepAlignMiddleware,
-		)
-	}
+	// step align middleware
+	queryRangeMiddleware = append(
+		queryRangeMiddleware,
+		queryrange.InstrumentMiddleware("step_align", metrics),
+		queryrange.StepAlignMiddleware,
+	)
 
 	if splitQueryInterval != 0 {
 		queryRangeMiddleware = append(
@@ -107,24 +105,21 @@ func NewTripperWare(
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		// Finally, if the user selected any query range middleware, stitch it in.
-		if len(queryRangeMiddleware) > 0 {
-			queryRangeTripper := queryrange.NewRoundTripper(next, codec, queryRangeMiddleware...)
-			return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
-				isQueryRange := strings.HasSuffix(r.URL.Path, "/query_range")
-				op := labelQuery
-				if isQueryRange {
-					op = labelQueryRange
-				}
+		queryRangeTripper := queryrange.NewRoundTripper(next, codec, queryRangeMiddleware...)
+		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			isQueryRange := strings.HasSuffix(r.URL.Path, "/query_range")
+			op := labelQuery
+			if isQueryRange {
+				op = labelQueryRange
+			}
 
-				queriesCount.WithLabelValues(op).Inc()
+			queriesCount.WithLabelValues(op).Inc()
 
-				if !isQueryRange {
-					return next.RoundTrip(r)
-				}
-				return queryRangeTripper.RoundTrip(r)
-			})
-		}
-		return next
+			if !isQueryRange {
+				return next.RoundTrip(r)
+			}
+			return queryRangeTripper.RoundTrip(r)
+		})
 	}, nil
 }
 
