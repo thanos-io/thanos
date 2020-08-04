@@ -117,14 +117,14 @@ func runQueryFrontend(
 		return errors.Wrap(err, "initialize query frontend")
 	}
 
-	limiter := queryfrontend.NewLimiter(
+	limits := queryfrontend.NewLimits(
 		conf.queryRangeConfig.maxQueryParallelism,
 		conf.queryRangeConfig.maxQueryLength,
 		conf.queryRangeConfig.respCacheConfig.cacheMaxFreshness,
 	)
 
 	tripperWare, err := queryfrontend.NewTripperWare(
-		limiter,
+		limits,
 		queryrange.PrometheusCodec,
 		queryrange.PrometheusResponseExtractor{},
 		conf.queryRangeConfig.cacheResults,

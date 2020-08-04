@@ -47,7 +47,7 @@ func NewTripperWare(
 	metrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 
-	// step align middleware
+	// step align middleware.
 	queryRangeMiddleware = append(
 		queryRangeMiddleware,
 		queryrange.InstrumentMiddleware("step_align", metrics),
@@ -127,8 +127,8 @@ func NewTripperWare(
 // constSplitter is a utility for using a constant split interval when determining cache keys.
 type constSplitter time.Duration
 
-// GenerateCacheKey generates a cache key based on the userID, Request and interval.
-func (t constSplitter) GenerateCacheKey(userID string, r queryrange.Request) string {
+// GenerateCacheKey generates a cache key based on the Request and interval.
+func (t constSplitter) GenerateCacheKey(_ string, r queryrange.Request) string {
 	currentInterval := r.GetStart() / time.Duration(t).Milliseconds()
-	return fmt.Sprintf("%s:%s:%d:%d", userID, r.GetQuery(), r.GetStep(), currentInterval)
+	return fmt.Sprintf("%s:%d:%d", r.GetQuery(), r.GetStep(), currentInterval)
 }

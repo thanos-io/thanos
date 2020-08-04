@@ -5,34 +5,34 @@ package queryfrontend
 
 import "time"
 
-// Limiter implements the Limits interface in Cortex frontend
+// Limits implements the Limits interface in Cortex frontend
 // https://github.com/cortexproject/cortex/blob/master/pkg/querier/queryrange/limits.go#L17.
-type Limiter struct {
+type Limits struct {
 	maxQueryLength      time.Duration
 	maxCacheFreshness   time.Duration
 	maxQueryParallelism int
 }
 
-func NewLimiter(
+func NewLimits(
 	maxQueryParallelism int,
 	maxQueryLength time.Duration,
 	maxCacheFreshness time.Duration,
-) *Limiter {
-	return &Limiter{
+) *Limits {
+	return &Limits{
 		maxQueryLength:      maxQueryLength,
 		maxCacheFreshness:   maxCacheFreshness,
 		maxQueryParallelism: maxQueryParallelism,
 	}
 }
 
-func (l *Limiter) MaxQueryLength(_ string) time.Duration {
+func (l *Limits) MaxQueryLength(_ string) time.Duration {
 	return l.maxQueryLength
 }
 
-func (l *Limiter) MaxQueryParallelism(_ string) int {
+func (l *Limits) MaxQueryParallelism(_ string) int {
 	return l.maxQueryParallelism
 }
 
-func (l *Limiter) MaxCacheFreshness(_ string) time.Duration {
+func (l *Limits) MaxCacheFreshness(_ string) time.Duration {
 	return l.maxCacheFreshness
 }
