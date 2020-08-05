@@ -111,3 +111,6 @@ adopters:
 - name: Beat
   url: https://thebeat.co
   logo: thebeat.png
+- name: TiDB Cloud
+  url: https://tidbcloud.com
+  logo: tidbcloud.png
