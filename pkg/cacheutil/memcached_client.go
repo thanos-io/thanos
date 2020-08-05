@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,12 @@ const (
 	opGetMulti            = "getmulti"
 	reasonMaxItemSize     = "max-item-size"
 	reasonAsyncBufferFull = "async-buffer-full"
+	reasonMalformedKey    = "malformed-key"
+	reasonTimeout         = "timeout"
+	reasonMotStored       = "not-stored"
+	reasonCacheMiss       = "cache-miss"
+	reasonConflict        = "conflict"
+	reasonOther           = "other"
 )
 
 var (
@@ -148,10 +155,12 @@ type memcachedClient struct {
 	workers sync.WaitGroup
 
 	// Tracked metrics.
+	clientInfo prometheus.GaugeFunc
 	operations *prometheus.CounterVec
 	failures   *prometheus.CounterVec
 	skipped    *prometheus.CounterVec
 	duration   *prometheus.HistogramVec
+	valueSize  *prometheus.HistogramVec
 }
 
 type memcachedGetMultiResult struct {
@@ -214,6 +223,23 @@ func newMemcachedClient(
 			NewGate(config.MaxGetMultiConcurrency),
 	}
 
+	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_memcached_client_info",
+		Help: "A metric with a constant '1' value labeled by configuration options from which memcached client was configured.",
+		ConstLabels: prometheus.Labels{
+			"timeout":                      config.Timeout.String(),
+			"max_idle_connections":         strconv.Itoa(config.MaxIdleConnections),
+			"max_async_concurrency":        strconv.Itoa(config.MaxAsyncConcurrency),
+			"max_async_buffer_size":        strconv.Itoa(config.MaxAsyncBufferSize),
+			"max_item_size":                strconv.FormatUint(uint64(config.MaxItemSize), 10),
+			"max_get_multi_concurrency":    strconv.Itoa(config.MaxGetMultiConcurrency),
+			"max_get_multi_batch_size":     strconv.Itoa(config.MaxGetMultiBatchSize),
+			"dns_provider_update_interval": config.DNSProviderUpdateInterval.String(),
+		},
+	},
+		func() float64 { return 1 },
+	)
+
 	c.operations = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_memcached_operations_total",
 		Help: "Total number of operations against memcached.",
@@ -224,9 +250,15 @@ func newMemcachedClient(
 	c.failures = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_memcached_operation_failures_total",
 		Help: "Total number of operations against memcached that failed.",
-	}, []string{"operation"})
-	c.failures.WithLabelValues(opGetMulti)
-	c.failures.WithLabelValues(opSet)
+	}, []string{"operation", "reason"})
+	c.failures.WithLabelValues(opGetMulti, reasonMalformedKey)
+	c.failures.WithLabelValues(opGetMulti, reasonCacheMiss)
+	c.failures.WithLabelValues(opGetMulti, reasonOther)
+	c.failures.WithLabelValues(opSet, reasonTimeout)
+	c.failures.WithLabelValues(opSet, reasonMotStored)
+	c.failures.WithLabelValues(opSet, reasonCacheMiss)
+	c.failures.WithLabelValues(opSet, reasonConflict)
+	c.failures.WithLabelValues(opSet, reasonOther)
 
 	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_memcached_operation_skipped_total",
@@ -243,6 +275,18 @@ func newMemcachedClient(
 	}, []string{"operation"})
 	c.duration.WithLabelValues(opGetMulti)
 	c.duration.WithLabelValues(opSet)
+
+	c.valueSize = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanos_memcached_operation_value_size_bytes",
+		Help: "Tracks the size of the values stored in and fetched from memcached.",
+		Buckets: []float64{
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+		},
+	},
+		[]string{"operation"},
+	)
+	c.valueSize.WithLabelValues(opGetMulti)
+	c.valueSize.WithLabelValues(opSet)
 
 	// As soon as the client is created it must ensure that memcached server
 	// addresses are resolved, so we're going to trigger an initial addresses
@@ -288,15 +332,34 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
 		if err != nil {
-			c.failures.WithLabelValues(opSet).Inc()
-
 			// If the PickServer will fail for any reason the server address will be nil
 			// and so missing in the logs. We're OK with that (it's a best effort).
 			serverAddr, _ := c.selector.PickServer(key)
-			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "sizeBytes", len(value), "server", serverAddr, "err", err)
+			level.Debug(c.logger).Log(
+				"msg", "failed to store item to memcached",
+				"key", key,
+				"sizeBytes", len(value),
+				"server", serverAddr,
+				"err", err,
+			)
+
+			var e *memcache.ConnectTimeoutError
+			switch {
+			case errors.As(err, &e):
+				c.failures.WithLabelValues(opSet, reasonTimeout).Inc()
+			case errors.Is(err, memcache.ErrNotStored):
+				c.failures.WithLabelValues(opSet, reasonMotStored).Inc()
+			case errors.Is(err, memcache.ErrCASConflict):
+				c.failures.WithLabelValues(opSet, reasonConflict).Inc()
+			case errors.Is(err, memcache.ErrCacheMiss):
+				c.failures.WithLabelValues(opSet, reasonCacheMiss).Inc()
+			default:
+				c.failures.WithLabelValues(opSet, reasonOther).Inc()
+			}
 			return
 		}
 
+		c.valueSize.WithLabelValues(opSet).Observe(float64(len(value)))
 		c.duration.WithLabelValues(opSet).Observe(time.Since(start).Seconds())
 	})
 
@@ -410,8 +473,23 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	c.operations.WithLabelValues(opGetMulti).Inc()
 	items, err = c.client.GetMulti(keys)
 	if err != nil {
-		c.failures.WithLabelValues(opGetMulti).Inc()
+		var e *memcache.ConnectTimeoutError
+		switch {
+		case errors.As(err, &e):
+			c.failures.WithLabelValues(opGetMulti, reasonTimeout).Inc()
+		case errors.Is(err, memcache.ErrCacheMiss):
+			c.failures.WithLabelValues(opGetMulti, reasonCacheMiss).Inc()
+		case errors.Is(err, memcache.ErrMalformedKey):
+			c.failures.WithLabelValues(opGetMulti, reasonMalformedKey).Inc()
+		default:
+			c.failures.WithLabelValues(opGetMulti, reasonOther).Inc()
+		}
 	} else {
+		var total int
+		for _, it := range items {
+			total += len(it.Value)
+		}
+		c.valueSize.WithLabelValues(opGetMulti).Observe(float64(total))
 		c.duration.WithLabelValues(opGetMulti).Observe(time.Since(start).Seconds())
 	}
 
