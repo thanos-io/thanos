@@ -9,6 +9,7 @@ import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { sortBlocks } from './helpers';
 import styles from './blocks.module.css';
+import TimeRange from './TimeRange';
 
 export interface BlockListProps {
   blocks: Block[];
@@ -37,6 +38,8 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     return [gridMinTime, gridMaxTime];
   }, [blocks]);
 
+  const [[viewMinTime, viewMaxTime], setViewTime] = useState<[number, number]>([gridMinTime, gridMaxTime]);
+
   return (
     <>
       {blocks.length > 0 ? (
@@ -48,10 +51,17 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
                 data={blockPools[pk]}
                 title={pk}
                 selectBlock={selectBlock}
-                gridMinTime={gridMinTime}
-                gridMaxTime={gridMaxTime}
+                gridMinTime={viewMinTime}
+                gridMaxTime={viewMaxTime}
               />
             ))}
+            <TimeRange
+              gridMinTime={gridMinTime}
+              gridMaxTime={gridMaxTime}
+              viewMinTime={viewMinTime}
+              viewMaxTime={viewMaxTime}
+              onChange={setViewTime}
+            />
           </div>
           <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
         </div>

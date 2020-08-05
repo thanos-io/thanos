@@ -43,6 +43,17 @@
   font-size: 2em;
 }
 
+.timeRangeDiv {
+  box-sizing: border-box;
+  padding: 1em 3em;
+}
+
+.timeRange {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .source {
   width: 100%;
   display: flex;
@@ -72,6 +83,7 @@
   position: relative;
   height: 1.5em;
   margin: 0.2em 0;
+  overflow-x: hidden;
 }
 
 .blockSpan {
