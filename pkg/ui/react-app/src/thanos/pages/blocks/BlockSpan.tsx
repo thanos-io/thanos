@@ -17,7 +17,7 @@ export const BlockSpan: FC<BlockSpanProps> = ({ block, gridMaxTime, gridMinTime,
   return (
     <button
       onClick={(): void => selectBlock(block)}
-      className={styles.blockSpan}
+      className={`${styles.blockSpan} ${styles[`res-${block.thanos.downsample.resolution}`]}`}
       style={{
         width: `${spanWidth}%`,
         left: `${spanOffset}%`,

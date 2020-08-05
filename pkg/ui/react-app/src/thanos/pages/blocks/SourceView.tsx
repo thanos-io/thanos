@@ -29,7 +29,7 @@ export const SourceView: FC<{
     <>
       <div className={styles.source}>
         <div className={styles.title}>
-          <h4>{title}</h4>
+          <p>{title}</p>
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map(k => (

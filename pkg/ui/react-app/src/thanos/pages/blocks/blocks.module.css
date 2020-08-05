@@ -54,7 +54,7 @@
   padding: 0 1em;
 }
 
-.title > h4 {
+.title > p {
   margin: 0;
 }
 
@@ -70,17 +70,15 @@
 .row {
   width: 100%;
   position: relative;
-  height: 2em;
+  height: 1.5em;
   margin: 0.2em 0;
 }
 
 .blockSpan {
   position: absolute;
-  background: turquoise;
   border: none;
   height: 100%;
   min-width: 0.5%;
-  /* cursor: pointer; */
   padding: 0;
   margin: 0;
   min-width: 0;
@@ -88,6 +86,27 @@
 }
 
 .blockSpan:hover, .blockSpan:focus {
-  background: teal;
   outline: none;
+}
+
+/* block colors */
+.res-0 {
+  background: turquoise;
+}
+.res-0:hover, .res-0:focus {
+  background: teal;
+}
+
+.res-300000 {
+  background: dodgerblue;
+}
+.res-300000:hover, .res-300000:focus {
+  background: midnightblue;
+}
+
+.res-3600000 {
+  background: lightgreen;
+}
+.res-3600000:hover, .res-3600000:focus {
+  background: olivedrab;
 }
