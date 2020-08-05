@@ -123,6 +123,20 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 
 // MarkForDeletion creates a file which stores information about when the block was marked for deletion.
 func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, markedForDeletion prometheus.Counter) error {
+	return markForDeletion(ctx, logger, bkt, id, time.Now(), markedForDeletion)
+}
+
+// MarkForFutureDeletion creates a file which stores information about when the block should be deleted in the future.
+func MarkForFutureDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, futureDeletionTime time.Time, markedForDeletion prometheus.Counter) error {
+	if time.Now().Before(futureDeletionTime) {
+		return errors.New(fmt.Sprintf("deletion time %s is not in the future", futureDeletionTime.Format(time.RFC3339)))
+	}
+
+	return markForDeletion(ctx, logger, bkt, id, futureDeletionTime, markedForDeletion)
+}
+
+// MarkForDeletion creates a file which stores information about when the block should be marked for deletion.
+func markForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, deletionTime time.Time, markedForDeletion prometheus.Counter) error {
 	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
 	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
 	if err != nil {
@@ -135,7 +149,7 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 
 	deletionMark, err := json.Marshal(metadata.DeletionMark{
 		ID:           id,
-		DeletionTime: time.Now().Unix(),
+		DeletionTime: deletionTime.Unix(),
 		Version:      metadata.DeletionMarkVersion1,
 	})
 	if err != nil {

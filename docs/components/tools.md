@@ -488,6 +488,7 @@ Flags:
                                  duration relative to current time, such as -1d
                                  or 2h45m. Valid duration units are ms, s, m, h,
                                  d, w, y.
+      --delete-old-blocks        Delete blocks that are older then max-time.
 
 ```
 

@@ -315,15 +315,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil, nil)
 		testutil.Ok(t, err)
 
-		r := newReplicationScheme(
-			logger,
-			newReplicationMetrics(nil),
-			filter,
-			fetcher,
-			objstore.WithNoopInstr(originBucket),
-			targetBucket,
-			nil,
-		)
+		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil, nil, false)
 
 		err = r.execute(ctx)
 		testutil.Ok(t, err)
