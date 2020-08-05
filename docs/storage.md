@@ -87,7 +87,7 @@ config:
   secret_key: ""
   put_user_metadata: {}
   http_config:
-    idle_conn_timeout: 90s
+    idle_conn_timeout: 1m30s
     response_header_timeout: 2m
     insecure_skip_verify: false
   trace:

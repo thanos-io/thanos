@@ -4,6 +4,7 @@
 package store
 
 import (
+	"context"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -29,7 +30,7 @@ func TestDiffVarintCodec(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(chunksDir))
 	}()
 
-	appendTestData(t, h.Appender(), 1e6)
+	appendTestData(t, h.Appender(context.Background()), 1e6)
 
 	idx, err := h.Index()
 	testutil.Ok(t, err)

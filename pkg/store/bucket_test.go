@@ -1028,7 +1028,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 
 	logger := log.NewNopLogger()
 
-	appendTestData(t, h.Appender(), series)
+	appendTestData(t, h.Appender(context.Background()), series)
 
 	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "tmp"), os.ModePerm))
 	id := createBlockFromHead(t, filepath.Join(tmpDir, "tmp"), h)
@@ -1372,7 +1372,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender()
+		app := h.Appender(context.Background())
 
 		for i := 0; i < numSeries; i++ {
 			ts := int64(i)
@@ -1410,7 +1410,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender()
+		app := h.Appender(context.Background())
 
 		for i := 0; i < numSeries; i++ {
 			ts := int64(i)
@@ -1848,7 +1848,7 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
-	app := h.Appender()
+	app := h.Appender(context.Background())
 
 	ts := int64(blockIndex * totalSamples)
 	ref, err := app.Add(lbls, ts, random.Float64())
