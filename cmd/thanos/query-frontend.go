@@ -4,6 +4,7 @@
 package main
 
 import (
+	"github.com/prometheus/common/model"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
@@ -37,10 +38,10 @@ type queryFrontendConfig struct {
 type queryRangeConfig struct {
 	respCacheConfig     responseCacheConfig
 	cacheResults        bool
-	splitInterval       time.Duration
+	splitInterval       model.Duration
 	maxRetries          int
 	maxQueryParallelism int
-	maxQueryLength      time.Duration
+	maxQueryLength      model.Duration
 }
 
 type responseCacheConfig struct {
@@ -59,10 +60,16 @@ func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
 		BoolVar(&c.cacheResults)
 
 	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
-		Default("24h").DurationVar(&c.splitInterval)
+		Default("24h").SetValue(&c.splitInterval)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&c.maxRetries)
+
+	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
+		Default("0").SetValue(&c.maxQueryLength)
+
+	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the frontend.").
+		Default("14").IntVar(&c.maxQueryParallelism)
 }
 
 func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
@@ -119,7 +126,7 @@ func runQueryFrontend(
 
 	limits := queryfrontend.NewLimits(
 		conf.queryRangeConfig.maxQueryParallelism,
-		conf.queryRangeConfig.maxQueryLength,
+		time.Duration(conf.queryRangeConfig.maxQueryLength),
 		conf.queryRangeConfig.respCacheConfig.cacheMaxFreshness,
 	)
 
@@ -128,7 +135,7 @@ func runQueryFrontend(
 		queryrange.PrometheusCodec,
 		queryrange.PrometheusResponseExtractor{},
 		conf.queryRangeConfig.cacheResults,
-		conf.queryRangeConfig.splitInterval,
+		time.Duration(conf.queryRangeConfig.splitInterval),
 		conf.queryRangeConfig.maxRetries,
 		reg,
 		logger,
