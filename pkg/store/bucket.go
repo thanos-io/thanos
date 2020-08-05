@@ -86,6 +86,9 @@ const (
 	// Labels for metrics.
 	labelEncode = "encode"
 	labelDecode = "decode"
+	// Label values for metrics.
+	opFetchPostings = "fetch-postings"
+	opLoadSeries    = "load-series"
 )
 
 type bucketStoreMetrics struct {
@@ -105,13 +108,14 @@ type bucketStoreMetrics struct {
 	chunkSizeBytes        prometheus.Histogram
 	queriesDropped        prometheus.Counter
 	seriesRefetches       prometheus.Counter
-	fetchDuration         *prometheus.HistogramVec
 
 	cachedPostingsCompressions           *prometheus.CounterVec
 	cachedPostingsCompressionErrors      *prometheus.CounterVec
 	cachedPostingsCompressionTimeSeconds *prometheus.CounterVec
 	cachedPostingsOriginalSizeBytes      prometheus.Counter
 	cachedPostingsCompressedSizeBytes    prometheus.Counter
+
+	indexOperationDuration *prometheus.HistogramVec
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -222,11 +226,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Compressed size of postings stored into cache.",
 	})
 
-	m.fetchDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_fetch_duration_seconds",
-		Help:    "Time it takes to fetch an element from a bucket to respond a query (Any BucketReader can be used as source: objstore or caching bucket).",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
-	}, []string{"data_type"})
+	m.indexOperationDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanos_bucket_store_index_operation_duration_seconds",
+		Help: "Time it takes to process index operation from a bucket to respond a query.",
+		Buckets: []float64{
+			0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120,
+		},
+	}, []string{"operation"})
 
 	return &m
 }
@@ -480,7 +486,14 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
-	indexHeaderReader, err := indexheader.NewBinaryReader(ctx, s.logger, s.bkt, s.dir, meta.ULID, s.postingOffsetsInMemSampling)
+	indexHeaderReader, err := indexheader.NewBinaryReader(
+		ctx,
+		s.logger,
+		s.bkt,
+		s.dir,
+		meta.ULID,
+		s.postingOffsetsInMemSampling,
+	)
 	if err != nil {
 		return errors.Wrap(err, "create index header reader")
 	}
@@ -493,6 +506,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	b, err := newBucketBlock(
 		ctx,
 		log.With(s.logger, "block", meta.ULID),
+		s.metrics,
 		meta,
 		s.bkt,
 		dir,
@@ -500,7 +514,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.chunkPool,
 		indexHeaderReader,
 		s.partitioner,
-		s.metrics.seriesRefetches,
 		s.enablePostingsCompression,
 	)
 	if err != nil {
@@ -973,9 +986,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.cachedPostingsCompressionTimeSeconds.WithLabelValues(labelDecode).Add(stats.cachedPostingsDecompressionTimeSum.Seconds())
 		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.cachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.cachedPostingsCompressedSizeSum))
-		s.metrics.fetchDuration.WithLabelValues("postings").Observe(stats.postingsFetchDurationSum.Seconds())
-		s.metrics.fetchDuration.WithLabelValues("series").Observe(stats.seriesFetchDurationSum.Seconds())
-		s.metrics.fetchDuration.WithLabelValues("chunks").Observe(stats.chunksFetchDurationSum.Seconds())
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"stats", fmt.Sprintf("%+v", stats), "err", err)
@@ -1268,6 +1278,7 @@ func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.M
 // state for the block on local disk.
 type bucketBlock struct {
 	logger     log.Logger
+	metrics    *bucketStoreMetrics
 	bkt        objstore.BucketReader
 	meta       *metadata.Meta
 	dir        string
@@ -1282,8 +1293,6 @@ type bucketBlock struct {
 
 	partitioner partitioner
 
-	seriesRefetches prometheus.Counter
-
 	enablePostingsCompression bool
 
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
@@ -1294,6 +1303,7 @@ type bucketBlock struct {
 func newBucketBlock(
 	ctx context.Context,
 	logger log.Logger,
+	metrics *bucketStoreMetrics,
 	meta *metadata.Meta,
 	bkt objstore.BucketReader,
 	dir string,
@@ -1301,11 +1311,11 @@ func newBucketBlock(
 	chunkPool pool.BytesPool,
 	indexHeadReader indexheader.Reader,
 	p partitioner,
-	seriesRefetches prometheus.Counter,
 	enablePostingsCompression bool,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
 		logger:                    logger,
+		metrics:                   metrics,
 		bkt:                       bkt,
 		indexCache:                indexCache,
 		chunkPool:                 chunkPool,
@@ -1313,7 +1323,6 @@ func newBucketBlock(
 		partitioner:               p,
 		meta:                      meta,
 		indexHeaderReader:         indexHeadReader,
-		seriesRefetches:           seriesRefetches,
 		enablePostingsCompression: enablePostingsCompression,
 	}
 
@@ -1620,6 +1629,9 @@ type postingPtr struct {
 // It returns one postings for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
+	start := time.Now()
+	defer r.block.metrics.indexOperationDuration.WithLabelValues(opFetchPostings).Observe(time.Since(start).Seconds())
+
 	var ptrs []postingPtr
 
 	output := make([]index.Postings, len(keys))
@@ -1837,6 +1849,9 @@ func (it *bigEndianPostings) length() int {
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
+	start := time.Now()
+	defer r.block.metrics.indexOperationDuration.WithLabelValues(opLoadSeries).Observe(float64(time.Since(start)))
+
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
 	fromCache, ids := r.block.indexCache.FetchMultiSeries(r.ctx, r.block.meta.ULID, ids)
@@ -1887,7 +1902,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetc
 			}
 
 			// Inefficient, but should be rare.
-			r.block.seriesRefetches.Inc()
+			r.block.metrics.seriesRefetches.Inc()
 			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", maxSeriesSize)
 
 			// Fetch plus to get the size of next one if exists.
