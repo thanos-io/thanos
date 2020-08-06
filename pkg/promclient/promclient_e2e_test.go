@@ -146,3 +146,41 @@ func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	_, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
 	testutil.NotOk(t, err)
 }
+
+func TestQueryRange_e2e(t *testing.T) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
+		now := time.Now()
+
+		ctx := context.Background()
+		// Create artificial block.
+		_, err := e2eutil.CreateBlock(
+			ctx,
+			p.Dir(),
+			[]labels.Labels{labels.FromStrings("a", "b")},
+			10,
+			timestamp.FromTime(now.Add(-2*time.Hour)),
+			timestamp.FromTime(now),
+			nil,
+			0,
+		)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, p.Start())
+
+		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		testutil.Ok(t, err)
+
+		res, _, err := NewDefaultClient().QueryRange(
+			ctx,
+			u,
+			`{a="b"}`,
+			timestamp.FromTime(now.Add(-2*time.Hour)),
+			timestamp.FromTime(now),
+			14,
+			QueryOptions{},
+		)
+		testutil.Ok(t, err)
+
+		testutil.Equals(t, len(res) > 0, true)
+	})
+}
