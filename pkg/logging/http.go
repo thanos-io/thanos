@@ -38,7 +38,7 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		wrapped := httputil.WrapResponseWriterWithStatus(w)
 		start := time.Now()
-		decision := m.opts.shouldLog(name)
+		decision := m.opts.shouldLog()
 
 		switch decision {
 		case NoLogCall:

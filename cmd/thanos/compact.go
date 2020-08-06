@@ -402,7 +402,7 @@ func runCompact(
 
 		api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func(_ string) logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)

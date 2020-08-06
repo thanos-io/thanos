@@ -354,7 +354,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		api := v1.NewBlocksAPI(logger, *label, flagsMap)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func(_ string) logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)

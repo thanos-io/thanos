@@ -71,11 +71,12 @@ func DefaultErrorToCode(_ error) int {
 }
 
 // Decider function defines rules for suppressing the logging.
-type Decider func(fullMethodName string) Decision
+// TODO : Add the method name as a parameter in case we want to log based on method names.
+type Decider func() Decision
 
 // DefaultDeciderMethod is the default implementation of decider to see if you should log the call
 // by default this is set to LogStartAndFinishCall.
-func DefaultDeciderMethod(_ string) Decision {
+func DefaultDeciderMethod() Decision {
 	return LogStartAndFinishCall
 }
 

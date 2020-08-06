@@ -407,7 +407,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func(_ string) logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
 			return logging.LogDecision[requestLoggingDecision]
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
