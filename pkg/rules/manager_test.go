@@ -167,8 +167,8 @@ groups:
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
-			Queryable:  nopQueryable{},
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
@@ -295,8 +295,8 @@ func TestManager_Rules(t *testing.T) {
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
-			Queryable:  nopQueryable{},
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
