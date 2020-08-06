@@ -145,7 +145,7 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 			Help: "Total number of objects replicated.",
 		}),
 		blocksMarkedForDeletion: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_replicate _blocks_marked_for_deletion_total",
+			Name: "thanos_replicate_blocks_marked_for_deletion_total",
 			Help: "Total number of blocks marked for deletion in compactor.",
 		}),
 	}
