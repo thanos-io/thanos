@@ -651,9 +651,7 @@
                ]
             },
             {
-               "aliasColors": {
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -685,11 +683,11 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) / sum(rate(thanos_objstore_bucket_operations_total{namespace=\"$namespace\",job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, operation) (rate(thanos_objstore_bucket_operation_failures_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) / sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{namespace=\"$namespace\",job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "error",
-                     "refId": "A",
+                     "legendFormat": "{{job}} {{operation}}",
+                     "legendLink": null,
                      "step": 10
                   }
                ],
@@ -762,7 +760,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.99, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, operation, le)) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99 {{job}}",
@@ -770,7 +768,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_objstore_bucket_operation_duration_seconds_sum{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job) * 1 / sum(rate(thanos_objstore_bucket_operation_duration_seconds_count{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job)",
+                     "expr": "sum(rate(thanos_objstore_bucket_operation_duration_seconds_sum{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, operation) * 1 / sum(rate(thanos_objstore_bucket_operation_duration_seconds_count{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, operation)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "mean {{job}}",
@@ -778,7 +776,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.50, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, operation, le)) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50 {{job}}",
