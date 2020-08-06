@@ -5,11 +5,12 @@
 
 trap 'kill 0' SIGTERM
 
-MINIO_ENABLED=${MINIO_ENABLED:-0}
+MINIO_ENABLED=${MINIO_ENABLED:-""}
 MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
 MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
 PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"./prometheus"}
 THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"./thanos"}
+S3_ENDPOINT=""
 
 if [ ! $(command -v "$PROMETHEUS_EXECUTABLE") ]; then
   echo "Cannot find or execute Prometheus binary $PROMETHEUS_EXECUTABLE, you can override it by setting the PROMETHEUS_EXECUTABLE env variable"
@@ -156,7 +157,7 @@ for i in $(seq 0 2); do
     --http-grace-period 1s \
     --prometheus.url http://localhost:909"${i}" \
     --tsdb.path data/prom"${i}" \
-    "${OBJSTORECFG}" &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:109${i}1"
 
@@ -174,7 +175,7 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
     --http-address 0.0.0.0:10906 \
     --http-grace-period 1s \
     --data-dir data/store \
-    "${OBJSTORECFG}" &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:10905"
 fi
@@ -203,8 +204,8 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --label 'receive="true"' \
       --receive.local-endpoint 127.0.0.1:1${i}907 \
       --receive.hashrings-file ./data/hashring.json \
-      "${OBJSTORECFG}" \
-      --remote-write.address 0.0.0.0:1${i}908 &
+      --remote-write.address 0.0.0.0:1${i}908 \
+      ${OBJSTORECFG} &
 
     STORES="${STORES} --store 127.0.0.1:1${i}907"
   done
@@ -260,7 +261,7 @@ for i in $(seq 0 1); do
     --query.replica-label prometheus \
     --tracing.config="${QUERIER_JAEGER_CONFIG}" \
     --query.replica-label receive_replica \
-    "${STORES}" &
+    ${STORES} &
 done
 
 sleep 0.5
@@ -271,7 +272,7 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
     --log.level debug \
     --http-address 0.0.0.0:10933 \
     --http-grace-period 1s \
-    "${OBJSTORECFG}" &
+    ${OBJSTORECFG} &
 fi
 
 sleep 0.5
