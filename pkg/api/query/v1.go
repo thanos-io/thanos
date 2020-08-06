@@ -224,15 +224,9 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 }
 
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
-	var ts time.Time
-	if t := r.FormValue("time"); t != "" {
-		var err error
-		ts, err = parseTime(t)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		}
-	} else {
-		ts = qapi.baseAPI.Now()
+	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
 	ctx := r.Context()
@@ -425,12 +419,26 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
 	}
 
+	start, err := parseTimeParam(r, "start", minTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	end, err := parseTimeParam(r, "end", maxTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	if end.Before(start) {
+		err := errors.New("end timestamp must not be before start time")
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, nil, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := qapi.queryableCreate(true, nil, nil, 0, enablePartialResponse, false).
+		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
@@ -464,26 +472,17 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
-	var start time.Time
-	if t := r.FormValue("start"); t != "" {
-		var err error
-		start, err = parseTime(t)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		}
-	} else {
-		start = minTime
+	start, err := parseTimeParam(r, "start", minTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
-
-	var end time.Time
-	if t := r.FormValue("end"); t != "" {
-		var err error
-		end, err = parseTime(t)
-		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		}
-	} else {
-		end = maxTime
+	end, err := parseTimeParam(r, "end", maxTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	if end.Before(start) {
+		err := errors.New("end timestamp must not be before start time")
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
 	var matcherSets [][]*labels.Matcher
@@ -540,6 +539,18 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	return metrics, set.Warnings(), nil
 }
 
+func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (time.Time, error) {
+	val := r.FormValue(paramName)
+	if val == "" {
+		return defaultValue, nil
+	}
+	result, err := parseTime(val)
+	if err != nil {
+		return time.Time{}, errors.Wrapf(err, "Invalid time value for '%s'", paramName)
+	}
+	return result, nil
+}
+
 func parseTime(s string) (time.Time, error) {
 	if t, err := strconv.ParseFloat(s, 64); err == nil {
 		s, ns := math.Modf(t)
@@ -569,6 +580,19 @@ func parseDuration(s string) (time.Duration, error) {
 func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ctx := r.Context()
 
+	start, err := parseTimeParam(r, "start", minTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	end, err := parseTimeParam(r, "end", maxTime)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	if end.Before(start) {
+		err := errors.New("end timestamp must not be before start time")
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr
@@ -579,7 +603,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
