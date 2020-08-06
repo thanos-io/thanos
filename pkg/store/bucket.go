@@ -86,9 +86,6 @@ const (
 	// Labels for metrics.
 	labelEncode = "encode"
 	labelDecode = "decode"
-	// Label values for metrics.
-	opFetchPostings = "fetch-postings"
-	opLoadSeries    = "load-series"
 )
 
 type bucketStoreMetrics struct {
@@ -115,7 +112,8 @@ type bucketStoreMetrics struct {
 	cachedPostingsOriginalSizeBytes      prometheus.Counter
 	cachedPostingsCompressedSizeBytes    prometheus.Counter
 
-	indexOperationDuration *prometheus.HistogramVec
+	seriesLookupDuration   prometheus.Histogram
+	postingsLookupDuration prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -226,13 +224,17 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Compressed size of postings stored into cache.",
 	})
 
-	m.indexOperationDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name: "thanos_bucket_store_index_operation_duration_seconds",
-		Help: "Time it takes to process index operation from a bucket to respond a query.",
-		Buckets: []float64{
-			0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120,
-		},
-	}, []string{"operation"})
+	m.seriesLookupDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_index_series_lookup_duration_seconds",
+		Help:    "Time it takes to lookup series from a bucket to respond a query. It also includes the cache fetch and store operations.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+
+	m.postingsLookupDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_index_postings_lookup_duration_seconds",
+		Help:    "Time it takes to lookup postings from a bucket to respond a query. It also includes the cache fetch and store operations.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
 
 	return &m
 }
@@ -1630,7 +1632,7 @@ type postingPtr struct {
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
 	start := time.Now()
-	defer r.block.metrics.indexOperationDuration.WithLabelValues(opFetchPostings).Observe(time.Since(start).Seconds())
+	defer r.block.metrics.postingsLookupDuration.Observe(time.Since(start).Seconds())
 
 	var ptrs []postingPtr
 
@@ -1850,7 +1852,7 @@ func (it *bigEndianPostings) length() int {
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	start := time.Now()
-	defer r.block.metrics.indexOperationDuration.WithLabelValues(opLoadSeries).Observe(float64(time.Since(start)))
+	defer r.block.metrics.seriesLookupDuration.Observe(float64(time.Since(start)))
 
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
