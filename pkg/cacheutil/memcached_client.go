@@ -31,7 +31,7 @@ const (
 	reasonAsyncBufferFull = "async-buffer-full"
 	reasonMalformedKey    = "malformed-key"
 	reasonTimeout         = "timeout"
-	reasonMotStored       = "not-stored"
+	reasonNotStored       = "not-stored"
 	reasonCacheMiss       = "cache-miss"
 	reasonConflict        = "conflict"
 	reasonOther           = "other"
@@ -160,7 +160,7 @@ type memcachedClient struct {
 	failures   *prometheus.CounterVec
 	skipped    *prometheus.CounterVec
 	duration   *prometheus.HistogramVec
-	valueSize  *prometheus.HistogramVec
+	dataSize   *prometheus.HistogramVec
 }
 
 type memcachedGetMultiResult struct {
@@ -255,7 +255,7 @@ func newMemcachedClient(
 	c.failures.WithLabelValues(opGetMulti, reasonCacheMiss)
 	c.failures.WithLabelValues(opGetMulti, reasonOther)
 	c.failures.WithLabelValues(opSet, reasonTimeout)
-	c.failures.WithLabelValues(opSet, reasonMotStored)
+	c.failures.WithLabelValues(opSet, reasonNotStored)
 	c.failures.WithLabelValues(opSet, reasonCacheMiss)
 	c.failures.WithLabelValues(opSet, reasonConflict)
 	c.failures.WithLabelValues(opSet, reasonOther)
@@ -276,17 +276,17 @@ func newMemcachedClient(
 	c.duration.WithLabelValues(opGetMulti)
 	c.duration.WithLabelValues(opSet)
 
-	c.valueSize = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name: "thanos_memcached_operation_value_size_bytes",
-		Help: "Tracks the size of the values stored in and fetched from memcached.",
+	c.dataSize = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanos_memcached_operation_data_size_bytes",
+		Help: "Tracks the size of the data stored in and fetched from memcached.",
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
 	},
 		[]string{"operation"},
 	)
-	c.valueSize.WithLabelValues(opGetMulti)
-	c.valueSize.WithLabelValues(opSet)
+	c.dataSize.WithLabelValues(opGetMulti)
+	c.dataSize.WithLabelValues(opSet)
 
 	// As soon as the client is created it must ensure that memcached server
 	// addresses are resolved, so we're going to trigger an initial addresses
@@ -348,7 +348,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 			case errors.As(err, &e):
 				c.failures.WithLabelValues(opSet, reasonTimeout).Inc()
 			case errors.Is(err, memcache.ErrNotStored):
-				c.failures.WithLabelValues(opSet, reasonMotStored).Inc()
+				c.failures.WithLabelValues(opSet, reasonNotStored).Inc()
 			case errors.Is(err, memcache.ErrCASConflict):
 				c.failures.WithLabelValues(opSet, reasonConflict).Inc()
 			case errors.Is(err, memcache.ErrCacheMiss):
@@ -359,7 +359,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 			return
 		}
 
-		c.valueSize.WithLabelValues(opSet).Observe(float64(len(value)))
+		c.dataSize.WithLabelValues(opSet).Observe(float64(len(value)))
 		c.duration.WithLabelValues(opSet).Observe(time.Since(start).Seconds())
 	})
 
@@ -489,7 +489,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 		for _, it := range items {
 			total += len(it.Value)
 		}
-		c.valueSize.WithLabelValues(opGetMulti).Observe(float64(total))
+		c.dataSize.WithLabelValues(opGetMulti).Observe(float64(total))
 		c.duration.WithLabelValues(opGetMulti).Observe(time.Since(start).Seconds())
 	}
 
