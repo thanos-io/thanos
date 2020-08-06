@@ -75,7 +75,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 			"--log.level":                       logLevel,
 			"--web.listen-address":              ":9090",
 		})...),
-		e2e.NewReadinessProbe(9090, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
 		9090,
 	)
 	prom.SetUser(strconv.Itoa(os.Getuid()))
@@ -103,7 +103,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 			"--tsdb.path":         dataDir,
 			"--log.level":         logLevel,
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -171,7 +171,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -222,7 +222,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 		8081,
@@ -271,7 +271,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--query.sd-dns-interval":         "1s",
 			"--resend-delay":                  "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -311,7 +311,7 @@ receivers:
 			"--web.get-concurrency": "1",
 			"--web.timeout":         "2m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 	)
 	s.SetUser(strconv.Itoa(os.Getuid()))
@@ -355,7 +355,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -396,7 +396,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 	)
 	compactor.SetUser(strconv.Itoa(os.Getuid()))
