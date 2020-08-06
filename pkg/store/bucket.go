@@ -1631,8 +1631,8 @@ type postingPtr struct {
 // It returns one postings for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
-	start := time.Now()
-	defer r.block.metrics.postingsLookupDuration.Observe(time.Since(start).Seconds())
+	timer := prometheus.NewTimer(r.block.metrics.postingsLookupDuration)
+	defer timer.ObserveDuration()
 
 	var ptrs []postingPtr
 
@@ -1851,8 +1851,8 @@ func (it *bigEndianPostings) length() int {
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
-	start := time.Now()
-	defer r.block.metrics.seriesLookupDuration.Observe(float64(time.Since(start)))
+	timer := prometheus.NewTimer(r.block.metrics.seriesLookupDuration)
+	defer timer.ObserveDuration()
 
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
