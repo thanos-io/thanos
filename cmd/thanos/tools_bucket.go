@@ -33,6 +33,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -351,7 +352,14 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		flagsMap := getFlagsMap(cmd.Model().Flags)
 
 		api := v1.NewBlocksAPI(logger, *label, flagsMap)
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv.Handle("/", router)
 
