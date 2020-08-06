@@ -38,7 +38,7 @@ The main motivation for considering deletions in the object storage are the foll
     *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
-*   The details are entered via a deletions API and they are processed by the CLI tool to create a tombstone file (unique for a request). After which the tombstone file is uploaded to object storage making it accessible to all components.
+*   The entered details are processed by the CLI tool to create a tombstone file (unique for a request). After which the tombstone file is uploaded to object storage making it accessible to all components.
 *   Store Gateway masks the series on processing the global tombstone files from the object storage.
 *   During compaction or downsampling, we check if the blocks being considered have series corresponding to a tombstone file, if so we delete the data and continue with the process.
 
@@ -82,7 +82,7 @@ The main motivation for considering deletions in the object storage are the foll
 
 ## Action Plan
 
-*   Add the deletion API that only creates tombstones
+*   Add a CLI tool which creates tombstones
 *   Store Gateway should be able to mask based on the tombstones from object storage
 *   Compactor solves the tombstones as per the proposed approach
 
@@ -91,7 +91,6 @@ The main motivation for considering deletions in the object storage are the foll
 *   How to "compact" / "remove" **Custom format global - single file per request** files when applied.
 *   Do we want those deletion to be applied only during compaction or also for already compacted blocks. If yes how? 5%? And how to tell that when is 5%? What component would do that?
 *   Any rate limiting, what if there are too many files? Would that scale?
-
 
 ## Future Work
 
