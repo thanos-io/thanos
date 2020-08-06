@@ -31,9 +31,8 @@ const (
 	reasonAsyncBufferFull = "async-buffer-full"
 	reasonMalformedKey    = "malformed-key"
 	reasonTimeout         = "timeout"
-	reasonNotStored       = "not-stored"
 	reasonCacheMiss       = "cache-miss"
-	reasonConflict        = "conflict"
+	reasonServerError     = "server-error"
 	reasonOther           = "other"
 )
 
@@ -251,13 +250,14 @@ func newMemcachedClient(
 		Name: "thanos_memcached_operation_failures_total",
 		Help: "Total number of operations against memcached that failed.",
 	}, []string{"operation", "reason"})
+	c.failures.WithLabelValues(opGetMulti, reasonTimeout)
 	c.failures.WithLabelValues(opGetMulti, reasonMalformedKey)
 	c.failures.WithLabelValues(opGetMulti, reasonCacheMiss)
+	c.failures.WithLabelValues(opGetMulti, reasonServerError)
 	c.failures.WithLabelValues(opGetMulti, reasonOther)
 	c.failures.WithLabelValues(opSet, reasonTimeout)
-	c.failures.WithLabelValues(opSet, reasonNotStored)
-	c.failures.WithLabelValues(opSet, reasonCacheMiss)
-	c.failures.WithLabelValues(opSet, reasonConflict)
+	c.failures.WithLabelValues(opSet, reasonMalformedKey)
+	c.failures.WithLabelValues(opSet, reasonServerError)
 	c.failures.WithLabelValues(opSet, reasonOther)
 
 	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -347,12 +347,10 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 			switch {
 			case errors.As(err, &e):
 				c.failures.WithLabelValues(opSet, reasonTimeout).Inc()
-			case errors.Is(err, memcache.ErrNotStored):
-				c.failures.WithLabelValues(opSet, reasonNotStored).Inc()
-			case errors.Is(err, memcache.ErrCASConflict):
-				c.failures.WithLabelValues(opSet, reasonConflict).Inc()
-			case errors.Is(err, memcache.ErrCacheMiss):
-				c.failures.WithLabelValues(opSet, reasonCacheMiss).Inc()
+			case errors.Is(err, memcache.ErrMalformedKey):
+				c.failures.WithLabelValues(opSet, reasonMalformedKey).Inc()
+			case errors.Is(err, memcache.ErrServerError):
+				c.failures.WithLabelValues(opSet, reasonServerError).Inc()
 			default:
 				c.failures.WithLabelValues(opSet, reasonOther).Inc()
 			}
@@ -481,6 +479,8 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 			c.failures.WithLabelValues(opGetMulti, reasonCacheMiss).Inc()
 		case errors.Is(err, memcache.ErrMalformedKey):
 			c.failures.WithLabelValues(opGetMulti, reasonMalformedKey).Inc()
+		case errors.Is(err, memcache.ErrServerError):
+			c.failures.WithLabelValues(opGetMulti, reasonServerError).Inc()
 		default:
 			c.failures.WithLabelValues(opGetMulti, reasonOther).Inc()
 		}
