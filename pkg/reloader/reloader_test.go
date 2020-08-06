@@ -97,6 +97,7 @@ config:
 	}()
 
 	reloadsSeen := 0
+	attemptsCnt := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -105,12 +106,9 @@ config:
 		}
 
 		rel := reloads.Load().(int)
-		if rel <= reloadsSeen {
-			// Nothing new.
-			continue
-		}
+		reloadsSeen = rel
 
-		if reloadsSeen == 0 {
+		if reloadsSeen == 1 {
 			// Initial apply seen (without doing nothing).
 			f, err := ioutil.ReadFile(output)
 			testutil.Ok(t, err)
@@ -128,7 +126,7 @@ config:
   b: $(TEST_RELOADER_THANOS_ENV)
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
-		} else {
+		} else if reloadsSeen == 2 {
 			// Another apply, ensure we see change.
 			f, err := ioutil.ReadFile(output)
 			testutil.Ok(t, err)
@@ -138,10 +136,15 @@ config:
   b: 2
   c: 3
 `, string(f))
-			// All good, break
-			break
+
+			// Change the mode so reloader can't read the file.
+			testutil.Ok(t, os.Chmod(input, os.ModeDir))
+			attemptsCnt += 1
+			// That was the second attempt to reload config. All good, break.
+			if attemptsCnt == 2 {
+				break
+			}
 		}
-		reloadsSeen = rel
 	}
 	cancel2()
 	g.Wait()

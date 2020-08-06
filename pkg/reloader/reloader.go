@@ -97,6 +97,7 @@ type Reloader struct {
 	watches      prometheus.Gauge
 	watchEvents  prometheus.Counter
 	watchErrors  prometheus.Counter
+	configErrors prometheus.Counter
 }
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
@@ -129,6 +130,12 @@ func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFi
 			prometheus.CounterOpts{
 				Name: "reloader_reloads_failed_total",
 				Help: "Total number of reload requests that failed.",
+			},
+		),
+		configErrors: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_config_errors_total",
+				Help: "Total number of config reads that failed.",
 			},
 		),
 		watches: promauto.With(reg).NewGauge(
@@ -218,9 +225,8 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 
 		if err := r.apply(ctx); err != nil {
-			// Critical error.
-			// TODO(bwplotka): There is no need to get process down in this case and decrease availability, handle the error in different way.
-			return err
+			r.configErrors.Inc()
+			level.Error(r.logger).Log("msg", "apply error", "err", err)
 		}
 	}
 }
