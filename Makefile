@@ -124,14 +124,19 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
+
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
+ifeq ($(OS)_$(ARCH), linux_x86_64)
 docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
 	@rm ./thanos_tmp_for_docker
+else
+docker: docker-multi-stage
+endif
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
@@ -210,7 +215,7 @@ test-local:
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker-multi-stage
+test-e2e: docker
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
