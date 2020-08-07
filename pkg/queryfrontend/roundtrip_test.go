@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -104,8 +105,18 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			cache := NewFifoCacheConfig("1MB", 1000, time.Minute)
-			tpw, err := NewTripperWare(&fakeLimits{}, cache, queryrange.PrometheusCodec, nil, false,
+			cacheConf := &queryrange.ResultsCacheConfig{
+				CacheConfig: cortexcache.Config{
+					EnableFifoCache: true,
+					Fifocache: cortexcache.FifoCacheConfig{
+						MaxSizeBytes: "2KB",
+						MaxSizeItems: 1000,
+						Validity:     time.Hour,
+					},
+				},
+			}
+
+			tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, nil,
 				time.Hour, tc.maxRetries, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
@@ -188,8 +199,17 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			cache := NewFifoCacheConfig("1MB", 1000, time.Minute)
-			tpw, err := NewTripperWare(&fakeLimits{}, cache, queryrange.PrometheusCodec, nil, false,
+			cacheConf := &queryrange.ResultsCacheConfig{
+				CacheConfig: cortexcache.Config{
+					EnableFifoCache: true,
+					Fifocache: cortexcache.FifoCacheConfig{
+						MaxSizeBytes: "2KB",
+						MaxSizeItems: 1000,
+						Validity:     time.Hour,
+					},
+				},
+			}
+			tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, nil,
 				tc.splitInterval, 0, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 

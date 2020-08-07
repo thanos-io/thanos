@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
 
@@ -405,15 +406,18 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 	return compactor, nil
 }
 
-func NewQueryFrontend(sharedDir string, name string, downstreamURL string) (*e2e.HTTPService, error) {
+func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.ResponseCacheConfig) (*e2e.HTTPService, error) {
+	respCacheConfigBytes, err := yaml.Marshal(respCacheConf)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate response cache config file: %v", respCacheConf)
+	}
+
 	args := e2e.BuildArgs(map[string]string{
-		"--debug.name":                    fmt.Sprintf("query-frontend-%s", name),
-		"--http-address":                  ":8080",
-		"--query-frontend.downstream-url": downstreamURL,
-		"--query-range.cache-results":     "",
-		"--log.level":                     logLevel,
-		"--fifocache.max-size-bytes":      "2KB",
-		"--fifocache.ttl":                 "6h",
+		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
+		"--http-address":                      ":8080",
+		"--query-frontend.downstream-url":     downstreamURL,
+		"--log.level":                         logLevel,
+		"--query-range.response-cache-config": string(respCacheConfigBytes),
 	})
 
 	queryFrontend := e2e.NewHTTPService(

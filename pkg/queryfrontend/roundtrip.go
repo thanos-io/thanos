@@ -26,10 +26,9 @@ const (
 
 func NewTripperWare(
 	limits queryrange.Limits,
-	cacheConfig queryrange.ResultsCacheConfig,
+	cacheConfig *queryrange.ResultsCacheConfig,
 	codec queryrange.Codec,
 	cacheExtractor queryrange.Extractor,
-	cacheResults bool,
 	splitQueryInterval time.Duration,
 	maxRetries int,
 	reg prometheus.Registerer,
@@ -62,10 +61,10 @@ func NewTripperWare(
 		)
 	}
 
-	if cacheResults {
+	if cacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			cacheConfig,
+			*cacheConfig,
 			constSplitter(splitQueryInterval),
 			limits,
 			codec,

@@ -49,7 +49,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.11.1
-	github.com/prometheus/prometheus v1.8.2-0.20200805082714-e0cf219f0de2
+	github.com/prometheus/prometheus v1.8.2-0.20200807135816-2899773b0159
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	github.com/weaveworks/common v0.0.0-20200625145055-4b1847531bc9

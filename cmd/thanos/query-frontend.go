@@ -6,7 +6,6 @@ package main
 import (
 	"time"
 
-	"github.com/alecthomas/units"
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/go-kit/kit/log"
@@ -21,9 +20,11 @@ import (
 
 	v1 "github.com/thanos-io/thanos/pkg/api/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 )
 
@@ -37,44 +38,15 @@ type queryFrontendConfig struct {
 }
 
 type queryRangeConfig struct {
-	respCacheConfig     responseCacheConfig
-	cacheResults        bool
+	respCacheConfig     extflag.PathOrContent
+	cacheMaxFreshness   time.Duration
 	splitInterval       model.Duration
 	maxRetries          int
 	maxQueryParallelism int
 	maxQueryLength      model.Duration
 }
 
-type responseCacheConfig struct {
-	cacheMaxFreshness time.Duration
-	fifoCache         fifoCacheConfig
-}
-
-func (c *responseCacheConfig) registerFlag(cmd *kingpin.CmdClause) {
-	c.fifoCache.registerFlag(cmd)
-	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&c.cacheMaxFreshness)
-}
-
-// fifoCacheConfig defines configurations for Cortex fifo cache.
-type fifoCacheConfig struct {
-	maxSizeBytes units.Base2Bytes
-	maxSizeItems int
-	ttl          time.Duration
-}
-
-func (c *fifoCacheConfig) registerFlag(cmd *kingpin.CmdClause) {
-	cmd.Flag("fifocache.max-size-bytes", "Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.").BytesVar(&c.maxSizeBytes)
-	cmd.Flag("fifocache.max-size-items", "Maximum number of entries in the cache.").Default("0").IntVar(&c.maxSizeItems)
-	cmd.Flag("fifocache.ttl", "The expiry duration for the cache.").Default("0").DurationVar(&c.ttl)
-}
-
 func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
-	c.respCacheConfig.registerFlag(cmd)
-
-	cmd.Flag("query-range.cache-results", "Cache query range results.").Default("false").
-		BoolVar(&c.cacheResults)
-
 	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
 		Default("24h").SetValue(&c.splitInterval)
 
@@ -86,6 +58,11 @@ func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the frontend.").
 		Default("14").IntVar(&c.maxQueryParallelism)
+
+	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
+		Default("1m").DurationVar(&c.cacheMaxFreshness)
+
+	c.respCacheConfig = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 }
 
 func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
@@ -109,14 +86,7 @@ func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
 	conf.registerFlag(cmd)
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-
-		return runQueryFrontend(
-			g,
-			logger,
-			reg,
-			conf,
-			comp,
-		)
+		return runQueryFrontend(g, logger, reg, conf, comp)
 	}
 }
 
@@ -145,20 +115,28 @@ func runQueryFrontend(
 	limits := queryfrontend.NewLimits(
 		conf.queryRangeConfig.maxQueryParallelism,
 		time.Duration(conf.queryRangeConfig.maxQueryLength),
-		conf.queryRangeConfig.respCacheConfig.cacheMaxFreshness,
+		conf.queryRangeConfig.cacheMaxFreshness,
 	)
 
-	// TODO(yeya24): support other cache when available.
-	// Using Cortex fifo cache temporarily.
-	fifoCache := conf.queryRangeConfig.respCacheConfig.fifoCache
-	cacheConfig := queryfrontend.NewFifoCacheConfig(fifoCache.maxSizeBytes.String(), fifoCache.maxSizeItems, fifoCache.ttl)
+	respCacheContentYaml, err := conf.queryRangeConfig.respCacheConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of response cache configuration")
+	}
 
+	var cacheConfig *queryrange.ResultsCacheConfig
+	if len(respCacheContentYaml) > 0 {
+		cacheConfig, err = cache.NewResponseCacheConfig(respCacheContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "create response cache")
+		}
+	}
+
+	// TODO(yeya24): support other cache when available.
 	tripperWare, err := queryfrontend.NewTripperWare(
 		limits,
 		cacheConfig,
 		queryrange.PrometheusCodec,
 		queryrange.PrometheusResponseExtractor{},
-		conf.queryRangeConfig.cacheResults,
 		time.Duration(conf.queryRangeConfig.splitInterval),
 		conf.queryRangeConfig.maxRetries,
 		reg,

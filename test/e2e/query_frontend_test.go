@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -33,7 +34,16 @@ func TestQueryFrontend(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	queryFrontend, err := e2ethanos.NewQueryFrontend(s.SharedDir(), "1", "http://"+q.NetworkHTTPEndpoint())
+	inMemoryCacheConfig := cache.ResponseCacheConfig{
+		Type: cache.INMEMORY,
+		Config: cache.InMemoryResponseCacheConfig{
+			MaxSize:      "2KB",
+			MaxSizeItems: 1000,
+			Validity:     time.Hour,
+		},
+	}
+
+	queryFrontend, err := e2ethanos.NewQueryFrontend("1", "http://"+q.NetworkHTTPEndpoint(), inMemoryCacheConfig)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
 
