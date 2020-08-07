@@ -30,10 +30,9 @@ type queryFrontendConfig struct {
 	http             httpConfig
 	queryRangeConfig queryRangeConfig
 
-	// TODO(yeya24): use this after promql engine is added
-	defaultEvaluationInterval time.Duration
-	downstreamURL             string
-	compressResponses         bool
+	downstreamURL        string
+	compressResponses    bool
+	LogQueriesLongerThan time.Duration
 }
 
 type queryRangeConfig struct {
@@ -77,14 +76,14 @@ func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
 	c.queryRangeConfig.registerFlag(cmd)
 	c.http.registerFlag(cmd)
 
-	cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").
-		Default("1m").DurationVar(&c.defaultEvaluationInterval)
-
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
 		Default("http://localhost:9090").StringVar(&c.downstreamURL)
 
 	cmd.Flag("query-frontend.compress-responses", "Compress HTTP responses.").
 		Default("false").BoolVar(&c.compressResponses)
+
+	cmd.Flag("query-frontend.log_queries_longer_than", "Log queries that are slower than the specified duration. "+
+		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&c.LogQueriesLongerThan)
 }
 
 func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
@@ -118,12 +117,14 @@ func runQueryFrontend(
 	}
 
 	fe, err := frontend.New(frontend.Config{
-		DownstreamURL:     conf.downstreamURL,
-		CompressResponses: conf.compressResponses,
+		DownstreamURL:        conf.downstreamURL,
+		CompressResponses:    conf.compressResponses,
+		LogQueriesLongerThan: conf.LogQueriesLongerThan,
 	}, logger, reg)
 	if err != nil {
-		return errors.Wrap(err, "initialize query frontend")
+		return errors.Wrap(err, "setup query frontend")
 	}
+	defer fe.Close()
 
 	limits := queryfrontend.NewLimits(
 		conf.queryRangeConfig.maxQueryParallelism,
@@ -142,7 +143,7 @@ func runQueryFrontend(
 		logger,
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setup query range middlewares")
 	}
 
 	fe.Wrap(tripperWare)
