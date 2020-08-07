@@ -114,3 +114,6 @@ adopters:
 - name: Mobiuspace
   url: https://www.mobiuspace.com
   logo: mobiuspace.png
+- name: TiDB Cloud
+  url: https://tidbcloud.com
+  logo: tidbcloud.png

@@ -356,16 +356,12 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	t.Run("no query configured", func(t *testing.T) {
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_ruler_query_apis_dns_provider_results"))
-
 		// Check for a few evaluations, check all of them failed.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(10), "prometheus_rule_evaluations_total"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.EqualsAmongTwo, "prometheus_rule_evaluations_total", "prometheus_rule_evaluation_failures_total"))
 
 		// No alerts sent.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_sent_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_errors_total"))
 	})
 
 	var currentFailures float64
@@ -373,7 +369,7 @@ func TestRule(t *testing.T) {
 		// Attach querier to target files.
 		writeTargets(t, filepath.Join(s.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.NetworkHTTPEndpoint())
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_query_apis_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_ruler_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
 
 		var currentVal float64
@@ -391,7 +387,6 @@ func TestRule(t *testing.T) {
 		// Alerts sent.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(4), "thanos_alert_sender_alerts_sent_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_errors_total"))
 
 		// Alerts received.
 		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))

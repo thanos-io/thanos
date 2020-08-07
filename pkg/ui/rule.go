@@ -32,8 +32,13 @@ type Rule struct {
 }
 
 func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanosrules.Manager, queryURL, externalPrefix, prefixHeader string) *Rule {
+	tmplVariables := map[string]string{
+		"Component": component.Rule.String(),
+		"queryURL":  queryURL,
+	}
+
 	return &Rule{
-		BaseUI:         NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL), externalPrefix, prefixHeader, component.Rule),
+		BaseUI:         NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL), tmplVariables, externalPrefix, prefixHeader, component.Rule),
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		ruleManager:    ruleManager,

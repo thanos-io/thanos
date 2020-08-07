@@ -349,6 +349,13 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --log.request.decision=LogFinishCall
+                                 Request Logging for logging the start and end
+                                 of requests. LogFinishCall is enabled by
+                                 default. LogFinishCall : Logs the finish call
+                                 of the requests. LogStartAndFinishCall : Logs
+                                 the start and finish call of the requests.
+                                 NoLogCall : Disable request logging.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
