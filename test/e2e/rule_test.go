@@ -38,6 +38,7 @@ const (
 	testAlertRuleAbortOnPartialResponse = `
 groups:
 - name: example_abort
+  interval: 500ms
   # Abort should be a default: partial_response_strategy: "ABORT"
   rules:
   - alert: TestAlert_AbortOnPartialResponse
@@ -51,6 +52,7 @@ groups:
 	testAlertRuleWarnOnPartialResponse = `
 groups:
 - name: example_warn
+  interval: 500ms
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_WarnOnPartialResponse
@@ -64,6 +66,7 @@ groups:
 	testAlertRuleAddedLaterWebHandler = `
 groups:
 - name: example
+  interval: 500ms
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_HasBeenLoadedViaWebHandler

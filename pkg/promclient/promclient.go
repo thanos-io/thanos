@@ -510,7 +510,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 
 	// Decode the Result depending on the ResultType
 	switch m.Data.ResultType {
-	case parser.ValueTypeMatrix:
+	case string(parser.ValueTypeMatrix):
 		if err = json.Unmarshal(m.Data.Result, &matrixResult); err != nil {
 			return nil, nil, errors.Wrap(err, "decode result into ValueTypeMatrix")
 		}
