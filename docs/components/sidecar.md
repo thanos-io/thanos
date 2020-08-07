@@ -141,8 +141,8 @@ Flags:
                                  Rule directories for the reloader to refresh
                                  (repeated field).
       --reloader.watch-interval=3m
-                                 Controls how often reloader re-reads config 
-                                 and rules.
+                                 Controls how often reloader re-reads config and
+                                 rules.
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
