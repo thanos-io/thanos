@@ -209,10 +209,9 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		end           func() int64
 	}{
 		{
-			title:         "no label in tsdb",
-			labels:        []string{},
-			expectedNames: []string{},
-			timestamp:     now.Unix(),
+			title:     "no label in tsdb",
+			labels:    []string{},
+			timestamp: now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -318,11 +317,10 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 		end            func() int64
 	}{
 		{
-			title:          "no label in tsdb",
-			addedLabels:    []string{},
-			queryLabel:     "foo",
-			expectedValues: []string{},
-			timestamp:      now.Unix(),
+			title:       "no label in tsdb",
+			addedLabels: []string{},
+			queryLabel:  "foo",
+			timestamp:   now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
