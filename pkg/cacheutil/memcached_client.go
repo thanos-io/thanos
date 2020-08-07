@@ -31,7 +31,6 @@ const (
 	reasonAsyncBufferFull = "async-buffer-full"
 	reasonMalformedKey    = "malformed-key"
 	reasonTimeout         = "timeout"
-	reasonCacheMiss       = "cache-miss"
 	reasonServerError     = "server-error"
 	reasonOther           = "other"
 )
@@ -252,7 +251,6 @@ func newMemcachedClient(
 	}, []string{"operation", "reason"})
 	c.failures.WithLabelValues(opGetMulti, reasonTimeout)
 	c.failures.WithLabelValues(opGetMulti, reasonMalformedKey)
-	c.failures.WithLabelValues(opGetMulti, reasonCacheMiss)
 	c.failures.WithLabelValues(opGetMulti, reasonServerError)
 	c.failures.WithLabelValues(opGetMulti, reasonOther)
 	c.failures.WithLabelValues(opSet, reasonTimeout)
@@ -475,8 +473,6 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 		switch {
 		case errors.As(err, &e):
 			c.failures.WithLabelValues(opGetMulti, reasonTimeout).Inc()
-		case errors.Is(err, memcache.ErrCacheMiss):
-			c.failures.WithLabelValues(opGetMulti, reasonCacheMiss).Inc()
 		case errors.Is(err, memcache.ErrMalformedKey):
 			c.failures.WithLabelValues(opGetMulti, reasonMalformedKey).Inc()
 		case errors.Is(err, memcache.ErrServerError):
