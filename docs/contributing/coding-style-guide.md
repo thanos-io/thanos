@@ -6,6 +6,8 @@ menu: contributing
 
 # Thanos Coding Style Guide
 
+__NOTE: This style guide is on [Awesome-Go-Styles List](https://github.com/dgryski/awesome-go-style)__
+
 This document details the official style guides for the various languages we use in the Thanos project.
 Feel free to familiarize yourself with and refer to this document during code reviews. If something in our codebase does not match the style, it means it
 was missed or it was written before this document. Help wanted to fix it! (:

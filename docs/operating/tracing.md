@@ -1,7 +1,7 @@
 ---
 title: Tracing
 type: docs
-menu: thanos
+menu: operating
 slug: /tracing.md
 ---
 

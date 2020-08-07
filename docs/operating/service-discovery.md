@@ -1,7 +1,7 @@
 ---
 title: Service Discovery
 type: docs
-menu: thanos
+menu: operating
 slug: /service-discovery.md
 ---
 

@@ -19,9 +19,9 @@ Thanos is a set of components that can be composed into a highly available metri
 system with unlimited storage capacity, which can be added seamlessly on top of existing
 Prometheus deployments.
 
-Thanos is a [CNCF](https://www.cncf.io/) Sandbox project.
+Thanos is a [CNCF](https://www.cncf.io/) Sandbox project (currently in vote for Incubation stage.)
 
-Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
+Thanos leverages the Prometheus 2.x storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides
 a global query view across all Prometheus installations and can merge data from Prometheus
 HA pairs on the fly.
@@ -32,7 +32,7 @@ Concretely the aims of the project are:
 1. Unlimited retention of metrics.
 1. High availability of components, including Prometheus.
 
-## Getting Started
+## Documentation
 
 * **[Getting Started](https://thanos.io/getting-started.md/)**
 * [Design](https://thanos.io/design.md/)
@@ -52,6 +52,7 @@ Concretely the aims of the project are:
 * Fault-tolerant query routing
 * Simple gRPC "Store API" for unified data access across all metric data
 * Easy integration points for custom metric providers
+* Recording and alerting rules on global layer
 
 ## Architecture Overview
 
@@ -87,7 +88,7 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 Thanos is an open source project and we value and welcome new contributors and members
 of the community. Here are ways to get in touch with the community:
 
-* Slack: [#thanos](https://slack.cncf.io/)
+* Slack: [#thanos](https://slack.cncf.io/) [#thanos-dev](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
 ## Maintainers

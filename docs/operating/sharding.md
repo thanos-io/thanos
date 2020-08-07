@@ -1,7 +1,7 @@
 ---
 title: Sharding
 type: docs
-menu: thanos
+menu: operating
 slug: /sharding.md
 ---
 
