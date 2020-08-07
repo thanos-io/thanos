@@ -6,6 +6,7 @@ package main
 import (
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/go-kit/kit/log"
@@ -46,11 +47,26 @@ type queryRangeConfig struct {
 
 type responseCacheConfig struct {
 	cacheMaxFreshness time.Duration
+	fifoCache         fifoCacheConfig
 }
 
 func (c *responseCacheConfig) registerFlag(cmd *kingpin.CmdClause) {
-	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result per-tenant, to prevent caching very recent results that might still be in flux.").
+	c.fifoCache.registerFlag(cmd)
+	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
 		Default("1m").DurationVar(&c.cacheMaxFreshness)
+}
+
+// fifoCacheConfig defines configurations for Cortex fifo cache.
+type fifoCacheConfig struct {
+	maxSizeBytes units.Base2Bytes
+	maxSizeItems int
+	ttl          time.Duration
+}
+
+func (c *fifoCacheConfig) registerFlag(cmd *kingpin.CmdClause) {
+	cmd.Flag("fifocache.max-size-bytes", "Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.").BytesVar(&c.maxSizeBytes)
+	cmd.Flag("fifocache.max-size-items", "Maximum number of entries in the cache.").Default("0").IntVar(&c.maxSizeItems)
+	cmd.Flag("fifocache.ttl", "The expiry duration for the cache.").Default("0").DurationVar(&c.ttl)
 }
 
 func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
@@ -132,8 +148,14 @@ func runQueryFrontend(
 		conf.queryRangeConfig.respCacheConfig.cacheMaxFreshness,
 	)
 
+	// TODO(yeya24): support other cache when available.
+	// Using Cortex fifo cache temporarily.
+	fifoCache := conf.queryRangeConfig.respCacheConfig.fifoCache
+	cacheConfig := queryfrontend.NewFifoCacheConfig(fifoCache.maxSizeBytes.String(), fifoCache.maxSizeItems, fifoCache.ttl)
+
 	tripperWare, err := queryfrontend.NewTripperWare(
 		limits,
+		cacheConfig,
 		queryrange.PrometheusCodec,
 		queryrange.PrometheusResponseExtractor{},
 		conf.queryRangeConfig.cacheResults,

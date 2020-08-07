@@ -104,7 +104,8 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, queryrange.PrometheusCodec, nil, false,
+			cache := NewFifoCacheConfig("1MB", 1000, time.Minute)
+			tpw, err := NewTripperWare(&fakeLimits{}, cache, queryrange.PrometheusCodec, nil, false,
 				time.Hour, tc.maxRetries, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
@@ -187,7 +188,8 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, queryrange.PrometheusCodec, nil, false,
+			cache := NewFifoCacheConfig("1MB", 1000, time.Minute)
+			tpw, err := NewTripperWare(&fakeLimits{}, cache, queryrange.PrometheusCodec, nil, false,
 				tc.splitInterval, 0, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 

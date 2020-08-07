@@ -412,6 +412,8 @@ func NewQueryFrontend(sharedDir string, name string, downstreamURL string) (*e2e
 		"--query-frontend.downstream-url": downstreamURL,
 		"--query-range.cache-results":     "",
 		"--log.level":                     logLevel,
+		"--fifocache.max-size-bytes":      "2KB",
+		"--fifocache.ttl":                 "6h",
 	})
 
 	queryFrontend := e2e.NewHTTPService(

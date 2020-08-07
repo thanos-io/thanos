@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 
@@ -27,6 +26,7 @@ const (
 
 func NewTripperWare(
 	limits queryrange.Limits,
+	cacheConfig queryrange.ResultsCacheConfig,
 	codec queryrange.Codec,
 	cacheExtractor queryrange.Extractor,
 	cacheResults bool,
@@ -63,18 +63,6 @@ func NewTripperWare(
 	}
 
 	if cacheResults {
-
-		// TODO(yeya24): use actual cache config after it is implemented
-		cacheConfig := queryrange.ResultsCacheConfig{
-			CacheConfig: cortexcache.Config{
-				EnableFifoCache: true,
-				Fifocache: cortexcache.FifoCacheConfig{
-					MaxSizeBytes: "10000",
-					MaxSizeItems: 10000,
-				},
-			},
-		}
-
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			cacheConfig,
