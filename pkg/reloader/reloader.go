@@ -151,8 +151,8 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 		),
 		configErrors: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
-				Name: "reloader_config_errors_total",
-				Help: "Total number of config reads that failed.",
+				Name: "reloader_config_apply_errors_total",
+				Help: "Total number of config applies that failed.",
 			},
 		),
 		watches: promauto.With(reg).NewGauge(
