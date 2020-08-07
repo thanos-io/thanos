@@ -38,7 +38,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 
-	app := db.Appender()
+	app := db.Appender(context.Background())
 	_, err = app.Add(labels.FromStrings("a", "a"), 12, 0.1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, app.Commit())
@@ -64,7 +64,7 @@ func TestTSDBStore_Series(t *testing.T) {
 
 	tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
 
-	appender := db.Appender()
+	appender := db.Appender(context.Background())
 
 	for i := 1; i <= 3; i++ {
 		_, err = appender.Add(labels.FromStrings("a", "1"), int64(i), float64(i))
@@ -188,7 +188,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	appender := db.Appender()
+	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
 			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
@@ -209,10 +209,9 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		end           func() int64
 	}{
 		{
-			title:         "no label in tsdb",
-			labels:        []string{},
-			expectedNames: []string{},
-			timestamp:     now.Unix(),
+			title:     "no label in tsdb",
+			labels:    []string{},
+			timestamp: now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -246,10 +245,9 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 			},
 		},
 		{
-			title:         "query range outside tsdb head",
-			labels:        []string{},
-			expectedNames: []string{},
-			timestamp:     now.Unix(),
+			title:     "query range outside tsdb head",
+			labels:    []string{},
+			timestamp: now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -296,7 +294,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	appender := db.Appender()
+	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
 			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
@@ -318,11 +316,10 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 		end            func() int64
 	}{
 		{
-			title:          "no label in tsdb",
-			addedLabels:    []string{},
-			queryLabel:     "foo",
-			expectedValues: []string{},
-			timestamp:      now.Unix(),
+			title:       "no label in tsdb",
+			addedLabels: []string{},
+			queryLabel:  "foo",
+			timestamp:   now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -357,11 +354,10 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			},
 		},
 		{
-			title:          "query time range outside head",
-			addedLabels:    []string{},
-			queryLabel:     "foo",
-			expectedValues: []string{},
-			timestamp:      now.Unix(),
+			title:       "query time range outside head",
+			addedLabels: []string{},
+			queryLabel:  "foo",
+			timestamp:   now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -394,7 +390,7 @@ func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, db.Appender(), func() storepb.StoreServer {
+	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, db.Appender(context.Background()), func() storepb.StoreServer {
 		tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
 
 		return tsdbStore

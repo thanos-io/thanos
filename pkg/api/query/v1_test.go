@@ -93,7 +93,7 @@ func TestEndpoints(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	app := db.Appender()
+	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
 			_, err := app.Add(lbl, i*60000, float64(i))

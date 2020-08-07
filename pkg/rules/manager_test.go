@@ -27,7 +27,7 @@ import (
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Appender() storage.Appender { return nopAppender{} }
+func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
 
 type nopAppender struct{}
 
@@ -35,7 +35,13 @@ func (n nopAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) { 
 func (n nopAppender) AddFast(ref uint64, t int64, v float64) error            { return nil }
 func (n nopAppender) Commit() error                                           { return nil }
 func (n nopAppender) Rollback() error                                         { return nil }
-func (n nopAppender) Appender() (storage.Appender, error)                     { return n, nil }
+func (n nopAppender) Appender(_ context.Context) (storage.Appender, error)    { return n, nil }
+
+type nopQueryable struct{}
+
+func (n nopQueryable) Querier(_ context.Context, _, _ int64) (storage.Querier, error) {
+	return storage.NoopQuerier(), nil
+}
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
 func TestRun(t *testing.T) {
@@ -65,6 +71,7 @@ groups:
 			Logger:     log.NewLogfmtLogger(os.Stderr),
 			Context:    context.Background(),
 			Appendable: nopAppendable{},
+			Queryable:  nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {
@@ -160,7 +167,8 @@ groups:
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
@@ -287,7 +295,8 @@ func TestManager_Rules(t *testing.T) {
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {

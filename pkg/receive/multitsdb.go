@@ -386,9 +386,9 @@ func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Q
 }
 
 // Appender implements the Storage interface.
-func (s *ReadyStorage) Appender() (storage.Appender, error) {
+func (s *ReadyStorage) Appender(ctx context.Context) (storage.Appender, error) {
 	if x := s.get(); x != nil {
-		return x.Appender()
+		return x.Appender(ctx)
 	}
 	return nil, ErrNotReady
 }
@@ -420,8 +420,8 @@ func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier
 }
 
 // Appender returns a new appender against the storage.
-func (a adapter) Appender() (storage.Appender, error) {
-	return a.db.Appender(), nil
+func (a adapter) Appender(ctx context.Context) (storage.Appender, error) {
+	return a.db.Appender(ctx), nil
 }
 
 // Close closes the storage and all its underlying resources.

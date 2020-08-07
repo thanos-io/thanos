@@ -72,7 +72,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	h, err := tsdb.NewHead(nil, nil, w, 10000000, tsdbDir, nil, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 
-	app := h.Appender()
+	app := h.Appender(context.Background())
 	for i := 0; i < opts.Series; i++ {
 		ts := int64(j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries)
 		ref, err := app.Add(labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, LabelLongSuffix)), ts, opts.Random.Float64())
