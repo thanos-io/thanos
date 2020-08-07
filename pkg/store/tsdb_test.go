@@ -245,10 +245,9 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 			},
 		},
 		{
-			title:         "query range outside tsdb head",
-			labels:        []string{},
-			expectedNames: []string{},
-			timestamp:     now.Unix(),
+			title:     "query range outside tsdb head",
+			labels:    []string{},
+			timestamp: now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -355,11 +354,10 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			},
 		},
 		{
-			title:          "query time range outside head",
-			addedLabels:    []string{},
-			queryLabel:     "foo",
-			expectedValues: []string{},
-			timestamp:      now.Unix(),
+			title:       "query time range outside head",
+			addedLabels: []string{},
+			queryLabel:  "foo",
+			timestamp:   now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
