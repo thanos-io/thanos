@@ -64,9 +64,14 @@ func TestReloader_ConfigApply(t *testing.T) {
 		input  = filepath.Join(dir, "in", "cfg.yaml.tmpl")
 		output = filepath.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, nil, reloadURL, input, output, nil)
-	reloader.watchInterval = 9999 * time.Hour // Disable interval to test watch logic only.
-	reloader.retryInterval = 100 * time.Millisecond
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       input,
+		CfgOutputFile: output,
+		RuleDirs:      nil,
+		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+		RetryInterval: 100 * time.Millisecond,
+	})
 
 	// Fail without config.
 	err = reloader.Watch(ctx)
@@ -97,6 +102,7 @@ config:
 	}()
 
 	reloadsSeen := 0
+	attemptsCnt := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -105,12 +111,9 @@ config:
 		}
 
 		rel := reloads.Load().(int)
-		if rel <= reloadsSeen {
-			// Nothing new.
-			continue
-		}
+		reloadsSeen = rel
 
-		if reloadsSeen == 0 {
+		if reloadsSeen == 1 {
 			// Initial apply seen (without doing nothing).
 			f, err := ioutil.ReadFile(output)
 			testutil.Ok(t, err)
@@ -128,7 +131,7 @@ config:
   b: $(TEST_RELOADER_THANOS_ENV)
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
-		} else {
+		} else if reloadsSeen == 2 {
 			// Another apply, ensure we see change.
 			f, err := ioutil.ReadFile(output)
 			testutil.Ok(t, err)
@@ -138,10 +141,15 @@ config:
   b: 2
   c: 3
 `, string(f))
-			// All good, break
-			break
+
+			// Change the mode so reloader can't read the file.
+			testutil.Ok(t, os.Chmod(input, os.ModeDir))
+			attemptsCnt += 1
+			// That was the second attempt to reload config. All good, break.
+			if attemptsCnt == 2 {
+				break
+			}
 		}
-		reloadsSeen = rel
 	}
 	cancel2()
 	g.Wait()
@@ -191,9 +199,14 @@ func TestReloader_RuleApply(t *testing.T) {
 	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
 
-	reloader := New(nil, nil, reloadURL, "", "", []string{dir, path.Join(dir, "rule-dir")})
-	reloader.watchInterval = 100 * time.Millisecond
-	reloader.retryInterval = 100 * time.Millisecond
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       "",
+		CfgOutputFile: "",
+		RuleDirs:      []string{dir, path.Join(dir, "rule-dir")},
+		WatchInterval: 100 * time.Millisecond,
+		RetryInterval: 100 * time.Millisecond,
+	})
 
 	// Some initial state.
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))

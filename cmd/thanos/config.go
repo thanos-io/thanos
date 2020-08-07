@@ -98,6 +98,8 @@ type reloaderConfig struct {
 	confFile        string
 	envVarConfFile  string
 	ruleDirectories []string
+	watchInterval   time.Duration
+	retryInterval   time.Duration
 }
 
 func (rc *reloaderConfig) registerFlag(cmd *kingpin.CmdClause) *reloaderConfig {
@@ -110,6 +112,13 @@ func (rc *reloaderConfig) registerFlag(cmd *kingpin.CmdClause) *reloaderConfig {
 	cmd.Flag("reloader.rule-dir",
 		"Rule directories for the reloader to refresh (repeated field).").
 		StringsVar(&rc.ruleDirectories)
+	cmd.Flag("reloader.watch-interval",
+		"Controls how often reloader re-reads config and rules.").
+		Default("3m").DurationVar(&rc.watchInterval)
+	cmd.Flag("reloader.retry-interval",
+		"Controls how often reloader retries config reload in case of error.").
+		Default("5s").DurationVar(&rc.retryInterval)
+
 	return rc
 }
 
