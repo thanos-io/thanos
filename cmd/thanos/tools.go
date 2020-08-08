@@ -19,6 +19,7 @@ import (
 func registerTools(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command("tools", "Tools utility commands")
 
+	registerDelete(m, cmd, "tools")
 	registerBucket(m, cmd, "tools")
 	registerCheckRules(m, cmd, "tools")
 }
