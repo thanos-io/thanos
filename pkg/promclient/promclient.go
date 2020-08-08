@@ -97,13 +97,16 @@ func NewWithTracingClient(logger log.Logger, userAgent string) *Client {
 	)
 }
 
-func (c *Client) get2xx(ctx context.Context, u *url.URL) (_ []byte, _ int, err error) {
+func (c *Client) get2xx(ctx context.Context, u *url.URL, additionalHeaders ...[2]string) (_ []byte, _ int, err error) {
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "create GET request")
 	}
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
+	}
+	for _, headers := range additionalHeaders {
+		req.Header.Set(headers[0], headers[1])
 	}
 
 	resp, err := c.Do(req.WithContext(ctx))
@@ -461,7 +464,16 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 }
 
 // QueryRange performs a range query using a default HTTP client and returns results in model.Matrix type.
-func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, error) {
+func (c *Client) QueryRange(
+	ctx context.Context,
+	base *url.URL,
+	query string,
+	startTime int64,
+	endTime int64,
+	step int64,
+	opts QueryOptions,
+	httpHeaders ...[2]string,
+) (model.Matrix, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
@@ -483,7 +495,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	span, ctx := tracing.StartSpan(ctx, "/prom_query_range HTTP[client]")
 	defer span.Finish()
 
-	body, _, err := c.get2xx(ctx, &u)
+	body, _, err := c.get2xx(ctx, &u, httpHeaders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "read query range response")
 	}
