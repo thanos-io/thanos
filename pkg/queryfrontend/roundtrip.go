@@ -62,6 +62,11 @@ func NewTripperWare(
 	}
 
 	if cacheConfig != nil {
+		// constSplitter will panic when splitQueryInterval is 0.
+		if splitQueryInterval == 0 {
+			return nil, errors.New("cannot create results cache middleware when split interval is 0")
+		}
+
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*cacheConfig,

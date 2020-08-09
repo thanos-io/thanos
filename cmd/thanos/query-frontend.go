@@ -131,7 +131,6 @@ func runQueryFrontend(
 		}
 	}
 
-	// TODO(yeya24): support other cache when available.
 	tripperWare, err := queryfrontend.NewTripperWare(
 		limits,
 		cacheConfig,
