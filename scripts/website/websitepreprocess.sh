@@ -43,5 +43,8 @@ do
   find $FILES -name "_index.md" -delete
 done
 
+# Rename "getting_started.md" files to "getting-started.md"
+find . -name 'getting_started.md' -execdir mv {} 'getting-started.md' ';'
+
 # TODO: Open problems to solve:
 # * We can first ensure that public contains the layout we want, then we can adjust html accordingly.
