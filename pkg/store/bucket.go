@@ -112,8 +112,8 @@ type bucketStoreMetrics struct {
 	cachedPostingsOriginalSizeBytes      prometheus.Counter
 	cachedPostingsCompressedSizeBytes    prometheus.Counter
 
-	seriesLookupDuration   prometheus.Histogram
-	postingsLookupDuration prometheus.Histogram
+	seriesFetchDuration   prometheus.Histogram
+	postingsFetchDuration prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -224,15 +224,15 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Compressed size of postings stored into cache.",
 	})
 
-	m.seriesLookupDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_index_series_lookup_duration_seconds",
-		Help:    "Time it takes to lookup series from a bucket to respond a query. It also includes the cache fetch and store operations.",
+	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_cached_series_fetch_duration_seconds",
+		Help:    "Time it takes to fetch series from a bucket to respond a query. It also includes the time it takes to cache fetch and store operations.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
-	m.postingsLookupDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_index_postings_lookup_duration_seconds",
-		Help:    "Time it takes to lookup postings from a bucket to respond a query. It also includes the cache fetch and store operations.",
+	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_cached_postings_fetch_duration_seconds",
+		Help:    "Time it takes to fetch postings from a bucket to respond a query. It also includes the time it takes to cache fetch and store operations.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
@@ -1631,7 +1631,7 @@ type postingPtr struct {
 // It returns one postings for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings, error) {
-	timer := prometheus.NewTimer(r.block.metrics.postingsLookupDuration)
+	timer := prometheus.NewTimer(r.block.metrics.postingsFetchDuration)
 	defer timer.ObserveDuration()
 
 	var ptrs []postingPtr
@@ -1851,7 +1851,7 @@ func (it *bigEndianPostings) length() int {
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
-	timer := prometheus.NewTimer(r.block.metrics.seriesLookupDuration)
+	timer := prometheus.NewTimer(r.block.metrics.seriesFetchDuration)
 	defer timer.ObserveDuration()
 
 	// Load series from cache, overwriting the list of ids to preload
