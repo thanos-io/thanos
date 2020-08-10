@@ -5,6 +5,23 @@ COMMIT_SHA=`git rev-parse HEAD`
 
 echo ">> preprocessing content of dir ${OUTPUT_CONTENT_DIR}"
 
+# Add header to missing frontmatter files (specifically release 0.1.0 and release-0.2).
+name="${OUTPUT_CONTENT_DIR:${#OUTPUT_CONTENT_DIR}-11}"
+if [ "$name" = "release-0.2" ] || [ "$name" = "lease-0.1.0" ]; then
+echo "$(
+  cat <<EOT
+---
+title: Getting Started
+type: docs
+menu: thanos
+weight: 1
+slug: /getting-started.md
+---
+EOT
+)" >${OUTPUT_CONTENT_DIR}/getting_started.md
+cat ${OUTPUT_CONTENT_DIR}/getting_started.md  >>${OUTPUT_CONTENT_DIR}/getting_started.md
+fi
+
 # Add headers to special CODE_OF_CONDUCT.md, CONTRIBUTING.md and CHANGELOG.md files.
 echo "$(
   cat <<EOF
