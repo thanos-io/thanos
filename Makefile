@@ -4,6 +4,7 @@ FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
+SHELLCHECK ?= $(GOBIN)/shellcheck
 
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
@@ -20,7 +21,6 @@ GOPROXY           ?= https://proxy.golang.org
 export GOPROXY
 
 GOTEST_OPTS ?= -failfast -timeout 10m -v
-BIN_DIR ?= $(shell pwd)/tmp/bin
 OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
 ARCH ?= $(shell uname -m)
 
@@ -169,7 +169,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 .PHONY:shell-format
 shell-format: $(SHFMT)
 	@echo ">> formatting shell scripts"
-	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
+	@$(SHFMT)shell -i 2 -ci -w -s $( find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
 
 .PHONY:format
 format: ## Formats code including imports and cleans up white noise.
@@ -231,6 +231,7 @@ install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: docker-ci
+docker-ci: export BIN_DIR= $(shell pwd)/tmp/bin
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
 docker-ci: install-deps
 	# Copy all to tmp local dir as this is required by docker.
@@ -262,7 +263,7 @@ web: web-pre-process $(HUGO)
 	# TODO(bwplotka): Make it --gc
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
-.PHONY:lint
+.PHONY: lint
 lint: ## Runs various static analysis against our code.
 lint: go-lint react-app-lint shell-lint
 	@echo ">> detecting white noise"
@@ -296,7 +297,7 @@ sync/atomic=go.uber.org/atomic" ./...
 	@$(MAKE) proto
 	$(call require_clean_work_tree,"detected files without copyright")
 
-.PHONY:shell-lint
+.PHONY: shell-lint
 shell-lint: ## Runs static analysis against our shell scripts.
 shell-lint: $(SHELLCHECK)
 	@echo ">> linting all of the shell script files"
@@ -358,14 +359,9 @@ examples-clean:
 	rm -f examples/dashboards/*.json
 	rm -f examples/tmp/*.yaml
 
-# non-phony targets
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
-
-SHELLCHECK ?= $(BIN_DIR)/shellcheck
-$(SHELLCHECK): $(BIN_DIR)
+$(SHELLCHECK):
 	@echo "Downloading Shellcheck"
-	curl -sNL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.$(OS).$(ARCH).tar.xz" | tar --strip-components=1 -xJf - -C $(BIN_DIR)
+	@curl -sNL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.$(OS).$(ARCH).tar.xz" | tar --strip-components=1 -xJf - -C $(GOBIN)
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
