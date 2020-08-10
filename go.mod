@@ -77,6 +77,8 @@ replace (
 	// TODO(yeya24): This is just a temporary fork. Update it after
 	// https://github.com/cortexproject/cortex/pull/3000 is merged.
 	github.com/cortexproject/cortex => github.com/yeya24/cortex v0.2.0-rc.0.0.20200808202232-e79e9acd4e4d
+	// Update to v1.1.1 to make sure windows CI pass.
+	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200807135816-2899773b0159
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible

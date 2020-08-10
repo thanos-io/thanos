@@ -199,17 +199,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			cacheConf := &queryrange.ResultsCacheConfig{
-				CacheConfig: cortexcache.Config{
-					EnableFifoCache: true,
-					Fifocache: cortexcache.FifoCacheConfig{
-						MaxSizeBytes: "2KB",
-						MaxSizeItems: 1000,
-						Validity:     time.Hour,
-					},
-				},
-			}
-			tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, nil,
+			tpw, err := NewTripperWare(&fakeLimits{}, nil, queryrange.PrometheusCodec, nil,
 				tc.splitInterval, 0, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
