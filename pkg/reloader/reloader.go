@@ -16,13 +16,14 @@
 // This and below for reloader:
 //
 // 	u, _ := url.Parse("http://localhost:9090")
-// 	rl := reloader.New(
-// 		nil,
-// 		reloader.ReloadURLFromBase(u),
-// 		"/path/to/cfg",
-// 		"/path/to/cfg.out",
-// 		[]string{"/path/to/dirs"},
-// 	)
+// 	rl := reloader.New(nil, nil, &reloader.Options{
+// 		ReloadURL:     reloader.ReloadURLFromBase(u),
+// 		CfgFile:       "/path/to/cfg",
+// 		CfgOutputFile: "/path/to/cfg.out",
+// 		RuleDirs:      []string{"/path/to/dirs"},
+// 		WatchInterval: 3 * time.Minute,
+// 		RetryInterval: 5 * time.Second,
+//  })
 //
 // The url of reloads can be generated with function ReloadURLFromBase().
 // It will append the default path of reload into the given url:
@@ -41,7 +42,7 @@
 // 	// ...
 // 	cancel()
 //
-// By default, reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
+// Reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
 // even if it is no changes.
 //
 // A basic example of configuration template with environment variables:
@@ -97,27 +98,44 @@ type Reloader struct {
 	watches      prometheus.Gauge
 	watchEvents  prometheus.Counter
 	watchErrors  prometheus.Counter
+	configErrors prometheus.Counter
+}
+
+// Options bundles options for the Reloader.
+type Options struct {
+	// ReloadURL is a prometheus URL to trigger reloads.
+	ReloadURL *url.URL
+	// CfgFile is a path to the prometheus config file to watch.
+	CfgFile string
+	// CfgOutputFile is a path for the output config file.
+	// If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
+	// will be substituted and the output written into the given path. Prometheus should then use
+	// cfgOutputFile as its config file path.
+	CfgOutputFile string
+	// RuleDirs is a collection of paths for this reloader to watch over.
+	RuleDirs []string
+	// WatchInterval controls how often reloader re-reads config and rules.
+	WatchInterval time.Duration
+	// RetryInterval controls how often reloader retries config reload in case of error.
+	RetryInterval time.Duration
 }
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
 
 // New creates a new reloader that watches the given config file and rule directory
 // and triggers a Prometheus reload upon changes.
-// If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
-// will be substituted and the output written into the given path. Prometheus should then use
-// cfgOutputFile as its config file path.
-func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFile string, cfgOutputFile string, ruleDirs []string) *Reloader {
+func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	r := &Reloader{
 		logger:        logger,
-		reloadURL:     reloadURL,
-		cfgFile:       cfgFile,
-		cfgOutputFile: cfgOutputFile,
-		ruleDirs:      ruleDirs,
-		watchInterval: 3 * time.Minute,
-		retryInterval: 5 * time.Second,
+		reloadURL:     o.ReloadURL,
+		cfgFile:       o.CfgFile,
+		cfgOutputFile: o.CfgOutputFile,
+		ruleDirs:      o.RuleDirs,
+		watchInterval: o.WatchInterval,
+		retryInterval: o.RetryInterval,
 
 		reloads: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
@@ -129,6 +147,12 @@ func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFi
 			prometheus.CounterOpts{
 				Name: "reloader_reloads_failed_total",
 				Help: "Total number of reload requests that failed.",
+			},
+		),
+		configErrors: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_config_apply_errors_total",
+				Help: "Total number of config applies that failed.",
 			},
 		),
 		watches: promauto.With(reg).NewGauge(
@@ -196,7 +220,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 	r.watches.Set(float64(len(watchables)))
 	level.Info(r.logger).Log(
-		"msg", "started watching config file and non-recursively rule dirs for changes",
+		"msg", "started watching config file and recursively rule dirs for changes",
 		"cfg", r.cfgFile,
 		"out", r.cfgOutputFile,
 		"dirs", strings.Join(r.ruleDirs, ","))
@@ -218,9 +242,8 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 
 		if err := r.apply(ctx); err != nil {
-			// Critical error.
-			// TODO(bwplotka): There is no need to get process down in this case and decrease availability, handle the error in different way.
-			return err
+			r.configErrors.Inc()
+			level.Error(r.logger).Log("msg", "apply error", "err", err)
 		}
 	}
 }

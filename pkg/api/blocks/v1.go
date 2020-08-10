@@ -13,6 +13,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 )
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
@@ -41,10 +42,10 @@ func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *
 	}
 }
 
-func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
-	bapi.baseAPI.Register(r, tracer, logger, ins)
+func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
+	bapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 }

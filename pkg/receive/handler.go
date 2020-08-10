@@ -448,7 +448,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
-					err = h.writer.Write(tenant, wreqs[endpoint])
+					err = h.writer.Write(fctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.

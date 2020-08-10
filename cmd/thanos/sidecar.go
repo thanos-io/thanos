@@ -49,14 +49,16 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	conf.registerFlag(cmd)
 
 	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		rl := reloader.New(
-			log.With(logger, "component", "reloader"),
+		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
-			reloader.ReloadURLFromBase(conf.prometheus.url),
-			conf.reloader.confFile,
-			conf.reloader.envVarConfFile,
-			conf.reloader.ruleDirectories,
-		)
+			&reloader.Options{
+				ReloadURL:     reloader.ReloadURLFromBase(conf.prometheus.url),
+				CfgFile:       conf.reloader.confFile,
+				CfgOutputFile: conf.reloader.envVarConfFile,
+				RuleDirs:      conf.reloader.ruleDirectories,
+				WatchInterval: conf.reloader.watchInterval,
+				RetryInterval: conf.reloader.retryInterval,
+			})
 
 		return runSidecar(
 			g,

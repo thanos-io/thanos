@@ -93,7 +93,7 @@ func TestEndpoints(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	app := db.Appender()
+	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
 			_, err := app.Add(lbl, i*60000, float64(i))
@@ -878,6 +878,10 @@ func TestParseTime(t *testing.T) {
 		}, {
 			input:  "2015-06-03T14:21:58.555+01:00",
 			result: ts,
+		}, {
+			// Test float rounding.
+			input:  "1543578564.705",
+			result: time.Unix(1543578564, 705*1e6),
 		},
 	}
 

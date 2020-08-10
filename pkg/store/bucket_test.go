@@ -30,14 +30,14 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -52,7 +52,6 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	"go.uber.org/atomic"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -209,7 +208,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, true)
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, true)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -921,10 +920,10 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 				ULID: ulid.MustNew(1, nil),
 			},
 		},
-		bkt:             bkt,
-		seriesRefetches: s.seriesRefetches,
-		logger:          log.NewNopLogger(),
-		indexCache:      noopCache{},
+		bkt:        bkt,
+		logger:     log.NewNopLogger(),
+		metrics:    s,
+		indexCache: noopCache{},
 	}
 
 	buf := encoding.Encbuf{}
@@ -1028,7 +1027,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 
 	logger := log.NewNopLogger()
 
-	appendTestData(t, h.Appender(), series)
+	appendTestData(t, h.Appender(context.Background()), series)
 
 	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, "tmp"), os.ModePerm))
 	id := createBlockFromHead(t, filepath.Join(tmpDir, "tmp"), h)
@@ -1130,6 +1129,7 @@ func benchmarkExpandedPostings(
 		t.Run(c.name, func(t testutil.TB) {
 			b := &bucketBlock{
 				logger:            log.NewNopLogger(),
+				metrics:           newBucketStoreMetrics(nil),
 				indexHeaderReader: r,
 				indexCache:        noopCache{},
 				bkt:               bkt,
@@ -1228,15 +1228,16 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String())))
 
+		m := newBucketStoreMetrics(nil)
 		b := &bucketBlock{
-			indexCache:      noopCache{},
-			logger:          logger,
-			bkt:             bkt,
-			meta:            meta,
-			partitioner:     gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
-			chunkObjs:       []string{filepath.Join(id.String(), "chunks", "000001")},
-			chunkPool:       chunkPool,
-			seriesRefetches: promauto.With(nil).NewCounter(prometheus.CounterOpts{}),
+			indexCache:  noopCache{},
+			logger:      logger,
+			metrics:     m,
+			bkt:         bkt,
+			meta:        meta,
+			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
+			chunkPool:   chunkPool,
 		}
 		blocks = append(blocks, b)
 	}
@@ -1289,7 +1290,7 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 
 		for _, b := range blocks {
 			// NOTE(bwplotka): It is 4 x 1.0 for 100mln samples. Kind of make sense: long series.
-			testutil.Equals(t, 0.0, promtest.ToFloat64(b.seriesRefetches))
+			testutil.Equals(t, 0.0, promtest.ToFloat64(b.metrics.seriesRefetches))
 		}
 	}
 }
@@ -1372,7 +1373,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender()
+		app := h.Appender(context.Background())
 
 		for i := 0; i < numSeries; i++ {
 			ts := int64(i)
@@ -1393,6 +1394,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		b1 = &bucketBlock{
 			indexCache:  indexCache,
 			logger:      logger,
+			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
 			meta:        meta,
 			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
@@ -1410,7 +1412,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender()
+		app := h.Appender(context.Background())
 
 		for i := 0; i < numSeries; i++ {
 			ts := int64(i)
@@ -1431,6 +1433,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		b2 = &bucketBlock{
 			indexCache:  indexCache,
 			logger:      logger,
+			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
 			meta:        meta,
 			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
@@ -1848,7 +1851,7 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
-	app := h.Appender()
+	app := h.Appender(context.Background())
 
 	ts := int64(blockIndex * totalSamples)
 	ref, err := app.Add(lbls, ts, random.Float64())

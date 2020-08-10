@@ -378,10 +378,22 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
-	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{})
+	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{"a"}, resp.Names)
+
+	// Outside time range.
+	resp, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Names)
 }
 
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
@@ -413,10 +425,22 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
 	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+
+	// Outside time range.
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Values)
 }
 
 // Test to check external label values retrieve.

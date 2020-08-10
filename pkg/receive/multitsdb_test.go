@@ -56,7 +56,7 @@ func TestMultiTSDB(t *testing.T) {
 
 		var a storage.Appender
 		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			a, err = app.Appender()
+			a, err = app.Appender(context.Background())
 			return err
 		}))
 
@@ -83,7 +83,7 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			a, err = app.Appender()
+			a, err = app.Appender(context.Background())
 			return err
 		}))
 
@@ -123,7 +123,7 @@ func TestMultiTSDB(t *testing.T) {
 		defer cancel()
 
 		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			_, err := app.Appender()
+			_, err := app.Appender(context.Background())
 			return err
 		}))
 
