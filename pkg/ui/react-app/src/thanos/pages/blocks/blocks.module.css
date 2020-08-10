@@ -19,7 +19,7 @@
 }
 
 .blockDetails.open {
-  min-width: 20vw;
+  min-width: 22vw;
   border-left: solid 1px gray;
 }
 
@@ -41,6 +41,7 @@
   border: none;
   background: none;
   font-size: 2em;
+  transform: translateY(-10%);
 }
 
 .timeRangeDiv {
@@ -52,6 +53,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 0.9em;
 }
 
 .source {
@@ -81,7 +83,9 @@
 .row {
   width: 100%;
   position: relative;
-  height: 1.5em;
+  --block-height: 2em;
+  height: var(--block-height);
+  box-sizing: content-box;
   margin: 0.2em 0;
   overflow-x: hidden;
 }
@@ -95,30 +99,61 @@
   margin: 0;
   min-width: 0;
   box-sizing: border-box;
+  mix-blend-mode: multiply;
 }
 
-.blockSpan:hover, .blockSpan:focus {
+.blockSpan:hover,
+.blockSpan:focus {
   outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.3) inset;
 }
 
-/* block colors */
+/*
+* block colors
+* https://coolors.co/9b5de5-f15bb5-fee440-00bbf9-00f5d4
+*/
 .res-0 {
-  background: turquoise;
-}
-.res-0:hover, .res-0:focus {
-  background: teal;
+  --level-1: #bd96ee;
+  --level-2: #9250e2;
+  --level-3: #7c2cdd;
+  --level-4: #681fc1;
+  --level-5: #4c178c;
+  --level-6: #391169;
 }
 
 .res-300000 {
-  background: dodgerblue;
-}
-.res-300000:hover, .res-300000:focus {
-  background: midnightblue;
+  --level-1: #f15bb5;
+  --level-2: #ef43aa;
+  --level-3: #eb1e99;
+  --level-4: #ce1283;
+  --level-5: #a90f6b;
+  --level-6: #830b53;
 }
 
 .res-3600000 {
-  background: lightgreen;
+  --level-1: #70dbff;
+  --level-2: #47d1ff;
+  --level-3: #1fc7ff;
+  --level-4: #00b8f5;
+  --level-5: #0099cc;
+  --level-6: #007aa3;
 }
-.res-3600000:hover, .res-3600000:focus {
-  background: olivedrab;
+
+.level-1 {
+  background: var(--level-1);
+}
+.level-2 {
+  background: var(--level-2);
+}
+.level-3 {
+  background: var(--level-3);
+}
+.level-4 {
+  background: var(--level-4);
+}
+.level-5 {
+  background: var(--level-5);
+}
+.level-6 {
+  background: var(--level-6);
 }

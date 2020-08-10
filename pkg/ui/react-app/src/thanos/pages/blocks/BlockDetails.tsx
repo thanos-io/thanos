@@ -1,6 +1,4 @@
 import React, { FC } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTimes } from '@fortawesome/free-solid-svg-icons';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
@@ -18,7 +16,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           <div className={styles.detailsTop}>
             <p>{block.ulid}</p>
             <button className={styles.closeBtn} onClick={(): void => selectBlock(undefined)}>
-              <FontAwesomeIcon icon={faTimes} />
+              &times;
             </button>
           </div>
           <hr />

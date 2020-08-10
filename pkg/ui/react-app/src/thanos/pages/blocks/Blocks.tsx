@@ -21,24 +21,29 @@ export interface BlockListProps {
 export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const [selectedBlock, selectBlock] = useState<Block>();
 
-  const { blocks, label } = data;
+  const { blocks, label, err } = data;
 
   const blockPools = useMemo(() => sortBlocks(blocks, label), [blocks, label]);
   const [gridMinTime, gridMaxTime] = useMemo(() => {
-    let gridMinTime = blocks[0].minTime;
-    let gridMaxTime = blocks[0].maxTime;
-    blocks.forEach(block => {
-      if (block.minTime < gridMinTime) {
-        gridMinTime = block.minTime;
-      }
-      if (block.maxTime > gridMaxTime) {
-        gridMaxTime = block.maxTime;
-      }
-    });
-    return [gridMinTime, gridMaxTime];
-  }, [blocks]);
+    if (!err && blocks.length > 0) {
+      let gridMinTime = blocks[0].minTime;
+      let gridMaxTime = blocks[0].maxTime;
+      blocks.forEach(block => {
+        if (block.minTime < gridMinTime) {
+          gridMinTime = block.minTime;
+        }
+        if (block.maxTime > gridMaxTime) {
+          gridMaxTime = block.maxTime;
+        }
+      });
+      return [gridMinTime, gridMaxTime];
+    }
+    return [0, 0];
+  }, [blocks, err]);
 
   const [[viewMinTime, viewMaxTime], setViewTime] = useState<[number, number]>([gridMinTime, gridMaxTime]);
+
+  if (err) return <Alert color="danger">{err.toString()}</Alert>;
 
   return (
     <>
