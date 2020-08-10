@@ -156,8 +156,8 @@ func (m *Manager) Stop() {
 		mgr.Stop()
 	}
 }
-
 func (m *Manager) protoRuleGroups() []*rulespb.RuleGroup {
+
 	rg := m.RuleGroups()
 	res := make([]*rulespb.RuleGroup, 0, len(rg))
 	for _, g := range rg {
