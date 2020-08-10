@@ -11,12 +11,13 @@ interface TimeRangeProps {
   viewMaxTime: number;
   gridMinTime: number;
   gridMaxTime: number;
-  onChange: React.Dispatch<React.SetStateAction<[number, number]>>;
+  onChange: (times: [number, number]) => void;
 }
+
+const NUM_MARKS = 10;
 
 const TimeRange: FC<TimeRangeProps> = ({ viewMinTime, viewMaxTime, gridMinTime, gridMaxTime, onChange }) => {
   const marks = useMemo(() => {
-    const NUM_MARKS = 10;
     const step = (gridMaxTime - gridMinTime) / NUM_MARKS;
 
     const marks: { [num: string]: string } = {};
@@ -35,7 +36,7 @@ const TimeRange: FC<TimeRangeProps> = ({ viewMinTime, viewMaxTime, gridMinTime, 
         max={gridMaxTime}
         marks={marks}
         // tipFormatter={(t: number): string => moment.unix(t / 1000).format('lll')}
-        defaultValue={[gridMinTime, gridMaxTime]}
+        defaultValue={[viewMinTime, viewMaxTime]}
         onChange={onChange}
       />
       <div className={styles.timeRange}>

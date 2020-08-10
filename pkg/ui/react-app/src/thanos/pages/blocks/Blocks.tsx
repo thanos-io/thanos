@@ -1,6 +1,7 @@
 import React, { FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import { Alert } from 'reactstrap';
+import { useQueryParams, withDefault, NumberParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
@@ -41,7 +42,17 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     return [0, 0];
   }, [blocks, err]);
 
-  const [[viewMinTime, viewMaxTime], setViewTime] = useState<[number, number]>([gridMinTime, gridMaxTime]);
+  const [{ 'min-time': viewMinTime, 'max-time': viewMaxTime }, setQuery] = useQueryParams({
+    'min-time': withDefault(NumberParam, gridMinTime),
+    'max-time': withDefault(NumberParam, gridMaxTime),
+  });
+
+  const setViewTime = (times: [number, number]): void => {
+    setQuery({
+      'min-time': times[0],
+      'max-time': times[1],
+    });
+  };
 
   if (err) return <Alert color="danger">{err.toString()}</Alert>;
 
