@@ -468,7 +468,7 @@ type compactConfig struct {
 	label                                          string
 }
 
-func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
+func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) {
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
@@ -531,6 +531,4 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
-
-	return cc
 }

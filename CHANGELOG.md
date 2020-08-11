@@ -38,6 +38,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2865](https://github.com/thanos-io/thanos/pull/2865) ui: Migrate Thanos Ruler UI to React
 - [#2964](https://github.com/thanos-io/thanos/pull/2964) Query: Add time range parameters to label APIs. Add `start` and `end` fields to Store API `LabelNamesRequest` and `LabelValuesRequest`.
 - [#2996](https://github.com/thanos-io/thanos/pull/2996) Sidecar: Add `reloader_config_apply_errors_total` metric. Add new flags `--reloader.watch-interval`, and `--reloader.retry-interval`.
+- [#2973](https://github.com/thanos-io/thanos/pull/2973) Add Thanos Query Frontend component.
 
 ### Changed
 

@@ -62,6 +62,7 @@ func main() {
 	registerCompact(cmds, app)
 	registerTools(cmds, app)
 	registerReceive(cmds, app)
+	registerQueryFrontend(cmds, app)
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
