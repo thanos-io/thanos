@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -340,18 +341,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 				"server", serverAddr,
 				"err", err,
 			)
-
-			var e *memcache.ConnectTimeoutError
-			switch {
-			case errors.As(err, &e):
-				c.failures.WithLabelValues(opSet, reasonTimeout).Inc()
-			case errors.Is(err, memcache.ErrMalformedKey):
-				c.failures.WithLabelValues(opSet, reasonMalformedKey).Inc()
-			case errors.Is(err, memcache.ErrServerError):
-				c.failures.WithLabelValues(opSet, reasonServerError).Inc()
-			default:
-				c.failures.WithLabelValues(opSet, reasonOther).Inc()
-			}
+			c.handleError(opSet, err)
 			return
 		}
 
@@ -469,17 +459,8 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	c.operations.WithLabelValues(opGetMulti).Inc()
 	items, err = c.client.GetMulti(keys)
 	if err != nil {
-		var e *memcache.ConnectTimeoutError
-		switch {
-		case errors.As(err, &e):
-			c.failures.WithLabelValues(opGetMulti, reasonTimeout).Inc()
-		case errors.Is(err, memcache.ErrMalformedKey):
-			c.failures.WithLabelValues(opGetMulti, reasonMalformedKey).Inc()
-		case errors.Is(err, memcache.ErrServerError):
-			c.failures.WithLabelValues(opGetMulti, reasonServerError).Inc()
-		default:
-			c.failures.WithLabelValues(opGetMulti, reasonOther).Inc()
-		}
+		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
+		c.handleError(opGetMulti, err)
 	} else {
 		var total int
 		for _, it := range items {
@@ -490,6 +471,27 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	}
 
 	return items, err
+}
+
+func (c *memcachedClient) handleError(op string, err error) {
+	var connErr *memcache.ConnectTimeoutError
+	var netErr net.Error
+	switch {
+	case errors.As(err, &connErr):
+		c.failures.WithLabelValues(op, reasonTimeout).Inc()
+	case errors.As(err, &netErr):
+		if netErr.Timeout() {
+			c.failures.WithLabelValues(op, reasonTimeout).Inc()
+		} else {
+			c.failures.WithLabelValues(op, reasonOther).Inc()
+		}
+	case errors.Is(err, memcache.ErrMalformedKey):
+		c.failures.WithLabelValues(op, reasonMalformedKey).Inc()
+	case errors.Is(err, memcache.ErrServerError):
+		c.failures.WithLabelValues(op, reasonServerError).Inc()
+	default:
+		c.failures.WithLabelValues(op, reasonOther).Inc()
+	}
 }
 
 func (c *memcachedClient) enqueueAsync(op func()) error {
