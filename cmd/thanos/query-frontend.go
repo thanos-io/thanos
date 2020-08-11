@@ -4,6 +4,7 @@
 package main
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
@@ -15,10 +16,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/common/route"
+	"github.com/weaveworks/common/user"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	v1 "github.com/thanos-io/thanos/pkg/api/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -155,16 +155,19 @@ func runQueryFrontend(
 
 	// Start metrics HTTP server.
 	{
-		router := route.New()
-
-		api := v1.NewAPI(logger)
-		api.Register(router.WithPrefix("/api/v1"), fe.Handler().ServeHTTP)
-
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(conf.http.bindAddress),
 			httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		)
-		srv.Handle("/", router)
+
+		injectf := func(f http.HandlerFunc) http.HandlerFunc {
+			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Cortex frontend middlewares require orgID.
+				f.ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
+			})
+			return hf
+		}
+		srv.Handle("/", injectf(fe.Handler().ServeHTTP))
 
 		g.Add(func() error {
 			statusProber.Healthy()

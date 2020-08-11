@@ -6,7 +6,6 @@ package queryfrontend
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
@@ -36,9 +35,8 @@ func NewTripperWare(
 ) (frontend.Tripperware, error) {
 
 	queriesCount := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Namespace: "thanos",
-		Name:      "query_frontend_queries_total",
-		Help:      "Total queries",
+		Name: "thanos_query_frontend_queries_total",
+		Help: "Total queries passing through query frontend",
 	}, []string{"op"})
 	queriesCount.WithLabelValues(labelQuery)
 	queriesCount.WithLabelValues(labelQueryRange)
@@ -99,18 +97,19 @@ func NewTripperWare(
 	return func(next http.RoundTripper) http.RoundTripper {
 		queryRangeTripper := queryrange.NewRoundTripper(next, codec, queryRangeMiddleware...)
 		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
-			isQueryRange := strings.HasSuffix(r.URL.Path, "/query_range")
-			op := labelQuery
-			if isQueryRange {
-				op = labelQueryRange
+			switch r.URL.Path {
+			case "/api/v1/query":
+				if r.Method == http.MethodGet || r.Method == http.MethodPost {
+					queriesCount.WithLabelValues(labelQuery).Inc()
+				}
+			case "/api/v1/query_range":
+				if r.Method == http.MethodGet || r.Method == http.MethodPost {
+					queriesCount.WithLabelValues(labelQueryRange).Inc()
+					return queryRangeTripper.RoundTrip(r)
+				}
+			default:
 			}
-
-			queriesCount.WithLabelValues(op).Inc()
-
-			if !isQueryRange {
-				return next.RoundTrip(r)
-			}
-			return queryRangeTripper.RoundTrip(r)
+			return next.RoundTrip(r)
 		})
 	}, nil
 }

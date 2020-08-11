@@ -5,6 +5,7 @@ package queryfrontend
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,19 +14,27 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
+	"github.com/cortexproject/cortex/pkg/ingester/client"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
+)
+
+const (
+	seconds = 1e3 // 1e3 milliseconds per second.
+	hour    = 3600 * seconds
+	day     = 24 * time.Hour
 )
 
 // fakeLimits implements the Cortex queryrange.Limits interface.
 type fakeLimits struct{}
 
 func (l *fakeLimits) MaxQueryLength(_ string) time.Duration {
-	return 24 * time.Hour
+	return 7 * 24 * time.Hour
 }
 
 func (l *fakeLimits) MaxQueryParallelism(_ string) int {
@@ -69,9 +78,9 @@ func (r *fakeRoundTripper) RoundTrip(h *http.Request) (*http.Response, error) {
 func TestRoundTripRetryMiddleware(t *testing.T) {
 	testRequest := &queryrange.PrometheusRequest{
 		Path:  "/api/v1/query_range",
-		Start: 100,
-		End:   1100,
-		Step:  10,
+		Start: 0,
+		End:   2 * hour,
+		Step:  10 * seconds,
 	}
 
 	for _, tc := range []struct {
@@ -79,13 +88,43 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		maxRetries       int
 		req              queryrange.Request
 		handlerAndResult func() (*int, http.Handler)
+		expectedError    bool
 		expected         int
 	}{
+		{
+			name:       "not query range, retry won't be triggered 1.",
+			maxRetries: 100,
+			req: &queryrange.PrometheusRequest{
+				Path:  "/api/v1/query",
+				Start: 0,
+				End:   2 * hour,
+				Step:  10 * seconds,
+			},
+			handlerAndResult: counter,
+			// not go through tripperware so no error.
+			expectedError: false,
+			expected:      1,
+		},
+		{
+			name:       "not query range, retry won't be triggered 2.",
+			maxRetries: 100,
+			req: &queryrange.PrometheusRequest{
+				Path:  "/api/v1/labels",
+				Start: 0,
+				End:   2 * hour,
+				Step:  10 * seconds,
+			},
+			handlerAndResult: counter,
+			// not go through tripperware so no error.
+			expectedError: false,
+			expected:      1,
+		},
 		{
 			name:             "no retry, get counter value 1",
 			maxRetries:       0,
 			req:              testRequest,
 			handlerAndResult: counter,
+			expectedError:    true,
 			expected:         1,
 		},
 		{
@@ -93,6 +132,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			maxRetries:       1,
 			req:              testRequest,
 			handlerAndResult: counter,
+			expectedError:    true,
 			expected:         1,
 		},
 		{
@@ -100,24 +140,14 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			maxRetries:       3,
 			req:              testRequest,
 			handlerAndResult: counter,
+			expectedError:    true,
 			expected:         3,
 		},
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			cacheConf := &queryrange.ResultsCacheConfig{
-				CacheConfig: cortexcache.Config{
-					EnableFifoCache: true,
-					Fifocache: cortexcache.FifoCacheConfig{
-						MaxSizeBytes: "2KB",
-						MaxSizeItems: 1000,
-						Validity:     time.Hour,
-					},
-				},
-			}
-
-			tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, nil,
-				time.Hour, tc.maxRetries, nil, log.NewNopLogger())
+			tpw, err := NewTripperWare(&fakeLimits{}, nil, queryrange.PrometheusCodec, nil,
+				day, tc.maxRetries, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
@@ -130,7 +160,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
-			testutil.NotOk(t, err)
+			testutil.Equals(t, tc.expectedError, err != nil)
 
 			testutil.Equals(t, tc.expected, *res)
 		})
@@ -138,62 +168,79 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	}
 }
 
-// counter is a mock handler used to test retry and split.
-// Copied from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L526.
-func counter() (*int, http.Handler) {
-	count := 0
-	var lock sync.Mutex
-	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lock.Lock()
-		defer lock.Unlock()
-		count++
-	})
-}
-
-// TestRoundTripRetryMiddleware tests the split interval middleware.
+// TestRoundTripSplitIntervalMiddleware tests the split interval middleware.
 func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
-	now := time.Now()
+	testRequest := &queryrange.PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   2 * hour,
+		Step:  10 * seconds,
+	}
+
 	for _, tc := range []struct {
 		name             string
 		splitInterval    time.Duration
 		req              queryrange.Request
 		handlerAndResult func() (*int, http.Handler)
+		expectError      bool
 		expected         int
 	}{
 		{
-			name: "disable split",
+			name: "non query range request won't be split 1",
 			req: &queryrange.PrometheusRequest{
-				Path:  "/api/v1/query_range",
+				Path:  "/api/v1/query",
 				Start: 0,
-				End:   1000,
-				Step:  10,
+				End:   2 * hour,
+				Step:  10 * seconds,
 			},
+			splitInterval:    time.Hour,
+			handlerAndResult: counter,
+			expectError:      false,
+			expected:         1,
+		},
+		{
+			name: "non query range request won't be split 2",
+			req: &queryrange.PrometheusRequest{
+				Path:  "/api/v1/labels",
+				Start: 0,
+				End:   2 * hour,
+				Step:  10 * seconds,
+			},
+			splitInterval:    time.Hour,
+			handlerAndResult: counter,
+			expectError:      false,
+			expected:         1,
+		},
+		{
+			name:             "split interval == 0, disable split",
+			req:              testRequest,
 			splitInterval:    0,
 			handlerAndResult: counter,
+			expectError:      true,
 			expected:         1,
 		},
 		{
-			name: "won't be split",
-			req: &queryrange.PrometheusRequest{
-				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-1 * time.Hour)),
-				End:   timestamp.FromTime(now),
-				Step:  1400000,
-			},
+			name:             "won't be split. Interval == time range",
+			req:              testRequest,
 			splitInterval:    2 * time.Hour,
 			handlerAndResult: counter,
+			expectError:      true,
 			expected:         1,
 		},
 		{
-			name: "split to 2 requests",
-			req: &queryrange.PrometheusRequest{
-				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-3 * time.Hour)),
-				End:   timestamp.FromTime(now),
-				Step:  1400000,
-			},
-			splitInterval:    2 * time.Hour,
+			name:             "won't be split. Interval > time range",
+			req:              testRequest,
+			splitInterval:    day,
 			handlerAndResult: counter,
+			expectError:      true,
+			expected:         1,
+		},
+		{
+			name:             "split to 2 requests",
+			req:              testRequest,
+			splitInterval:    1 * time.Hour,
+			handlerAndResult: counter,
+			expectError:      true,
 			expected:         2,
 		},
 	} {
@@ -213,10 +260,154 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
-			testutil.NotOk(t, err)
+			testutil.Equals(t, tc.expectError, err != nil)
 
 			testutil.Equals(t, tc.expected, *res)
 		})
 
 	}
+}
+
+// TestRoundTripCacheMiddleware tests the cache middleware.
+func TestRoundTripCacheMiddleware(t *testing.T) {
+	testRequest := &queryrange.PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   2 * hour,
+		Step:  10 * seconds,
+	}
+
+	// non query range request, won't be cached.
+	testRequest2 := &queryrange.PrometheusRequest{
+		Path:  "/api/v1/query",
+		Start: 0,
+		End:   2 * hour,
+		Step:  10 * seconds,
+	}
+
+	cacheConf := &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: "1MiB",
+				MaxSizeItems: 1000,
+				Validity:     time.Hour,
+			},
+		},
+	}
+
+	now := time.Now()
+	tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, queryrange.PrometheusResponseExtractor{},
+		day, 0, nil, log.NewNopLogger())
+	testutil.Ok(t, err)
+
+	rt, err := newFakeRoundTripper()
+	testutil.Ok(t, err)
+	res, handler := promqlResults()
+	rt.setHandler(handler)
+
+	for _, tc := range []struct {
+		name             string
+		req              queryrange.Request
+		handlerAndResult func() (*int, http.Handler)
+		expected         int
+	}{
+		{
+			name:     "first request",
+			req:      testRequest,
+			expected: 1,
+		},
+		{
+			name:     "same request as the first one, directly use cache",
+			req:      testRequest,
+			expected: 1,
+		},
+		{
+			name:     "non query range request won't be cached",
+			req:      testRequest2,
+			expected: 2,
+		},
+		{
+			name:     "do it again",
+			req:      testRequest2,
+			expected: 3,
+		},
+		{
+			name: "request but will be partitioned",
+			req: &queryrange.PrometheusRequest{
+				Path:  "/api/v1/query_range",
+				Start: timestamp.FromTime(now.Add(-time.Hour)),
+				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Step:  10 * seconds,
+			},
+			expected: 4,
+		},
+		{
+			name: "same query as the previous one",
+			req: &queryrange.PrometheusRequest{
+				Path:  "/api/v1/query_range",
+				Start: timestamp.FromTime(now.Add(-time.Hour)),
+				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Step:  10 * seconds,
+			},
+			expected: 5,
+		},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := queryrange.PrometheusCodec.EncodeRequest(ctx, tc.req)
+			testutil.Ok(t, err)
+
+			_, err = tpw(rt).RoundTrip(httpReq)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expected, *res)
+		})
+
+	}
+}
+
+// counter is a mock handler used to test retry and split.
+// Copied from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L526.
+func counter() (*int, http.Handler) {
+	count := 0
+	var lock sync.Mutex
+	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+		defer lock.Unlock()
+		count++
+	})
+}
+
+// promqlResults is a mock handler used to test cache middleware.
+// Modified from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L547.
+func promqlResults() (*int, http.Handler) {
+	count := 0
+	var lock sync.Mutex
+	q := queryrange.PrometheusResponse{
+		Status: "success",
+		Data: queryrange.PrometheusData{
+			ResultType: string(parser.ValueTypeMatrix),
+			Result: []queryrange.SampleStream{
+				{
+					Labels: []client.LabelAdapter{},
+					Samples: []client.Sample{
+						{Value: 0, TimestampMs: 0},
+						{Value: 1, TimestampMs: 1},
+					},
+				},
+			},
+		},
+	}
+
+	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+		defer lock.Unlock()
+		if err := json.NewEncoder(w).Encode(q); err != nil {
+			panic(err)
+		}
+		count++
+	})
 }
