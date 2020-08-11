@@ -1826,8 +1826,7 @@ func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, ra
 	testutil.Ok(t, err)
 
 	for _, b := range blocksToCompact {
-		err := os.RemoveAll(b)
-		testutil.Ok(t, err)
+		testutil.Ok(t, os.RemoveAll(b))
 	}
 
 	db, err := tsdb.Open(dir, nil, nil, tsdb.DefaultOptions())

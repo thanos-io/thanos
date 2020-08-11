@@ -70,9 +70,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 )
 
-// We want to replace the client-go version with a specific commit hash,
-// so that we don't get errors about being incompatible with the Go proxies.
-// See https://github.com/thanos-io/thanos/issues/1415
 replace (
 	// TODO(yeya24): This is just a temporary fork. Update it after
 	// https://github.com/cortexproject/cortex/pull/3000 is merged.
@@ -80,7 +77,7 @@ replace (
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200807135816-2899773b0159
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200811145323-f16cbc20d6f8
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	k8s.io/klog => k8s.io/klog v0.3.1
