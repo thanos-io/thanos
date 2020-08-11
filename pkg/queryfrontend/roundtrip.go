@@ -120,5 +120,8 @@ type constSplitter time.Duration
 // GenerateCacheKey generates a cache key based on the Request and interval.
 func (t constSplitter) GenerateCacheKey(_ string, r queryrange.Request) string {
 	currentInterval := r.GetStart() / time.Duration(t).Milliseconds()
+	if thanosReq, ok := r.(*ThanosRequest); ok {
+		return fmt.Sprintf("%s:%d:%d:%d", r.GetQuery(), r.GetStep(), currentInterval, thanosReq.GetMaxSourceResolution())
+	}
 	return fmt.Sprintf("%s:%d:%d", r.GetQuery(), r.GetStep(), currentInterval)
 }

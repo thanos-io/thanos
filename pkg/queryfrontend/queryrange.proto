@@ -1,0 +1,24 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+
+package queryfrontend;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message ThanosRequest {
+  string path = 1;
+  int64 start = 2;
+  int64 end = 3;
+  int64 step = 4;
+  google.protobuf.Duration timeout = 5 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+  string query = 6;
+  bool dedup = 7;
+  bool partialResponse = 8;
+  int64 maxSourceResolution = 9;
+}

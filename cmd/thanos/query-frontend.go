@@ -44,6 +44,10 @@ type queryRangeConfig struct {
 	maxRetries          int
 	maxQueryParallelism int
 	maxQueryLength      model.Duration
+
+	// partialResponseStrategy is the default strategy used
+	// when parsing thanos query request.
+	partialResponseStrategy bool
 }
 
 func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
@@ -61,6 +65,9 @@ func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
 		Default("1m").DurationVar(&c.cacheMaxFreshness)
+
+	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
+		Default("true").BoolVar(&c.partialResponseStrategy)
 
 	c.respCacheConfig = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 }
@@ -131,10 +138,11 @@ func runQueryFrontend(
 		}
 	}
 
+	codec := queryfrontend.NewThanosCodec(conf.queryRangeConfig.partialResponseStrategy)
 	tripperWare, err := queryfrontend.NewTripperWare(
 		limits,
 		cacheConfig,
-		queryrange.PrometheusCodec,
+		codec,
 		queryrange.PrometheusResponseExtractor{},
 		time.Duration(conf.queryRangeConfig.splitInterval),
 		conf.queryRangeConfig.maxRetries,
