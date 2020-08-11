@@ -5,7 +5,7 @@
 set -e
 set -u
 
-if ! [[ $0 == "scripts/build-react-app.sh" ]]; then
+if ! [[ "scripts/build-react-app.sh" =~ $0 ]]; then
   echo "must be run from repository root"
   exit 255
 fi

@@ -28,7 +28,7 @@ EOF
 
 }
 
-if ! [[ $0 == "scripts/genflagdocs.sh" ]]; then
+if ! [[ "scripts/genflagdocs.sh" =~ $0 ]]; then
   echo "must be run from repository root"
   exit 255
 fi
