@@ -39,7 +39,6 @@ func TestQueryFrontend(t *testing.T) {
 	inMemoryCacheConfig := cache.ResponseCacheConfig{
 		Type: cache.INMEMORY,
 		Config: cache.InMemoryResponseCacheConfig{
-			MaxSize:      "1MiB",
 			MaxSizeItems: 1000,
 			Validity:     time.Hour,
 		},
@@ -201,8 +200,8 @@ func TestQueryFrontend(t *testing.T) {
 			ctx,
 			queryFrontend.HTTPEndpoint(),
 			queryUpWithoutInstance,
-			timestamp.FromTime(now.Add(-15*time.Hour)),
-			timestamp.FromTime(now.Add(15*time.Hour)),
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(24*time.Hour)),
 			14,
 			promclient.QueryOptions{},
 			func(res model.Matrix) bool {
@@ -215,20 +214,19 @@ func TestQueryFrontend(t *testing.T) {
 			[]string{"thanos_query_frontend_queries_total"},
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
 		)
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "cortex_cache_fetched_keys"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_hits"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_new_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "querier_cache_added_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
-		// Query is 30h so it will be split to 2 requests.
+		// Query is 25h so it will be split to 2 requests.
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "cortex_frontend_split_queries_total"))
 
-		// One more request is needed in order to satisfy the req range.
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(5),
+			e2e.Equals(4),
 			[]string{"http_requests_total"},
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
 		)
