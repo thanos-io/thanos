@@ -33,6 +33,7 @@ const (
 	reasonMalformedKey    = "malformed-key"
 	reasonTimeout         = "timeout"
 	reasonServerError     = "server-error"
+	reasonNetworkError    = "network-error"
 	reasonOther           = "other"
 )
 
@@ -341,7 +342,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 				"server", serverAddr,
 				"err", err,
 			)
-			c.handleError(opSet, err)
+			c.trackError(opSet, err)
 			return
 		}
 
@@ -460,7 +461,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	items, err = c.client.GetMulti(keys)
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
-		c.handleError(opGetMulti, err)
+		c.trackError(opGetMulti, err)
 	} else {
 		var total int
 		for _, it := range items {
@@ -473,7 +474,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	return items, err
 }
 
-func (c *memcachedClient) handleError(op string, err error) {
+func (c *memcachedClient) trackError(op string, err error) {
 	var connErr *memcache.ConnectTimeoutError
 	var netErr net.Error
 	switch {
@@ -483,7 +484,7 @@ func (c *memcachedClient) handleError(op string, err error) {
 		if netErr.Timeout() {
 			c.failures.WithLabelValues(op, reasonTimeout).Inc()
 		} else {
-			c.failures.WithLabelValues(op, reasonOther).Inc()
+			c.failures.WithLabelValues(op, reasonNetworkError).Inc()
 		}
 	case errors.Is(err, memcache.ErrMalformedKey):
 		c.failures.WithLabelValues(op, reasonMalformedKey).Inc()
