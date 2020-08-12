@@ -10,5 +10,6 @@ mkdir -p /root/manifests/receiver
 
 mkdir -p /root/manifests/us1
 mkdir -p /root/manifests/storeapius1
+mkdir -p /root/manifests/rulerslo
 
 launch.sh

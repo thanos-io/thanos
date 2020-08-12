@@ -1,0 +1,11 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  creationTimestamp: null
+  labels:
+    prometheus: slo
+    role: thanos-rulefiles
+  name: prometheus-slo
+  namespace: default
+spec:
+# Paste groups here

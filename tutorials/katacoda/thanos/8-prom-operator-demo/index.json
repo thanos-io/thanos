@@ -47,6 +47,7 @@
         {"file": "thanos-ruler.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service-storeapi.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
+        {"file": "thanos-ruler-slo-rule.yaml", "target": "/root/manifests/rulerslo/", "chmod": "+rw"},
 
         {"file": "us1/prometheus-operator-cluster-role.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
         {"file": "us1/prometheus-operator-cluster-role-binding.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
@@ -59,7 +60,9 @@
         {"file": "us1/prometheus-service.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
         {"file": "us1/prometheus-service-monitor.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
         {"file": "us1/prometheus-operator-service-monitor.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
-        {"file": "us1/thanos-query-service-storeapi.yaml", "target": "/root/manifests/storeapius1/", "chmod": "+rw"}
+        {"file": "us1/thanos-query-service-storeapi.yaml", "target": "/root/manifests/storeapius1/", "chmod": "+rw"},
+
+        {"file": "promtools.png", "target": "/root", "chmod": "+rw"}
       ]
     },
     "intro": {
