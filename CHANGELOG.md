@@ -28,6 +28,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2957](https://github.com/thanos-io/thanos/pull/2957) Rule: now sets all of the relevant fields properly; avoids a panic when `/api/v1/rules` is called and the time zone is _not_ UTC; `rules` field is an empty array now if no rules have been defined in a rule group.
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
 - [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and also increase the timeout for 10 minutes.
+- [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: consider group name and file for deduplication
 
 ### Added
 
