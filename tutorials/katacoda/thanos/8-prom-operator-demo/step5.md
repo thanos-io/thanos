@@ -10,6 +10,8 @@ Adding Thanos is as easy as adding two lines:
     version: v0.14.0
     # Thanos sidecar will be now included!</pre>
 
+You can see what Prometheus resource can include [here](https://github.com/prometheus-operator/prometheus-operator/blob/v0.40.0/Documentation/api.md#prometheus).
+
 ```
 kubectl apply -f /root/manifests/prometheus/
 ```{{execute}}
@@ -20,4 +22,4 @@ kubectl get po
 
 Let's see what it scrapes: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-30090-[[KATACODA_HOST]].environments.katacoda.com/new/targets)
 
-Nothing?
+You should see no targets indeed! Check next step how to fix this.

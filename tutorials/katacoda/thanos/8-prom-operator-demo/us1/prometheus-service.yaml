@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+    prometheus: demo
+  name: prometheus-demo
+  namespace: us1
+spec:
+  type: NodePort
+  ports:
+  - name: web
+    port: 9090
+    protocol: TCP
+    targetPort: web
+    nodePort: 30190
+  - name: thanos-http
+    port: 19090
+    protocol: TCP
+    targetPort: thanos-http
+  selector:
+    prometheus: demo

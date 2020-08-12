@@ -1,19 +1,11 @@
-## But there are two replicas. How to use them?
+## Define what to scrape using Service Monitors
 
-Thanks to sidecars we have gRPC StoreAPI endpoints and we can create headless services for them: 
+`manifests/svcmonitors/prometheus-operator-service-monitor.yaml`{{open}}
 
-`manifests/query/thanos-query-service-storeapi.yaml`{{open}}
-
-So now we can spin up Querier connected to those:
-
-`manifests/query/thanos-query-deployment.yaml`{{open}}
+You can see what ServiceMonitor resource can include [here](https://github.com/prometheus-operator/prometheus-operator/blob/v0.40.0/Documentation/api.md#servicemonitor).
 
 ```
-kubectl apply -f /root/manifests/query/
+kubectl apply -f /root/manifests/svcmonitors/
 ```{{execute}}
 
-```
-kubectl get po
-```{{execute}}
-
-Let's now query the data from both replicas: [Thanos Query UI](https://[[HOST_SUBDOMAIN]]-30093-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.range_input=1h&g0.max_source_resolution=0s&g0.expr=prometheus_tsdb_head_series&g0.tab=0)
+Now we should see some targets, and we can query: [Prometheus UI](https://[[HOST_SUBDOMAIN]]-30090-[[KATACODA_HOST]].environments.katacoda.com/new/targets)

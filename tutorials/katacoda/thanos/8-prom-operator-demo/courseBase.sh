@@ -8,4 +8,7 @@ mkdir -p /root/manifests/query
 mkdir -p /root/manifests/svcmonitors
 mkdir -p /root/manifests/receiver
 
+mkdir -p /root/manifests/us1
+mkdir -p /root/manifests/storeapius1
+
 launch.sh

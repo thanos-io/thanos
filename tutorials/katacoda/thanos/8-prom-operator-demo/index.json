@@ -8,12 +8,13 @@
       {"text": "step3.md"},
       {"text": "step4.md"},
       {"text": "step5.md"},
-      {"text": "step5b.md"},
       {"text": "step6.md"},
       {"text": "step7.md"},
       {"text": "step8.md"},
       {"text": "step9.md"},
-      {"text": "step10.md"}
+      {"text": "step10.md"},
+      {"text": "step11.md"},
+      {"text": "step12.md"}
     ],
     "assets": {
       "master": [
@@ -37,6 +38,7 @@
         {"file": "prometheus-service.yaml", "target": "/root/manifests/prometheus/", "chmod": "+rw"},
 
         {"file": "prometheus-service-monitor.yaml", "target": "/root/manifests/svcmonitors/", "chmod": "+rw"},
+        {"file": "prometheus-operator-service-monitor.yaml", "target": "/root/manifests/svcmonitors/", "chmod": "+rw"},
 
         {"file": "thanos-query-deployment.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
         {"file": "thanos-query-service.yaml", "target": "/root/manifests/query/", "chmod": "+rw"},
@@ -46,10 +48,18 @@
         {"file": "thanos-ruler-service.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
         {"file": "thanos-ruler-service-storeapi.yaml", "target": "/root/manifests/ruler/", "chmod": "+rw"},
 
-        {"file": "thanos-receive-service.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
-        {"file": "thanos-receive-statefulset.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
-        {"file": "thanos-receive-configmap.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"},
-        {"file": "thanos-receive-service-storeapi.yaml", "target": "/root/manifests/receiver/", "chmod": "+rw"}
+        {"file": "us1/prometheus-operator-cluster-role.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-operator-cluster-role-binding.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-operator-deployment.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-operator-service.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-operator-service-account.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-role.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-role-binding.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-service.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-service-monitor.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/prometheus-operator-service-monitor.yaml", "target": "/root/manifests/us1/", "chmod": "+rw"},
+        {"file": "us1/thanos-query-service-storeapi.yaml", "target": "/root/manifests/storeapius1/", "chmod": "+rw"}
       ]
     },
     "intro": {
