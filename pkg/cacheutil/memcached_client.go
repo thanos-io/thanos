@@ -254,10 +254,12 @@ func newMemcachedClient(
 	c.failures.WithLabelValues(opGetMulti, reasonTimeout)
 	c.failures.WithLabelValues(opGetMulti, reasonMalformedKey)
 	c.failures.WithLabelValues(opGetMulti, reasonServerError)
+	c.failures.WithLabelValues(opGetMulti, reasonNetworkError)
 	c.failures.WithLabelValues(opGetMulti, reasonOther)
 	c.failures.WithLabelValues(opSet, reasonTimeout)
 	c.failures.WithLabelValues(opSet, reasonMalformedKey)
 	c.failures.WithLabelValues(opSet, reasonServerError)
+	c.failures.WithLabelValues(opSet, reasonNetworkError)
 	c.failures.WithLabelValues(opSet, reasonOther)
 
 	c.skipped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
