@@ -11,15 +11,15 @@
   <nav class="docs-menu collapse d-lg-block"> 
     {{ if in $currentPageUrl $versionDocsUrl }}    
       {{ range (.Pages.GroupByParam "menu").Reverse }}
-        <div class="sidemenu-thanos">
+        <div class="sidemenu-docs">
           <input type="checkbox" id="menuinput-{{ .Key }}" class="menuinput" {{if eq .Key "thanos"}} checked {{end}}/>
-          <label for="menuinput-{{ .Key }}" class="menulabel-thanos">
+          <label for="menuinput-{{ .Key }}" class="menulabel-docs">
             <h5 >{{ .Key }}</h5>
             <img class="caret-expand" src="/expand.svg" alt="expand" />
           </label>        
           {{ range .Pages }}
           <div class="list-group list-group-flush">
-            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .Permalink }}">{{ .Title }}</a>
+            <a class="list-group-item list-group-item-action list-group-item-docs py-1" href="{{ .Permalink }}">{{ .Title }}</a>
           </div>
           {{ end }}
         </div>
