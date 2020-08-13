@@ -1,26 +1,46 @@
 .container {
   display: flex;
-  min-height: calc(100vh - 80px);
+  --top: 72px;
+  min-height: calc(100vh - var(--top));
 }
 
 .grid {
   width: 100%;
 }
 
+.sources {
+  max-height: calc(100vh - 2 * var(--top));
+  overflow-y: auto;
+  scrollbar-color: #b1b1b1 transparent;
+  scrollbar-width: thin;
+}
+
+.sources::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sources::-webkit-scrollbar-thumb {
+  background-color: #b1b1b1;
+  border-radius: 6px;
+}
+
+
 .blockDetails {
   width: 0;
   overflow-x: hidden;
   overflow-y: auto;
   min-width: 0;
-  max-width: 35vw;
-  padding: 1em;
+  max-width: 55vw;
   box-sizing: border-box;
-  transition: min-width 0.2s ease-in-out;
+  transition: all 0.2s ease-in-out;
+  margin-top: -16px;
+  margin-right: -15px;
 }
 
 .blockDetails.open {
-  min-width: 22vw;
-  border-left: solid 1px gray;
+  min-width: 420px;
+  padding: 2em;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
 }
 
 .detailsTop {
@@ -28,6 +48,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap-reverse;
 }
 
 .detailsTop > p {
@@ -46,7 +67,12 @@
 
 .timeRangeDiv {
   box-sizing: border-box;
-  padding: 1em 3em;
+  padding: 0em 3em;
+  display: flex;
+  justify-content: space-evenly;
+  flex-direction: column;
+  align-items: center;
+  height: var(--top);
 }
 
 .timeRange {
@@ -54,6 +80,7 @@
   justify-content: space-between;
   align-items: center;
   font-size: 0.9em;
+  width: 100%;
 }
 
 .source {

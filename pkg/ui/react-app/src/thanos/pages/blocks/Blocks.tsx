@@ -61,16 +61,18 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
       {blocks.length > 0 ? (
         <div className={styles.container}>
           <div className={styles.grid}>
-            {Object.keys(blockPools).map(pk => (
-              <SourceView
-                key={pk}
-                data={blockPools[pk]}
-                title={pk}
-                selectBlock={selectBlock}
-                gridMinTime={viewMinTime}
-                gridMaxTime={viewMaxTime}
-              />
-            ))}
+            <div className={styles.sources}>
+              {Object.keys(blockPools).map(pk => (
+                <SourceView
+                  key={pk}
+                  data={blockPools[pk]}
+                  title={pk}
+                  selectBlock={selectBlock}
+                  gridMinTime={viewMinTime}
+                  gridMaxTime={viewMaxTime}
+                />
+              ))}
+            </div>
             <TimeRange
               gridMinTime={gridMinTime}
               gridMaxTime={gridMaxTime}
