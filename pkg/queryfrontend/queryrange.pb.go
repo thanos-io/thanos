@@ -14,6 +14,8 @@ import (
 	math "math"
 	math_bits "math/bits"
 	time "time"
+
+	storepb "github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -29,18 +31,20 @@ var _ = time.Kitchen
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type ThanosRequest struct {
-	Path                 string        `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Start                int64         `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
-	End                  int64         `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
-	Step                 int64         `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
-	Timeout              time.Duration `protobuf:"bytes,5,opt,name=timeout,proto3,stdduration" json:"timeout"`
-	Query                string        `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
-	Dedup                bool          `protobuf:"varint,7,opt,name=dedup,proto3" json:"dedup,omitempty"`
-	PartialResponse      bool          `protobuf:"varint,8,opt,name=partialResponse,proto3" json:"partialResponse,omitempty"`
-	MaxSourceResolution  int64         `protobuf:"varint,9,opt,name=maxSourceResolution,proto3" json:"maxSourceResolution,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
-	XXX_unrecognized     []byte        `json:"-"`
-	XXX_sizecache        int32         `json:"-"`
+	Path                 string           `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Start                int64            `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	End                  int64            `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
+	Step                 int64            `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
+	Timeout              time.Duration    `protobuf:"bytes,5,opt,name=timeout,proto3,stdduration" json:"timeout"`
+	Query                string           `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
+	Dedup                bool             `protobuf:"varint,7,opt,name=dedup,proto3" json:"dedup,omitempty"`
+	PartialResponse      bool             `protobuf:"varint,8,opt,name=partialResponse,proto3" json:"partialResponse,omitempty"`
+	MaxSourceResolution  int64            `protobuf:"varint,9,opt,name=maxSourceResolution,proto3" json:"maxSourceResolution,omitempty"`
+	ReplicaLabels        []string         `protobuf:"bytes,10,rep,name=replicaLabels,proto3" json:"replicaLabels,omitempty"`
+	StoreMatchers        []*LabelMatchers `protobuf:"bytes,11,rep,name=storeMatchers,proto3" json:"storeMatchers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
 func (m *ThanosRequest) Reset()         { *m = ThanosRequest{} }
@@ -139,33 +143,100 @@ func (m *ThanosRequest) GetMaxSourceResolution() int64 {
 	return 0
 }
 
+func (m *ThanosRequest) GetReplicaLabels() []string {
+	if m != nil {
+		return m.ReplicaLabels
+	}
+	return nil
+}
+
+func (m *ThanosRequest) GetStoreMatchers() []*LabelMatchers {
+	if m != nil {
+		return m.StoreMatchers
+	}
+	return nil
+}
+
+type LabelMatchers struct {
+	Matchers             []*storepb.LabelMatcher `protobuf:"bytes,1,rep,name=matchers,proto3" json:"matchers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
+}
+
+func (m *LabelMatchers) Reset()         { *m = LabelMatchers{} }
+func (m *LabelMatchers) String() string { return proto.CompactTextString(m) }
+func (*LabelMatchers) ProtoMessage()    {}
+func (*LabelMatchers) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3998a2c98127212f, []int{1}
+}
+func (m *LabelMatchers) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LabelMatchers) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LabelMatchers.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LabelMatchers) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LabelMatchers.Merge(m, src)
+}
+func (m *LabelMatchers) XXX_Size() int {
+	return m.Size()
+}
+func (m *LabelMatchers) XXX_DiscardUnknown() {
+	xxx_messageInfo_LabelMatchers.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LabelMatchers proto.InternalMessageInfo
+
+func (m *LabelMatchers) GetMatchers() []*storepb.LabelMatcher {
+	if m != nil {
+		return m.Matchers
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*ThanosRequest)(nil), "queryfrontend.ThanosRequest")
+	proto.RegisterType((*LabelMatchers)(nil), "queryfrontend.LabelMatchers")
 }
 
 func init() { proto.RegisterFile("queryfrontend/queryrange.proto", fileDescriptor_3998a2c98127212f) }
 
 var fileDescriptor_3998a2c98127212f = []byte{
-	// 294 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x8f, 0x4b, 0x4e, 0xeb, 0x30,
-	0x14, 0x86, 0xaf, 0xfb, 0xae, 0x2f, 0x15, 0xc8, 0x74, 0x60, 0x3a, 0x48, 0x23, 0x46, 0x19, 0x25,
-	0x08, 0xc6, 0x4c, 0x2a, 0x56, 0x60, 0xd8, 0x80, 0x4b, 0x4e, 0xd3, 0x4a, 0xad, 0x4f, 0xea, 0x87,
-	0x04, 0x3b, 0x61, 0x05, 0xac, 0xa5, 0x43, 0x56, 0x00, 0x28, 0x2b, 0x41, 0x39, 0xa6, 0x03, 0x10,
-	0xb3, 0xff, 0xe1, 0xa3, 0xff, 0x33, 0x4f, 0xf6, 0x01, 0xec, 0xf3, 0xca, 0xa2, 0xf1, 0x60, 0xca,
-	0x82, 0x9c, 0xd5, 0xa6, 0x82, 0xbc, 0xb6, 0xe8, 0x51, 0x4c, 0x7e, 0xf4, 0xb3, 0x69, 0x85, 0x15,
-	0x52, 0x53, 0xb4, 0x2a, 0x3e, 0x9a, 0x25, 0x15, 0x62, 0xb5, 0x85, 0x82, 0xdc, 0x32, 0xac, 0x8a,
-	0x32, 0x58, 0xed, 0x37, 0x68, 0x62, 0x7f, 0xf9, 0xda, 0xe1, 0x93, 0x87, 0xb5, 0x36, 0xe8, 0x14,
-	0xec, 0x03, 0x38, 0x2f, 0x04, 0xef, 0xd5, 0xda, 0xaf, 0x25, 0x4b, 0x59, 0x36, 0x56, 0xa4, 0xc5,
-	0x94, 0xf7, 0x9d, 0xd7, 0xd6, 0xcb, 0x4e, 0xca, 0xb2, 0xae, 0x8a, 0x46, 0x9c, 0xf1, 0x2e, 0x98,
-	0x52, 0x76, 0x29, 0x6b, 0x65, 0x7b, 0xeb, 0x3c, 0xd4, 0xb2, 0x47, 0x11, 0x69, 0x71, 0xcb, 0x87,
-	0x7e, 0xb3, 0x03, 0x0c, 0x5e, 0xf6, 0x53, 0x96, 0xfd, 0xbf, 0xbe, 0xc8, 0x23, 0x53, 0x7e, 0x64,
-	0xca, 0xef, 0xbe, 0x99, 0x16, 0xa3, 0xc3, 0xfb, 0xfc, 0xdf, 0xcb, 0xc7, 0x9c, 0xa9, 0xe3, 0x4d,
-	0x3b, 0x4d, 0xff, 0x94, 0x03, 0xe2, 0x89, 0xa6, 0x4d, 0x4b, 0x28, 0x43, 0x2d, 0x87, 0x29, 0xcb,
-	0x46, 0x2a, 0x1a, 0x91, 0xf1, 0xd3, 0x5a, 0x5b, 0xbf, 0xd1, 0x5b, 0x05, 0xae, 0x46, 0xe3, 0x40,
-	0x8e, 0xa8, 0xff, 0x1d, 0x8b, 0x2b, 0x7e, 0xbe, 0xd3, 0x4f, 0xf7, 0x18, 0xec, 0x23, 0x28, 0x70,
-	0xb8, 0x0d, 0xed, 0xbe, 0x1c, 0x13, 0xf7, 0x5f, 0xd5, 0xe2, 0xe4, 0xd0, 0x24, 0xec, 0xad, 0x49,
-	0xd8, 0x67, 0x93, 0xb0, 0xe5, 0x80, 0xd8, 0x6f, 0xbe, 0x02, 0x00, 0x00, 0xff, 0xff, 0x57, 0x5c,
-	0x04, 0x98, 0xa4, 0x01, 0x00, 0x00,
+	// 382 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x51, 0x4b, 0xce, 0xd3, 0x30,
+	0x10, 0xc6, 0xe4, 0x7f, 0xa4, 0x2e, 0x11, 0xc8, 0x74, 0xe1, 0x56, 0x28, 0x8d, 0x2a, 0x16, 0x59,
+	0x25, 0x55, 0x59, 0xb3, 0xa0, 0x62, 0x09, 0x1b, 0xc3, 0x05, 0x9c, 0x66, 0x9a, 0x46, 0x4a, 0x63,
+	0xd7, 0x0f, 0x89, 0xde, 0x82, 0x25, 0x47, 0xea, 0x92, 0x13, 0x00, 0xea, 0x49, 0x50, 0x26, 0x0d,
+	0x52, 0xd0, 0xbf, 0xb1, 0xe6, 0x7b, 0xcc, 0xf8, 0xd3, 0x0c, 0x8d, 0x4f, 0x1e, 0xcc, 0x79, 0x6f,
+	0x54, 0xeb, 0xa0, 0x2d, 0x73, 0x44, 0x46, 0xb6, 0x15, 0x64, 0xda, 0x28, 0xa7, 0x58, 0x34, 0xd2,
+	0x17, 0xb3, 0x4a, 0x55, 0x0a, 0x95, 0xbc, 0xab, 0x7a, 0xd3, 0x22, 0xae, 0x94, 0xaa, 0x1a, 0xc8,
+	0x11, 0x15, 0x7e, 0x9f, 0x97, 0xde, 0x48, 0x57, 0xab, 0xf6, 0xa6, 0xcf, 0xad, 0x53, 0x06, 0x72,
+	0x7c, 0x75, 0x91, 0xbb, 0xb3, 0x06, 0xdb, 0x4b, 0xab, 0xef, 0x01, 0x8d, 0xbe, 0x1e, 0x64, 0xab,
+	0xac, 0x80, 0x93, 0x07, 0xeb, 0x18, 0xa3, 0x77, 0x5a, 0xba, 0x03, 0x27, 0x09, 0x49, 0x27, 0x02,
+	0x6b, 0x36, 0xa3, 0xf7, 0xd6, 0x49, 0xe3, 0xf8, 0xf3, 0x84, 0xa4, 0x81, 0xe8, 0x01, 0x7b, 0x45,
+	0x03, 0x68, 0x4b, 0x1e, 0x20, 0xd7, 0x95, 0x5d, 0xaf, 0x75, 0xa0, 0xf9, 0x1d, 0x52, 0x58, 0xb3,
+	0xf7, 0xf4, 0xd1, 0xd5, 0x47, 0x50, 0xde, 0xf1, 0xfb, 0x84, 0xa4, 0xd3, 0xcd, 0x3c, 0xeb, 0xe3,
+	0x66, 0x43, 0xdc, 0xec, 0xe3, 0x2d, 0xee, 0x36, 0xbc, 0xfc, 0x5a, 0x3e, 0xfb, 0xf1, 0x7b, 0x49,
+	0xc4, 0xd0, 0xd3, 0x7d, 0x8d, 0x2b, 0xe0, 0x0f, 0x98, 0xa7, 0x07, 0x1d, 0x5b, 0x42, 0xe9, 0x35,
+	0x7f, 0x4c, 0x48, 0x1a, 0x8a, 0x1e, 0xb0, 0x94, 0xbe, 0xd4, 0xd2, 0xb8, 0x5a, 0x36, 0x02, 0xac,
+	0x56, 0xad, 0x05, 0x1e, 0xa2, 0xfe, 0x3f, 0xcd, 0xd6, 0xf4, 0xf5, 0x51, 0x7e, 0xfb, 0xa2, 0xbc,
+	0xd9, 0x81, 0x00, 0xab, 0x1a, 0xdf, 0xfd, 0xcf, 0x27, 0x98, 0xfb, 0x29, 0x89, 0xbd, 0xa5, 0x91,
+	0x01, 0xdd, 0xd4, 0x3b, 0xf9, 0x49, 0x16, 0xd0, 0x58, 0x4e, 0x93, 0x20, 0x9d, 0x88, 0x31, 0xc9,
+	0xb6, 0x34, 0xc2, 0x2d, 0x7f, 0x96, 0x6e, 0x77, 0x00, 0x63, 0xf9, 0x34, 0x09, 0xd2, 0xe9, 0xe6,
+	0x4d, 0x36, 0x3a, 0x63, 0x86, 0xee, 0xc1, 0x23, 0xc6, 0x2d, 0xab, 0x0f, 0x34, 0x1a, 0xe9, 0x6c,
+	0x4d, 0xc3, 0xe3, 0x30, 0x8f, 0xe0, 0xbc, 0x59, 0xe6, 0xf0, 0x66, 0xa3, 0x41, 0xe2, 0x9f, 0x6b,
+	0xfb, 0xe2, 0x72, 0x8d, 0xc9, 0xcf, 0x6b, 0x4c, 0xfe, 0x5c, 0x63, 0x52, 0x3c, 0xe0, 0xa2, 0xdf,
+	0xfd, 0x0d, 0x00, 0x00, 0xff, 0xff, 0xf5, 0xfa, 0x52, 0xf0, 0x6c, 0x02, 0x00, 0x00,
 }
 
 func (m *ThanosRequest) Marshal() (dAtA []byte, err error) {
@@ -191,6 +262,29 @@ func (m *ThanosRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.StoreMatchers) > 0 {
+		for iNdEx := len(m.StoreMatchers) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.StoreMatchers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintQueryrange(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x5a
+		}
+	}
+	if len(m.ReplicaLabels) > 0 {
+		for iNdEx := len(m.ReplicaLabels) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.ReplicaLabels[iNdEx])
+			copy(dAtA[i:], m.ReplicaLabels[iNdEx])
+			i = encodeVarintQueryrange(dAtA, i, uint64(len(m.ReplicaLabels[iNdEx])))
+			i--
+			dAtA[i] = 0x52
+		}
 	}
 	if m.MaxSourceResolution != 0 {
 		i = encodeVarintQueryrange(dAtA, i, uint64(m.MaxSourceResolution))
@@ -257,6 +351,47 @@ func (m *ThanosRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *LabelMatchers) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LabelMatchers) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LabelMatchers) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Matchers) > 0 {
+		for iNdEx := len(m.Matchers) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Matchers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintQueryrange(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintQueryrange(dAtA []byte, offset int, v uint64) int {
 	offset -= sovQueryrange(v)
 	base := offset
@@ -301,6 +436,36 @@ func (m *ThanosRequest) Size() (n int) {
 	}
 	if m.MaxSourceResolution != 0 {
 		n += 1 + sovQueryrange(uint64(m.MaxSourceResolution))
+	}
+	if len(m.ReplicaLabels) > 0 {
+		for _, s := range m.ReplicaLabels {
+			l = len(s)
+			n += 1 + l + sovQueryrange(uint64(l))
+		}
+	}
+	if len(m.StoreMatchers) > 0 {
+		for _, e := range m.StoreMatchers {
+			l = e.Size()
+			n += 1 + l + sovQueryrange(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *LabelMatchers) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Matchers) > 0 {
+		for _, e := range m.Matchers {
+			l = e.Size()
+			n += 1 + l + sovQueryrange(uint64(l))
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -556,6 +721,160 @@ func (m *ThanosRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicaLabels", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ReplicaLabels = append(m.ReplicaLabels, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreMatchers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StoreMatchers = append(m.StoreMatchers, &LabelMatchers{})
+			if err := m.StoreMatchers[len(m.StoreMatchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQueryrange(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LabelMatchers) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQueryrange
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LabelMatchers: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LabelMatchers: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Matchers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueryrange
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueryrange
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Matchers = append(m.Matchers, &storepb.LabelMatcher{})
+			if err := m.Matchers[len(m.Matchers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipQueryrange(dAtA[iNdEx:])

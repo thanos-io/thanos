@@ -17,7 +17,11 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
+
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 var (
@@ -43,7 +47,6 @@ func (c codec) MergeResponse(responses ...queryrange.Response) (queryrange.Respo
 	return c.prometheusCodec.MergeResponse(responses...)
 }
 
-// TODO(yeya24): Decode all supported params, including replica labels and store matchers.
 func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
 	var (
 		result ThanosRequest
@@ -93,6 +96,15 @@ func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Req
 		return nil, err
 	}
 
+	if len(r.Form["replicaLabels[]"]) > 0 {
+		result.ReplicaLabels = r.Form["replicaLabels[]"]
+	}
+
+	result.StoreMatchers, err = parseStoreMatchersParam(r.Form["storeMatch[]"])
+	if err != nil {
+		return nil, err
+	}
+
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 	return &result, nil
@@ -110,12 +122,21 @@ func (c codec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.R
 		"query":            []string{thanosReq.Query},
 		"dedup":            []string{strconv.FormatBool(thanosReq.Dedup)},
 		"partial_response": []string{strconv.FormatBool(thanosReq.PartialResponse)},
+		"replicaLabels[]":  thanosReq.ReplicaLabels,
 	}
 
 	// Add this param only if it is set. Set to 0 will impact
 	// auto-downsampling in the querier.
 	if thanosReq.MaxSourceResolution != 0 {
 		params["max_source_resolution"] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
+	}
+
+	if len(thanosReq.StoreMatchers) > 0 {
+		storeMatchers, err := matchersToStringSlice(thanosReq.StoreMatchers)
+		if err != nil {
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid request format")
+		}
+		params["storeMatch[]"] = storeMatchers
 	}
 
 	u := &url.URL{
@@ -165,6 +186,8 @@ func (m *ThanosRequest) LogToSpan(sp opentracing.Span) {
 		otlog.Int64("step (ms)", m.GetStep()),
 		otlog.Bool("dedup", m.GetDedup()),
 		otlog.Bool("partial_response", m.GetPartialResponse()),
+		otlog.Object("replicaLabels", m.GetReplicaLabels()),
+		otlog.Object("storeMatchers", m.GetStoreMatchers()),
 	)
 }
 
@@ -224,6 +247,27 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 	return defaultEnablePartialResponse, nil
 }
 
+func parseStoreMatchersParam(ss []string) ([]*LabelMatchers, error) {
+	storeMatchers := make([]*LabelMatchers, 0)
+	for _, s := range ss {
+		matchers, err := parser.ParseMetricSelector(s)
+		if err != nil {
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, "storeMatch[]")
+		}
+		stm, err := storepb.TranslatePromMatchers(matchers...)
+		if err != nil {
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, "storeMatch[]")
+		}
+		lm := make([]*storepb.LabelMatcher, 0, len(stm))
+		for _, slm := range stm {
+			l := &slm
+			lm = append(lm, l)
+		}
+		storeMatchers = append(storeMatchers, &LabelMatchers{Matchers: lm})
+	}
+	return storeMatchers, nil
+}
+
 func encodeTime(t int64) string {
 	f := float64(t) / 1.0e3
 	return strconv.FormatFloat(f, 'f', -1, 64)
@@ -231,4 +275,33 @@ func encodeTime(t int64) string {
 
 func encodeDurationMillis(d int64) string {
 	return strconv.FormatFloat(float64(d)/float64(time.Second/time.Millisecond), 'f', -1, 64)
+}
+
+// matchersToStringSlice converts storeMatchers to string slice.
+func matchersToStringSlice(storeMatchers []*LabelMatchers) ([]string, error) {
+	res := make([]string, 0)
+	for _, storeMatcher := range storeMatchers {
+		var s string
+
+		ms := make([]storepb.LabelMatcher, 0, len(storeMatcher.Matchers))
+		for _, match := range storeMatcher.Matchers {
+			ms = append(ms, *match)
+		}
+
+		matchers, err := promclient.TranslateMatchers(ms)
+		if err != nil {
+			return nil, err
+		}
+
+		for i, m := range matchers {
+			s += m.String()
+			if i < len(matchers)-1 {
+				s += ", "
+			}
+		}
+
+		res = append(res, "{"+s+"}")
+	}
+
+	return res, nil
 }

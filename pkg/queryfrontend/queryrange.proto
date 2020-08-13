@@ -7,6 +7,7 @@ package queryfrontend;
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "store/storepb/types.proto";
 
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
@@ -21,4 +22,10 @@ message ThanosRequest {
   bool dedup = 7;
   bool partialResponse = 8;
   int64 maxSourceResolution = 9;
+  repeated string replicaLabels = 10;
+  repeated LabelMatchers storeMatchers = 11;
+}
+
+message LabelMatchers {
+  repeated thanos.LabelMatcher matchers = 1;
 }

@@ -105,6 +105,10 @@ Flags:
                               Most recent allowed cacheable result, to prevent
                               caching very recent results that might still be in
                               flux.
+      --query-range.partial-response
+                              Enable partial response for queries if no
+                              partial_response param is specified.
+                              --no-query-range.partial-response for disabling.
       --query-range.response-cache-config-file=<file-path>
                               Path to YAML file that contains response cache
                               configuration.
