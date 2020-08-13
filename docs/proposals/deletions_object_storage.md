@@ -28,7 +28,7 @@ The main motivation for considering deletions in the object storage are the foll
 
 ## Proposed Approach
 
-*   We propose to implement deletions using the tombstones approach using a CLI tool.
+*   We propose to implement deletions via the tombstones approach using a CLI tool.
 *   A tombstone is proposed to be a **Custom format global - single file per request**.
 *   **Why Custom format global - single file per request**? :
     *   https://cloud-native.slack.com/archives/CL25937SP/p1595954850430300
@@ -38,7 +38,7 @@ The main motivation for considering deletions in the object storage are the foll
     *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
-*   The entered details are processed by the CLI tool to create a tombstone file (unique for a request). After which the tombstone file is uploaded to object storage making it accessible to all components.
+*   The entered details are processed by the CLI tool to create a tombstone file (unique for a request), and then the tombstone file is uploaded to the object storage making it accessible to all components.
 *   Store Gateway masks the series on processing the global tombstone files from the object storage.
 *   During compaction or downsampling, we check if the blocks being considered have series corresponding to a tombstone file, if so we delete the data and continue with the process.
 
@@ -70,14 +70,14 @@ The main motivation for considering deletions in the object storage are the foll
 3. Custom format per block
 4. Custom format global - appendable file
 
-**Reasons for not choosing 1 & 2 i.e., Prometheus format:**
+Reasons for not choosing 1 & 2 tombstone formats i.e., **Prometheus format**:
 *   In this format, for creation of a tombstone, we will need the series ID. To find the series ID we need to pull the index of all the blocks which will never scale.
 *   This is a mutable file in Prometheus and which is not the case in Thanos Object Store.
 
-**Reasons for not choosing 3:**
+Reasons for not choosing 3 i.e., **Custom format per block**:
 *   This becomes the function of number of blocks which hinders scalability and adds complexity.
 
-**Reasons for not choosing 4:**
+Reasons for not choosing 4 i.e., **Custom format global - appendable file**:
 *   Read-after-write consistency cannot be guaranteed.
 
 ## Action Plan
