@@ -8,12 +8,11 @@ require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/armon/go-metrics v0.3.3
-	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.2.1-0.20200805064754-d8edc95e2c91
+	github.com/cortexproject/cortex v1.2.1-0.20200812152417-a4aad5da5e4e
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
@@ -49,7 +48,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.11.1
-	github.com/prometheus/prometheus v1.8.2-0.20200807135816-2899773b0159
+	github.com/prometheus/prometheus v1.8.2-0.20200811193703-869f1bc587e6
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	github.com/weaveworks/common v0.0.0-20200625145055-4b1847531bc9
@@ -71,13 +70,10 @@ require (
 )
 
 replace (
-	// TODO(yeya24): This is just a temporary fork. Update it after
-	// https://github.com/cortexproject/cortex/pull/3000 is merged.
-	github.com/cortexproject/cortex => github.com/yeya24/cortex v0.2.0-rc.0.0.20200808202232-e79e9acd4e4d
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200811145323-f16cbc20d6f8
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200811193703-869f1bc587e6
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	k8s.io/klog => k8s.io/klog v0.3.1
