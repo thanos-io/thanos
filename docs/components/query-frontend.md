@@ -48,12 +48,13 @@ Query Frontend calculates the required subqueries and executes them in parallel 
 
 Currently, only in-memory cache (fifo cache) is supported. An example config:
 
+[embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
 ```yaml
-type: in-memory
+type: IN-MEMORY
 config:
-  max_size: 1MiB
-  max_size_items: 1000
-  validity: 6h
+  max_size: ""
+  max_size_items: 0
+  validity: 0s
 ```
 
 ### Slow Query Log
