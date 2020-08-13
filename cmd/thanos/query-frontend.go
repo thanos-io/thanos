@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/go-kit/kit/log"
@@ -22,10 +23,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type queryFrontendConfig struct {
@@ -35,6 +40,8 @@ type queryFrontendConfig struct {
 	downstreamURL        string
 	compressResponses    bool
 	LogQueriesLongerThan time.Duration
+
+	requestLoggingDecision string
 }
 
 type queryRangeConfig struct {
@@ -77,6 +84,8 @@ func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
 
 	cmd.Flag("query-frontend.log_queries_longer_than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&c.LogQueriesLongerThan)
+
+	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&c.requestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 }
 
 func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
@@ -85,8 +94,8 @@ func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
 	conf := &queryFrontendConfig{}
 	conf.registerFlag(cmd)
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, conf, comp)
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runQueryFrontend(g, logger, reg, tracer, conf, comp)
 	}
 }
 
@@ -94,6 +103,7 @@ func runQueryFrontend(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
 	conf *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -153,6 +163,13 @@ func runQueryFrontend(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
+	// Configure Request Logging for HTTP calls.
+	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		return logging.LogDecision[conf.requestLoggingDecision]
+	})}
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+	ins := extpromhttp.NewInstrumentationMiddleware(reg)
+
 	// Start metrics HTTP server.
 	{
 		srv := httpserver.New(logger, reg, comp, httpProbe,
@@ -160,14 +177,26 @@ func runQueryFrontend(
 			httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		)
 
-		injectf := func(f http.HandlerFunc) http.HandlerFunc {
+		instr := func(f http.HandlerFunc) http.HandlerFunc {
 			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Cortex frontend middlewares require orgID.
-				f.ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
+				name := "query-frontend"
+				ins.NewHandler(
+					name,
+					logMiddleware.HTTPMiddleware(
+						name,
+						tracing.HTTPMiddleware(
+							tracer,
+							name,
+							logger,
+							gziphandler.GzipHandler(middleware.RequestID(f)),
+						),
+					),
+					// Cortex frontend middlewares require orgID.
+				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
 			})
 			return hf
 		}
-		srv.Handle("/", injectf(fe.Handler().ServeHTTP))
+		srv.Handle("/", instr(fe.Handler().ServeHTTP))
 
 		g.Add(func() error {
 			statusProber.Healthy()

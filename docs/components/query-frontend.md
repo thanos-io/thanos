@@ -125,5 +125,12 @@ Flags:
                               Log queries that are slower than the specified
                               duration. Set to 0 to disable. Set to < 0 to
                               enable on all queries.
+      --log.request.decision=LogFinishCall
+                              Request Logging for logging the start and end of
+                              requests. LogFinishCall is enabled by default.
+                              LogFinishCall : Logs the finish call of the
+                              requests. LogStartAndFinishCall : Logs the start
+                              and finish call of the requests. NoLogCall :
+                              Disable request logging.
 
 ```
