@@ -61,7 +61,7 @@ Thanos Querier fans-out to all know Rules endpoints configured via `--rule` comm
 
 Generally the deduplication logic is less complex than with time series, specifically:
 
-* Deduplication happens first at the rule group level. The identifier is the group name.
+* Deduplication happens first at the rule group level. The identifier is the group name and the group file.
 * Then, per group name deduplication happens on the rule level, where:
 
 1. the rule type (recording rule vs. alerting rule)
@@ -170,6 +170,26 @@ Given the following stream of incoming alerting rules will also result in two in
     labels:
       severity: critical
 ```
+
+Scenario 4:
+
+As specified, the group name and file fields are used for deduplication.
+
+Given the following stream of incoming rule groups:
+```text
+group: a/file1
+group: b/file1
+group: a/file2
+```
+
+The output becomes:
+```text
+group: a/file1
+group: a/file2
+group: b/file1
+```
+
+Deduplication of included alerting/recording rules inside groups is described in the previous scenarios.
 
 ## Alternatives
 
