@@ -232,8 +232,7 @@ The `in-memory` index cache is enabled by default and its max size can be config
 
 Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]: # "../flags/config_index_cache_in_memory.txt yaml"
-
+[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -250,8 +249,7 @@ All the settings are **optional**:
 
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]: # "../flags/config_index_cache_memcached.txt yaml"
-
+[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
 config:
@@ -260,8 +258,8 @@ config:
   max_idle_connections: 0
   max_async_concurrency: 0
   max_async_buffer_size: 0
-  max_item_size: 1MiB
   max_get_multi_concurrency: 0
+  max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
 ```
