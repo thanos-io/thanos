@@ -11,6 +11,7 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/weaveworks/common/httpgrpc"
 )
@@ -100,6 +101,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				Step:            1000,
 				Dedup:           true,
 				PartialResponse: true,
+				StoreMatchers:   [][]storepb.LabelMatcher{},
 			},
 		},
 		{
@@ -113,6 +115,39 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				Step:            1000,
 				Dedup:           true,
 				PartialResponse: true,
+				StoreMatchers:   [][]storepb.LabelMatcher{},
+			},
+		},
+		{
+			name:            "replicaLabels",
+			url:             "/api/v1/query_range?start=123&end=456&step=1&replicaLabels[]=foo&replicaLabels[]=bar",
+			partialResponse: false,
+			expectedRequest: &ThanosRequest{
+				Path:          "/api/v1/query_range",
+				Start:         123000,
+				End:           456000,
+				Step:          1000,
+				Dedup:         true,
+				ReplicaLabels: []string{"foo", "bar"},
+				StoreMatchers: [][]storepb.LabelMatcher{},
+			},
+		},
+		{
+			name:            "storeMatchers",
+			url:             `/api/v1/query_range?start=123&end=456&step=1&storeMatch[]={__address__="localhost:10901", cluster="test"}`,
+			partialResponse: false,
+			expectedRequest: &ThanosRequest{
+				Path:  "/api/v1/query_range",
+				Start: 123000,
+				End:   456000,
+				Step:  1000,
+				Dedup: true,
+				StoreMatchers: [][]storepb.LabelMatcher{
+					{
+						storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10901"},
+						storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "cluster", Value: "test"},
+					},
+				},
 			},
 		},
 	} {

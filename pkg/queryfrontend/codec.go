@@ -13,10 +13,7 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
-	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
@@ -32,19 +29,15 @@ var (
 )
 
 type codec struct {
-	prometheusCodec queryrange.Codec
+	queryrange.Codec
 	partialResponse bool
 }
 
 func NewThanosCodec(partialResponse bool) *codec {
 	return &codec{
-		prometheusCodec: queryrange.PrometheusCodec,
+		Codec:           queryrange.PrometheusCodec,
 		partialResponse: partialResponse,
 	}
-}
-
-func (c codec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
-	return c.prometheusCodec.MergeResponse(responses...)
 }
 
 func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
@@ -154,43 +147,6 @@ func (c codec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.R
 	return req.WithContext(ctx), nil
 }
 
-func (c codec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
-	return c.prometheusCodec.DecodeResponse(ctx, r, req)
-}
-
-func (c codec) EncodeResponse(ctx context.Context, res queryrange.Response) (*http.Response, error) {
-	return c.prometheusCodec.EncodeResponse(ctx, res)
-}
-
-// WithStartEnd clones the current `ThanosRequest` with a new `start` and `end` timestamp.
-func (m *ThanosRequest) WithStartEnd(start int64, end int64) queryrange.Request {
-	newReq := *m
-	newReq.Start = start
-	newReq.End = end
-	return &newReq
-}
-
-// WithQuery clones the current `ThanosRequest` with a new query.
-func (m *ThanosRequest) WithQuery(query string) queryrange.Request {
-	newReq := *m
-	newReq.Query = query
-	return &newReq
-}
-
-// LogToSpan logs the current `ThanosRequest` parameters to the specified span.
-func (m *ThanosRequest) LogToSpan(sp opentracing.Span) {
-	sp.LogFields(
-		otlog.String("query", m.GetQuery()),
-		otlog.String("start", timestamp.Time(m.GetStart()).String()),
-		otlog.String("end", timestamp.Time(m.GetEnd()).String()),
-		otlog.Int64("step (ms)", m.GetStep()),
-		otlog.Bool("dedup", m.GetDedup()),
-		otlog.Bool("partial_response", m.GetPartialResponse()),
-		otlog.Object("replicaLabels", m.GetReplicaLabels()),
-		otlog.Object("storeMatchers", m.GetStoreMatchers()),
-	)
-}
-
 func parseDurationMillis(s string) (int64, error) {
 	if d, err := strconv.ParseFloat(s, 64); err == nil {
 		ts := d * float64(time.Second/time.Millisecond)
@@ -247,8 +203,8 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 	return defaultEnablePartialResponse, nil
 }
 
-func parseStoreMatchersParam(ss []string) ([]*LabelMatchers, error) {
-	storeMatchers := make([]*LabelMatchers, 0)
+func parseStoreMatchersParam(ss []string) ([][]storepb.LabelMatcher, error) {
+	storeMatchers := make([][]storepb.LabelMatcher, 0, len(ss))
 	for _, s := range ss {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
@@ -258,12 +214,7 @@ func parseStoreMatchersParam(ss []string) ([]*LabelMatchers, error) {
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusBadRequest, "storeMatch[]")
 		}
-		lm := make([]*storepb.LabelMatcher, 0, len(stm))
-		for _, slm := range stm {
-			l := &slm
-			lm = append(lm, l)
-		}
-		storeMatchers = append(storeMatchers, &LabelMatchers{Matchers: lm})
+		storeMatchers = append(storeMatchers, stm)
 	}
 	return storeMatchers, nil
 }
@@ -278,29 +229,15 @@ func encodeDurationMillis(d int64) string {
 }
 
 // matchersToStringSlice converts storeMatchers to string slice.
-func matchersToStringSlice(storeMatchers []*LabelMatchers) ([]string, error) {
-	res := make([]string, 0)
+func matchersToStringSlice(storeMatchers [][]storepb.LabelMatcher) ([]string, error) {
+	res := make([]string, 0, len(storeMatchers))
 	for _, storeMatcher := range storeMatchers {
-		var s string
-
-		ms := make([]storepb.LabelMatcher, 0, len(storeMatcher.Matchers))
-		for _, match := range storeMatcher.Matchers {
-			ms = append(ms, *match)
-		}
-
-		matchers, err := promclient.TranslateMatchers(ms)
+		matcher, err := promclient.MatchersToString(storeMatcher)
 		if err != nil {
 			return nil, err
 		}
 
-		for i, m := range matchers {
-			s += m.String()
-			if i < len(matchers)-1 {
-				s += ", "
-			}
-		}
-
-		res = append(res, "{"+s+"}")
+		res = append(res, matcher)
 	}
 
 	return res, nil
