@@ -13,8 +13,6 @@ import (
 	"runtime"
 	"syscall"
 
-	gmetrics "github.com/armon/go-metrics"
-	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -22,10 +20,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
-	"github.com/thanos-io/thanos/pkg/tracing/client"
 	"go.uber.org/automaxprocs/maxprocs"
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"github.com/thanos-io/thanos/pkg/tracing/client"
 )
 
 const (

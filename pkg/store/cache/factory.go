@@ -11,15 +11,17 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 )
 
 type IndexCacheProvider string
 
 const (
-	INMEMORY  IndexCacheProvider = "IN-MEMORY"
-	MEMCACHED IndexCacheProvider = "MEMCACHED"
+	INMEMORY   IndexCacheProvider = "IN-MEMORY"
+	MEMCACHED  IndexCacheProvider = "MEMCACHED"
+	GROUPCACHE IndexCacheProvider = "GROUPCACHE"
 )
 
 // IndexCacheConfig specifies the index cache config.
@@ -45,6 +47,8 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	switch strings.ToUpper(string(cacheConfig.Type)) {
 	case string(INMEMORY):
 		cache, err = NewInMemoryIndexCache(logger, reg, backendConfig)
+	case string(GROUPCACHE):
+		cache = NewGroupcacheCache(logger, reg)
 	case string(MEMCACHED):
 		var memcached cacheutil.MemcachedClient
 		memcached, err = cacheutil.NewMemcachedClient(logger, "index-cache", backendConfig, reg)

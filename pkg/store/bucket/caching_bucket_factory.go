@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package storecache
+package bucket
 
 import (
 	"regexp"
@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	cache "github.com/thanos-io/thanos/pkg/cache"
+	"github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -24,7 +24,10 @@ import (
 // BucketCacheProvider is a type used to evaluate all bucket cache providers.
 type BucketCacheProvider string
 
-const MemcachedBucketCacheProvider BucketCacheProvider = "MEMCACHED" // Memcached cache-provider for caching bucket.
+const (
+	MEMCACHED  BucketCacheProvider = "MEMCACHED" // Memcached cache-provider for caching bucket.
+	GROUPCACHE BucketCacheProvider = "GROUPCACHE"
+)
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
 type CachingWithBackendConfig struct {
@@ -80,9 +83,10 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	}
 
 	var c cache.Cache
-
 	switch strings.ToUpper(string(config.Type)) {
-	case string(MemcachedBucketCacheProvider):
+	case string(GROUPCACHE):
+		c = cache.NewGroupcacheCache(logger, reg, "caching-bucket")
+	case string(MEMCACHED):
 		var memcached cacheutil.MemcachedClient
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {

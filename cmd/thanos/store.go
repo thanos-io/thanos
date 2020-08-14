@@ -17,7 +17,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -31,6 +34,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/bucket"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -220,7 +224,7 @@ func runStore(
 		return errors.Wrap(err, "get caching bucket configuration")
 	}
 	if len(cachingBucketConfigYaml) > 0 {
-		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
+		bkt, err = bucket.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
@@ -261,6 +265,19 @@ func runStore(
 	}
 	if err != nil {
 		return errors.Wrap(err, "create index cache")
+	}
+
+	if false { // TODO(kakkoyun): Catch if groupcache activated.
+		pool, err := cacheutil.NewGroupcacheHTTPPool(logger, reg, httpBindAddr, []byte{}) // TODO(kakkoyun): pass config.
+		if err != nil {
+			// TODO(kakkoyun): !!
+			return err
+		}
+		srv.Handle("/", pool)
+
+		g.Add(pool.UpdateLoop, func(err error) {
+			pool.Stop()
+		})
 	}
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay)

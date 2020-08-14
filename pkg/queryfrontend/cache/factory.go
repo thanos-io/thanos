@@ -16,7 +16,8 @@ type ResponseCacheProvider string
 
 // TODO: add other cache providers when available.
 const (
-	INMEMORY ResponseCacheProvider = "IN-MEMORY"
+	INMEMORY   ResponseCacheProvider = "IN-MEMORY"
+	GROUPCACHE ResponseCacheProvider = "GROUPCACHE"
 )
 
 // ResponseCacheConfig specifies the response cache config.
@@ -40,6 +41,8 @@ func NewResponseCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheCon
 	switch strings.ToUpper(string(cacheConfig.Type)) {
 	case string(INMEMORY):
 		resultsCacheConf, err = newInMemoryResponseCacheConfig(backendConfig)
+	case string(GROUPCACHE):
+		// TODO(kakkoyun): Implement ME!
 	default:
 		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
 	}

@@ -2,7 +2,7 @@
 // Licensed under the Apache License 2.0.
 
 //nolint:unparam
-package storecache
+package bucket
 
 import (
 	"bytes"

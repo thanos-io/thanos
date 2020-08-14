@@ -3,6 +3,7 @@
 
 //nolint:unparam
 // TODO(kakkoyun): Fix linter issues - The pattern we use makes linter unhappy (returning unused config pointers).
+
 package main
 
 import (
