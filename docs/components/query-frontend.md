@@ -46,7 +46,9 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
 Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
 
-Currently, only in-memory cache (fifo cache) is supported. An example config:
+Currently, in-memory cache (fifo cache) and memcached are supported.
+
+#### In-memory
 
 [embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
 ```yaml
@@ -54,6 +56,24 @@ type: IN-MEMORY
 config:
   max_size: ""
   max_size_items: 0
+  validity: 0s
+```
+
+#### Memcached
+
+[embedmd]:# (../flags/config_response_cache_memcached.txt yaml)
+```yaml
+type: MEMCACHED
+config:
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_item_size: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
   validity: 0s
 ```
 

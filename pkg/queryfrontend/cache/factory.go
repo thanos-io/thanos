@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -16,7 +18,8 @@ type ResponseCacheProvider string
 
 // TODO: add other cache providers when available.
 const (
-	INMEMORY ResponseCacheProvider = "IN-MEMORY"
+	INMEMORY  ResponseCacheProvider = "IN-MEMORY"
+	MEMCACHED ResponseCacheProvider = "MEMCACHED"
 )
 
 // ResponseCacheConfig specifies the response cache config.
@@ -25,7 +28,7 @@ type ResponseCacheConfig struct {
 	Config interface{}           `yaml:"config"`
 }
 
-func NewResponseCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheConfig, error) {
+func NewResponseCacheConfig(confContentYaml []byte, logger log.Logger, reg prometheus.Registerer) (*queryrange.ResultsCacheConfig, error) {
 	cacheConfig := &ResponseCacheConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
@@ -36,10 +39,12 @@ func NewResponseCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheCon
 		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
 	}
 
-	var resultsCacheConf *queryrange.ResultsCacheConfig
+	var resultsCache *queryrange.ResultsCacheConfig
 	switch strings.ToUpper(string(cacheConfig.Type)) {
 	case string(INMEMORY):
-		resultsCacheConf, err = newInMemoryResponseCacheConfig(backendConfig)
+		resultsCache, err = newInMemoryResponseCacheConfig(backendConfig)
+	case string(MEMCACHED):
+		resultsCache, err = newMemcachedCache(backendConfig, logger, reg)
 	default:
 		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
 	}
@@ -48,5 +53,5 @@ func NewResponseCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheCon
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s response cache", cacheConfig.Type))
 	}
 
-	return resultsCacheConf, nil
+	return resultsCache, nil
 }

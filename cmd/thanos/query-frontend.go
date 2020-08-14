@@ -125,7 +125,7 @@ func runQueryFrontend(
 
 	var cacheConfig *queryrange.ResultsCacheConfig
 	if len(respCacheContentYaml) > 0 {
-		cacheConfig, err = cache.NewResponseCacheConfig(respCacheContentYaml)
+		cacheConfig, err = cache.NewResponseCacheConfig(respCacheContentYaml, logger, reg)
 		if err != nil {
 			return errors.Wrap(err, "create response cache")
 		}

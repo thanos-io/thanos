@@ -432,3 +432,17 @@ func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.Res
 
 	return queryFrontend, nil
 }
+
+func NewMemcached(name string) *e2e.ConcreteService {
+	memcached := e2e.NewConcreteService(
+		fmt.Sprintf("memcached-%s", name),
+		"docker.io/memcached:1.6.3-alpine",
+		e2e.NewCommand("memcached", []string{"-m 1024", "-I 1m", "-c 1024", "-v"}...),
+		nil,
+		11211,
+	)
+	memcached.SetUser(strconv.Itoa(os.Getuid()))
+	memcached.SetBackoff(defaultBackoffConfig)
+
+	return memcached
+}

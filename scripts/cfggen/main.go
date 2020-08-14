@@ -59,7 +59,8 @@ var (
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
 	}
 	responseCacheConfigs = map[responsecache.ResponseCacheProvider]interface{}{
-		responsecache.INMEMORY: responsecache.InMemoryResponseCacheConfig{},
+		responsecache.INMEMORY:  responsecache.InMemoryResponseCacheConfig{},
+		responsecache.MEMCACHED: responsecache.MemcachedResponseCacheConfig{},
 	}
 )
 
