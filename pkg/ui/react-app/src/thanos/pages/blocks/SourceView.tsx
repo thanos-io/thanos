@@ -3,7 +3,7 @@ import { Block, BlocksPool } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
 
-const BlocksRow: FC<{
+export const BlocksRow: FC<{
   blocks: Block[];
   gridMinTime: number;
   gridMaxTime: number;
@@ -18,13 +18,15 @@ const BlocksRow: FC<{
   );
 };
 
-export const SourceView: FC<{
+export interface SourceViewProps {
   data: BlocksPool;
   title: string;
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
-}> = ({ data, title, gridMaxTime, gridMinTime, selectBlock }) => {
+}
+
+export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock }) => {
   return (
     <>
       <div className={styles.source}>
