@@ -21,8 +21,8 @@ export const BlockSpan: FC<BlockSpanProps> = ({ block, gridMaxTime, gridMinTime,
         styles[`level-${block.compaction.level}`]
       }`}
       style={{
-        width: `${spanWidth}%`,
-        left: `${spanOffset}%`,
+        width: `${spanWidth.toFixed(4)}%`,
+        left: `${spanOffset.toFixed(4)}%`,
       }}
     />
   );

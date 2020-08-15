@@ -24,7 +24,6 @@
   border-radius: 6px;
 }
 
-
 .blockDetails {
   width: 0;
   overflow-x: hidden;
@@ -40,7 +39,7 @@
 .blockDetails.open {
   min-width: 420px;
   padding: 2em;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
 }
 
 .detailsTop {
@@ -95,7 +94,12 @@
 }
 
 .title > p {
+  width: 8vw;
   margin: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .rowsContainer {
@@ -104,7 +108,7 @@
   width: 100%;
   padding: 1em;
   box-sizing: border-box;
-  border-left: solid 5px teal;
+  border-left: solid 3px teal;
 }
 
 .row {
