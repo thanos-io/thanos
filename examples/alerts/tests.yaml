@@ -79,13 +79,15 @@ tests:
         job: thanos-sidecar
         pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 600 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 600 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
         job: thanos-sidecar
         pod: thanos-sidecar-pod-1
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 600 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 600 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 11m
     alertname: ThanosSidecarUnhealthy
     exp_alerts:
@@ -94,13 +96,15 @@ tests:
         job: thanos-sidecar
         pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 660 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 660 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
         job: thanos-sidecar
         pod: thanos-sidecar-pod-1
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 660 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 660 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 12m
     alertname: ThanosSidecarUnhealthy
     exp_alerts:
@@ -109,10 +113,12 @@ tests:
         job: thanos-sidecar
         pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 720 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 720 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
         job: thanos-sidecar
         pod: thanos-sidecar-pod-1
       exp_annotations:
-        message: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 720 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 720 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
