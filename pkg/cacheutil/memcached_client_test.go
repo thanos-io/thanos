@@ -27,15 +27,34 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 	}{
 		"should pass on valid config": {
 			config: MemcachedClientConfig{
-				Addresses: []string{"127.0.0.1:11211"},
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
 			},
 			expected: nil,
 		},
 		"should fail on no addresses": {
 			config: MemcachedClientConfig{
-				Addresses: []string{},
+				Addresses:                 []string{},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
 			},
 			expected: errMemcachedConfigNoAddrs,
+		},
+		"should fail on max_async_concurrency <= 0": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       0,
+				DNSProviderUpdateInterval: time.Second,
+			},
+			expected: errMemcachedMaxAsyncConcurrencyNotPositive,
+		},
+		"should fail on dns_provider_update_interval <= 0": {
+			config: MemcachedClientConfig{
+				Addresses:           []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency: 1,
+			},
+			expected: errMemcachedDNSUpdateIntervalNotPositive,
 		},
 	}
 

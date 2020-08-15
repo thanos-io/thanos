@@ -38,8 +38,10 @@ const (
 )
 
 var (
-	errMemcachedAsyncBufferFull = errors.New("the async buffer is full")
-	errMemcachedConfigNoAddrs   = errors.New("no memcached addresses provided")
+	errMemcachedAsyncBufferFull                = errors.New("the async buffer is full")
+	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
+	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("dns_provider_update_interval must be positive")
+	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max_async_concurrency must be positive")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,
@@ -118,6 +120,16 @@ type MemcachedClientConfig struct {
 func (c *MemcachedClientConfig) validate() error {
 	if len(c.Addresses) == 0 {
 		return errMemcachedConfigNoAddrs
+	}
+
+	// Avoid panic in time ticker.
+	if c.DNSProviderUpdateInterval <= 0 {
+		return errMemcachedDNSUpdateIntervalNotPositive
+	}
+
+	// Set async only available when MaxAsyncConcurrency > 0.
+	if c.MaxAsyncConcurrency <= 0 {
+		return errMemcachedMaxAsyncConcurrencyNotPositive
 	}
 
 	return nil
