@@ -44,6 +44,9 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		File:                    g.OriginalFile,
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
+		// https://github.com/gogo/protobuf/issues/519
+		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
+		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
 	}
 
 	for _, r := range g.Rules() {
@@ -66,7 +69,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// https://github.com/gogo/protobuf/issues/519
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		case *rules.RecordingRule:
 			ret.Rules = append(ret.Rules, &rulespb.Rule{
@@ -77,7 +81,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// https://github.com/gogo/protobuf/issues/519
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		default:
 			// We cannot do much, let's panic, API will recover.
@@ -144,9 +149,10 @@ func NewManager(
 	return m
 }
 
+// Run is non blocking, in opposite to TSDB manager, which is blocking.
 func (m *Manager) Run() {
 	for _, mgr := range m.mgrs {
-		mgr.Run()
+		go mgr.Run()
 	}
 }
 
@@ -155,8 +161,8 @@ func (m *Manager) Stop() {
 		mgr.Stop()
 	}
 }
-
 func (m *Manager) protoRuleGroups() []*rulespb.RuleGroup {
+
 	rg := m.RuleGroups()
 	res := make([]*rulespb.RuleGroup, 0, len(rg))
 	for _, g := range rg {

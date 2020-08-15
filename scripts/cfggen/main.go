@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
+	responsecache "github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -57,6 +58,9 @@ var (
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
 	}
+	responseCacheConfigs = map[responsecache.ResponseCacheProvider]interface{}{
+		responsecache.INMEMORY: responsecache.InMemoryResponseCacheConfig{},
+	}
 )
 
 func main() {
@@ -86,6 +90,13 @@ func main() {
 
 	for typ, config := range indexCacheConfigs {
 		if err := generate(storecache.IndexCacheConfig{Type: typ, Config: config}, generateName("index_cache_", string(typ)), *outputDir); err != nil {
+			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			os.Exit(1)
+		}
+	}
+
+	for typ, config := range responseCacheConfigs {
+		if err := generate(responsecache.ResponseCacheConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}

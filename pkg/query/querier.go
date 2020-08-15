@@ -333,7 +333,12 @@ func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
-	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{Label: name, PartialResponseDisabled: !q.partialResponse})
+	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label:                   name,
+		PartialResponseDisabled: !q.partialResponse,
+		Start:                   q.mint,
+		End:                     q.maxt,
+	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
 	}
@@ -351,7 +356,11 @@ func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
 
-	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{PartialResponseDisabled: !q.partialResponse})
+	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		PartialResponseDisabled: !q.partialResponse,
+		Start:                   q.mint,
+		End:                     q.maxt,
+	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
 	}

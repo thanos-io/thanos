@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v1.8.2-0.20200507164740-ecee9c8abfd1" // v2.18.1
+	defaultPrometheusVersion   = "v1.8.2-0.20200724121523-657ba532e42f"
 	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
@@ -276,7 +276,7 @@ func (p *Prometheus) Appender() storage.Appender {
 	if p.running {
 		panic("Appender must not be called after start")
 	}
-	return p.db.Appender()
+	return p.db.Appender(context.Background())
 }
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
@@ -435,7 +435,7 @@ func createBlock(
 			t := mint
 
 			for i := 0; i < numSamples; i++ {
-				app := h.Appender()
+				app := h.Appender(ctx)
 
 				for _, lset := range batch {
 					_, err := app.Add(lset, t, rand.Float64())

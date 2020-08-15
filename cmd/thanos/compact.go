@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -400,7 +401,12 @@ func runCompact(
 		global.Register(r, ins)
 
 		api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
-		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins)
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
@@ -462,7 +468,7 @@ type compactConfig struct {
 	label                                          string
 }
 
-func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
+func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) {
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
@@ -525,6 +531,4 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
-
-	return cc
 }

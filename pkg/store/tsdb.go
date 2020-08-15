@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -24,7 +23,7 @@ import (
 )
 
 type TSDBReader interface {
-	storage.Queryable
+	storage.ChunkQueryable
 	StartTime() (int64, error)
 }
 
@@ -32,10 +31,11 @@ type TSDBReader interface {
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
-	logger         log.Logger
-	db             TSDBReader
-	component      component.StoreAPI
-	externalLabels labels.Labels
+	logger           log.Logger
+	db               TSDBReader
+	component        component.StoreAPI
+	externalLabels   labels.Labels
+	maxBytesPerFrame int
 }
 
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.
@@ -50,10 +50,11 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, com
 		logger = log.NewNopLogger()
 	}
 	return &TSDBStore{
-		logger:         logger,
-		db:             db,
-		component:      component,
-		externalLabels: externalLabels,
+		logger:           logger,
+		db:               db,
+		component:        component,
+		externalLabels:   externalLabels,
+		maxBytesPerFrame: 1024 * 1024, // 1MB as recommended by gRPC.
 	}
 }
 
@@ -109,7 +110,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	q, err := s.db.Querier(context.Background(), r.MinTime, r.MaxTime)
+	q, err := s.db.ChunkQuerier(context.Background(), r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -119,72 +120,67 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		set        = q.Select(false, nil, matchers...)
 		respSeries storepb.Series
 	)
+
+	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-
 		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.externalLabels)
+		respSeries.Chunks = respSeries.Chunks[:0]
+		if r.SkipChunks {
+			if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
+				return status.Error(codes.Aborted, err.Error())
+			}
+			continue
+		}
 
-		if !r.SkipChunks {
-			// TODO(fabxc): An improvement over this trivial approach would be to directly
-			// use the chunks provided by TSDB in the response.
-			c, err := s.encodeChunks(series.Iterator(), MaxSamplesPerChunk)
-			if err != nil {
-				return status.Errorf(codes.Internal, "encode chunk: %s", err)
+		frameBytesLeft := s.maxBytesPerFrame
+		for _, lbl := range respSeries.Labels {
+			frameBytesLeft -= lbl.Size()
+		}
+
+		chIter := series.Iterator()
+		isNext := chIter.Next()
+		for isNext {
+			chk := chIter.At()
+			if chk.Chunk == nil {
+				return status.Errorf(codes.Internal, "TSDBStore: found not populated chunk returned by SeriesSet at ref: %v", chk.Ref)
 			}
 
-			respSeries.Chunks = append(respSeries.Chunks[:0], c...)
+			respSeries.Chunks = append(respSeries.Chunks, storepb.AggrChunk{
+				MinTime: chk.MinTime,
+				MaxTime: chk.MaxTime,
+				Raw: &storepb.Chunk{
+					Type: storepb.Chunk_Encoding(chk.Chunk.Encoding() - 1), // Proto chunk encoding is one off to TSDB one.
+					Data: chk.Chunk.Bytes(),
+				},
+			})
+			frameBytesLeft -= respSeries.Chunks[len(respSeries.Chunks)-1].Size()
+
+			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
+			isNext = chIter.Next()
+			if frameBytesLeft > 0 && isNext {
+				continue
+			}
+
+			if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
+				return status.Error(codes.Aborted, err.Error())
+			}
+			respSeries.Chunks = respSeries.Chunks[:0]
+		}
+		if err := chIter.Err(); err != nil {
+			return status.Error(codes.Internal, errors.Wrap(err, "chunk iter").Error())
 		}
 
-		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
-			return status.Error(codes.Aborted, err.Error())
-		}
 	}
 	if err := set.Err(); err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
+	for _, w := range set.Warnings() {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(w)); err != nil {
+			return status.Error(codes.Aborted, err.Error())
+		}
+	}
 	return nil
-}
-
-func (s *TSDBStore) encodeChunks(it chunkenc.Iterator, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
-	var (
-		chkMint int64
-		chk     *chunkenc.XORChunk
-		app     chunkenc.Appender
-		isNext  = it.Next()
-	)
-
-	for isNext {
-		if chk == nil {
-			chk = chunkenc.NewXORChunk()
-			app, err = chk.Appender()
-			if err != nil {
-				return nil, err
-			}
-			chkMint, _ = it.At()
-		}
-
-		app.Append(it.At())
-		chkMaxt, _ := it.At()
-
-		isNext = it.Next()
-		if isNext && chk.NumSamples() < maxSamplesPerChunk {
-			continue
-		}
-
-		// Cut the chunk.
-		chks = append(chks, storepb.AggrChunk{
-			MinTime: chkMint,
-			MaxTime: chkMaxt,
-			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chk.Bytes()},
-		})
-		chk = nil
-	}
-	if it.Err() != nil {
-		return nil, errors.Wrap(it.Err(), "read TSDB series")
-	}
-
-	return chks, nil
-
 }
 
 // translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
@@ -214,10 +210,10 @@ func (s *TSDBStore) translateAndExtendLabels(m, extend labels.Labels) []storepb.
 }
 
 // LabelNames returns all known label names.
-func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
+func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	q, err := s.db.Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -234,7 +230,7 @@ func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest
 func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
-	q, err := s.db.Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

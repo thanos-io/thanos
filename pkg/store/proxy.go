@@ -598,6 +598,8 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 		g.Go(func() error {
 			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
 				PartialResponseDisabled: r.PartialResponseDisabled,
+				Start:                   r.Start,
+				End:                     r.End,
 			})
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
@@ -647,6 +649,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
+				Start:                   r.Start,
+				End:                     r.End,
 			})
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", store)

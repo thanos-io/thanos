@@ -93,7 +93,7 @@ func TestEndpoints(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	app := db.Appender()
+	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
 			_, err := app.Add(lbl, i*60000, float64(i))
@@ -878,6 +878,10 @@ func TestParseTime(t *testing.T) {
 		}, {
 			input:  "2015-06-03T14:21:58.555+01:00",
 			result: ts,
+		}, {
+			// Test float rounding.
+			input:  "1543578564.705",
+			result: time.Unix(1543578564, 705*1e6),
 		},
 	}
 
@@ -1134,48 +1138,44 @@ func TestRulesHandler(t *testing.T) {
 		g: map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup{
 			rulespb.RulesRequest_ALL: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all,
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all,
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(10 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 				{
-					Name:                              "grp2",
-					File:                              "/path/to/groupfile2",
-					Rules:                             all[3:],
-					Interval:                          10,
-					EvaluationDurationSeconds:         2142,
-					LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
+					Name:                      "grp2",
+					File:                      "/path/to/groupfile2",
+					Rules:                     all[3:],
+					Interval:                  10,
+					EvaluationDurationSeconds: 2142,
+					LastEvaluation:            time.Time{}.Add(100 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_ABORT,
 				},
 			},
 			rulespb.RulesRequest_RECORD: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all[:2],
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all[:2],
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(20 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
 			rulespb.RulesRequest_ALERT: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all[2:],
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all[2:],
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(30 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
 		},
@@ -1258,24 +1258,22 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll,
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll,
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(10 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 					{
-						Name:                              "grp2",
-						File:                              "/path/to/groupfile2",
-						Rules:                             expectedAll[3:],
-						Interval:                          10,
-						EvaluationTime:                    2142,
-						LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
-						PartialResponseStrategy:           "ABORT",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp2",
+						File:                    "/path/to/groupfile2",
+						Rules:                   expectedAll[3:],
+						Interval:                10,
+						EvaluationTime:          2142,
+						LastEvaluation:          time.Time{}.Add(100 * time.Minute),
+						PartialResponseStrategy: "ABORT",
 					},
 				},
 			},
@@ -1285,14 +1283,13 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll[:2],
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll[:2],
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(20 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 				},
 			},
@@ -1302,14 +1299,13 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll[2:],
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll[2:],
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(30 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 				},
 			},

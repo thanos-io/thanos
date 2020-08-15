@@ -21,6 +21,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -1098,6 +1099,8 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	req := &storepb.LabelValuesRequest{
 		Label:                   "a",
 		PartialResponseDisabled: true,
+		Start:                   timestamp.FromTime(minTime),
+		End:                     timestamp.FromTime(maxTime),
 	}
 	resp, err := q.LabelValues(ctx, req)
 	testutil.Ok(t, err)
@@ -1139,6 +1142,8 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				},
 			},
 			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
 				PartialResponseDisabled: true,
 			},
 			expectedNames:       []string{"a", "b", "c", "d"},
@@ -1161,6 +1166,8 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				},
 			},
 			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
 				PartialResponseDisabled: true,
 			},
 			expectedErr: errors.New("fetch label names from store test: error!"),
@@ -1182,6 +1189,8 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				},
 			},
 			req: &storepb.LabelNamesRequest{
+				Start:                   timestamp.FromTime(minTime),
+				End:                     timestamp.FromTime(maxTime),
 				PartialResponseDisabled: false,
 			},
 			expectedNames:       []string{"a", "b"},

@@ -28,7 +28,7 @@ EOF
 
 }
 
-if ! [[ $0 == "scripts/genflagdocs.sh" ]]; then
+if ! [[ "scripts/genflagdocs.sh" =~ $0 ]]; then
   echo "must be run from repository root"
   exit 255
 fi
@@ -37,7 +37,7 @@ CHECK=${1:-}
 
 # Auto update flags.
 
-commands=("compact" "query" "rule" "sidecar" "store" "receive" "tools")
+commands=("compact" "query" "rule" "sidecar" "store" "receive" "tools" "query-frontend")
 for x in "${commands[@]}"; do
   ${THANOS_BIN} "${x}" --help &>"docs/components/flags/${x}.txt"
 done

@@ -80,7 +80,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(4), "thanos_store_nodes_grpc_connections"))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(4), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
 	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", []*rulespb.RuleGroup{
 		{

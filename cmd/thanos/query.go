@@ -32,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
@@ -60,6 +61,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+
+	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
 	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -147,15 +150,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
 
-		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
-
 		flagsMap := getFlagsMap(cmd.Model().Flags)
-
 		return runQuery(
 			g,
 			logger,
 			reg,
 			tracer,
+			*requestLoggingDecision,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -174,6 +175,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
+			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
 			selectorLset,
@@ -201,6 +203,7 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	requestLoggingDecision string,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -219,6 +222,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
+	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
@@ -305,6 +309,9 @@ func runQuery(
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
+				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
+					return defaultEvaluationInterval.Milliseconds()
+				},
 			},
 		)
 	)
@@ -401,6 +408,12 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.LogDecision[requestLoggingDecision]
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
@@ -422,7 +435,7 @@ func runQuery(
 			maxConcurrentQueries,
 		)
 
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),

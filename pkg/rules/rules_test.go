@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,69 +29,100 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 
 	expected := []*rulespb.RuleGroup{
 		{
-			Name:                              "thanos-bucket-replicate.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Name:                    "thanos-bucket-replicate.rules",
+			File:                    filepath.Join(dir, "alerts.yaml"),
+			Rules:                   []*rulespb.Rule{someAlert, someAlert, someAlert},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-compact.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Name:                    "thanos-compact.rules",
+			File:                    filepath.Join(dir, "alerts.yaml"),
+			Rules:                   []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-component-absent.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Name:                    "thanos-component-absent.rules",
+			File:                    filepath.Join(dir, "alerts.yaml"),
+			Rules:                   []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
 			Name: "thanos-query.rules",
 			File: filepath.Join(dir, "alerts.yaml"),
 			Rules: []*rulespb.Rule{
 				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
-				someRecording, someRecording, someRecording, someRecording, someRecording,
 			},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
 			Name: "thanos-receive.rules",
 			File: filepath.Join(dir, "alerts.yaml"),
 			Rules: []*rulespb.Rule{
 				someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert,
-				someRecording, someRecording, someRecording, someRecording, someRecording, someRecording, someRecording,
 			},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-rule.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Name:                    "thanos-rule.rules",
+			File:                    filepath.Join(dir, "alerts.yaml"),
+			Rules:                   []*rulespb.Rule{someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert, someAlert},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
-			Name:                              "thanos-sidecar.rules",
-			File:                              filepath.Join(dir, "alerts.yaml"),
-			Rules:                             []*rulespb.Rule{someAlert, someAlert},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Name:                    "thanos-sidecar.rules",
+			File:                    filepath.Join(dir, "alerts.yaml"),
+			Rules:                   []*rulespb.Rule{someAlert, someAlert},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 		{
 			Name: "thanos-store.rules",
 			File: filepath.Join(dir, "alerts.yaml"),
 			Rules: []*rulespb.Rule{
 				someAlert, someAlert, someAlert, someAlert,
+			},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			Name:                    "thanos-bucket-replicate.rules",
+			File:                    filepath.Join(dir, "rules.yaml"),
+			Rules:                   nil,
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			Name: "thanos-query.rules",
+			File: filepath.Join(dir, "rules.yaml"),
+			Rules: []*rulespb.Rule{
+				someRecording, someRecording, someRecording, someRecording, someRecording,
+			},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			Name: "thanos-receive.rules",
+			File: filepath.Join(dir, "rules.yaml"),
+			Rules: []*rulespb.Rule{
+				someRecording, someRecording, someRecording, someRecording, someRecording, someRecording, someRecording,
+			},
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			Name: "thanos-store.rules",
+			File: filepath.Join(dir, "rules.yaml"),
+			Rules: []*rulespb.Rule{
 				someRecording, someRecording, someRecording, someRecording,
 			},
-			Interval:                          60,
-			DeprecatedPartialResponseStrategy: storepb.PartialResponseStrategy_WARN, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			Interval:                60,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},
 	}
 
@@ -165,7 +197,9 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 				got[i].EvaluationDurationSeconds = 0
 				got[i].LastEvaluation = time.Time{}
 
-				testutil.Equals(t, expectedForType[i], got[i])
+				t.Run(got[i].Name+" "+path.Base(got[i].File), func(t *testing.T) {
+					testutil.Equals(t, expectedForType[i], got[i])
+				})
 			}
 			testutil.Equals(t, expectedForType, got)
 		})
@@ -739,6 +773,79 @@ func TestDedupGroups(t *testing.T) {
 				},
 				{
 					Name: "c",
+				},
+			},
+		},
+		{
+			name: "distinct file names",
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					File: "foo.yaml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+				{
+					Name: "a",
+					File: "bar.yaml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+					},
+				},
+				{
+					Name: "c",
+				},
+				{
+					Name: "a",
+					File: "bar.yaml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "a",
+					File: "foo.yaml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
 				},
 			},
 		},

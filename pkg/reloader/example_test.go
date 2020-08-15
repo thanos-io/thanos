@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/thanos-io/thanos/pkg/reloader"
 )
@@ -19,14 +20,14 @@ func ExampleReloader() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	rl := reloader.New(
-		nil,
-		nil,
-		reloader.ReloadURLFromBase(u),
-		"/path/to/cfg",
-		"/path/to/cfg.out",
-		[]string{"/path/to/dirs"},
-	)
+	rl := reloader.New(nil, nil, &reloader.Options{
+		ReloadURL:     reloader.ReloadURLFromBase(u),
+		CfgFile:       "/path/to/cfg",
+		CfgOutputFile: "/path/to/cfg.out",
+		RuleDirs:      []string{"/path/to/dirs"},
+		WatchInterval: 3 * time.Minute,
+		RetryInterval: 5 * time.Second,
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
