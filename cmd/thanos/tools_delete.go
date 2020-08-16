@@ -4,32 +4,18 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"io/ioutil"
-	"os"
-	"strconv"
-	"time"
-
-	"github.com/cespare/xxhash"
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/runutil"
-
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
-)
 
-type Tombstone struct {
-	Matcher string `json:"matcher"`
-	MinTime int64  `json:"minTime"`
-	MaxTime int64  `json:"maxTime"`
-}
+	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tombstone"
+)
 
 func registerDelete(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {
 	cmd := app.Command("delete", "Delete series command")
@@ -64,26 +50,9 @@ func registerDelete(m map[string]setupFunc, app *kingpin.CmdClause, pre string) 
 			return err
 		}
 
-		ts := Tombstone{Matcher: *matcher, MinTime: minTime.PrometheusTimestamp(), MaxTime: maxTime.PrometheusTimestamp()}
-		b, err := json.Marshal(ts)
-		if err != nil {
-			return err
-		}
+		ts := tombstone.NewTombstone(*matcher, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp())
 
-		tmpDir := os.TempDir()
-
-		tsPath := tmpDir + "/tombstone.json"
-		err = ioutil.WriteFile(tsPath, b, 0644)
-		if err != nil {
-			return err
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		hash := xxhash.Sum64(b)
-
-		err = objstore.UploadFile(ctx, logger, bkt, tsPath, "tombstones/"+strconv.FormatUint(hash, 10)+".json")
+		err = tombstone.UploadTombstone(ts, bkt, logger)
 		if err != nil {
 			return err
 		}
