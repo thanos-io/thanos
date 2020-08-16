@@ -36,6 +36,9 @@ Flags:
                            https://thanos.io/tracing.md/#configuration
 
 Subcommands:
+  tools delete [<flags>]
+    Delete series command
+
   tools bucket verify [<flags>]
     Verify all blocks in the bucket against specified issues
 
