@@ -1,3 +1,10 @@
+---
+title: Troubleshooting
+type: docs
+menu: operating
+slug: /troubleshooting.md
+---
+
 # Troubleshooting for dev workflow
 
 ## Dep `grouped write of manifest, lock and vendor: scratch directory ... already exists, please remove it`
