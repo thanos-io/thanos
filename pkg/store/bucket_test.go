@@ -1175,7 +1175,7 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 	var (
 		logger = log.NewNopLogger()
 		blocks []*bucketBlock
-		series []storepb.Series
+		series []*storepb.Series
 		random = rand.New(rand.NewSource(120))
 	)
 
@@ -1210,7 +1210,7 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	for bi := 0; bi < numOfBlocks; bi++ {
 		head, bSeries := storetestutil.CreateHeadWithSeries(t, bi, storetestutil.HeadGenOptions{
-			Dir:              tmpDir,
+			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", bi)),
 			SamplesPerSeries: samplesPerSeriesPerBlock,
 			Series:           seriesPerBlock,
 			PrependLabels:    extLset,
@@ -1533,17 +1533,22 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 	}
 
 	// Create TSDB blocks.
-	opts := storetestutil.HeadGenOptions{
-		Dir:              tmpDir,
+	head, seriesSet1 := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
+		TSDBDir:          filepath.Join(tmpDir, "0"),
 		SamplesPerSeries: 1,
 		Series:           2,
 		PrependLabels:    extLset,
 		Random:           random,
-	}
-	head, seriesSet1 := storetestutil.CreateHeadWithSeries(t, 0, opts)
+	})
 	block1 := createBlockFromHead(t, bktDir, head)
 	testutil.Ok(t, head.Close())
-	head2, seriesSet2 := storetestutil.CreateHeadWithSeries(t, 1, opts)
+	head2, seriesSet2 := storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
+		TSDBDir:          filepath.Join(tmpDir, "1"),
+		SamplesPerSeries: 1,
+		Series:           2,
+		PrependLabels:    extLset,
+		Random:           random,
+	})
 	block2 := createBlockFromHead(t, bktDir, head2)
 	testutil.Ok(t, head2.Close())
 
@@ -1607,7 +1612,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
-			ExpectedSeries: append(append([]storepb.Series{}, seriesSet1...), seriesSet2...),
+			ExpectedSeries: append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
 			ExpectedHints: []hintspb.SeriesResponseHints{
 				{
 					QueriedBlocks: []hintspb.Block{
