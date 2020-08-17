@@ -1,3 +1,11 @@
+---
+title: Getting Started
+type: docs
+menu: thanos
+weight: 1
+slug: /getting-started.md
+---
+
 # Getting started
 
 Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 

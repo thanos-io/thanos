@@ -1,3 +1,11 @@
+---
+title: High-availability for store instances
+type: proposal
+menu: proposals
+status: rejected
+owner: mattbostock
+---
+
 # High-availability for store instances
 
 Status: draft | in-review | **rejected** | accepted | complete
