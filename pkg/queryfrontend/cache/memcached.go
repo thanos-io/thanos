@@ -56,16 +56,28 @@ func newMemcachedCache(conf []byte, logger log.Logger, reg prometheus.Registerer
 		return nil, errors.Wrap(err, "create memcached client")
 	}
 
+	c := newMemcachedCacheWithClient(memcached, config.Validity, logger, reg)
+
+	return &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{Cache: c},
+	}, nil
+}
+
+func newMemcachedCacheWithClient(
+	memcached cacheutil.MemcachedClient,
+	validity time.Duration,
+	logger log.Logger,
+	reg prometheus.Registerer,
+) *MemcachedCache {
 	c := &MemcachedCache{
 		logger:    logger,
 		memcached: memcached,
-		validity:  config.Validity,
+		validity:  validity,
 	}
 
 	if c.validity == 0 {
-		c.validity = memcachedDefaultTTL
-
 		level.Info(logger).Log("msg", "memcached cache valid time set to 0, use 24 hours instead")
+		c.validity = memcachedDefaultTTL
 	}
 
 	c.requests = promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -80,11 +92,7 @@ func newMemcachedCache(conf []byte, logger log.Logger, reg prometheus.Registerer
 
 	level.Info(logger).Log("msg", "created memcached cache")
 
-	return &queryrange.ResultsCacheConfig{
-		CacheConfig: cortexcache.Config{
-			Cache: c,
-		},
-	}, nil
+	return c
 }
 
 // Store data identified by keys.

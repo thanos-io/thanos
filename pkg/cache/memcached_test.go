@@ -70,7 +70,7 @@ func TestMemcachedIndexCache(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			memcached := newMockedMemcachedClient(testData.mockedErr)
+			memcached := NewMockedMemcachedClient(testData.mockedErr)
 			c := NewMemcachedCache("test", log.NewNopLogger(), memcached, nil)
 
 			// Store the postings expected before running the test.
@@ -86,41 +86,4 @@ func TestMemcachedIndexCache(t *testing.T) {
 			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits))
 		})
 	}
-}
-
-type mockedMemcachedClient struct {
-	cache             map[string][]byte
-	mockedGetMultiErr error
-}
-
-func newMockedMemcachedClient(mockedGetMultiErr error) *mockedMemcachedClient {
-	return &mockedMemcachedClient{
-		cache:             map[string][]byte{},
-		mockedGetMultiErr: mockedGetMultiErr,
-	}
-}
-
-func (c *mockedMemcachedClient) GetMulti(_ context.Context, keys []string) map[string][]byte {
-	if c.mockedGetMultiErr != nil {
-		return nil
-	}
-
-	hits := map[string][]byte{}
-
-	for _, key := range keys {
-		if value, ok := c.cache[key]; ok {
-			hits[key] = value
-		}
-	}
-
-	return hits
-}
-
-func (c *mockedMemcachedClient) SetAsync(_ context.Context, key string, value []byte, _ time.Duration) error {
-	c.cache[key] = value
-	return nil
-}
-
-func (c *mockedMemcachedClient) Stop() {
-	// Nothing to do.
 }
