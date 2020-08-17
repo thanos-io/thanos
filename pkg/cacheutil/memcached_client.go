@@ -40,8 +40,8 @@ const (
 var (
 	errMemcachedAsyncBufferFull                = errors.New("the async buffer is full")
 	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
-	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("dns_provider_update_interval must be positive")
-	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max_async_concurrency must be positive")
+	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("DNS provider update interval must be positive")
+	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max async concurrency must be positive")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,
