@@ -1,3 +1,11 @@
+---
+title: Thanos Cluster Configuration
+type: proposal
+menu: proposals
+status: rejected
+owner: domgreen
+---
+
 # Thanos Cluster Configuration
 
 Status: draft | in-review | **rejected** | accepted | complete

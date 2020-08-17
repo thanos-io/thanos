@@ -1,8 +1,16 @@
+---
+title: Deprecated gossip clustering in favor of File SD
+type: proposal
+menu: proposals
+status: accepted
+owner: bwplotka
+---
+
 # Deprecated gossip clustering in favor of File SD
 
 Status: draft | in-review | rejected | **accepted** | complete
 
-Implementation Owner: [@bplotka](https://github.com/Bplotka)
+Implementation Owner: [@bwplotka](https://github.com/Bwplotka)
 
 Ticket: https://github.com/improbable-eng/thanos/issues/484
 
