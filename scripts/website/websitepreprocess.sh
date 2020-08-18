@@ -3,7 +3,7 @@
 # TODO(bwplotka): Take it from outside as param?
 # Regexp take from https://semver.org/
 # If we want to limit those we can sort, and have only head -n X of them etc
-RELEASE_FILTER_RE="release-(0|[1-9]\d*)\.(0|[1-9]\d*)(\.0|)$"
+RELEASE_FILTER_RE="release-(0|[1-9]\d*)\.(0|[1-9]\d*)(\.[0-9]|)$"
 WEBSITE_DIR="website"
 ORIGINAL_CONTENT_DIR="docs"
 OUTPUT_CONTENT_DIR="${WEBSITE_DIR}/docs-pre-processed"
