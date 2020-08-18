@@ -29,7 +29,8 @@ bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/tip" ${RELEASE_
 
 # TODO: In future, fix older release that does not have font matter.
 for branchRef in ${RELEASE_BRANCHES}; do
-    branch=${branchRef##*/}
+    branchName=${branchRef##*/}
+    branch=${branchName/release-/v}
     echo ">> cloning docs for versioning ${branch}"
     mkdir -p "${OUTPUT_CONTENT_DIR}/${branch}"
     git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${branch} -x "docs/" --strip-components=1
