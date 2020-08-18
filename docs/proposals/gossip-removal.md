@@ -6,14 +6,6 @@ status: accepted
 owner: bwplotka
 ---
 
-# Deprecated gossip clustering in favor of File SD
-
-Status: draft | in-review | rejected | **accepted** | complete
-
-Implementation Owner: [@bwplotka](https://github.com/Bwplotka)
-
-Ticket: https://github.com/improbable-eng/thanos/issues/484
-
 ## Summary
 
 It is becoming clear that we need to remove gossip protocol as our main way of communication between Thanos Querier and
