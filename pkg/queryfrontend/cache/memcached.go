@@ -46,12 +46,7 @@ func newMemcachedCache(conf []byte, logger log.Logger, reg prometheus.Registerer
 		return nil, err
 	}
 
-	memcachedClientConfig, err := yaml.Marshal(config.Memcached)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshal content of memcached client configuration")
-	}
-
-	memcached, err := cacheutil.NewMemcachedClient(logger, "response-cache", memcachedClientConfig, reg)
+	memcached, err := cacheutil.NewMemcachedClient(logger, "response-cache", conf, reg)
 	if err != nil {
 		return nil, errors.Wrap(err, "create memcached client")
 	}
@@ -76,18 +71,20 @@ func newMemcachedCacheWithClient(
 	}
 
 	if c.validity == 0 {
-		level.Info(logger).Log("msg", "memcached cache valid time set to 0, use 24 hours instead")
+		level.Warn(logger).Log("msg", "memcached cache valid time set to 0, use 24 hours instead")
 		c.validity = memcachedDefaultTTL
 	}
 
 	c.requests = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_cache_memcached_requests_total",
-		Help: "Total number of items requests to memcached.",
+		Name:        "thanos_cache_memcached_requests_total",
+		Help:        "Total number of items requests to memcached.",
+		ConstLabels: prometheus.Labels{"name": "response-cache"},
 	})
 
 	c.hits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_cache_memcached_hits_total",
-		Help: "Total number of items requests to the cache that were a hit.",
+		Name:        "thanos_cache_memcached_hits_total",
+		Help:        "Total number of items requests to the cache that were a hit.",
+		ConstLabels: prometheus.Labels{"name": "response-cache"},
 	})
 
 	level.Info(logger).Log("msg", "created memcached cache")
@@ -103,6 +100,11 @@ func (c *MemcachedCache) Store(ctx context.Context, keys []string, bufs [][]byte
 		firstErr error
 		failed   int
 	)
+
+	if len(keys) != len(bufs) {
+		level.Error(c.logger).Log("msg", "input keys and values should have same length")
+		return
+	}
 
 	for i, key := range keys {
 		if err := c.memcached.SetAsync(ctx, key, bufs[i], c.validity); err != nil {

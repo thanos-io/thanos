@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -133,7 +132,7 @@ func TestMemcachedResponseCache(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			memcached := cache.NewMockedMemcachedClient(tc.mockedErr)
+			memcached := newMockedMemcachedClient(tc.mockedErr)
 			c := newMemcachedCacheWithClient(memcached, time.Hour, log.NewNopLogger(), nil)
 
 			ctx := context.Background()
@@ -152,4 +151,43 @@ func TestMemcachedResponseCache(t *testing.T) {
 			testutil.Equals(t, float64(len(tc.expectedHits)), prom_testutil.ToFloat64(c.hits))
 		})
 	}
+}
+
+// mockedMemcachedClient is a mocked memcached client for testing.
+type mockedMemcachedClient struct {
+	cache       map[string][]byte
+	getMultiErr error
+}
+
+// newMockedMemcachedClient returns a mocked memcached client.
+func newMockedMemcachedClient(getMultiErr error) *mockedMemcachedClient {
+	return &mockedMemcachedClient{
+		cache:       map[string][]byte{},
+		getMultiErr: getMultiErr,
+	}
+}
+
+func (c *mockedMemcachedClient) GetMulti(_ context.Context, keys []string) map[string][]byte {
+	if c.getMultiErr != nil {
+		return nil
+	}
+
+	hits := map[string][]byte{}
+
+	for _, key := range keys {
+		if value, ok := c.cache[key]; ok {
+			hits[key] = value
+		}
+	}
+
+	return hits
+}
+
+func (c *mockedMemcachedClient) SetAsync(_ context.Context, key string, value []byte, _ time.Duration) error {
+	c.cache[key] = value
+	return nil
+}
+
+func (c *mockedMemcachedClient) Stop() {
+	// Nothing to do.
 }
