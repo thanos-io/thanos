@@ -6,13 +6,6 @@ status: rejected
 owner: mattbostock
 ---
 
-# High-availability for store instances
-
-Status: draft | in-review | **rejected** | accepted | complete
-
-Proposal author: [@mattbostock](https://github.com/mattbostock)
-Implementation owner: [@mattbostock](https://github.com/mattbostock)
-
 ## Status: Rejected
 
 This proposal makes total sense and solves our goals when using gossip. However there exists a very easy solution

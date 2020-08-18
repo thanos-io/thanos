@@ -6,12 +6,6 @@ status: accepted
 owner: bwplotka
 ---
 
-# Deprecated gossip clustering in favor of File SD
-
-Status: draft | in-review | rejected | **accepted** | complete
-
-Implementation Owner: [@bplotka](https://github.com/Bplotka)
-
 Ticket: https://github.com/improbable-eng/thanos/issues/484
 
 ## Summary

@@ -6,12 +6,6 @@ status: rejected
 owner: domgreen
 ---
 
-# Thanos Cluster Configuration
-
-Status: draft | in-review | **rejected** | accepted | complete
-
-Implementation Owner: [@domgreen](https://github.com/domgreen)
-
 ## Summary
 
 The proposal of creating a central configuration component within Thanos has been rejected by the community as the requirements are specific to the use case at Improbable and that adding configuration management into Thanos will result in adding more knowledge to the system about what the scrapers are doing and their targets.
