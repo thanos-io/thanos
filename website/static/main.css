@@ -119,6 +119,10 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
   }
 
 /* SideMenu Collapse */
+.docs-menu{
+    text-transform: capitalize;
+}
+
 .menuinput {
     display: none;
 }
