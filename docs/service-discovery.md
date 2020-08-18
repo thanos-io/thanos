@@ -1,3 +1,10 @@
+---
+title: Service Discovery
+type: docs
+menu: thanos
+slug: /service-discovery.md
+---
+
 # Thanos Service Discovery
 
 Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.

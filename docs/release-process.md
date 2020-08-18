@@ -1,3 +1,10 @@
+---
+title: Release Process
+type: docs
+menu: thanos
+slug: /release-process.md
+---
+
 # Releases
 
 This page describes the release process for Thanos project.

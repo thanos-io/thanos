@@ -1,9 +1,10 @@
-# High-availability for store instances
-
-Status: draft | in-review | **rejected** | accepted | complete
-
-Proposal author: [@mattbostock](https://github.com/mattbostock)
-Implementation owner: [@mattbostock](https://github.com/mattbostock)
+---
+title: High-availability for store instances
+type: proposal
+menu: proposals
+status: rejected
+owner: mattbostock
+---
 
 ## Status: Rejected
 

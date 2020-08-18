@@ -1,8 +1,10 @@
-# Thanos Cluster Configuration
-
-Status: draft | in-review | **rejected** | accepted | complete
-
-Implementation Owner: [@domgreen](https://github.com/domgreen)
+---
+title: Thanos Cluster Configuration
+type: proposal
+menu: proposals
+status: rejected
+owner: domgreen
+---
 
 ## Summary
 

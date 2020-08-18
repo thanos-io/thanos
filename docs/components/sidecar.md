@@ -1,3 +1,9 @@
+---
+title: Sidecar
+type: docs
+menu: components
+---
+
 # Sidecar
 
 The sidecar component of Thanos gets deployed along with a Prometheus instance. It implements Thanos' Store API on top of Prometheus' remote-read API and advertises itself as a data source to the cluster. Thereby queriers in the cluster can treat Prometheus servers as yet another source of time series data without directly talking to its APIs.
