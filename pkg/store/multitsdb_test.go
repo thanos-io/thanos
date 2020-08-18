@@ -12,12 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -25,7 +24,7 @@ import (
 )
 
 func TestMultiTSDBSeries(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
@@ -178,9 +177,9 @@ func (m *mockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Stor
 
 // Regression test against https://github.com/thanos-io/thanos/issues/2823.
 func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
-	t.Run("exhausted StoreSet", func(t *testing.T) {
-		defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
+	t.Run("exhausted StoreSet", func(t *testing.T) {
 		s := newTenantSeriesSetServer(context.Background(), "a", nil)
 
 		resps := []*storepb.SeriesResponse{
@@ -210,7 +209,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 	})
 
 	t.Run("canceled, not exhausted StoreSet", func(t *testing.T) {
-		defer leaktest.CheckTimeout(t, 10*time.Second)()
+		defer testutil.TolerantVerifyLeak(t)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		s := newTenantSeriesSetServer(ctx, "a", nil)
@@ -245,7 +244,7 @@ func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
 // Regression test against https://github.com/thanos-io/thanos/issues/2823.
 // This is different leak than in TestTenantSeriesSetServert_NotLeakingIfNotExhausted.
 func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	m := NewMultiTSDBStore(log.NewNopLogger(), nil, component.Receive, func() map[string]storepb.StoreServer {
 		return map[string]storepb.StoreServer{

@@ -20,9 +20,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -36,7 +34,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/encoding"
-
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -187,7 +184,7 @@ func TestBucketBlock_Property(t *testing.T) {
 }
 
 func TestBucketBlock_matchLabels(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	dir, err := ioutil.TempDir("", "bucketblock-test")
 	testutil.Ok(t, err)
@@ -285,7 +282,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.Labels{})
 
@@ -396,7 +393,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 }
 
 func TestBucketBlockSet_remove(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.Labels{})
 
@@ -426,7 +423,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 }
 
 func TestBucketBlockSet_labelMatchers(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.FromStrings("a", "b", "c", "d"))
 
@@ -495,7 +492,7 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 }
 
 func TestGapBasedPartitioner_Partition(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	const maxGapSize = 1024 * 512
 
@@ -555,7 +552,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 }
 
 func TestBucketStore_Info(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1735,6 +1732,8 @@ func TestBigEndianPostingsCount(t *testing.T) {
 }
 
 func TestBlockWithLargeChunks(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
 	tmpDir, err := ioutil.TempDir(os.TempDir(), "large-chunk-test")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
@@ -1830,10 +1829,16 @@ func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, ra
 	}
 
 	db, err := tsdb.Open(dir, nil, nil, tsdb.DefaultOptions())
+	defer func() {
+		testutil.Ok(t, db.Close())
+	}()
 	testutil.Ok(t, err)
 	bs := db.Blocks()
 	testutil.Equals(t, 1, len(bs))
 	cr, err := bs[0].Chunks()
+	defer func() {
+		testutil.Ok(t, cr.Close())
+	}()
 	testutil.Ok(t, err)
 	// Ref is (<segment file index> << 32 + offset in the file). In TSDB v1 first chunk is always at offset 8.
 	c, err := cr.Chunk(8)

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -19,7 +19,7 @@ import (
 )
 
 func TestTSDBStore_Info(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -53,7 +53,7 @@ func TestTSDBStore_Info(t *testing.T) {
 }
 
 func TestTSDBStore_Series(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -178,9 +178,9 @@ func TestTSDBStore_Series(t *testing.T) {
 }
 
 func TestTSDBStore_LabelNames(t *testing.T) {
-	var err error
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
+	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -284,9 +284,9 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 }
 
 func TestTSDBStore_LabelValues(t *testing.T) {
-	var err error
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
+	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -383,7 +383,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/1038.
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()

@@ -14,15 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+	"gopkg.in/yaml.v3"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v3"
 )
 
 type nopAppendable struct{}
@@ -249,6 +249,12 @@ groups:
 			testutil.Equals(t, exp[i].file, p.File)
 		})
 	}
+	defer func() {
+		// Update creates go routines. We don't need rules mngrs to run, just to parse things, but let it start and stop
+		// at the end to correctly test leaked go routines.
+		thanosRuleMgr.Run()
+		thanosRuleMgr.Stop()
+	}()
 }
 
 func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
@@ -280,8 +286,6 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
 }
 
 func TestManager_Rules(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	dir, err := ioutil.TempDir("", "test_rule_run")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()

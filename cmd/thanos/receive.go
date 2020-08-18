@@ -373,6 +373,7 @@ func runReceive(
 		if cw != nil {
 			// Check the hashring configuration on before running the watcher.
 			if err := cw.ValidateConfig(); err != nil {
+				cw.Stop()
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
 			}

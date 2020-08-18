@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -51,9 +50,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
-func TestEndpoints(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestMain(m *testing.M) {
+	testutil.TolerantVerifyLeakMain(m)
+}
 
+func TestEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
 		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},

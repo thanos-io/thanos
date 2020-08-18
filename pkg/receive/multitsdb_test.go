@@ -10,21 +10,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestMultiTSDB(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	dir, err := ioutil.TempDir("", "test")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()

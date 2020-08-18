@@ -9,19 +9,17 @@ import (
 	"math"
 	"net"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/store"
-
-	"sort"
-
-	"github.com/fortytw2/leaktest"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -124,9 +122,11 @@ func specsFromAddrFunc(addrs []string) func() []StoreSpec {
 	}
 }
 
-func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestMain(m *testing.M) {
+	testutil.TolerantVerifyLeakMain(m)
+}
 
+func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	st, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Sidecar,

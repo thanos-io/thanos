@@ -10,9 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
-	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -23,13 +21,18 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+	"go.uber.org/goleak"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestDownsampleCounterBoundaryReset(t *testing.T) {
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
+func TestDownsampleCounterBoundaryReset(t *testing.T) {
 	toAggrChunks := func(t *testing.T, cm []chunks.Meta) (res []*AggrChunk) {
 		for i := range cm {
 			achk, ok := cm[i].Chunk.(*AggrChunk)
@@ -207,8 +210,6 @@ var (
 )
 
 func TestDownsample(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	type downsampleTestCase struct {
 		name string
 
@@ -594,8 +595,6 @@ var (
 )
 
 func TestApplyCounterResetsIterator(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	for _, tcase := range []struct {
 		name string
 
