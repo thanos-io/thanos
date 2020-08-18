@@ -226,7 +226,7 @@ Keep in mind that the maximum number of concurrent queries that are handled by q
 
 It's possible to provide a set of matchers to the Querier api to select specific stores to be used during the query using the `storeMatch[]` parameter. It is useful when debugging a slow/broken store.
 It uses the same format as the matcher of [Prometheus' federate api](https://prometheus.io/docs/prometheus/latest/querying/api/#finding-series-by-label-matchers).
-Note that at the moment the querier only supports the `__address__` which contain the address of the store as it is shown on the `/stores` endoint of the UI.
+Note that at the moment the querier only supports the `__address__` which contain the address of the store as it is shown on the `/stores` endpoint of the UI.
 
 Example:
 ```
@@ -236,7 +236,7 @@ Example:
 ```
 
 ```
-http://localhost:10901/api/v1/query?query=up&dedup=true&partial_response=true&storeMatch={__address__=~"prometheus-foo.*"}
+http://localhost:10901/api/v1/query?query=up&dedup=true&partial_response=true&storeMatch[]={__address__=~"prometheus-foo.*"}
 ```
 
 Will only return metrics from `prometheus-foo.thanos-sidecar:10901`
