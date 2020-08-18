@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -37,7 +37,7 @@ func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	t.Helper()
 
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
@@ -171,7 +171,7 @@ func getExternalLabels() labels.Labels {
 func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	t.Helper()
 
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -351,8 +351,9 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		})
 	}
 }
+
 func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -397,7 +398,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -445,7 +446,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 
 // Test to check external label values retrieve.
 func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -485,7 +486,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -550,7 +551,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_Info(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -621,7 +622,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 // Regression test for https://github.com/thanos-io/thanos/issues/396.
 func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -643,12 +644,4 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 
 		return proxy
 	})
-}
-
-func TestRuleGroupToProto(t *testing.T) {
-
-}
-
-func TestRuleGroupFromProto(t *testing.T) {
-
 }

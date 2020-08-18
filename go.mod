@@ -16,7 +16,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
-	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-kit/kit v0.10.0
 	github.com/go-openapi/strfmt v0.19.5
@@ -56,6 +55,7 @@ require (
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.6.0
 	go.uber.org/automaxprocs v1.2.0
+	go.uber.org/goleak v1.1.0
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208

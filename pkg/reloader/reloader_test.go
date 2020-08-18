@@ -18,14 +18,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"go.uber.org/atomic"
+	"go.uber.org/goleak"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestReloader_ConfigApply(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
+func TestReloader_ConfigApply(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -159,8 +162,6 @@ config:
 }
 
 func TestReloader_RuleApply(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 

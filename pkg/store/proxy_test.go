@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -23,13 +22,14 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type testClient struct {
@@ -58,7 +58,7 @@ func (c testClient) Addr() string {
 }
 
 func TestProxyStore_Info(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -79,7 +79,7 @@ func TestProxyStore_Info(t *testing.T) {
 }
 
 func TestProxyStore_Series(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title          string
@@ -452,7 +452,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		t.Skip("enable THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS to run store-read-timeout tests")
 	}
 
-	defer leaktest.CheckTimeout(t, 20*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title          string
@@ -973,7 +973,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 }
 
 func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	m := &mockedStoreAPI{
 		RespSeries: []*storepb.SeriesResponse{
@@ -1016,7 +1016,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 }
 
 func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	var cls []Client
 	for i := 0; i < 10; i++ {
@@ -1071,7 +1071,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 }
 
 func TestProxyStore_LabelValues(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	m1 := &mockedStoreAPI{
 		RespLabelValues: &storepb.LabelValuesResponse{
@@ -1111,7 +1111,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 }
 
 func TestProxyStore_LabelNames(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title     string
@@ -1225,6 +1225,8 @@ func TestProxyStore_LabelNames(t *testing.T) {
 }
 
 func TestProxyStore_storeMatch(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
 	storeAPIs := []Client{
 		&testClient{
 			StoreClient: &mockedStoreAPI{
@@ -1310,8 +1312,6 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 }
 
 func TestStoreMatches(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	cases := []struct {
 		s          Client
 		mint, maxt int64
@@ -1718,7 +1718,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 }
 
 func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	clients := []Client{
 		&testClient{

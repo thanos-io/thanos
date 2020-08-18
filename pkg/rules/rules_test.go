@@ -18,6 +18,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+func TestMain(m *testing.M) {
+	testutil.TolerantVerifyLeakMain(m)
+}
+
 // testRulesAgainstExamples tests against alerts.yaml and rules.yaml examples.
 func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServer) {
 	t.Helper()

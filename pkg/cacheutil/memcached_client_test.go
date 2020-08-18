@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -66,8 +65,6 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 }
 
 func TestNewMemcachedClient(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	// Should return error on empty YAML config.
 	conf := []byte{}
 	cache, err := NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
@@ -130,8 +127,6 @@ dns_provider_update_interval: 1s
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	ctx := context.Background()
 	config := defaultMemcachedClientConfig
 	config.Addresses = []string{"127.0.0.1:11211"}
@@ -157,8 +152,6 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 }
 
 func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	ctx := context.Background()
 	config := defaultMemcachedClientConfig
 	config.Addresses = []string{"127.0.0.1:11211"}
@@ -185,8 +178,6 @@ func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
 }
 
 func TestMemcachedClient_GetMulti(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	tests := map[string]struct {
 		maxBatchSize          int
 		maxConcurrency        int

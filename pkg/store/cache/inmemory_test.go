@@ -10,9 +10,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
-	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
@@ -23,8 +21,6 @@ import (
 )
 
 func TestNewInMemoryIndexCache(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	// Should return error on invalid YAML config.
 	conf := []byte("invalid")
 	cache, err := NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
@@ -51,8 +47,6 @@ max_item_size: 2KB
 }
 
 func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSize: sliceHeaderSize + 5,
@@ -85,8 +79,6 @@ func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
 }
 
 func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	const maxSize = 2 * (sliceHeaderSize + 1)
 
 	var errorLogs []string
@@ -190,8 +182,6 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 
 // This should not happen as we hardcode math.MaxInt, but we still add test to check this out.
 func TestInMemoryIndexCache_MaxNumberOfItemsHit(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSize: 2*sliceHeaderSize + 10,
@@ -224,8 +214,6 @@ func TestInMemoryIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 }
 
 func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSize: 2*sliceHeaderSize + 5,
