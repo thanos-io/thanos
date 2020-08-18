@@ -84,7 +84,7 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	// and which breaks users with a --web.route-prefix that deviates from the path derived
 	// from the external URL.
 	r.Get("/new", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), "new")+"/", http.StatusFound)
+		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), "new")+"/graph", http.StatusFound)
 	})
 	r.Get("/new/*filepath", instrf("react-static", q.serveReactUI))
 
