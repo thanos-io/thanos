@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 OUTPUT_CONTENT_DIR=$1
+TOP_WEIGHT=$2
 COMMIT_SHA=`git rev-parse HEAD`
 
 echo ">> preprocessing content of dir ${OUTPUT_CONTENT_DIR}"
@@ -67,6 +68,15 @@ mv ${OUTPUT_CONTENT_DIR}/*.md ${OUTPUT_CONTENT_DIR}/thanos/
 mv ${OUTPUT_CONTENT_DIR}/thanos/CONTRIBUTING.md ${OUTPUT_CONTENT_DIR}/contributing/CONTRIBUTING.md
 mv ${OUTPUT_CONTENT_DIR}/thanos/CODE_OF_CONDUCT.md ${OUTPUT_CONTENT_DIR}/contributing/CODE_OF_CONDUCT.md
 mv ${OUTPUT_CONTENT_DIR}/thanos/community.md ${OUTPUT_CONTENT_DIR}/contributing/community.md
+
+#Create an _index.md in all dirs to enable sorting capabilities and make "tip" appear top in version picker
+echo "$(
+  cat <<EOF
+---
+weight: ${TOP_WEIGHT}
+---
+EOF
+)" >${OUTPUT_CONTENT_DIR}/_index.md
 
 # Add edit footer to all markdown files assumed as content.
 ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md"`

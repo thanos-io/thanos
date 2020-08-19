@@ -17,7 +17,7 @@ git remote -v
 git fetch origin
 # TODO: Remove head -n 3 when ready for prod.
 # TODO: Here add logic what releases to filter (regexp) based on some parameter.
-RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}"| egrep --invert-match '(:?HEAD|master)$' | sort -nr)
+RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}"| egrep --invert-match '(:?HEAD|master)$' | sort -V)
 echo ">> chosen $(echo ${RELEASE_BRANCHES}) releases to deploy docs from"
 
 rm -rf ${OUTPUT_CONTENT_DIR}
@@ -25,23 +25,20 @@ mkdir -p "${OUTPUT_CONTENT_DIR}/tip"
 
 # Copy original content from current state first.
 cp -r ${ORIGINAL_CONTENT_DIR}/* "${OUTPUT_CONTENT_DIR}/tip"
-bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/tip" ${RELEASE_BRANCHES}
+bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/tip" 100000
+
+#create variable for weight value
+WEIGHT_VALUE=0
 
 # TODO: In future, fix older release that does not have font matter.
 for branchRef in ${RELEASE_BRANCHES}; do
+    WEIGHT_VALUE=$(( WEIGHT_VALUE + 1 ))
     branchName=${branchRef##*/}
     branch=${branchName/release-/v}
     echo ">> cloning docs for versioning ${branch}"
     mkdir -p "${OUTPUT_CONTENT_DIR}/${branch}"
     git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${branch} -x "docs/" --strip-components=1
-    bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${branch}"
-done
-
-# Find and remove _index.md from all firectory inorder to render docs content
-for f in $FILES
-do
-  # take action on each file. $f store current file name
-  find $FILES -name "_index.md" -delete
+    bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${branch}" ${WEIGHT_VALUE}    
 done
 
 # TODO: Open problems to solve:
