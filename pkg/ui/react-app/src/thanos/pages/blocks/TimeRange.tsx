@@ -18,7 +18,7 @@ const NUM_MARKS = 10;
 
 const TimeRange: FC<TimeRangeProps> = ({ viewMinTime, viewMaxTime, gridMinTime, gridMaxTime, onChange }) => {
   const marks = useMemo(() => {
-    const step = (gridMaxTime - gridMinTime) / NUM_MARKS;
+    const step = Math.ceil((gridMaxTime - gridMinTime) / NUM_MARKS);
 
     const marks: { [num: string]: string } = {};
     for (let i = gridMinTime + step; i < gridMaxTime; i += step) {
@@ -35,7 +35,6 @@ const TimeRange: FC<TimeRangeProps> = ({ viewMinTime, viewMaxTime, gridMinTime, 
         min={gridMinTime}
         max={gridMaxTime}
         marks={marks}
-        // tipFormatter={(t: number): string => moment.unix(t / 1000).format('lll')}
         defaultValue={[viewMinTime, viewMaxTime]}
         onChange={onChange}
       />
