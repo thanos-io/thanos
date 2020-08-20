@@ -1549,7 +1549,7 @@
                      "expr": "sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) by (job, alertmanager)",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{alertmanager}}",
+                     "legendFormat": "{{alertmanager}}",
                      "legendLink": null,
                      "step": 10
                   }
