@@ -76,12 +76,14 @@ func (r *fakeRoundTripper) RoundTrip(h *http.Request) (*http.Response, error) {
 
 // TestRoundTripRetryMiddleware tests the retry middleware.
 func TestRoundTripRetryMiddleware(t *testing.T) {
-	testRequest := &queryrange.PrometheusRequest{
+	testRequest := &ThanosRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
+
+	codec := NewThanosCodec(true)
 
 	for _, tc := range []struct {
 		name             string
@@ -94,7 +96,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		{
 			name:       "not query range, retry won't be triggered 1.",
 			maxRetries: 100,
-			req: &queryrange.PrometheusRequest{
+			req: &ThanosRequest{
 				Path:  "/api/v1/query",
 				Start: 0,
 				End:   2 * hour,
@@ -108,7 +110,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		{
 			name:       "not query range, retry won't be triggered 2.",
 			maxRetries: 100,
-			req: &queryrange.PrometheusRequest{
+			req: &ThanosRequest{
 				Path:  "/api/v1/labels",
 				Start: 0,
 				End:   2 * hour,
@@ -146,7 +148,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, queryrange.PrometheusCodec, nil,
+			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
 				day, tc.maxRetries, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
@@ -156,7 +158,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := queryrange.PrometheusCodec.EncodeRequest(ctx, tc.req)
+			httpReq, err := codec.EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -170,12 +172,14 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 
 // TestRoundTripSplitIntervalMiddleware tests the split interval middleware.
 func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
-	testRequest := &queryrange.PrometheusRequest{
+	testRequest := &ThanosRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
+
+	codec := NewThanosCodec(true)
 
 	for _, tc := range []struct {
 		name             string
@@ -187,7 +191,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	}{
 		{
 			name: "non query range request won't be split 1",
-			req: &queryrange.PrometheusRequest{
+			req: &ThanosRequest{
 				Path:  "/api/v1/query",
 				Start: 0,
 				End:   2 * hour,
@@ -200,7 +204,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		},
 		{
 			name: "non query range request won't be split 2",
-			req: &queryrange.PrometheusRequest{
+			req: &ThanosRequest{
 				Path:  "/api/v1/labels",
 				Start: 0,
 				End:   2 * hour,
@@ -246,7 +250,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, queryrange.PrometheusCodec, nil,
+			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
 				tc.splitInterval, 0, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
@@ -256,7 +260,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := queryrange.PrometheusCodec.EncodeRequest(ctx, tc.req)
+			httpReq, err := codec.EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -270,19 +274,30 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 
 // TestRoundTripCacheMiddleware tests the cache middleware.
 func TestRoundTripCacheMiddleware(t *testing.T) {
-	testRequest := &queryrange.PrometheusRequest{
-		Path:  "/api/v1/query_range",
+	testRequest := &ThanosRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 1 * seconds,
+	}
+
+	// non query range request, won't be cached.
+	testRequest2 := &ThanosRequest{
+		Path:  "/api/v1/query",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
 
-	// non query range request, won't be cached.
-	testRequest2 := &queryrange.PrometheusRequest{
-		Path:  "/api/v1/query",
-		Start: 0,
-		End:   2 * hour,
-		Step:  10 * seconds,
+	// same query params as testRequest, but with different maxSourceResolution,
+	// so won't be cached in this case.
+	testRequest3 := &ThanosRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 10 * seconds,
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{
@@ -296,8 +311,10 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		},
 	}
 
+	codec := NewThanosCodec(true)
+
 	now := time.Now()
-	tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, queryrange.PrometheusCodec, queryrange.PrometheusResponseExtractor{},
+	tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, codec, queryrange.PrometheusResponseExtractor{},
 		day, 0, nil, log.NewNopLogger())
 	testutil.Ok(t, err)
 
@@ -328,23 +345,18 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 			expected: 2,
 		},
 		{
-			name:     "do it again",
-			req:      testRequest2,
+			name:     "different max source resolution won't be cached",
+			req:      testRequest3,
 			expected: 3,
 		},
 		{
-			name: "request but will be partitioned",
-			req: &queryrange.PrometheusRequest{
-				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
-				Step:  10 * seconds,
-			},
+			name:     "do it again",
+			req:      testRequest2,
 			expected: 4,
 		},
 		{
-			name: "same query as the previous one",
-			req: &queryrange.PrometheusRequest{
+			name: "request but will be partitioned",
+			req: &ThanosRequest{
 				Path:  "/api/v1/query_range",
 				Start: timestamp.FromTime(now.Add(-time.Hour)),
 				End:   timestamp.FromTime(now.Add(time.Hour)),
@@ -352,12 +364,22 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 			},
 			expected: 5,
 		},
+		{
+			name: "same query as the previous one",
+			req: &ThanosRequest{
+				Path:  "/api/v1/query_range",
+				Start: timestamp.FromTime(now.Add(-time.Hour)),
+				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Step:  10 * seconds,
+			},
+			expected: 6,
+		},
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := queryrange.PrometheusCodec.EncodeRequest(ctx, tc.req)
+			httpReq, err := codec.EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
