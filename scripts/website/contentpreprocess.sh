@@ -2,7 +2,7 @@
 
 OUTPUT_CONTENT_DIR=$1
 TOP_WEIGHT=$2
-COMMIT_SHA=`git rev-parse HEAD`
+COMMIT_SHA=$(git rev-parse HEAD)
 
 echo ">> preprocessing content of dir ${OUTPUT_CONTENT_DIR}"
 
@@ -79,11 +79,11 @@ EOF
 )" >${OUTPUT_CONTENT_DIR}/_index.md
 
 # Add edit footer to all markdown files assumed as content.
-ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md"`
-for file in ${ALL_DOC_CONTENT_FILES}
-do
+ALL_DOC_CONTENT_FILES=$(echo "${OUTPUT_CONTENT_DIR}/**/*.md")
+for file in ${ALL_DOC_CONTENT_FILES}; do
   relFile=${file##${OUTPUT_CONTENT_DIR}/}
-  echo "$(cat <<EOF
+  echo "$(
+    cat <<EOF
 
 ---
 
@@ -91,7 +91,7 @@ Found a typo, inconsistency or missing information in our docs?
 Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/master/docs/${relFile}) :heart:
 
 EOF
-)" >> ${file}
+  )" >>${file}
 
 done
 
@@ -105,7 +105,7 @@ perl -pi -e 's/src=\"(?!http)/src=\"..\//g' ${ALL_DOC_CONTENT_FILES}
 
 CODING_STYLE_FILE=${OUTPUT_CONTENT_DIR}/contributing/coding-style-guide.md
 # "Mask" bug in blackfriday that does not generate code snippets in tables.
-if [[ -f "${CODING_STYLE_FILE}" ]]; then
+if [[ -f ${CODING_STYLE_FILE} ]]; then
   perl -pi -e 's/```([a-z]+)/{{< highlight $1 >}}/g' ${CODING_STYLE_FILE}
   perl -pi -e 's/```/{{< \/highlight >}}/g' ${CODING_STYLE_FILE}
 fi

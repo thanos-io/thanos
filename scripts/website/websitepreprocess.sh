@@ -17,7 +17,7 @@ git remote -v
 git fetch origin
 # TODO: Remove head -n 3 when ready for prod.
 # TODO: Here add logic what releases to filter (regexp) based on some parameter.
-RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}"| egrep --invert-match '(:?HEAD|master)$' | sort -V)
+RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}" | egrep --invert-match '(:?HEAD|master)$' | sort -V)
 echo ">> chosen $(echo ${RELEASE_BRANCHES}) releases to deploy docs from"
 
 rm -rf ${OUTPUT_CONTENT_DIR}
@@ -32,13 +32,13 @@ WEIGHT_VALUE=0
 
 # TODO: In future, fix older release that does not have font matter.
 for branchRef in ${RELEASE_BRANCHES}; do
-    WEIGHT_VALUE=$(( WEIGHT_VALUE + 1 ))
-    branchName=${branchRef##*/}
-    branch=${branchName/release-/v}
-    echo ">> cloning docs for versioning ${branch}"
-    mkdir -p "${OUTPUT_CONTENT_DIR}/${branch}"
-    git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${branch} -x "docs/" --strip-components=1
-    bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${branch}" ${WEIGHT_VALUE}    
+  WEIGHT_VALUE=$((WEIGHT_VALUE + 1))
+  branchName=${branchRef##*/}
+  branch=${branchName/release-/v}
+  echo ">> cloning docs for versioning ${branch}"
+  mkdir -p "${OUTPUT_CONTENT_DIR}/${branch}"
+  git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${branch} -x "docs/" --strip-components=1
+  bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${branch}" ${WEIGHT_VALUE}
 done
 
 # TODO: Open problems to solve:
