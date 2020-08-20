@@ -20,7 +20,7 @@ describe('BlockDetails', () => {
   const blockDetails = mount(<BlockDetails {...defaultProps} />);
 
   it('renders a heading with block ulid', () => {
-    const title = blockDetails.find('div > p');
+    const title = blockDetails.find({ 'data-testid': 'ulid' });
     expect(title).toHaveLength(1);
     expect(title.text()).toEqual(sampleBlock.ulid);
   });

@@ -50,7 +50,7 @@
   flex-wrap: wrap-reverse;
 }
 
-.detailsTop > p {
+.header {
   margin: 0;
   padding: 0;
   font-weight: 700;
@@ -93,7 +93,8 @@
   padding: 0 1em;
 }
 
-.title > p {
+.title > span {
+  display: block;
   width: 8vw;
   margin: 0;
   text-align: center;

@@ -14,7 +14,9 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
       {block && (
         <>
           <div className={styles.detailsTop}>
-            <p>{block.ulid}</p>
+            <span className={styles.header} data-testid="ulid">
+              {block.ulid}
+            </span>
             <button className={styles.closeBtn} onClick={(): void => selectBlock(undefined)}>
               &times;
             </button>

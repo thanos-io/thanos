@@ -31,7 +31,7 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
     <>
       <div className={styles.source}>
         <div className={styles.title} title={title}>
-          <p>{title}</p>
+          <span>{title}</span>
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map(k => (
