@@ -35,6 +35,7 @@ var (
 		"/tsdb-status",
 		"/version",
 		"/stores",
+		"/blocks",
 	}
 )
 
