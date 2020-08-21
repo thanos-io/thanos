@@ -117,3 +117,6 @@ adopters:
 - name: TiDB Cloud
   url: https://tidbcloud.com
   logo: tidbcloud.png
+- name: Talend
+  url: https://www.talend.com
+  logo: talend.png
