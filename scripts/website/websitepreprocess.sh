@@ -9,8 +9,6 @@ ORIGINAL_CONTENT_DIR="docs"
 OUTPUT_CONTENT_DIR="${WEBSITE_DIR}/docs-pre-processed"
 FILES="${WEBSITE_DIR}/docs-pre-processed/*"
 
-# git clone https://github.com/thanos-io/thanos.git
-
 git remote add upstream https://github.com/thanos-io/thanos.git
 git remote add origin https://github.com/thanos-io/thanos.git
 git remote -v
