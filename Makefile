@@ -253,7 +253,7 @@ endif
 .PHONY: web-pre-process
 web-pre-process:
 	@echo ">> running documentation website pre processing"
-	@bash scripts/website/websitepreprocess.sh
+	scripts/website/websitepreprocess.sh
 
 .PHONY: web
 web: ## Builds our website.

@@ -34,11 +34,11 @@ WEIGHT_VALUE=0
 for branchRef in ${RELEASE_BRANCHES}; do
   WEIGHT_VALUE=$((WEIGHT_VALUE + 1))
   branchName=${branchRef##*/}
-  branch=${branchName/release-/v}
-  echo ">> cloning docs for versioning ${branch}"
-  mkdir -p "${OUTPUT_CONTENT_DIR}/${branch}"
-  git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${branch} -x "docs/" --strip-components=1
-  bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${branch}" ${WEIGHT_VALUE}
+  tags=${branchName/release-/v}
+  echo ">> cloning docs for versioning ${tags}"
+  mkdir -p "${OUTPUT_CONTENT_DIR}/${tags}"
+  git archive --format=tar "refs/${branchRef}" | tar -C${OUTPUT_CONTENT_DIR}/${tags} -x "docs/" --strip-components=1
+  bash scripts/website/contentpreprocess.sh "${OUTPUT_CONTENT_DIR}/${tags}" ${WEIGHT_VALUE}
 done
 
 # TODO: Open problems to solve:
