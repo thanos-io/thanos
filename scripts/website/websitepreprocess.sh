@@ -41,8 +41,7 @@ done
 
 # Find and remove _index.md from components, proposal, and operating dirs inorder to render docs content
 # Due to _index.md in these dirs, hugo misinterprets dirs for single pages thus blocking rendering of content
-for f in $FILES
-do
+for f in $FILES; do
   # take action on each file. $f store current file name
   find $FILES -mindepth 2 -name "_index.md" -delete
 done
