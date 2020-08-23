@@ -86,6 +86,11 @@ config:
   encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
+  sse_config:
+    enabled: false
+    kms_key_id: ""
+    kms_encryption_context: {}
+    encryption_key: ""
   http_config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
@@ -114,6 +119,18 @@ For debug and testing purposes you can set
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
 
 * `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
+
+#### S3 Server-Side Encryption
+
+SSE can be configued using the `sse_config`. [SSE-S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html), [SSE-KMS](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html), and [SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) are supported.
+
+The following combinations are allowed:
+* If `enabled` is set to `true` but nothing else is set, we default to using [SSE-S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html).
+* If `kms_key_id` is set, [SSE-KMS](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html) is used, and the objects that Thanos uploads will be encrypted using that key.
+* If `kms_encryption_context` is set with `kms_key_id`, you will add an [encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context) that provides a layer of integrity checks. Note that you do not have to set this as AWS will provide a default one for you.
+* If `encryption_key` is set, [SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) is set up using the key provided.
+
+Thanos will throw an error if `encryption_key` AND `kms_key_id` is set.
 
 #### Credentials
 
