@@ -83,14 +83,8 @@ config:
   access_key: ""
   insecure: false
   signature_version2: false
-  encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
-  sse_config:
-    enabled: false
-    kms_key_id: ""
-    kms_encryption_context: {}
-    encryption_key: ""
   http_config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
@@ -98,6 +92,11 @@ config:
   trace:
     enable: false
   part_size: 134217728
+  sse_config:
+    enabled: false
+    kms_key_id: ""
+    kms_encryption_context: {}
+    encryption_key: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
