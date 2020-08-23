@@ -29,7 +29,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
 - [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and also increase the timeout for 10 minutes.
 - [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: consider group name and file for deduplication
-- [#3064](https://github.com/thanos-io/thanos/pull/3064) s3: Add SSE/SSE-KMS/SSE-C configuration 
+- [#3064](https://github.com/thanos-io/thanos/pull/3064) s3: Add SSE/SSE-KMS/SSE-C configuration
 
 ### Added
 
