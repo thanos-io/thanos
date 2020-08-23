@@ -24,6 +24,18 @@ insecure: false`)
 	}
 }
 
+func TestParseConfig_SSEConfig(t *testing.T) {
+	input := []byte(`sse_config:
+  enabled: true`)
+
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	if !cfg.SSEConfig.Enable {
+		t.Errorf("parsing of sse_config failed: got %v, expected %v", cfg.SSEConfig.Enable, true)
+	}
+}
+
 func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false`)

@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -53,13 +54,22 @@ type Config struct {
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
-	SSEEncryption   bool              `yaml:"encrypt_sse"`
 	SecretKey       string            `yaml:"secret_key"`
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
-	PartSize uint64 `yaml:"part_size"`
+	PartSize  uint64    `yaml:"part_size"`
+	SSEConfig SSEConfig `yaml:"sse_config"`
+}
+
+// SSEConfig deals with the configuration of SSE for Minio. The following options are valid:
+// kmsencryptioncontext == https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context
+type SSEConfig struct {
+	Enable               bool              `yaml:"enabled"`
+	KMSKeyID             string            `yaml:"kms_key_id"`
+	KMSEncryptionContext map[string]string `yaml:"kms_encryption_context"`
+	EncryptionKey        string            `yaml:"encryption_key"`
 }
 
 type TraceConfig struct {
@@ -173,8 +183,26 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 
 	var sse encrypt.ServerSide
-	if config.SSEEncryption {
-		sse = encrypt.NewSSE()
+	if config.SSEConfig.Enable {
+		switch {
+		case config.SSEConfig.KMSKeyID != "":
+			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
+			if err != nil {
+				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
+			}
+		case config.SSEConfig.EncryptionKey != "":
+			key, err := ioutil.ReadFile(config.SSEConfig.EncryptionKey)
+			if err != nil {
+				return nil, err
+			}
+
+			sse, err = encrypt.NewSSEC(key)
+			if err != nil {
+				return nil, errors.Wrap(err, "initialize s3 client SSE-C")
+			}
+		default:
+			sse = encrypt.NewSSE()
+		}
 	}
 
 	if config.TraceConfig.Enable {
@@ -210,6 +238,10 @@ func validate(conf Config) error {
 
 	if conf.AccessKey != "" && conf.SecretKey == "" {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
+	}
+
+	if conf.SSEConfig.EncryptionKey != "" && conf.SSEConfig.KMSKeyID != "" {
+		return errors.New("sse_encryption_key AND sse_kms_key_id set in sse_config. You can set one or the other, but NOT both.")
 	}
 	return nil
 }
