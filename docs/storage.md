@@ -131,6 +131,26 @@ SSE can be configued using the `sse_config`. [SSE-S3](https://docs.aws.amazon.co
 
 If the SSE Config block is set but the `type` is not one of `SSE-S3`, `SSE-KMS`, or `SSE-C`, an error is raised.
 
+You will also need to apply the following AWS IAM policy for the user to access the KMS key:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "KMSAccess",
+            "Effect": "Allow",
+            "Action": [
+                "kms:GenerateDataKey",
+                "kms:Encrypt",
+                "kms:Decrypt"
+            ],
+            "Resource": "arn:aws:kms:<region>:<account>:key/<KMS key id>"
+        }
+    ]
+}
+```
+
 #### Credentials
 
 By default Thanos will try to retrieve credentials from the following sources:
