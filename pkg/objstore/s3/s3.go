@@ -210,7 +210,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			sse = encrypt.NewSSE()
 
 		default:
-			sseErrMsg := errors.New("A type of SSE-S3, SSE-C, or SSE-KMS was not provided in sse_config")
+			sseErrMsg := errors.Errorf("Unsupported type %q was provided. Supported types are SSE-S3, SSE-KMS, SSE-C", config.SSEConfig.Type)
 			return nil, errors.Wrap(sseErrMsg, "Initialize s3 client SSE Config")
 		}
 	}
