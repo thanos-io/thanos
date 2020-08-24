@@ -13,6 +13,16 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 :warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
 
+:warning: **WARNING** :warning: The `sse_encryption` value is now deprecated in favour of `sse_config`. If you used `sse_encryption`, the migration strategy is to set up the following block:
+
+```yaml
+
+---
+sse_config:
+  type: SSE-S3
+```
+
+
 ### Fixed
 
 - [#2937](https://github.com/thanos-io/thanos/pull/2937) Receive: Fixing auto-configuration of --receive.local-endpoint
@@ -29,7 +39,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
 - [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and also increase the timeout for 10 minutes.
 - [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: consider group name and file for deduplication
-- [#3064](https://github.com/thanos-io/thanos/pull/3064) s3: Add SSE/SSE-KMS/SSE-C configuration
+- [#3064](https://github.com/thanos-io/thanos/pull/3064) s3: Add SSE/SSE-KMS/SSE-C configuration.
 
 ### Added
 

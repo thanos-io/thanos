@@ -66,7 +66,7 @@ type Config struct {
 // SSEConfig deals with the configuration of SSE for Minio. The following options are valid:
 // kmsencryptioncontext == https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context
 type SSEConfig struct {
-	Enable               bool              `yaml:"enabled"`
+	Type                 string            `yaml:"type"`
 	KMSKeyID             string            `yaml:"kms_key_id"`
 	KMSEncryptionContext map[string]string `yaml:"kms_encryption_context"`
 	EncryptionKey        string            `yaml:"encryption_key"`
@@ -183,14 +183,15 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 
 	var sse encrypt.ServerSide
-	if config.SSEConfig.Enable {
+	if config.SSEConfig.Type != "" {
 		switch {
-		case config.SSEConfig.KMSKeyID != "":
+		case config.SSEConfig.Type != "SSE-KMS":
 			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
 			if err != nil {
 				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
 			}
-		case config.SSEConfig.EncryptionKey != "":
+
+		case config.SSEConfig.Type == "SSE-C":
 			key, err := ioutil.ReadFile(config.SSEConfig.EncryptionKey)
 			if err != nil {
 				return nil, err
@@ -200,8 +201,13 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			if err != nil {
 				return nil, errors.Wrap(err, "initialize s3 client SSE-C")
 			}
-		default:
+
+		case config.SSEConfig.Type == "SSE-S3":
 			sse = encrypt.NewSSE()
+
+		default:
+			sseErrMsg := errors.New("A type of SSE-S3, SSE-C, or SSE-KMS was not provided in sse_config")
+			return nil, errors.Wrap(sseErrMsg, "Initialize s3 client SSE Config")
 		}
 	}
 
@@ -240,9 +246,14 @@ func validate(conf Config) error {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 
-	if conf.SSEConfig.EncryptionKey != "" && conf.SSEConfig.KMSKeyID != "" {
-		return errors.New("sse_encryption_key AND sse_kms_key_id set in sse_config. You can set one or the other, but NOT both.")
+	if conf.SSEConfig.Type == "SSE-C" && conf.SSEConfig.EncryptionKey == "" {
+		return errors.New("encryption_key must be set if sse_config.type is set to 'SSE-C'")
 	}
+
+	if conf.SSEConfig.Type == "SSE-KMS" && conf.SSEConfig.KMSKeyID == "" {
+		return errors.New("kms_key_id must be set if sse_config.type is set to 'SSE-KMS'")
+	}
+
 	return nil
 }
 

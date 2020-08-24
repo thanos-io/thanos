@@ -93,7 +93,7 @@ config:
     enable: false
   part_size: 134217728
   sse_config:
-    enabled: false
+    type: SSE-S3|SSE-KMS|SSE-C
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
@@ -123,13 +123,13 @@ For debug and testing purposes you can set
 
 SSE can be configued using the `sse_config`. [SSE-S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html), [SSE-KMS](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html), and [SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) are supported.
 
-The following combinations are allowed:
-* If `enabled` is set to `true` but nothing else is set, we default to using [SSE-S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html).
-* If `kms_key_id` is set, [SSE-KMS](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html) is used, and the objects that Thanos uploads will be encrypted using that key.
-* If `kms_encryption_context` is set with `kms_key_id`, you will add an [encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context) that provides a layer of integrity checks. Note that you do not have to set this as AWS will provide a default one for you.
-* If `encryption_key` is set, [SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) is set up using the key provided.
+* If type is set to `SSE-S3` you do not need to configure other options.
 
-Thanos will throw an error if `encryption_key` AND `kms_key_id` is set.
+* If type is set to `SSE-KMS` you must set `kms_key_id`. The `kms_encryption_context` is optional, as [AWS provides a default encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context).
+
+* If type is set to `SSE-C` you must provide a path to the encryption key using `encryption_key`.
+
+If the SSE Config block is set but the `type` is not one of `SSE-S3`, `SSE-KMS`, or `SSE-C`, an error is raised.
 
 #### Credentials
 
