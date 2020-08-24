@@ -35,6 +35,10 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+const SSEKMS = "SSE-KMS"
+const SSEC = "SSE-C"
+const SSES3 = "SSE-S3"
+
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
 	HTTPConfig: HTTPConfig{
@@ -184,14 +188,14 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 
 	var sse encrypt.ServerSide
 	if config.SSEConfig.Type != "" {
-		switch {
-		case config.SSEConfig.Type == "SSE-KMS":
+		switch config.SSEConfig.Type {
+		case SSEKMS:
 			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
 			if err != nil {
 				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
 			}
 
-		case config.SSEConfig.Type == "SSE-C":
+		case SSEC:
 			key, err := ioutil.ReadFile(config.SSEConfig.EncryptionKey)
 			if err != nil {
 				return nil, err
@@ -202,7 +206,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 				return nil, errors.Wrap(err, "initialize s3 client SSE-C")
 			}
 
-		case config.SSEConfig.Type == "SSE-S3":
+		case SSES3:
 			sse = encrypt.NewSSE()
 
 		default:
@@ -246,11 +250,11 @@ func validate(conf Config) error {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 
-	if conf.SSEConfig.Type == "SSE-C" && conf.SSEConfig.EncryptionKey == "" {
+	if conf.SSEConfig.Type == SSEC && conf.SSEConfig.EncryptionKey == "" {
 		return errors.New("encryption_key must be set if sse_config.type is set to 'SSE-C'")
 	}
 
-	if conf.SSEConfig.Type == "SSE-KMS" && conf.SSEConfig.KMSKeyID == "" {
+	if conf.SSEConfig.Type == SSEKMS && conf.SSEConfig.KMSKeyID == "" {
 		return errors.New("kms_key_id must be set if sse_config.type is set to 'SSE-KMS'")
 	}
 
