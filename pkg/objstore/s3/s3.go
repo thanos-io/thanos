@@ -35,8 +35,13 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// SSEKMS is the name of the SSE-KMS method for objectstore encryption.
 const SSEKMS = "SSE-KMS"
+
+// SSEC is the name of the SSE-C method for objstore encryption.
 const SSEC = "SSE-C"
+
+// SSES3 is the name of the SSE-S3 method for objstore encryption.
 const SSES3 = "SSE-S3"
 
 var DefaultConfig = Config{
