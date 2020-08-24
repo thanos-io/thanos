@@ -185,7 +185,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	var sse encrypt.ServerSide
 	if config.SSEConfig.Type != "" {
 		switch {
-		case config.SSEConfig.Type != "SSE-KMS":
+		case config.SSEConfig.Type == "SSE-KMS":
 			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
 			if err != nil {
 				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
