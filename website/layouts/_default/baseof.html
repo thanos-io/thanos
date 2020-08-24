@@ -37,17 +37,18 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav ml-auto">
-                <li class="nav-item">
+                <!-- disable searchbox until we fix -->
+                <!-- <li class="nav-item">
                     <div class="searchBox">
                         <input type="search" name="" id="searchInput" placeholder="Search">
                         <button type="submit" class="searchbtn"><i class="fas fa-search"></i></button>
                     </div>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ "/getting-started.md" | relURL }}">Documentation</a>
-                </li>
+                </li> -->
                 <li class="nav-item">
                     <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
+                </li>
+                <li class="nav-item">
+                    {{ partial "versioning/version-picker.html" . }}
                 </li>
                 <li class="nav-item">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="nav-link"><i class="fab fa-fw fa-github"></i> GitHub</a>
@@ -68,12 +69,12 @@
                 <div class="col-12 col-md-6 col-lg">
                     <h6 class="font-weight-bold">Documentation</h6>
                     <ul class="list-unstyled">
-                        <li><a class="text-reset" href="{{ "/getting-started.md" | relURL }}">Getting Started</a></li>
-                        <li><a class="text-reset" href="{{ "/design.md" | relURL }}">Design</a></li>
-                        <li><a class="text-reset" href="{{ "/storage.md" | relURL }}">Storage</a></li>
-                        <li><a class="text-reset" href="{{ "/service-discovery.md" | relURL }}">Service Discovery</a></li>
-                        <li><a class="text-reset" href="{{ "/maintainers" | relURL }}">Maintainers</a></li>
-                        <li><a class="text-reset" href="{{ "/contributing" | relURL }}">Contributing</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/getting-started.md" | relURL }}">Getting Started</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/design.md" | relURL }}">Design</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/storage.md" | relURL }}">Storage</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/service-discovery.md" | relURL }}">Service Discovery</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/thanos/maintainers" | relURL }}">Maintainers</a></li>
+                        <li><a class="text-reset" href="{{ "/tip/contributing/contributing" | relURL }}">Contributing</a></li>
                     </ul>
                 </div>
                 <div class="col-12 col-md-6 col-lg">
@@ -111,14 +112,15 @@
     {{ template "_internal/google_analytics_async.html" . }}
     {{ end }}
 
-    <script nonce="93HDK8392dfjh4Gb" type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
+    <!-- Disable search for now until we fix search to understand new dir structure -->
+    <!-- <script nonce="93HDK8392dfjh4Gb" type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
     <script nonce="93HDK8392dfjh4Gb" type="text/javascript"> docsearch({
             apiKey: '649aaeb84811844d97cb5aa0398b94d9',
             indexName: 'thanos',
             inputSelector: '#searchInput',
             debug: false // Set debug to true if you want to inspect the dropdown
         });
-    </script>
+    </script> -->
 </body>
 
 </html>

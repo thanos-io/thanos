@@ -128,7 +128,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
   * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
   * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
   * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
-  * [Thanos usage](https://www.infracloud.io/thanos-ha-scalable-prometheus/)
+  * [Thanos usage](https://www.infracloud.io/blogs/thanos-ha-scalable-prometheus/)
 
 ## Integrations
 
