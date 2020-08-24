@@ -93,7 +93,7 @@ config:
     enable: false
   part_size: 134217728
   sse_config:
-    type: SSE-S3|SSE-KMS|SSE-C
+    type: ""
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
