@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
@@ -50,6 +51,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -662,6 +664,7 @@ func blockSeries(
 	matchers []*labels.Matcher,
 	req *storepb.SeriesRequest,
 	chunksLimiter ChunksLimiter,
+	tombstones []tombstone.Tombstone,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -716,12 +719,44 @@ func blockSeries(
 			return s.lset[i].Name < s.lset[j].Name
 		})
 
+		validTombstones := make([]tombstone.Tombstone, 0)
+		for _, ts := range tombstones {
+			tsMatchers, err := parser.ParseMetricSelector(ts.Matchers)
+			if err != nil {
+				return nil, nil, err
+			}
+			tsPostings, err := indexr.ExpandedPostings(tsMatchers)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "expanded matching posting")
+			}
+
+			for _, elem := range tsPostings {
+				if elem == id {
+					validTombstones = append(validTombstones, ts)
+					break
+				}
+			}
+		}
+
 		for _, meta := range chks {
 			if meta.MaxTime < req.MinTime {
 				continue
 			}
 			if meta.MinTime > req.MaxTime {
 				break
+			}
+
+			mask := false
+			for _, ts := range validTombstones {
+				if meta.MaxTime > ts.MinTime && meta.MaxTime <= ts.MaxTime {
+					//We skip the chunk as the chunk's time range and the tombstone time range overlap
+					mask = true
+					break
+				}
+			}
+
+			if mask {
+				continue
 			}
 
 			if err := chunkr.addPreload(meta.Ref); err != nil {
@@ -891,6 +926,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	s.mtx.RLock()
 
+	var ts []tombstone.Tombstone
+	//Loading all tombstones from objstore
+	ts, err = tombstone.ReadTombstones(s.bkt, s.logger)
+	if err != nil {
+		return err
+	}
+
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -927,6 +969,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					chunksLimiter,
+					ts, //Tombstones
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

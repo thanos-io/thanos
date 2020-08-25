@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/runutil"
+
 	"github.com/cespare/xxhash"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -71,4 +73,32 @@ func UploadTombstone(tombstone Tombstone, bkt objstore.Bucket, logger log.Logger
 
 	return objstore.UploadFile(ctx, logger, bkt, tsPath, path.Join(TombstoneDir, GenName(tombstone)))
 
+}
+
+// ReadTombstones returns all the tombstones present in the object storage.
+func ReadTombstones(bkt objstore.InstrumentedBucketReader, logger log.Logger) ([]Tombstone, error) {
+	var ts []Tombstone
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	bkt.Iter(ctx, TombstoneDir, func(name string) error {
+		tombstoneFilename := path.Join("", name)
+		tombstoneFile, err := bkt.Get(ctx, tombstoneFilename)
+		if err != nil {
+			return nil
+		}
+		defer runutil.CloseWithLogOnErr(logger, tombstoneFile, "close bkt tombstone reader")
+
+		var t Tombstone
+		tombstone, err := ioutil.ReadAll(tombstoneFile)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(tombstone, &t); err != nil {
+			return nil
+		}
+		ts = append(ts, t)
+		return nil
+	})
+	return ts, nil
 }
