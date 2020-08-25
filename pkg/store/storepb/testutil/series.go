@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -39,13 +40,12 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 const RemoteReadFrameLimit = 1048576
 
 type HeadGenOptions struct {
-	Dir                      string
+	TSDBDir                  string
 	SamplesPerSeries, Series int
 
-	MaxFrameBytes int // No limit by default.
 	WithWAL       bool
 	PrependLabels labels.Labels
-	SkipChunks    bool
+	SkipChunks    bool // Skips chunks in returned slice (not in generated head!).
 
 	Random *rand.Rand
 }
@@ -54,22 +54,23 @@ type HeadGenOptions struct {
 // Returned series list has "ext1"="1" prepended. Each series looks as follows:
 // {foo=bar,i=000001aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd} <random value> where number indicate sample number from 0.
 // Returned series are frame in same way as remote read would frame them.
-func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head, []storepb.Series) {
+func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head, []*storepb.Series) {
 	if opts.SamplesPerSeries < 1 || opts.Series < 1 {
 		t.Fatal("samples and series has to be 1 or more")
 	}
 
-	tsdbDir := filepath.Join(opts.Dir, fmt.Sprintf("%d", j))
-	fmt.Printf("Creating %d %d-sample series in %s\n", opts.Series, opts.SamplesPerSeries, tsdbDir)
+	fmt.Printf("Creating %d %d-sample series in %s\n", opts.Series, opts.SamplesPerSeries, opts.TSDBDir)
 
 	var w *wal.WAL
 	var err error
 	if opts.WithWAL {
-		w, err = wal.New(nil, nil, filepath.Join(tsdbDir, "wal"), true)
+		w, err = wal.New(nil, nil, filepath.Join(opts.TSDBDir, "wal"), true)
 		testutil.Ok(t, err)
+	} else {
+		testutil.Ok(t, os.MkdirAll(filepath.Join(opts.TSDBDir, "wal"), os.ModePerm))
 	}
 
-	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, tsdbDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())
@@ -96,31 +97,20 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	var (
 		lset       labels.Labels
 		chunkMetas []chunks.Meta
-		expected   = make([]storepb.Series, 0, opts.Series)
-		sBytes     int
+		expected   = make([]*storepb.Series, 0, opts.Series)
 	)
 
 	all := allPostings(t, ir)
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &lset, &chunkMetas))
-		i := 0
 		sLset := storepb.PromLabelsToLabels(lset)
-		expected = append(expected, storepb.Series{Labels: append(storepb.PromLabelsToLabels(opts.PrependLabels), sLset...)})
+		expected = append(expected, &storepb.Series{Labels: append(storepb.PromLabelsToLabels(opts.PrependLabels), sLset...)})
 
 		if opts.SkipChunks {
 			continue
 		}
 
-		lBytes := 0
-		for _, l := range sLset {
-			lBytes += l.Size()
-		}
-		sBytes = lBytes
-
-		for {
-			c := chunkMetas[i]
-			i++
-
+		for _, c := range chunkMetas {
 			chEnc, err := chks.Chunk(c.Ref)
 			testutil.Ok(t, err)
 
@@ -129,22 +119,11 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			sBytes += len(chEnc.Bytes())
-
 			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
 				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chEnc.Bytes()},
 			})
-			if i >= len(chunkMetas) {
-				break
-			}
-
-			// Compose many frames as remote read (so sidecar StoreAPI) would do if requested by  maxFrameBytes.
-			if opts.MaxFrameBytes > 0 && sBytes >= opts.MaxFrameBytes {
-				expected = append(expected, storepb.Series{Labels: sLset})
-				sBytes = lBytes
-			}
 		}
 	}
 	testutil.Ok(t, all.Err())
@@ -158,7 +137,7 @@ type SeriesServer struct {
 
 	ctx context.Context
 
-	SeriesSet []storepb.Series
+	SeriesSet []*storepb.Series
 	Warnings  []string
 	HintsSet  []*types.Any
 
@@ -178,7 +157,7 @@ func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
 	}
 
 	if r.GetSeries() != nil {
-		s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
+		s.SeriesSet = append(s.SeriesSet, r.GetSeries())
 		return nil
 	}
 
@@ -227,7 +206,7 @@ type SeriesCase struct {
 	Req  *storepb.SeriesRequest
 
 	// Exact expectations are checked only for tests. For benchmarks only length is assured.
-	ExpectedSeries   []storepb.Series
+	ExpectedSeries   []*storepb.Series
 	ExpectedWarnings []string
 	ExpectedHints    []hintspb.SeriesResponseHints
 }
@@ -252,10 +231,18 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 						})
 					}
 
-					testutil.Equals(t, c.ExpectedSeries[0].Chunks[0], srv.SeriesSet[0].Chunks[0])
-
-					// This might give unreadable output for millions of series on fail..
-					testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
+					// Huge responses can produce unreadable diffs - make it more human readable.
+					if len(c.ExpectedSeries) > 4 {
+						for j := range c.ExpectedSeries {
+							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
+							if len(c.ExpectedSeries[j].Chunks) > 20 {
+								testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
+							}
+							testutil.Equals(t, c.ExpectedSeries[j].Chunks, srv.SeriesSet[j].Chunks, "%v series chunks mismatch", j)
+						}
+					} else {
+						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
+					}
 
 					var actualHints []hintspb.SeriesResponseHints
 					for _, anyHints := range srv.HintsSet {

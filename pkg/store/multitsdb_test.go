@@ -91,29 +91,24 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 		}
 	}()
 	for j := range dbs {
+		tsdbDir := filepath.Join(tmpDir, fmt.Sprintf("%d", j))
+
 		head, created := storetestutil.CreateHeadWithSeries(t, j, storetestutil.HeadGenOptions{
-			Dir:              tmpDir,
+			TSDBDir:          tsdbDir,
 			SamplesPerSeries: samplesPerSeriesPerTSDB,
 			Series:           seriesPerTSDB,
-			WithWAL:          true,
+			WithWAL:          !flushToBlocks,
 			Random:           random,
 			SkipChunks:       t.IsBenchmark(),
 		})
-		testutil.Ok(t, head.Close())
-
-		tsdbDir := filepath.Join(tmpDir, fmt.Sprintf("%d", j))
-
 		for i := 0; i < len(created); i++ {
-			resps[j] = append(resps[j], storepb.NewSeriesResponse(&created[i]))
+			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
 		}
 
 		if flushToBlocks {
-			db, err := tsdb.OpenDBReadOnly(tsdbDir, logger)
-			testutil.Ok(t, err)
-
-			testutil.Ok(t, db.FlushWAL(tmpDir))
-			testutil.Ok(t, db.Close())
+			_ = createBlockFromHead(t, tsdbDir, head)
 		}
+		testutil.Ok(t, head.Close())
 
 		db, err := tsdb.OpenDBReadOnly(tsdbDir, logger)
 		testutil.Ok(t, err)
@@ -128,7 +123,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 
 	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]storepb.StoreServer { return tsdbs })
 
-	var expected []storepb.Series
+	var expected []*storepb.Series
 	lastLabels := storepb.Series{}
 	for _, resp := range resps {
 		for _, r := range resp {
@@ -140,7 +135,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 				continue
 			}
 			lastLabels = x
-			expected = append(expected, *r.GetSeries())
+			expected = append(expected, r.GetSeries())
 		}
 	}
 
