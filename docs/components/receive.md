@@ -124,13 +124,13 @@ Flags:
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
       --receive.hashrings-file=<path>

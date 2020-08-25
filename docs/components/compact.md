@@ -107,13 +107,13 @@ Flags:
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of

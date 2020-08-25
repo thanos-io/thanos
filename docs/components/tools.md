@@ -107,12 +107,12 @@ Flags:
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
 
 Subcommands:
   tools bucket verify [<flags>]
@@ -176,13 +176,13 @@ Flags:
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
@@ -249,22 +249,22 @@ Flags:
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore-backup.config-file=<file-path>
                            Path to YAML file that contains object store-backup
                            configuration. See format details:
-                           https://thanos.io/storage.md/#configuration Used for
+                           https://thanos.io/tip/thanos/storage.md/#configuration Used for
                            repair logic to backup blocks before removal.
       --objstore-backup.config=<content>
                            Alternative to 'objstore-backup.config-file' flag
                            (lower priority). Content of YAML file that contains
                            object store-backup configuration. See format
-                           details: https://thanos.io/storage.md/#configuration
+                           details: https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
   -r, --repair             Attempt to repair blocks for which issues were
@@ -325,12 +325,12 @@ Flags:
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
-                           https://thanos.io/storage.md/#configuration
+                           https://thanos.io/tip/thanos/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
                            information. Options are 'json', 'wide' or a custom
                            template.
@@ -372,12 +372,12 @@ Flags:
       --objstore.config-file=<file-path>
                              Path to YAML file that contains object store
                              configuration. See format details:
-                             https://thanos.io/storage.md/#configuration
+                             https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                              Alternative to 'objstore.config-file' flag (lower
                              priority). Content of YAML file that contains
                              object store configuration. See format details:
-                             https://thanos.io/storage.md/#configuration
+                             https://thanos.io/tip/thanos/storage.md/#configuration
   -l, --selector=<name>=\"<value>\" ...
                              Selects blocks based on label, e.g. '-l
                              key1=\"value1\" -l key2=\"value2\"'. All key value
@@ -427,13 +427,13 @@ Flags:
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -441,14 +441,14 @@ Flags:
       --objstore-to.config-file=<file-path>
                                  Path to YAML file that contains object store-to
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration The
+                                 https://thanos.io/tip/thanos/storage.md/#configuration The
                                  object storage which replicate data to.
       --objstore-to.config=<content>
                                  Alternative to 'objstore-to.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store-to configuration. See
                                  format details:
-                                 https://thanos.io/storage.md/#configuration The
+                                 https://thanos.io/tip/thanos/storage.md/#configuration The
                                  object storage which replicate data to.
       --resolution=0s... ...     Only blocks with these resolutions will be
                                  replicated. Repeated flag.
@@ -504,12 +504,12 @@ Flags:
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object store
                               configuration. See format details:
-                              https://thanos.io/storage.md/#configuration
+                              https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                               Alternative to 'objstore.config-file' flag (lower
                               priority). Content of YAML file that contains
                               object store configuration. See format details:
-                              https://thanos.io/storage.md/#configuration
+                              https://thanos.io/tip/thanos/storage.md/#configuration
       --http-address="0.0.0.0:10902"
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
