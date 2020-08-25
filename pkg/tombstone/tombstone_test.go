@@ -16,8 +16,8 @@ func TestUploadTombstone(t *testing.T) {
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 
 	{
-		SampleTombstone := NewTombstone("up{a=\"b\"}", 00, 9999999)
-		err := UploadTombstone(SampleTombstone, bkt, log.NewNopLogger())
+		sampleTombstone := NewTombstone("up{a=\"b\"}", 00, 9999999, "john", "some valid reason")
+		err := UploadTombstone(sampleTombstone, bkt, log.NewNopLogger())
 		testutil.Ok(t, err)
 	}
 }

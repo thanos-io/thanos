@@ -37,7 +37,10 @@ Flags:
 
 Subcommands:
   tools delete [<flags>]
-    Delete series command
+    Delete series command for the object storage. NOTE: Currently it only
+    performs Store API masking in the object storage at chunk level with respect
+    to the tombstones created by the user (Doesn't actually delete the data in
+    objstore).
 
   tools bucket verify [<flags>]
     Verify all blocks in the bucket against specified issues
