@@ -83,7 +83,6 @@ config:
   access_key: ""
   insecure: false
   signature_version2: false
-  encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
   http_config:
@@ -93,6 +92,11 @@ config:
   trace:
     enable: false
   part_size: 134217728
+  sse_config:
+    type: ""
+    kms_key_id: ""
+    kms_encryption_context: {}
+    encryption_key: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -114,6 +118,38 @@ For debug and testing purposes you can set
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
 
 * `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
+
+#### S3 Server-Side Encryption
+
+SSE can be configued using the `sse_config`. [SSE-S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingServerSideEncryption.html), [SSE-KMS](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html), and [SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) are supported.
+
+* If type is set to `SSE-S3` you do not need to configure other options.
+
+* If type is set to `SSE-KMS` you must set `kms_key_id`. The `kms_encryption_context` is optional, as [AWS provides a default encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context).
+
+* If type is set to `SSE-C` you must provide a path to the encryption key using `encryption_key`.
+
+If the SSE Config block is set but the `type` is not one of `SSE-S3`, `SSE-KMS`, or `SSE-C`, an error is raised.
+
+You will also need to apply the following AWS IAM policy for the user to access the KMS key:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "KMSAccess",
+            "Effect": "Allow",
+            "Action": [
+                "kms:GenerateDataKey",
+                "kms:Encrypt",
+                "kms:Decrypt"
+            ],
+            "Resource": "arn:aws:kms:<region>:<account>:key/<KMS key id>"
+        }
+    ]
+}
+```
 
 #### Credentials
 
