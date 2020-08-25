@@ -88,11 +88,11 @@ $(JSONNETFMT): .bingo/jsonnetfmt.mod
 	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.16.0"
 	@cd .bingo && $(GO) build -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
-LICHE := $(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6
+LICHE := $(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4
 $(LICHE): .bingo/liche.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6"
-	@cd .bingo && $(GO) build -modfile=liche.mod -o=$(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6 "github.com/raviqqe/liche"
+	@echo "(re)installing $(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4"
+	@cd .bingo && $(GO) build -modfile=liche.mod -o=$(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4 "github.com/raviqqe/liche"
 
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): .bingo/minio.mod
