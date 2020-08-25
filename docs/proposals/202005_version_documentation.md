@@ -86,11 +86,11 @@ We want to add an additional `versioned` folder within the website's `tmp` direc
     |- tmp
         |- public
         |- docs-pre-processed
-        |- versioned
-            |- master
-            |- version 0.13.0
-            |- version 0.12.2
-            |- other-folder-for-other-releases
+            |- versioned
+                |- master
+                |- version 0.13.0
+                |- version 0.12.2
+                |- other-folder-for-other-releases
 ```
 _NOTE: `tmp` directory is not committed, just temporarily built. The current version of docs lives in the `master` folder_
 
@@ -165,4 +165,4 @@ We understand [Cortex](https://github.com/cortexproject/cortex/pull/2349) is wor
 
 ## Future Work
 
-We hope to rewrite the versioning plugin using golang. We care alot about code maintainability and because we use golang as our primary language, we want to make it easier for developers contribute to this feature and make it even better.
+We hope to rewrite the versioning plugin using golang. We care alot about code maintainability and because we use golang as our primary programming language, it will be easier for developers to contribute to this plugin and make it even better.
