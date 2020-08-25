@@ -154,17 +154,21 @@ docker-push:
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
+	@echo ">> generating docs"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
+	@echo ">> cleaning whte noise"
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(EMBEDMD) $(LICHE) build
+	@echo ">> checking docs generation"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
+	@echo ">> checking links"
 	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
 	@$(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checkin GitHub as we are often rate limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"check documentation")
+	$(call require_clean_work_tree,'run make docs and commit changes')
 
 .PHONY:shell-format
 shell-format: $(SHFMT)
@@ -268,7 +272,7 @@ lint: ## Runs various static analysis against our code.
 lint: go-lint react-app-lint shell-lint
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"detected white noise")
+	$(call require_clean_work_tree,'detected white noise, run make lint and commit changes')
 
 # PROTIP:
 # Add
@@ -277,7 +281,7 @@ lint: go-lint react-app-lint shell-lint
 # to debug big allocations during linting.
 .PHONY: go-lint
 go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
-	$(call require_clean_work_tree,"detected not clean master before running lint")
+	$(call require_clean_work_tree,'detected not clean master before running lint, previous job changed something?')
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
@@ -295,7 +299,7 @@ sync/atomic=go.uber.org/atomic" ./...
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
-	$(call require_clean_work_tree,"detected files without copyright")
+	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
 .PHONY:shell-lint
 shell-lint: ## Runs static analysis against our shell scripts.
@@ -350,7 +354,7 @@ example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rule
 
 .PHONY: check-examples
 check-examples: examples example-rules-lint
-	$(call require_clean_work_tree,'all generated files should be committed,check examples')
+	$(call require_clean_work_tree,'all generated files should be committed, run make check-examples and commit changes.')
 
 .PHONY: examples-clean
 examples-clean:
