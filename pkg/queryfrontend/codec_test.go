@@ -85,6 +85,20 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			expectedError:   httpgrpc.Errorf(http.StatusBadRequest, "negative max_source_resolution is not accepted. Try a positive integer"),
 		},
 		{
+			name: "auto downsampling enabled",
+			url:  "/api/v1/query_range?start=123&end=456&step=10&max_source_resolution=auto",
+			expectedRequest: &ThanosRequest{
+				Path:                "/api/v1/query_range",
+				Start:               123000,
+				End:                 456000,
+				Step:                10000,
+				MaxSourceResolution: 2000,
+				AutoDownsampling:    true,
+				Dedup:               true,
+				StoreMatchers:       [][]storepb.LabelMatcher{},
+			},
+		},
+		{
 			name:            "cannot parse partial_response",
 			url:             "/api/v1/query_range?start=123&end=456&step=1&partial_response=bar",
 			partialResponse: false,

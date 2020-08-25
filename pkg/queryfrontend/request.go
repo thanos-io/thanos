@@ -22,6 +22,7 @@ type ThanosRequest struct {
 	Query               string
 	Dedup               bool
 	PartialResponse     bool
+	AutoDownsampling    bool
 	MaxSourceResolution int64
 	ReplicaLabels       []string
 	StoreMatchers       [][]storepb.LabelMatcher
@@ -64,7 +65,7 @@ func (r *ThanosRequest) WithQuery(query string) queryrange.Request {
 
 // LogToSpan writes information about this request to an OpenTracing span.
 func (r *ThanosRequest) LogToSpan(sp opentracing.Span) {
-	sp.LogFields(
+	fields := []otlog.Field{
 		otlog.String("query", r.GetQuery()),
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
 		otlog.String("end", timestamp.Time(r.GetEnd()).String()),
@@ -73,7 +74,11 @@ func (r *ThanosRequest) LogToSpan(sp opentracing.Span) {
 		otlog.Bool("partial_response", r.PartialResponse),
 		otlog.Object("replicaLabels", r.ReplicaLabels),
 		otlog.Object("storeMatchers", r.StoreMatchers),
-	)
+		otlog.Bool("auto-downsampling", r.AutoDownsampling),
+		otlog.Int64("max_source_resolution (ms)", r.MaxSourceResolution),
+	}
+
+	sp.LogFields(fields...)
 }
 
 // Reset implements proto.Message interface required by queryrange.Request,

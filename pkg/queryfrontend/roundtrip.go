@@ -67,7 +67,7 @@ func NewTripperWare(
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*cacheConfig,
-			constSplitter(splitQueryInterval),
+			newThanosCacheSplitter(splitQueryInterval),
 			limits,
 			codec,
 			cacheExtractor,
