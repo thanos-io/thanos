@@ -258,13 +258,15 @@ Flags:
       --objstore-backup.config-file=<file-path>
                            Path to YAML file that contains object store-backup
                            configuration. See format details:
-                           https://thanos.io/tip/thanos/storage.md/#configuration Used for
-                           repair logic to backup blocks before removal.
+                           https://thanos.io/tip/thanos/storage.md/#configuration
+                           Used for repair logic to backup blocks before
+                           removal.
       --objstore-backup.config=<content>
                            Alternative to 'objstore-backup.config-file' flag
                            (lower priority). Content of YAML file that contains
                            object store-backup configuration. See format
-                           details: https://thanos.io/tip/thanos/storage.md/#configuration
+                           details:
+                           https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
   -r, --repair             Attempt to repair blocks for which issues were
@@ -441,15 +443,15 @@ Flags:
       --objstore-to.config-file=<file-path>
                                  Path to YAML file that contains object store-to
                                  configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration The
-                                 object storage which replicate data to.
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+                                 The object storage which replicate data to.
       --objstore-to.config=<content>
                                  Alternative to 'objstore-to.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store-to configuration. See
                                  format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration The
-                                 object storage which replicate data to.
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+                                 The object storage which replicate data to.
       --resolution=0s... ...     Only blocks with these resolutions will be
                                  replicated. Repeated flag.
       --compaction=1... ...      Only blocks with these compaction levels will
