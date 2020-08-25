@@ -162,3 +162,7 @@ With a regular expression. Instead of the developer manually checking out the in
 ## Summary
 
 We understand [Cortex](https://github.com/cortexproject/cortex/pull/2349) is working on this as well so we are learning from their approach and knowledge.
+
+## Future Work
+
+We hope to rewrite the versioning plugin using golang. We care alot about code maintainability and because we use golang as our primary language, we want to make it easier for developers contribute to this feature and make it even better.
