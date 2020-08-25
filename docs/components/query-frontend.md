@@ -22,7 +22,7 @@ thanos query-frontend \
 _**NOTE:** Currently only range queries (`/api/v1/query_range` API call) are actually processed through Query Frontend. All other
 API calls just directly go to the downstream Querier, which means only range queries are split and cached. But we are planning to support instant queries as well.
 
-For more information please check out [initial design proposal](https://thanos.io/proposals/202004_embedd_cortex_frontend.md/).
+For more information please check out [initial design proposal](https://thanos.io/tip/proposals/202004_embedd_cortex_frontend.md/).
 
 ## Features
 
@@ -83,12 +83,12 @@ Flags:
       --tracing.config-file=<file-path>
                               Path to YAML file with tracing configuration. See
                               format details:
-                              https://thanos.io/tracing.md/#configuration
+                              https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                               Alternative to 'tracing.config-file' flag (lower
                               priority). Content of YAML file with tracing
                               configuration. See format details:
-                              https://thanos.io/tracing.md/#configuration
+                              https://thanos.io/tip/tracing.md/#configuration
       --query-range.split-interval=24h
                               Split queries by an interval and execute in
                               parallel, 0 disables it.

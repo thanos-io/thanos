@@ -109,7 +109,6 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 * 2020:
 
   * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
-  * [A Production Thanos Deployment](https://www.omerlh.info/2020/02/08/a-production-thanos-deployment/)
   * [Monitoring the Beat microservices: A tale of evolution](https://build.thebeat.co/monitoring-the-beat-microservices-a-tale-of-evolution-4e246882606e)
 
 * 2019:

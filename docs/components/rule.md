@@ -245,12 +245,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -302,7 +302,7 @@ Flags:
       --alertmanagers.config-file=<file-path>
                                  Path to YAML file that contains alerting
                                  configuration. See format details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
@@ -311,7 +311,7 @@ Flags:
                                  (lower priority). Content of YAML file that
                                  contains alerting configuration. See format
                                  details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
@@ -374,14 +374,14 @@ Flags:
       --query.config-file=<file-path>
                                  Path to YAML file that contains query API
                                  servers configuration. See format details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
       --query.config=<content>   Alternative to 'query.config-file' flag (lower
                                  priority). Content of YAML file that contains
                                  query API servers configuration. See format
                                  details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
       --query.sd-files=<path> ...

@@ -44,12 +44,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -81,13 +81,13 @@ Flags:
       --index-cache.config-file=<file-path>
                                  Path to YAML file that contains index cache
                                  configuration. See format details:
-                                 https://thanos.io/components/store.md/#index-cache
+                                 https://thanos.io/tip/components/store.md/#index-cache
       --index-cache.config=<content>
                                  Alternative to 'index-cache.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains index cache configuration. See format
                                  details:
-                                 https://thanos.io/components/store.md/#index-cache
+                                 https://thanos.io/tip/components/store.md/#index-cache
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  reserved strictly to reuse for chunks in
                                  memory.

@@ -28,12 +28,12 @@ Flags:
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
 
 Subcommands:
   tools bucket verify [<flags>]
@@ -98,12 +98,12 @@ Flags:
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -167,12 +167,12 @@ Flags:
       --tracing.config-file=<file-path>
                                 Path to YAML file with tracing configuration.
                                 See format details:
-                                https://thanos.io/tracing.md/#configuration
+                                https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag (lower
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
-                                https://thanos.io/tracing.md/#configuration
+                                https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
@@ -240,12 +240,12 @@ Flags:
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -318,12 +318,12 @@ Flags:
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -365,12 +365,12 @@ Flags:
       --tracing.config-file=<file-path>
                              Path to YAML file with tracing configuration. See
                              format details:
-                             https://thanos.io/tracing.md/#configuration
+                             https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                              Alternative to 'tracing.config-file' flag (lower
                              priority). Content of YAML file with tracing
                              configuration. See format details:
-                             https://thanos.io/tracing.md/#configuration
+                             https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                              Path to YAML file that contains object store
                              configuration. See format details:
@@ -420,12 +420,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
@@ -497,12 +497,12 @@ Flags:
       --tracing.config-file=<file-path>
                               Path to YAML file with tracing configuration. See
                               format details:
-                              https://thanos.io/tracing.md/#configuration
+                              https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                               Alternative to 'tracing.config-file' flag (lower
                               priority). Content of YAML file with tracing
                               configuration. See format details:
-                              https://thanos.io/tracing.md/#configuration
+                              https://thanos.io/tip/tracing.md/#configuration
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object store
                               configuration. See format details:
@@ -552,12 +552,12 @@ Flags:
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
-                           https://thanos.io/tracing.md/#configuration
+                           https://thanos.io/tip/tracing.md/#configuration
       --rules=RULES ...    The rule files glob to check (repeated).
 
 ```
