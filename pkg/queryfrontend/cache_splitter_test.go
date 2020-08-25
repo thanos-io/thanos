@@ -12,12 +12,12 @@ import (
 )
 
 func TestGenerateCacheKey(t *testing.T) {
-	splitter := newThanosCacheSplitter(hour)
+	splitter := newThanosCacheKeyGenerator(hour)
 
 	for _, tc := range []struct {
-		name             string
-		req              queryrange.Request
-		expectedCacheKey string
+		name     string
+		req      queryrange.Request
+		expected string
 	}{
 		{
 			name: "non thanos req",
@@ -26,7 +26,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expectedCacheKey: "up:60000:0",
+			expected: "up:60000:0",
 		},
 		{
 			name: "non downsampling resolution specified",
@@ -35,7 +35,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expectedCacheKey: "up:60000:0:2",
+			expected: "up:60000:0:2",
 		},
 		{
 			name: "10s step",
@@ -44,7 +44,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  10 * seconds,
 			},
-			expectedCacheKey: "up:10000:0:2",
+			expected: "up:10000:0:2",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -54,7 +54,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 60 * seconds,
 			},
-			expectedCacheKey: "up:10000:0:2",
+			expected: "up:10000:0:2",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -64,7 +64,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 300 * seconds,
 			},
-			expectedCacheKey: "up:10000:0:1",
+			expected: "up:10000:0:1",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -74,10 +74,10 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
 			},
-			expectedCacheKey: "up:10000:0:0",
+			expected: "up:10000:0:0",
 		},
 	} {
 		key := splitter.GenerateCacheKey("", tc.req)
-		testutil.Equals(t, tc.expectedCacheKey, key)
+		testutil.Equals(t, tc.expected, key)
 	}
 }

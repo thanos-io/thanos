@@ -12,14 +12,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
-// thanosCacheSplitter is a utility for using split interval when determining cache keys.
-type thanosCacheSplitter struct {
+// thanosCacheKeyGenerator is a utility for using split interval when determining cache keys.
+type thanosCacheKeyGenerator struct {
 	interval    time.Duration
 	resolutions []int64
 }
 
-func newThanosCacheSplitter(interval time.Duration) thanosCacheSplitter {
-	return thanosCacheSplitter{
+func newThanosCacheKeyGenerator(interval time.Duration) thanosCacheKeyGenerator {
+	return thanosCacheKeyGenerator{
 		interval:    interval,
 		resolutions: []int64{downsample.ResLevel2, downsample.ResLevel1, downsample.ResLevel0},
 	}
@@ -27,7 +27,7 @@ func newThanosCacheSplitter(interval time.Duration) thanosCacheSplitter {
 
 // TODO(yeya24): Add other request params as request key.
 // GenerateCacheKey generates a cache key based on the Request and interval.
-func (t thanosCacheSplitter) GenerateCacheKey(_ string, r queryrange.Request) string {
+func (t thanosCacheKeyGenerator) GenerateCacheKey(_ string, r queryrange.Request) string {
 	currentInterval := r.GetStart() / t.interval.Milliseconds()
 	if tr, ok := r.(*ThanosRequest); ok {
 		i := 0
