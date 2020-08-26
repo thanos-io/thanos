@@ -88,8 +88,8 @@ As specified, the rule type and then rule name is used for deduplication.
 Given the following stream of incoming rule groups and containing recording/alerting rules:
 ```text
 group: a
-   recording:<name:"a1" last_evaluation:<seconds:1 > >
-   alert:    <name:"r1" last_evaluation:<seconds:1 > >
+   recording:<name:"r1" last_evaluation:<seconds:1 > >
+   alert:    <name:"a1" last_evaluation:<seconds:1 > >
 group: b
    recording:<name:"r1" last_evaluation:<seconds:1 > >
 group: a
