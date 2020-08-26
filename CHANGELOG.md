@@ -25,10 +25,10 @@ sse_config:
 ```
 
 Highlights:
-* Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching and
-query scheduling & parallelization (based on Cortex Query Frontend).
+* Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
+query scheduling and parallelization (based on Cortex Query Frontend).
 * Added various new, improved UIs to Thanos based on React: Querier' BuildInfo & Flags, Ruler UI, BlockViewer.
-* Optimized Sidecar, Store, Receive, Ruler data retrieval with new TSDB ChunkIterator, caping chunks to 120 samples, fixed various leaks.
+* Optimized Sidecar, Store, Receive, Ruler data retrieval with new TSDB ChunkIterator, capping chunks to 120 samples, fixed various leaks.
 * Fixed sample limit on Store Gateway.
 * Added S3 Server Side Encryption options.
 * Tons of other important fixes!
@@ -50,7 +50,7 @@ Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `pa
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
 - [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and also increase the timeout for 10 minutes.
 - [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: consider group name and file for deduplication
-- [#3012](https://github.com/thanos-io/thanos/pull/3012) Ruler,Receiver: TSDB not deletes blocks in atomic way.
+- [#3012](https://github.com/thanos-io/thanos/pull/3012) Ruler,Receiver: Fix TSDB to delete blocks in atomic way.
 - [#3046](https://github.com/thanos-io/thanos/pull/3046) Ruler,Receiver: Fixed framing of StoreAPI response, it was one chunk by one.
 
 ```yaml
