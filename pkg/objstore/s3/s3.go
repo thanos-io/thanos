@@ -107,7 +107,7 @@ type Bucket struct {
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
-	if err := yaml.Unmarshal(conf, &config); err != nil {
+	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
 		return Config{}, err
 	}
 
