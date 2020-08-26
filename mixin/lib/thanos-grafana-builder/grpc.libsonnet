@@ -2,32 +2,32 @@
   grpcQpsPanel(type, selector):: {
     local prefix = if type == 'client' then 'grpc_client' else 'grpc_server',
 
-    aliasColors: {
-      Aborted: '#EAB839',
-      AlreadyExists: '#7EB26D',
-      FailedPrecondition: '#6ED0E0',
-      Unimplemented: '#6ED0E0',
-      InvalidArgument: '#EF843C',
-      NotFound: '#EF843C',
-      PermissionDenied: '#EF843C',
-      Unauthenticated: '#EF843C',
-      Canceled: '#E24D42',
-      DataLoss: '#E24D42',
-      DeadlineExceeded: '#E24D42',
-      Internal: '#E24D42',
-      OutOfRange: '#E24D42',
-      ResourceExhausted: '#E24D42',
-      Unavailable: '#E24D42',
-      Unknown: '#E24D42',
-      OK: '#7EB26D',
-      'error': '#E24D42',
-    },
+    seriesOverrides: [
+      { alias: '/Aborted/', color: '#EAB839' },
+      { alias: '/AlreadyExists/', color: '#7EB26D' },
+      { alias: '/FailedPrecondition/', color: '#6ED0E0' },
+      { alias: '/Unimplemented/', color: '#6ED0E0' },
+      { alias: '/InvalidArgument/', color: '#EF843C' },
+      { alias: '/NotFound/', color: '#EF843C' },
+      { alias: '/PermissionDenied/', color: '#EF843C' },
+      { alias: '/Unauthenticated/', color: '#EF843C' },
+      { alias: '/Canceled/', color: '#E24D42' },
+      { alias: '/DataLoss/', color: '#E24D42' },
+      { alias: '/DeadlineExceeded/', color: '#E24D42' },
+      { alias: '/Internal/', color: '#E24D42' },
+      { alias: '/OutOfRange/', color: '#E24D42' },
+      { alias: '/ResourceExhausted/', color: '#E24D42' },
+      { alias: '/Unavailable/', color: '#E24D42' },
+      { alias: '/Unknown/', color: '#E24D42' },
+      { alias: '/OK/', color: '#7EB26D' },
+      { alias: 'error', color: '#E24D42' },
+    ],
     targets: [
       {
-        expr: 'sum(rate(%s_handled_total{%s}[$interval])) by (job, grpc_method, grpc_code)' % [prefix, selector],
+        expr: 'sum by (grpc_code) (rate(%s_handled_total{%s}[$interval]))' % [prefix, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: '{{job}} {{grpc_method}} {{grpc_code}}',
+        legendFormat: '{{grpc_code}}',
         refId: 'A',
         step: 10,
       },
@@ -45,19 +45,11 @@
     local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
     $.queryPanel(
       [
-        'histogram_quantile(0.99, sum(rate(%s_handling_seconds_bucket{%s}[$interval])) by (job, grpc_method, le)) * %s' % [prefix, selector, multiplier],
-        |||
-          sum(rate(%s_handling_seconds_sum{%s}[$interval])) by (job) * %s
-          /
-          sum(rate(%s_handling_seconds_count{%s}[$interval])) by (job)
-        ||| % [prefix, selector, multiplier, prefix, selector],
-        'histogram_quantile(0.50, sum(rate(%s_handling_seconds_bucket{%s}[$interval])) by (job, grpc_method, le)) * %s' % [prefix, selector, multiplier],
+        'histogram_quantile(0.99, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
+        'histogram_quantile(0.90, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
+        'histogram_quantile(0.50, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
       ],
-      [
-        'P99 {{job}} {{grpc_method}}',
-        'mean {{job}} {{grpc_method}}',
-        'P50 {{job}} {{grpc_method}}',
-      ]
+      ['p99', 'p90', 'p50']
     ) +
     { yaxes: $.yaxes('s') },
 }

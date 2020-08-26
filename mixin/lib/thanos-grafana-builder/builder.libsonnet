@@ -73,29 +73,14 @@ local template = grafana.template;
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(0.99, sum(rate(%s_bucket{%s}[$interval])) by (job, le)) * %s' % [metricName, selector, multiplier],
+        expr: 'histogram_quantile(%.2f, sum by (le) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P99 {{job}}',
+        legendFormat: 'p%d' % [100 * percentile],
         refId: 'A',
         step: 10,
-      },
-      {
-        expr: 'sum(rate(%s_sum{%s}[$interval])) by (job) * %s / sum(rate(%s_count{%s}[$interval])) by (job)' % [metricName, selector, multiplier, metricName, selector],
-        format: 'time_series',
-        intervalFactor: 2,
-        legendFormat: 'mean {{job}}',
-        refId: 'B',
-        step: 10,
-      },
-      {
-        expr: 'histogram_quantile(0.50, sum(rate(%s_bucket{%s}[$interval])) by (job, le)) * %s' % [metricName, selector, multiplier],
-        format: 'time_series',
-        intervalFactor: 2,
-        legendFormat: 'P50 {{job}}',
-        refId: 'C',
-        step: 10,
-      },
+      }
+      for percentile in [0.5, 0.9, 0.99]
     ],
     yaxes: $.yaxes('s'),
   },

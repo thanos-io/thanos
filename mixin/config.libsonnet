@@ -40,6 +40,6 @@
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
-    namespaceQuery: 'kube_pod_info',
+    namespaceQuery: 'thanos_build_info',
   },
 }
