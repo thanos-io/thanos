@@ -32,7 +32,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 - Misconfiguraiton of sidecar/ruler: Same external labels or no external labels across many block producers.
 - Running multiple compactors for single block "stream", even for short duration.
 - Manually uploading blocks to the bucket.
-- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/proposals/201901-read-write-operations-bucket.md)
+- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/tip/proposals/201901-read-write-operations-bucket.md)
 
 ### Solutions
 
@@ -51,6 +51,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 ```shell
 level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="changing probe status" status=not-ready reason="request flags against http://localhost:9090/api/v1/status/config: Get \"http://localhost:9090/api/v1/status/config\": dial tcp 127.0.0.1:9090: connect: connection refused"
 ```
+
 * This issue might happen when thanos is not configured properly.
 
 ### Possible Solution
@@ -65,6 +66,7 @@ level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="ch
 ```shell
 level=info ts=2020-04-18T03:16:32.158536285Z caller=grpc.go:137 service=gRPC/server component=sidecar msg="internal server shutdown" err="no external labels configured on Prometheus server, uniquely identifying external labels must be configured"
 ```
+
 * This issue happens when thanos doesn't recognise prometheus
 
 ### Possible Solution

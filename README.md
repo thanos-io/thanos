@@ -34,8 +34,8 @@ Concretely the aims of the project are:
 
 ## Getting Started
 
-* **[Getting Started](https://thanos.io/getting-started.md/)**
-* [Design](https://thanos.io/design.md/)
+* **[Getting Started](https://thanos.io/tip/thanos/getting-started.md/)**
+* [Design](https://thanos.io/tip/thanos/design.md/)
 * [Blog posts](docs/getting-started.md#blog-posts)
 * [Talks](docs/getting-started.md#talks)
 * [Proposals](docs/proposals)

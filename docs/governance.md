@@ -15,7 +15,7 @@ It is meant to be followed by all the developers of the Thanos project and the T
 * **Maintainers Team**: A core Thanos team that have owner access to http://github.com/thanos-io organization and all projects within it. Current list is available [here][maintainers-doc].
 
 * **Triage Team**: Contributors who does not belong to Maintainer's team, but has `Triage` GitHub role on [Thanos](https://github.com/thanos-io/thanos) repository allowing to change GitHub issues and PRs statuses and labels.
-They are listed [here](https://thanos.io/maintainers/#triage).
+They are listed [here](https://thanos.io/tip/thanos/maintainers/#triage).
 
 * **The Thanos project**: The sum of all activities performed under the [thanos-io organization on GitHub][gh], concerning one or more repositories or the community.
 
@@ -79,7 +79,7 @@ Upon death of a member, their Triage team membership ends automatically.
 ### Technical decisions
 
 Smaller technical decisions are made informally and [lazy consensus](#consensus) is assumed. Technical decisions that span multiple parts of the Thanos project
-should be discussed and made on the [GitHub issues][issues] and in most cases followed by proposal as described [here](https://thanos.io/contributing/#adding-new-features-components).
+should be discussed and made on the [GitHub issues][issues] and in most cases followed by proposal as described [here](https://thanos.io/tip/contributing/contributing/#adding-new-features-components).
 
 Decisions are usually made by [lazy consensus](#consensus). If no consensus can be reached, the matter may be resolved by [majority vote](#majority-vote).
 
@@ -170,7 +170,7 @@ It's about number of up votes to agree on the decision.
 
 ### How do I propose a decision?
 
-See [Contributor doc](https://thanos.io/contributing/#adding-new-features-components)
+See [Contributor doc](https://thanos.io/tip/contributing/contributing/#adding-new-features-components)
 
 ### How do I become a team member?
 
@@ -184,7 +184,7 @@ Should the decision be in favor, your new membership will also be announced on t
 
 As a team member, propose the new project on the [Thanos GitHub Issue][issues]. However, currently to maintain project in our organization you have to become Thanos Maintainers.
 
-All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject in appriopriate page e.g https://thanos.io/integrations.md/
+All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject in appriopriate page e.g https://thanos.io/tip/integrations.md/
 
 ### How do I remove a Maintainer or Triage member?
 
@@ -203,7 +203,7 @@ For supermajority voting team has to wait for all answers.
 
 [twitter]: https://twitter.com/ThanosMetrics
 [issues]: https://github.com/thanos-io/thanos/issues
-[maintainers-doc]: https://thanos.io/maintainers/
+[maintainers-doc]: https://thanos.io/tip/thanos/maintainers/
 [team]: https://groups.google.com/forum/#!forum/thanos-io
 [gh]: https://github.com/thanos-io
 [charter]: https://www.cncf.io/about/charter/

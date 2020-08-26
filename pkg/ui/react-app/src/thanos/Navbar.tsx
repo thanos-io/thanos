@@ -94,7 +94,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
             );
           })}
           <NavItem>
-            <NavLink href="https://thanos.io/getting-started.md/">Help</NavLink>
+            <NavLink href="https://thanos.io/tip/thanos/getting-started.md/">Help</NavLink>
           </NavItem>
           <NavItem>
             <NavLink href={`${pathPrefix}${defaultClassicUIRoute[thanosComponent]}${window.location.search}`}>
