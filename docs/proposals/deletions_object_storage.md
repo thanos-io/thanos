@@ -29,27 +29,37 @@ The main motivation for considering deletions in the object storage are the foll
 ## Proposed Approach
 
 *   We propose to implement deletions via the tombstones approach using a CLI tool.
-*   A tombstone is proposed to be a **Custom format global - single file per request**.
+*   A tombstone is proposed to be a **Custom format global - single file per request**. Example of a tombstone file is as follows
+```
+{
+		"matchers":     "up{source=\"prometheus\"}",
+		"minTime":      -62167219200000,
+		"maxTime":      253402300799000,
+		"creationTime": 1598367375935,
+		"author":       "John Gabriel",
+		"reason":       "not specified",
+}
+```
+
 *   **Why Custom format global - single file per request**? :
-    *   https://cloud-native.slack.com/archives/CL25937SP/p1595954850430300
+    *   As global tombstones are concerned, they would be immutable and deletion requests concurrency wouldn't be an issue (because each request creates a new object) and the compactor would load multiple tombstones upfront (before compacting), performs compaction and makes necessary changes to the block and then deletes the tombstones once done. If new tombstones are created in the meanwhile, it wouldn't cause a problem as the next compaction run will take them in account.
     *   We can easily have multiple writers
     *   No need to have index data of the blocks
 *   A user is expected to enter the following details for performing deletions:
     *   **label matchers**
     *   **start timestamp**
     *   **end timestamp** (start and end timestamps of the series data the user expects to be deleted)
-*   The entered details are processed by the CLI tool to create a tombstone file (unique for a request), and then the tombstone file is uploaded to the object storage making it accessible to all components.
-*   Store Gateway masks the series on processing the global tombstone files from the object storage.
+    *   **creation timestamp**
+    *   **author name**
+    *   **reason for deletion**
+*   The entered details are processed by the CLI tool to create a tombstone file (unique for a request and irrespective of the presence of series), and the file is uploaded to the object storage making it accessible to all components.
+*   **Filename optimization**: The filename is created from the hash of matchers, minTime and maxTime. This helps re-write an existing tombstone, whenever a same request is made in the future hence avoiding duplication of the same request. (NOTE: Requests which entail common deletions still creates different tombstones.)
+*   Store Gateway masks the series on processing the global tombstone files from the object storage. At chunk level, whenever there's a match with the data corresponding to atleast one of the tombstones, we skip the chunk, potentially resulting in the masking of chunk. 
 *   During compaction or downsampling, we check if the blocks being considered have series corresponding to a tombstone file, if so we delete the data and continue with the process.
-
-## Open Questions
-*   Optimization for file names?
-*   Do we create a tombstone irrespective of the presence of the series with the given matcher? Or should we check for the existence of series that corresponds to the deletion request?
-*   Should we consider having a threshold for compaction or downsampling where we check all the tombstones and calculate the percentage of deletions?
 
 ## Considerations
 
-*   The old blocks and the tombstones are deleted during compaction time.
+*   When any of the timestamps i.e., start timestamp or end timestamp or both remain unspecified we go with default values.
 *   We don’t want to add this feature to the sidecar. The sidecar is expected to be kept lightweight.
 
 ## Alternatives
