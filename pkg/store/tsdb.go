@@ -173,12 +173,14 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			if frameBytesLeft > 0 && isNext {
 				continue
 			}
-
 			if err := srv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: seriesLabels.Labels, Chunks: seriesChunks})); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
-			frameBytesLeft = bytesLeftForChunks
-			seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+
+			if isNext {
+				frameBytesLeft = bytesLeftForChunks
+				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+			}
 		}
 		if err := chIter.Err(); err != nil {
 			return status.Error(codes.Internal, errors.Wrap(err, "chunk iter").Error())
