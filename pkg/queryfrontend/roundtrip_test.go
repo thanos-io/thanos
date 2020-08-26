@@ -103,7 +103,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 				Step:  10 * seconds,
 			},
 			handlerAndResult: counter,
-			// not go through tripperware so no error.
+			// Not go through tripperware so no error.
 			expectedError: false,
 			expected:      1,
 		},
@@ -117,7 +117,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 				Step:  10 * seconds,
 			},
 			handlerAndResult: counter,
-			// not go through tripperware so no error.
+			// Not go through tripperware so no error.
 			expectedError: false,
 			expected:      1,
 		},
@@ -282,7 +282,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		MaxSourceResolution: 1 * seconds,
 	}
 
-	// non query range request, won't be cached.
+	// Non query range request, won't be cached.
 	testRequest2 := &ThanosRequest{
 		Path:  "/api/v1/query",
 		Start: 0,
@@ -290,14 +290,24 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		Step:  10 * seconds,
 	}
 
-	// same query params as testRequest, but with different maxSourceResolution,
-	// so won't be cached in this case.
+	// Same query params as testRequest, different maxSourceResolution
+	// but still in the same downsampling level, so it will be cached in this case.
 	testRequest3 := &ThanosRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 10 * seconds,
+	}
+
+	// Same query params as testRequest, different maxSourceResolution
+	// and downsampling level so it won't be cached in this case.
+	testRequest4 := &ThanosRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 1 * hour,
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{
@@ -329,31 +339,12 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		handlerAndResult func() (*int, http.Handler)
 		expected         int
 	}{
-		{
-			name:     "first request",
-			req:      testRequest,
-			expected: 1,
-		},
-		{
-			name:     "same request as the first one, directly use cache",
-			req:      testRequest,
-			expected: 1,
-		},
-		{
-			name:     "non query range request won't be cached",
-			req:      testRequest2,
-			expected: 2,
-		},
-		{
-			name:     "different max source resolution won't be cached",
-			req:      testRequest3,
-			expected: 3,
-		},
-		{
-			name:     "do it again",
-			req:      testRequest2,
-			expected: 4,
-		},
+		{name: "first request", req: testRequest, expected: 1},
+		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
+		{name: "non query range request won't be cached", req: testRequest2, expected: 2},
+		{name: "do it again", req: testRequest2, expected: 3},
+		{name: "different max source resolution but still same level", req: testRequest3, expected: 3},
+		{name: "different max source resolution and different level", req: testRequest4, expected: 4},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosRequest{

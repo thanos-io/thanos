@@ -79,9 +79,14 @@ func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Req
 		return nil, err
 	}
 
-	result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue("max_source_resolution"))
-	if err != nil {
-		return nil, err
+	if r.FormValue("max_source_resolution") == "auto" {
+		result.AutoDownsampling = true
+		result.MaxSourceResolution = result.Step / 5
+	} else {
+		result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue("max_source_resolution"))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	result.PartialResponse, err = parsePartialResponseParam(r.FormValue("partial_response"), c.partialResponse)
@@ -118,9 +123,11 @@ func (c codec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.R
 		"replicaLabels[]":  thanosReq.ReplicaLabels,
 	}
 
-	// Add this param only if it is set. Set to 0 will impact
-	// auto-downsampling in the querier.
-	if thanosReq.MaxSourceResolution != 0 {
+	if thanosReq.AutoDownsampling {
+		params["max_source_resolution"] = []string{"auto"}
+	} else if thanosReq.MaxSourceResolution != 0 {
+		// Add this param only if it is set. Set to 0 will impact
+		// auto-downsampling in the querier.
 		params["max_source_resolution"] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
 	}
 
