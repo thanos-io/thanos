@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -19,7 +20,7 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 	return value
 }
 
-func regGRPCFlags(cmd *kingpin.CmdClause) (
+func regGRPCFlags(cmd extkingpin.FlagClause) (
 	grpcBindAddr *string,
 	grpcGracePeriod *model.Duration,
 	grpcTLSSrvCert *string,
@@ -41,21 +42,21 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 		grpcTLSSrvClientCA
 }
 
-func regHTTPFlags(cmd *kingpin.CmdClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {
+func regHTTPFlags(cmd extkingpin.FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {
 	httpBindAddr = cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 	httpGracePeriod = modelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
 
 	return httpBindAddr, httpGracePeriod
 }
 
-func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
+func regCommonObjStoreFlags(cmd extkingpin.FlagClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
 	help := fmt.Sprintf("YAML file that contains object store%s configuration. See format details: https://thanos.io/tip/thanos/storage.md/#configuration ", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
 
 	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("objstore%s.config", suffix), help, required)
 }
 
-func regCommonTracingFlags(app *kingpin.Application) *extflag.PathOrContent {
+func regCommonTracingFlags(app extkingpin.FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
 		"tracing.config",
@@ -64,7 +65,7 @@ func regCommonTracingFlags(app *kingpin.Application) *extflag.PathOrContent {
 	)
 }
 
-func regSelectorRelabelFlags(cmd *kingpin.CmdClause) *extflag.PathOrContent {
+func regSelectorRelabelFlags(cmd extkingpin.FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",

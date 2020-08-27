@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -38,9 +38,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
-func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Receive
-	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
+func registerReceive(app *extkingpin.App) {
+	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
@@ -96,7 +95,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -164,9 +163,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
 			*allowOutOfOrderUpload,
-			comp,
+			component.Receive,
 		)
-	}
+	})
 }
 
 func runReceive(

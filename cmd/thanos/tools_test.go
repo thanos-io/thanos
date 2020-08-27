@@ -11,7 +11,6 @@ import (
 )
 
 func Test_CheckRules(t *testing.T) {
-
 	validFiles := []string{
 		"./testdata/rules-files/valid.yaml",
 	}

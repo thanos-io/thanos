@@ -21,12 +21,12 @@ type PathOrContent struct {
 	content *string
 }
 
-type CmdClause interface {
+type FlagClause interface {
 	Flag(name, help string) *kingpin.FlagClause
 }
 
 // RegisterPathOrContent registers PathOrContent flag in kingpinCmdClause.
-func RegisterPathOrContent(cmd CmdClause, flagName string, help string, required bool) *PathOrContent {
+func RegisterPathOrContent(cmd FlagClause, flagName string, help string, required bool) *PathOrContent {
 	fileFlagName := fmt.Sprintf("%s-file", flagName)
 	contentFlagName := flagName
 

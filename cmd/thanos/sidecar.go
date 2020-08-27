@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/exthttp"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -40,15 +41,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
-	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
+func registerSidecar(app *extkingpin.App) {
+	cmd := app.Command(component.Sidecar.String(), "Sidecar for Prometheus server")
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
-
-	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&reloader.Options{
@@ -60,16 +59,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(
-			g,
-			logger,
-			reg,
-			tracer,
-			rl,
-			component.Sidecar,
-			*conf,
-		)
-	}
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+	})
 }
 
 func runSidecar(
@@ -415,7 +406,7 @@ type sidecarConfig struct {
 	limitMinTime thanosmodel.TimeOrDurationValue
 }
 
-func (sc *sidecarConfig) registerFlag(cmd *kingpin.CmdClause) {
+func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)

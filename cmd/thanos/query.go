@@ -23,7 +23,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -45,7 +45,7 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
+func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
@@ -119,7 +119,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -150,7 +150,6 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
 
-		flagsMap := getFlagsMap(cmd.Model().Flags)
 		return runQuery(
 			g,
 			logger,
@@ -179,7 +178,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
 			selectorLset,
-			flagsMap,
+			getFlagsMap(cmd.Flags()),
 			*stores,
 			*ruleEndpoints,
 			*enableAutodownsampling,
@@ -193,7 +192,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*strictStores,
 			component.Query,
 		)
-	}
+	})
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
