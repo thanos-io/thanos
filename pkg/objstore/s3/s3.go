@@ -72,9 +72,6 @@ type Config struct {
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	PartSize  uint64    `yaml:"part_size"`
 	SSEConfig SSEConfig `yaml:"sse_config"`
-
-	// Allow upstream callers to inject a round tripper
-	Transport http.RoundTripper `yaml:"-"`
 }
 
 // SSEConfig deals with the configuration of SSE for Minio. The following options are valid:
@@ -95,6 +92,9 @@ type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
 	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	// Allow upstream callers to inject a round tripper
+	Transport http.RoundTripper `yaml:"-"`
 }
 
 // DefaultTransport - this default transport is based on the Minio
@@ -115,6 +115,9 @@ func DefaultTransport(config Config) *http.Transport {
 		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		// A custom ResponseHeaderTimeout was introduced
+		// to cover cases where the tcp connection works but
+		// the server never answers. Defaults to 2 minutes.
 		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
 		// Set this value so that the underlying transport round-tripper
 		// doesn't try to auto decode the body of objects with
@@ -192,8 +195,8 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	// Check if a roundtripper has been set in the config
 	// otherwise build the default transport.
 	var rt http.RoundTripper
-	if config.Transport != nil {
-		rt = config.Transport
+	if config.HTTPConfig.Transport != nil {
+		rt = config.HTTPConfig.Transport
 	} else {
 		rt = DefaultTransport(config)
 	}
