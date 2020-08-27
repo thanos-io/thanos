@@ -5,6 +5,7 @@ package testutil
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -76,15 +77,19 @@ func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
 	if len(v) > 0 {
 		msg = fmt.Sprintf(v[0].(string), v[1:]...)
 	}
-	tb.Fatal(sprintfWithLimit("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v%s\033[39m\n\n", filepath.Base(file), line, exp, act, diff(exp, act)))
+	tb.Fatalf("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v%s\033[39m\n\n", filepath.Base(file), line, trim(exp), trim(act), trim(diff(exp, act)))
 }
 
-func sprintfWithLimit(act string, v ...interface{}) string {
-	s := fmt.Sprintf(act, v...)
-	if len(s) > 1000 {
-		return s[:1000] + "...(output trimmed)"
+func trim(s interface{}) string {
+	str := fmt.Sprint(s)
+	_, noTrim := os.LookupEnv("NO_TRIM")
+	if noTrim { // Need full output for some test debugging.
+		return str
 	}
-	return s
+	if len(str) > 500 {
+		return str[:500] + "...(output trimmed - use env NO_TRIM to disable trimming)"
+	}
+	return str
 }
 
 func typeAndKind(v interface{}) (reflect.Type, reflect.Kind) {
