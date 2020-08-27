@@ -2,7 +2,7 @@
 title: 'Building A Versioning Plugin For Thanos'
 type: proposal
 menu: proposals
-status: approved
+status: complete
 owner: thisisobate
 Date: May 2020
 ---
