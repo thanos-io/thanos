@@ -165,4 +165,4 @@ We understand [Cortex](https://github.com/cortexproject/cortex/pull/2349) is wor
 
 ## Future Work
 
-We hope to rewrite the versioning plugin using golang. We care alot about code maintainability and because we use golang as our primary programming language, it will be easier for developers to contribute to this plugin and make it even better.
+We hope to rewrite the versioning plugin using Golang. We care a lot about code maintainability and because we use Golang as our primary programming language, it will be easier for developers to contribute to this plugin and make it even better.
