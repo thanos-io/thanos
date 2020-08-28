@@ -14,6 +14,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 ### Fixed
 
 * [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
+* [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
 
 ## [v0.15.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.0) - 2020.08.26
 
