@@ -589,6 +589,7 @@ Flags:
                                selecting blocks. It follows native Prometheus
                                relabel-config syntax. See format details:
                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+
 ```
 
 ## Rules-check
