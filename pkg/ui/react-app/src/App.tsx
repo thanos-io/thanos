@@ -15,7 +15,8 @@ const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
   rule: '/alerts',
   bucket: '/blocks',
-  compact: '/blocks',
+  compact: '/loaded',
+  store: '/loaded',
 };
 
 const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosComponent }) => {
@@ -46,6 +47,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
             <Targets path="/targets" pathPrefix={pathPrefix} />
             <Stores path="/stores" pathPrefix={pathPrefix} />
             <Blocks path="/blocks" pathPrefix={pathPrefix} />
+            <Blocks path="/loaded" pathPrefix={pathPrefix} view="loaded" />
           </Router>
         </QueryParamProvider>
       </Container>

@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -17,12 +16,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -149,6 +151,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*webPrefixHeaderName,
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
+			getFlagsMap(cmd.Model().Flags),
 		)
 	}
 }
@@ -180,6 +183,7 @@ func runStore(
 	externalPrefix, prefixHeader string,
 	postingOffsetsInMemSampling int,
 	cachingBucketConfig *extflag.PathOrContent,
+	flagsMap map[string]string,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -363,9 +367,23 @@ func runStore(
 	// Add bucket UI for loaded blocks.
 	{
 		r := route.New()
-		compactorView := ui.NewBucketUI(logger, "", path.Join(externalPrefix, "/loaded"), prefixHeader)
-		compactorView.Register(r, extpromhttp.NewInstrumentationMiddleware(reg))
-		metaFetcher.UpdateOnChange(compactorView.Set)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+
+		compactorView := ui.NewBucketUI(logger, "", externalPrefix, prefixHeader, "/loaded", component)
+		compactorView.Register(r, true, ins)
+
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
+		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
+		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			compactorView.Set(blocks, err)
+			api.SetLoaded(blocks, err)
+		})
 		srv.Handle("/", r)
 	}
 

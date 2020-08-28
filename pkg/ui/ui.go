@@ -36,6 +36,7 @@ var (
 		"/version",
 		"/stores",
 		"/blocks",
+		"/loaded",
 	}
 )
 

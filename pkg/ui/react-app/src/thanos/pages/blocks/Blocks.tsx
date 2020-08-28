@@ -92,8 +92,14 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
 
 const BlocksWithStatusIndicator = withStatusIndicator(BlocksContent);
 
-export const Blocks: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
-  const { response, error, isLoading } = useFetch<BlockListProps>(`${pathPrefix}/api/v1/blocks`);
+interface BlocksProps {
+  view?: string;
+}
+
+export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
+  const { response, error, isLoading } = useFetch<BlockListProps>(
+    `${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`
+  );
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 
