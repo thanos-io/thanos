@@ -15,9 +15,8 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 :warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
 
-:warning: **WARNING** :warning: The `sse_encryption` value is now deprecated in favour of `sse_config`. If you used `sse_encryption`, the migration strategy is to set up the following block:
-
-```yaml
+* [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
+* [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
 
 ---
 sse_config:
