@@ -294,7 +294,7 @@ func (s series) Iterator() chunkenc.Iterator {
 	return newMockedSeriesIterator(s.samples)
 }
 
-// TestQuerier_Select_After_promql tests expected results with and without deduplication after passing all data to promql.
+// TestQuerier_Select_AfterPromQL tests expected results with and without deduplication after passing all data to promql.
 // To test with real data:
 // Collect the expected results from Prometheus or Thanos through "/api/v1/query_range" and save to a file.
 // Collect raw data to be used for local storage:
@@ -303,7 +303,7 @@ func (s series) Iterator() chunkenc.Iterator {
 // 	When collecting the raw data mint should be Prometheus query time minus the default look back delta(default is 5min or 300000ms)
 // 	For example if the Prometheus query mint is 1597823700000 the grpccurl query mint should be 1597823400000.
 //  This is because when promql displays data for a given range it looks back 5min before the requested time window.
-func TestQuerier_Select_After_promql(t *testing.T) {
+func TestQuerier_Select_AfterPromQL(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	for _, tcase := range []struct {
@@ -742,8 +742,8 @@ type mockedQueryable struct {
 	querier storage.Querier
 }
 
-// Querier creates a queirier with the provided min and maxt.
-// The promq engine sets mint and it is calculated based on the default lookback delta.
+// Querier creates a querier with the provided min and max time.
+// The promQL engine sets mint and it is calculated based on the default lookback delta.
 func (q *mockedQueryable) Querier(_ context.Context, mint int64, maxt int64) (storage.Querier, error) {
 	if q.Creator == nil {
 		return q.querier, nil
