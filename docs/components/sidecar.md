@@ -85,7 +85,7 @@ To use this, the Prometheus compaction needs to be disabled. This can be done by
 ```$
 usage: thanos sidecar [<flags>]
 
-sidecar for Prometheus server
+Sidecar for Prometheus server
 
 Flags:
   -h, --help                     Show context-sensitive help (also try

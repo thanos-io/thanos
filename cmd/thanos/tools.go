@@ -12,26 +12,26 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/rules"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerTools(m map[string]setupFunc, app *kingpin.Application) {
+func registerTools(app *extkingpin.App) {
 	cmd := app.Command("tools", "Tools utility commands")
 
-	registerBucket(m, cmd, "tools")
-	registerCheckRules(m, cmd, "tools")
+	registerBucket(cmd)
+	registerCheckRules(cmd)
 }
 
-func registerCheckRules(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {
-	checkRulesCmd := app.Command("rules-check", "Check if the rule files are valid or not.")
-	ruleFiles := checkRulesCmd.Flag("rules", "The rule files glob to check (repeated).").Required().ExistingFiles()
+func registerCheckRules(app extkingpin.AppClause) {
+	cmd := app.Command("rules-check", "Check if the rule files are valid or not.")
+	ruleFiles := cmd.Flag("rules", "The rule files glob to check (repeated).").Required().ExistingFiles()
 
-	m[pre+" rules-check"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 		return checkRulesFiles(logger, ruleFiles)
-	}
+	})
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {

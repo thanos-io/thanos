@@ -17,8 +17,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/weaveworks/common/user"
-	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -57,7 +57,7 @@ type queryRangeConfig struct {
 	partialResponseStrategy bool
 }
 
-func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
+func (c *queryRangeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
 		Default("24h").SetValue(&c.splitInterval)
 
@@ -79,7 +79,7 @@ func (c *queryRangeConfig) registerFlag(cmd *kingpin.CmdClause) {
 	c.respCacheConfig = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 }
 
-func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
+func (c *queryFrontendConfig) registerFlag(cmd extkingpin.FlagClause) {
 	c.queryRangeConfig.registerFlag(cmd)
 	c.http.registerFlag(cmd)
 
@@ -95,15 +95,15 @@ func (c *queryFrontendConfig) registerFlag(cmd *kingpin.CmdClause) {
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&c.requestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 }
 
-func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
+func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
 	cmd := app.Command(comp.String(), "query frontend")
 	conf := &queryFrontendConfig{}
 	conf.registerFlag(cmd)
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runQueryFrontend(g, logger, reg, tracer, conf, comp)
-	}
+	})
 }
 
 func runQueryFrontend(

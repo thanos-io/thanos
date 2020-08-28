@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -44,7 +45,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 const extpromPrefix = "thanos_bucket_"
@@ -66,21 +66,20 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
-func registerBucket(m map[string]setupFunc, app *kingpin.CmdClause, pre string) {
+func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
-	pre += " bucket"
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-	registerBucketVerify(m, cmd, pre, objStoreConfig)
-	registerBucketLs(m, cmd, pre, objStoreConfig)
-	registerBucketInspect(m, cmd, pre, objStoreConfig)
-	registerBucketWeb(m, cmd, pre, objStoreConfig)
-	registerBucketReplicate(m, cmd, pre, objStoreConfig)
-	registerBucketDownsample(m, cmd, pre, objStoreConfig)
+	registerBucketVerify(cmd, objStoreConfig)
+	registerBucketLs(cmd, objStoreConfig)
+	registerBucketInspect(cmd, objStoreConfig)
+	registerBucketWeb(cmd, objStoreConfig)
+	registerBucketReplicate(cmd, objStoreConfig)
+	registerBucketDownsample(cmd, objStoreConfig)
 }
 
-func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("verify", "Verify all blocks in the bucket against specified issues")
+func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("verify", "Verify all blocks in the bucket against specified issues")
 	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
 	repair := cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
@@ -94,13 +93,13 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("0s"))
-	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -118,7 +117,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics.
-			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, nil, name)
+			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, nil, component.Bucket.String())
 			if err != nil {
 				return err
 			}
@@ -174,20 +173,20 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		}
 
 		return v.Verify(ctx, idMatcher)
-	}
+	})
 }
 
-func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("ls", "List all blocks in the bucket")
+func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("ls", "List all blocks in the bucket")
 	output := cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").String()
-	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -263,18 +262,18 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 		}
 		level.Info(logger).Log("msg", "ls done", "objects", objects)
 		return nil
-	}
+	})
 }
 
-func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
+func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
 	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\\\"value1\\\" -l key2=\\\"value2\\\"'. All key value pairs must match.").Short('l').
 		PlaceHolder("<name>=\\\"<value>\\\"").Strings()
 	sortBy := cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 
-	m[name+" inspect"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
 		// Parse selector.
 		selectorLabels, err := parseFlagLabels(*selector)
@@ -287,7 +286,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -317,12 +316,12 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		}
 
 		return printTable(blockMetas, selectorLabels, *sortBy)
-	}
+	})
 }
 
 // registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
-func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("web", "Web interface for remote storage bucket")
+func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("web", "Web interface for remote storage bucket")
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
@@ -330,7 +329,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
-	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		comp := component.Bucket
 		httpProbe := prober.NewHTTP()
 		statusProber := prober.Combine(
@@ -349,7 +348,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
 		bucketUI.Register(router, ins)
 
-		flagsMap := getFlagsMap(cmd.Model().Flags)
+		flagsMap := getFlagsMap(cmd.Flags())
 
 		api := v1.NewBlocksAPI(logger, *label, flagsMap)
 
@@ -427,7 +426,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		})
 
 		return nil
-	}
+	})
 }
 
 // Provide a list of resolution, can not use Enum directly, since string does not implement int64 function.
@@ -438,8 +437,8 @@ func listResLevel() []string {
 		time.Duration(downsample.ResLevel2).String()}
 }
 
-func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
+func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
 	resolutions := cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationList()
@@ -447,7 +446,7 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 	matcherStrs := cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
 	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
 
-	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse block label matchers")
@@ -472,22 +471,18 @@ func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, na
 			toObjStoreConfig,
 			*singleRun,
 		)
-	}
-
+	})
 }
 
-func registerBucketDownsample(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	comp := component.Downsample
-	cmd := root.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
-
+func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command(component.Downsample.String(), "continuously downsamples blocks in an object store bucket")
 	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
-
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
-	m[name+" "+comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
-	}
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, component.Downsample)
+	})
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
