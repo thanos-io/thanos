@@ -55,6 +55,9 @@ Subcommands:
   tools bucket downsample [<flags>]
     continuously downsamples blocks in an object store bucket
 
+  tools bucket cleanup [<flags>]
+    Cleans up all blocks marked for deletion
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -133,6 +136,9 @@ Subcommands:
 
   tools bucket downsample [<flags>]
     continuously downsamples blocks in an object store bucket
+
+  tools bucket cleanup [<flags>]
+    Cleans up all blocks marked for deletion
 
 
 ```
@@ -520,6 +526,71 @@ Flags:
                               process downsamplings.
 
 ```
+
+### Bucket cleanup
+
+`tools bucket cleanup` is used to cleanup all blocks marked for deletion.
+
+Example:
+```
+thanos tools bucket cleanup --objstore.config-file="..."
+```
+
+[embedmd]:# (flags/tools_bucket_cleanup.txt $)
+```$
+usage: thanos tools bucket cleanup [<flags>]
+
+Cleans up all blocks marked for deletion
+
+Flags:
+  -h, --help                   Show context-sensitive help (also try --help-long
+                               and --help-man).
+      --version                Show application version.
+      --log.level=info         Log filtering level.
+      --log.format=logfmt      Log format to use. Possible options: logfmt or
+                               json.
+      --tracing.config-file=<file-path>
+                               Path to YAML file with tracing configuration. See
+                               format details:
+                               https://thanos.io/tip/tracing.md/#configuration
+      --tracing.config=<content>
+                               Alternative to 'tracing.config-file' flag (lower
+                               priority). Content of YAML file with tracing
+                               configuration. See format details:
+                               https://thanos.io/tip/tracing.md/#configuration
+      --objstore.config-file=<file-path>
+                               Path to YAML file that contains object store
+                               configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config=<content>
+                               Alternative to 'objstore.config-file' flag (lower
+                               priority). Content of YAML file that contains
+                               object store configuration. See format details:
+                               https://thanos.io/tip/thanos/storage.md/#configuration
+      --delete-delay=48h       Time before a block marked for deletion is
+                               deleted from bucket.
+      --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
+                               before they are being processed. Malformed blocks
+                               older than the maximum of consistency-delay and
+                               48h0m0s will be removed.
+      --block-sync-concurrency=20
+                               Number of goroutines to use when syncing block
+                               metadata from object storage.
+      --selector.relabel-config-file=<file-path>
+                               Path to YAML file that contains relabeling
+                               configuration that allows selecting blocks. It
+                               follows native Prometheus relabel-config syntax.
+                               See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config=<content>
+                               Alternative to 'selector.relabel-config-file'
+                               flag (lower priority). Content of YAML file that
+                               contains relabeling configuration that allows
+                               selecting blocks. It follows native Prometheus
+                               relabel-config syntax. See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+```
+
 ## Rules-check
 
 The `tools rules-check` subcommand contains tools for validation of Prometheus rules.
