@@ -25,7 +25,18 @@ describe('Blocks', () => {
         blocks = mount(<Blocks />);
       });
       blocks.update();
-      expect(mock).toHaveBeenCalledWith('/api/v1/blocks', { cache: 'no-store', credentials: 'same-origin' });
+      expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
+
+      const sourceViews = blocks.find(SourceView);
+      expect(sourceViews).toHaveLength(8);
+    });
+
+    it('fetched data with different view', async () => {
+      await act(async () => {
+        blocks = mount(<Blocks view="loaded" />);
+      });
+      blocks.update();
+      expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=loaded', { cache: 'no-store', credentials: 'same-origin' });
 
       const sourceViews = blocks.find(SourceView);
       expect(sourceViews).toHaveLength(8);
@@ -49,7 +60,7 @@ describe('Blocks', () => {
       });
       blocks.update();
 
-      expect(mock).toHaveBeenCalledWith('/api/v1/blocks', { cache: 'no-store', credentials: 'same-origin' });
+      expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
 
       const alert = blocks.find(Alert);
       expect(alert.prop('color')).toBe('warning');
@@ -67,7 +78,7 @@ describe('Blocks', () => {
       });
       blocks.update();
 
-      expect(mock).toHaveBeenCalledWith('/api/v1/blocks', { cache: 'no-store', credentials: 'same-origin' });
+      expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
 
       const alert = blocks.find(Alert);
       expect(alert.prop('color')).toBe('danger');
