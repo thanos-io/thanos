@@ -314,6 +314,12 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 		ruleFiles       = map[string]string{}
 	)
 
+	// Initialize filesByStrategy for existing managers' strategies to make
+	// sure that managers are updated when they have no rules configured.
+	for strategy := range m.mgrs {
+		filesByStrategy[strategy] = make([]string, 0)
+	}
+
 	if err := os.RemoveAll(m.workDir); err != nil {
 		return errors.Wrapf(err, "remove %s", m.workDir)
 	}

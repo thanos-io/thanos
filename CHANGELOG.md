@@ -11,6 +11,10 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 ## Unreleased
 
+### Fixed
+
+* [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
+
 ## [v0.15.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.0) - 2020.08.26
 
 Highlights:
