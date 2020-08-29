@@ -69,7 +69,16 @@ mv ${OUTPUT_CONTENT_DIR}/thanos/CONTRIBUTING.md ${OUTPUT_CONTENT_DIR}/contributi
 mv ${OUTPUT_CONTENT_DIR}/thanos/CODE_OF_CONDUCT.md ${OUTPUT_CONTENT_DIR}/contributing/CODE_OF_CONDUCT.md
 mv ${OUTPUT_CONTENT_DIR}/thanos/community.md ${OUTPUT_CONTENT_DIR}/contributing/community.md
 
-#Create an _index.md in all dirs to enable sorting capabilities and make "tip" appear top in version picker
+# Create an _index.md in Thanos dir.
+echo "$(
+  cat <<EOF
+---
+title: "Thanos General Documents:"
+---
+EOF
+)" >${OUTPUT_CONTENT_DIR}/thanos/_index.md
+
+# Create an _index.md in this dir to enable sorting capabilities and make this version appear top in version picker
 echo "$(
   cat <<EOF
 ---
