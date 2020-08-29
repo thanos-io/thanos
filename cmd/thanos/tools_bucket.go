@@ -46,7 +46,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const extpromPrefix = "thanos_bucket_"
@@ -72,13 +71,13 @@ func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-	registerBucketVerify(m, cmd, pre, objStoreConfig)
-	registerBucketLs(m, cmd, pre, objStoreConfig)
-	registerBucketInspect(m, cmd, pre, objStoreConfig)
-	registerBucketWeb(m, cmd, pre, objStoreConfig)
-	registerBucketReplicate(m, cmd, pre, objStoreConfig)
-	registerBucketDownsample(m, cmd, pre, objStoreConfig)
-	registerBucketCleanup(m, cmd, pre, objStoreConfig)
+	registerBucketVerify(cmd, objStoreConfig)
+	registerBucketLs(cmd, objStoreConfig)
+	registerBucketInspect(cmd, objStoreConfig)
+	registerBucketWeb(cmd, objStoreConfig)
+	registerBucketReplicate(cmd, objStoreConfig)
+	registerBucketDownsample(cmd, objStoreConfig)
+	registerBucketCleanup(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -488,15 +487,15 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 	})
 }
 
-func registerBucketCleanup(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
-	cmd := root.Command("cleanup", "Cleans up all blocks marked for deletion")
+func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command(component.Cleanup.String(), "Cleans up all blocks marked for deletion")
 	deleteDelay := cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").Duration()
 	consistencyDelay := cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").Duration()
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").Int()
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
-	m[name+" cleanup"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
@@ -512,7 +511,7 @@ func registerBucketCleanup(m map[string]setupFunc, root *kingpin.CmdClause, name
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
 		if err != nil {
 			return err
 		}
@@ -574,7 +573,7 @@ func registerBucketCleanup(m map[string]setupFunc, root *kingpin.CmdClause, name
 
 		level.Info(logger).Log("msg", "cleanup done")
 		return nil
-	}
+	})
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
