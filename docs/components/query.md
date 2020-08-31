@@ -260,6 +260,30 @@ If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPref
 Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header.
 Then, `thanos query --web.prefix-header=X-Forwarded-Prefix` will serve correct HTTP redirects and links prefixed by the stripped path.
 
+For ingress controller nginx, use the flag `--web.prefix-header=X-Forwarded-Prefix` for thanos query
+and use the below example of Ingress configuration to access Thanos on `/thanos` prefix:
+```
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/x-forwarded-prefix: /thanos
+  labels:
+    app.kubernetes.io/name: thanos-query
+  name: thanos-query
+spec:
+  rules:
+  - host: ${MY-HOST-FQDN}
+    http:
+      paths:
+      - backend:
+          serviceName: thanos-query
+          servicePort: 9090
+        path: /thanos/?(.*)
+```
+
 ## File SD
 
 `--store.sd-file` flag provides a path to a JSON or YAML formatted file, which contains a list of targets in [Prometheus target format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
