@@ -22,6 +22,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
@@ -76,6 +77,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketWeb(cmd, objStoreConfig)
 	registerBucketReplicate(cmd, objStoreConfig)
 	registerBucketDownsample(cmd, objStoreConfig)
+	registerBucketCleanup(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -482,6 +484,95 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, component.Downsample)
+	})
+}
+
+func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command(component.Cleanup.String(), "Cleans up all blocks marked for deletion")
+	deleteDelay := cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").Duration()
+	consistencyDelay := cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
+		Default("30m").Duration()
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
+		Default("20").Int()
+	selectorRelabelConf := regSelectorRelabelFlags(cmd)
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		relabelContentYaml, err := selectorRelabelConf.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of relabel configuration")
+		}
+
+		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
+		if err != nil {
+			return err
+		}
+
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+		// This is to make sure compactor will not accidentally perform compactions with gap instead.
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, *deleteDelay/2)
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, *deleteDelay, stubCounter, stubCounter)
+
+		ctx := context.Background()
+
+		var sy *compact.Syncer
+		{
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			if err != nil {
+				return errors.Wrap(err, "create meta fetcher")
+			}
+			cf := baseMetaFetcher.NewMetaFetcher(
+				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
+					block.NewLabelShardedMetaFilter(relabelConfig),
+					block.NewConsistencyDelayMetaFilter(logger, *consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
+					ignoreDeletionMarkFilter,
+					duplicateBlocksFilter,
+				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+			)
+			sy, err = compact.NewSyncer(
+				logger,
+				reg,
+				bkt,
+				cf,
+				duplicateBlocksFilter,
+				ignoreDeletionMarkFilter,
+				stubCounter,
+				stubCounter,
+				*blockSyncConcurrency)
+			if err != nil {
+				return errors.Wrap(err, "create syncer")
+			}
+		}
+
+		level.Info(logger).Log("msg", "syncing blocks metadata")
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync blocks")
+		}
+
+		level.Info(logger).Log("msg", "synced blocks done")
+
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, stubCounter, stubCounter, stubCounter)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "error cleaning blocks")
+		}
+
+		level.Info(logger).Log("msg", "cleanup done")
+		return nil
 	})
 }
 
