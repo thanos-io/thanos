@@ -11,6 +11,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 ## Unreleased
 
+<<<<<<< HEAD
 ### Fixed
 
 * [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
@@ -18,7 +19,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 * [#3105](https://github.com/thanos-io/thanos/pull/3105) Query: Fix overwriting maxSourceResolution when auto downsampling is enabled.
 * [#3010](https://github.com/thanos-io/thanos/pull/3010) Querier: Added a flag to override the default look back delta in promql. The flag should be set to at least 2 times the slowest scrape interval or left unset to use the Prometheus defaults of 5min.
 
-## [v0.15.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.0) - 2020.08.26
+## [v0.15.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.1) - 2020.09.01
 
 Highlights:
 * Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
@@ -32,10 +33,10 @@ query scheduling and parallelization (based on Cortex Query Frontend).
 ### Fixed
 
 - [#2665](https://github.com/thanos-io/thanos/pull/2665) Swift: Fix issue with missing Content-Type HTTP headers.
-- [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`
-- [#2834](https://github.com/thanos-io/thanos/pull/2834) Query: Fix rendered JSON state value for rules and alerts should be in lowercase
+- [#2800](https://github.com/thanos-io/thanos/pull/2800) Query: Fix handling of `--web.external-prefix` and `--web.route-prefix`.
+- [#2834](https://github.com/thanos-io/thanos/pull/2834) Query: Fix rendered JSON state value for rules and alerts should be in lowercase.
 - [#2866](https://github.com/thanos-io/thanos/pull/2866) Receive, Querier: Fixed leaks on receive and querier Store API Series, which were leaking on errors.
-- [#2937](https://github.com/thanos-io/thanos/pull/2937) Receive: Fixing auto-configuration of --receive.local-endpoint
+- [#2937](https://github.com/thanos-io/thanos/pull/2937) Receive: Fixing auto-configuration of `--receive.local-endpoint`.
 - [#2895](https://github.com/thanos-io/thanos/pull/2895) Compact: Fix increment of `thanos_compact_downsample_total` metric for downsample of 5m resolution blocks.
 - [#2858](https://github.com/thanos-io/thanos/pull/2858) Store: Fix `--store.grpc.series-sample-limit` implementation. The limit is now applied to the sum of all samples fetched across all queried blocks via a single Series call, instead of applying it individually to each block.
 - [#2936](https://github.com/thanos-io/thanos/pull/2936) Compact: Fix ReplicaLabelRemover panic when replicaLabels are not specified.
@@ -44,10 +45,12 @@ query scheduling and parallelization (based on Cortex Query Frontend).
 - [#2957](https://github.com/thanos-io/thanos/pull/2957) Rule: *breaking :warning:* Now sets all of the relevant fields properly; avoids a panic when `/api/v1/rules` is called and the time zone is _not_ UTC; `rules` field is an empty array now if no rules have been defined in a rule group.
 Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
 - [#2976](https://github.com/thanos-io/thanos/pull/2976) Query: Better rounding for incoming query timestamps.
-- [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and also increase the timeout for 10 minutes.
-- [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: consider group name and file for deduplication
+- [#2929](https://github.com/thanos-io/thanos/pull/2929) Mixin: Fix expression for 'unhealthy sidecar' alert and increase the timeout for 10 minutes.
+- [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: Consider group name and file for deduplication.
 - [#3012](https://github.com/thanos-io/thanos/pull/3012) Ruler,Receiver: Fix TSDB to delete blocks in atomic way.
 - [#3046](https://github.com/thanos-io/thanos/pull/3046) Ruler,Receiver: Fixed framing of StoreAPI response, it was one chunk by one.
+- [#3095](https://github.com/thanos-io/thanos/pull/3095) Ruler: Update manager when all rule files removed.
+- [#3098](https://github.com/thanos-io/thanos/pull/3098) Compactor, Store: Fix Block Viewer.
 
 ```yaml
 sse_config:
