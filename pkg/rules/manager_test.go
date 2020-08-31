@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -15,10 +16,12 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"gopkg.in/yaml.v3"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -160,10 +163,11 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
+	reg := prometheus.NewRegistry()
 
 	thanosRuleMgr := NewManager(
 		context.Background(),
-		nil,
+		reg,
 		dir,
 		rules.ManagerOptions{
 			Logger:    log.NewLogfmtLogger(os.Stderr),
@@ -185,10 +189,24 @@ groups:
 		filepath.Join(dir, "non_existing.yaml"),
 		filepath.Join(dir, "subdir", "no_strategy.yaml"),
 	})
-
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.Contains(err.Error(), "wrong.yaml: failed to unmarshal \"afafsdgsdgs\" as 'partial_response_strategy'"), err.Error())
 	testutil.Assert(t, strings.Contains(err.Error(), "non_existing.yaml: no such file or directory"), err.Error())
+
+	// Still failed update should load at least partially correct rules.
+	// Also, check metrics: Regression test: https://github.com/thanos-io/thanos/issues/3083
+	testutil.Equals(t,
+		map[string]float64{
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/abort.yaml;something2,strategy=abort}", dir):            1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/bdir/no_strategy.yaml;something8,strategy=abort}", dir): 1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something6,strategy=abort}", dir):         1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something7,strategy=abort}", dir):         1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/no_strategy.yaml;something1,strategy=abort}", dir):      1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/combined.yaml;something5,strategy=warn}", dir):           1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/warn.yaml;something3,strategy=warn}", dir):               1,
+		},
+		extprom.CurrentGaugeValuesFor(t, reg, "prometheus_rule_group_rules"),
+	)
 
 	g := thanosRuleMgr.RuleGroups()
 	sort.Slice(g, func(i, j int) bool {

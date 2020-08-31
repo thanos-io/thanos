@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -224,10 +225,12 @@ func TestReloader_RuleApply(t *testing.T) {
 		reloadsSeen := 0
 		init := false
 		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(300 * time.Millisecond):
+			case <-time.After(500 * time.Millisecond):
 			}
 
 			rel := reloads.Load().(int)
@@ -235,7 +238,6 @@ func TestReloader_RuleApply(t *testing.T) {
 				continue
 			}
 			init = true
-
 			reloadsSeen = rel
 
 			t.Log("Performing step number", rel)

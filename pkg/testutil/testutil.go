@@ -81,8 +81,8 @@ func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
 
 func sprintfWithLimit(act string, v ...interface{}) string {
 	s := fmt.Sprintf(act, v...)
-	if len(s) > 1000 {
-		return s[:1000] + "...(output trimmed)"
+	if len(s) > 10000 {
+		return s[:10000] + "...(output trimmed)"
 	}
 	return s
 }
