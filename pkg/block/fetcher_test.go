@@ -1039,7 +1039,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
@@ -1064,7 +1064,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
 		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
