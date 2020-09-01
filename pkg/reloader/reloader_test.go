@@ -72,7 +72,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       input,
 		CfgOutputFile: output,
-		RuleDirs:      nil,
+		WatchedDirs:   nil,
 		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
 		RetryInterval: 100 * time.Millisecond,
 	})
@@ -205,7 +205,7 @@ func TestReloader_RuleApply(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       "",
 		CfgOutputFile: "",
-		RuleDirs:      []string{dir, path.Join(dir, "rule-dir")},
+		WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
 		WatchInterval: 100 * time.Millisecond,
 		RetryInterval: 100 * time.Millisecond,
 	})

@@ -24,7 +24,7 @@ func ExampleReloader() {
 		ReloadURL:     reloader.ReloadURLFromBase(u),
 		CfgFile:       "/path/to/cfg",
 		CfgOutputFile: "/path/to/cfg.out",
-		RuleDirs:      []string{"/path/to/dirs"},
+		WatchedDirs:   []string{"/path/to/dirs"},
 		WatchInterval: 3 * time.Minute,
 		RetryInterval: 5 * time.Second,
 	})
