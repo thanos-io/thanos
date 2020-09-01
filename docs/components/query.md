@@ -367,6 +367,19 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.lookback-delta=QUERY.LOOKBACK-DELTA
+                                 The maximum lookback duration for retrieving
+                                 metrics during expression evaluations. PromQL
+                                 always evaluates the query for the certain
+                                 timestamp (query range timestamps are deduced
+                                 by step). Since scrape intervals might be
+                                 different, PromQL looks back for given amount
+                                 of time to get latest sample. If it exceeds the
+                                 maximum lookback delta it assumes series is
+                                 stale and returns none (a gap). This is why
+                                 lookback delta should be set to at least 2
+                                 times of the slowest scrape interval. If unset
+                                 it will use the promql default of 5m
       --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.

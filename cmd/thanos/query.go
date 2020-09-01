@@ -70,6 +70,8 @@ func registerQuery(app *extkingpin.App) {
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
+	lookbackDelta := cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m").Duration()
+
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
 
@@ -174,6 +176,7 @@ func registerQuery(app *extkingpin.App) {
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
+			*lookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
@@ -221,6 +224,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
+	lookbackDelta time.Duration,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
@@ -311,6 +315,7 @@ func runQuery(
 				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
 					return defaultEvaluationInterval.Milliseconds()
 				},
+				LookbackDelta: lookbackDelta,
 			},
 		)
 	)

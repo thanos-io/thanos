@@ -18,6 +18,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 * [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
 * [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
 * [#3105](https://github.com/thanos-io/thanos/pull/3105) Query: Fix overwriting maxSourceResolution when auto downsampling is enabled.
+* [#3010](https://github.com/thanos-io/thanos/pull/3010) Querier: Added a flag to override the default look back delta in promql. The flag should be set to at least 2 times the slowest scrape interval or left unset to use the Prometheus defaults of 5min.
 
 ---
 sse_config:
