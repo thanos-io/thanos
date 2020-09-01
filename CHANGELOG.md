@@ -11,15 +11,8 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 ## Unreleased
 
-<<<<<<< HEAD
-### Fixed
-
-* [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
-* [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
-* [#3105](https://github.com/thanos-io/thanos/pull/3105) Query: Fix overwriting maxSourceResolution when auto downsampling is enabled.
-* [#3010](https://github.com/thanos-io/thanos/pull/3010) Querier: Added a flag to override the default look back delta in promql. The flag should be set to at least 2 times the slowest scrape interval or left unset to use the Prometheus defaults of 5min.
-
 ## [v0.15.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.1) - 2020.09.01
+
 
 Highlights:
 * Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
@@ -50,6 +43,8 @@ Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `pa
 - [#3012](https://github.com/thanos-io/thanos/pull/3012) Ruler,Receiver: Fix TSDB to delete blocks in atomic way.
 - [#3046](https://github.com/thanos-io/thanos/pull/3046) Ruler,Receiver: Fixed framing of StoreAPI response, it was one chunk by one.
 - [#3095](https://github.com/thanos-io/thanos/pull/3095) Ruler: Update the manager when all rule files are removed.
+- [#3105](https://github.com/thanos-io/thanos/pull/3105) Querier: Fix overwriting `maxSourceResolution` when auto downsampling is enabled.
+- [#3010](https://github.com/thanos-io/thanos/pull/3010) Querier: Added `--query.lookback-delta` flag to override the default lookback delta in PromQL. The flag should be lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the PromQL default of 5m.
 
 ```yaml
 sse_config:
