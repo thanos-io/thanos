@@ -49,8 +49,7 @@ Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `pa
 - [#3024](https://github.com/thanos-io/thanos/pull/3024) Query: Consider group name and file for deduplication.
 - [#3012](https://github.com/thanos-io/thanos/pull/3012) Ruler,Receiver: Fix TSDB to delete blocks in atomic way.
 - [#3046](https://github.com/thanos-io/thanos/pull/3046) Ruler,Receiver: Fixed framing of StoreAPI response, it was one chunk by one.
-- [#3095](https://github.com/thanos-io/thanos/pull/3095) Ruler: Update manager when all rule files removed.
-- [#3098](https://github.com/thanos-io/thanos/pull/3098) Compactor, Store: Fix Block Viewer.
+- [#3095](https://github.com/thanos-io/thanos/pull/3095) Ruler: Update the manager when all rule files are removed.
 
 ```yaml
 sse_config:
