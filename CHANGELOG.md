@@ -17,6 +17,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 * [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
 * [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
+* [#3105](https://github.com/thanos-io/thanos/pull/3105) Query: Fix overwriting maxSourceResolution when auto downsampling is enabled.
 
 ---
 sse_config:
