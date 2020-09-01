@@ -54,7 +54,7 @@ $ jb update
 
 #### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](../../examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](/examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
 
 [embedmd]:# (config.libsonnet)
 ```libsonnet
@@ -152,7 +152,7 @@ You validate your structural correctness of your Prometheus [alerting rules](htt
 $ make example-rules-lint
 ```
 
-Check out [test.yaml](../../examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
+Check out [test.yaml](/examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
 
 You test alerts with:
 
