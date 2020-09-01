@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -283,7 +284,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Non query range request, won't be cached.
-	testRequest2 := &ThanosRequest{
+	testRequestInstant := &ThanosRequest{
 		Path:  "/api/v1/query",
 		Start: 0,
 		End:   2 * hour,
@@ -292,7 +293,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// but still in the same downsampling level, so it will be cached in this case.
-	testRequest3 := &ThanosRequest{
+	testRequestSameLevelDownsampling := &ThanosRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -302,12 +303,22 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// and downsampling level so it won't be cached in this case.
-	testRequest4 := &ThanosRequest{
+	testRequestHigherLevelDownsampling := &ThanosRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * hour,
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 1 * seconds,
+		StoreMatchers:       [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}}},
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{
@@ -341,10 +352,11 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "non query range request won't be cached", req: testRequest2, expected: 2},
-		{name: "do it again", req: testRequest2, expected: 3},
-		{name: "different max source resolution but still same level", req: testRequest3, expected: 3},
-		{name: "different max source resolution and different level", req: testRequest4, expected: 4},
+		{name: "non query range request won't be cached", req: testRequestInstant, expected: 2},
+		{name: "do it again", req: testRequestInstant, expected: 3},
+		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 3},
+		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 4},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 5},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosRequest{
@@ -353,7 +365,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 				End:   timestamp.FromTime(now.Add(time.Hour)),
 				Step:  10 * seconds,
 			},
-			expected: 5,
+			expected: 6,
 		},
 		{
 			name: "same query as the previous one",
@@ -363,7 +375,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 				End:   timestamp.FromTime(now.Add(time.Hour)),
 				Step:  10 * seconds,
 			},
-			expected: 6,
+			expected: 7,
 		},
 	} {
 
