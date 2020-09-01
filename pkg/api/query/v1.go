@@ -195,7 +195,8 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 	val := r.FormValue(maxSourceResolutionParam)
 	if qapi.enableAutodownsampling || (val == "auto") {
 		maxSourceResolution = defaultVal
-	} else if val != "" {
+	}
+	if val != "" && val != "auto" {
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
