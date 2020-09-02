@@ -1,0 +1,31 @@
+/prometheus
+/thanos
+/vendor/
+/mixin/vendor/
+node_modules/
+
+# Ignore minikube setup working dirs.
+kube/bin
+kube/.kube
+kube/.minikube
+
+# Ignore e2e working dirs.
+data/
+test/e2e/e2e_integration_test*
+
+# Ignore promu artifacts.
+/.build
+/.release
+/.tarballs
+
+/.idea
+/*.iml
+
+website/public/
+website/docs-pre-processed/
+!website/data
+
+# React build assets
+pkg/ui/static/react
+
+tmp/

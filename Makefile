@@ -124,7 +124,6 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
-
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 ifeq ($(OS)_$(ARCH), linux_x86_64)
@@ -238,10 +237,6 @@ install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 .PHONY: docker-ci
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
 docker-ci: install-deps
-	# Copy all to tmp local dir as this is required by docker.
-	@rm -rf $(BIN_DIR)
-	@mkdir -p $(BIN_DIR)
-	@cp -r $(GOBIN)/* $(BIN_DIR)
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
 	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"

@@ -1,22 +1,22 @@
 go:
-    version: 1.14.2
+  version: 1.15.0
 repository:
-    path: github.com/thanos-io/thanos
+  path: github.com/thanos-io/thanos
 build:
-    binaries:
-        - name: thanos
-          path: ./cmd/thanos
-    flags: -a -tags netgo
-    ldflags: |
-        -X github.com/prometheus/common/version.Version={{.Version}}
-        -X github.com/prometheus/common/version.Revision={{.Revision}}
-        -X github.com/prometheus/common/version.Branch={{.Branch}}
-        -X github.com/prometheus/common/version.BuildUser={{user}}@{{host}}
-        -X github.com/prometheus/common/version.BuildDate={{date "20060102-15:04:05"}}
+  binaries:
+    - name: thanos
+      path: ./cmd/thanos
+  flags: -a -tags netgo
+  ldflags: |
+    -X github.com/prometheus/common/version.Version={{.Version}}
+    -X github.com/prometheus/common/version.Revision={{.Revision}}
+    -X github.com/prometheus/common/version.Branch={{.Branch}}
+    -X github.com/prometheus/common/version.BuildUser={{user}}@{{host}}
+    -X github.com/prometheus/common/version.BuildDate={{date "20060102-15:04:05"}}
 crossbuild:
-    platforms:
-        - linux/amd64
-        - darwin/amd64
-        - linux/arm64
-        - windows/amd64
-        - freebsd/amd64
+  platforms:
+    - linux/amd64
+    - darwin/amd64
+    - linux/arm64
+    - windows/amd64
+    - freebsd/amd64
