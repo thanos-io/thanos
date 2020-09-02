@@ -54,7 +54,7 @@ func registerSidecar(app *extkingpin.App) {
 				ReloadURL:     reloader.ReloadURLFromBase(conf.prometheus.url),
 				CfgFile:       conf.reloader.confFile,
 				CfgOutputFile: conf.reloader.envVarConfFile,
-				RuleDirs:      conf.reloader.ruleDirectories,
+				WatchedDirs:   conf.reloader.ruleDirectories,
 				WatchInterval: conf.reloader.watchInterval,
 				RetryInterval: conf.reloader.retryInterval,
 			})
