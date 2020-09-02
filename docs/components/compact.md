@@ -147,6 +147,12 @@ Flags:
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --compact.cleanup-interval=5m
+                                How often we should clean up partially uploaded
+                                blocks and blocks with deletion mark in the
+                                background when --wait has been enabled. Setting
+                                it to "0s" disables it - the cleaning will only
+                                happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
       --delete-delay=48h        Time before a block marked for deletion is

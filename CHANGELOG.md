@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Added
+
+- [#3115](https://github.com/thanos-io/thanos/pull/3115) compact: now deletes partially uploaded and blocks with deletion marks concurrently. It does that at the beginning and then every `--compact.cleanup-interval` time period. By default it is 5 minutes.
+
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - in release process.
 
 :warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
