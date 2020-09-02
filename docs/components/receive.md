@@ -8,7 +8,7 @@ menu: components
 
 The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It builds on top of existing Prometheus TSDB and retains their usefulness while extending their functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
 
-We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the various pros and cons of pushing metrics.
+We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
 Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documentation here](../operating/multi-tenancy.md).
 
@@ -19,15 +19,15 @@ For further information on tuning Prometheus Remote Write [see remote write tuni
 
 ```bash
 thanos receive \
-    --tsdb.path        "/path/to/receive/data/dir" \
+    --tsdb.path "/path/to/receive/data/dir" \
     --grpc-address 0.0.0.0:10907 \
     --http-address 0.0.0.0:10909 \
     --receive.replication-factor 1 \
     --label "receive_replica=\"0\"" \
     --receive.local-endpoint 127.0.0.1:10907 \
     --receive.hashrings-file ./data/hashring.json \
-    --remote-write.address 0.0.0.0:10908 &
-    --objstore.config-file  "bucket.yml"
+    --remote-write.address 0.0.0.0:10908 \
+    --objstore.config-file "bucket.yml"
 ```
 
 The example content of `bucket.yml`:
@@ -70,12 +70,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -124,13 +124,13 @@ Flags:
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
       --receive.hashrings-file=<path>
@@ -159,5 +159,8 @@ Flags:
                                  How many times to replicate incoming write
                                  requests.
       --tsdb.wal-compression     Compress the tsdb WAL.
+      --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
+                                 In any case, the lockfiles will be deleted on
+                                 next startup.
 
 ```

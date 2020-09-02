@@ -23,17 +23,18 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 
+	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
-	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -44,7 +45,7 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
+func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
@@ -57,9 +58,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
-	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+
+	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
 	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -116,7 +119,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -139,19 +142,12 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
-		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+		if *webRoutePrefix == "" {
+			*webRoutePrefix = *webExternalPrefix
+		}
 
-		flagsMap := map[string]string{}
-
-		// Exclude kingpin default flags to expose only Thanos ones.
-		boilerplateFlags := kingpin.New("", "").Version("")
-
-		for _, f := range cmd.Model().Flags {
-			if boilerplateFlags.GetFlag(f.Name) != nil {
-				continue
-			}
-
-			flagsMap[f.Name] = f.Value.String()
+		if *webRoutePrefix != *webExternalPrefix {
+			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
 
 		return runQuery(
@@ -159,6 +155,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
+			*requestLoggingDecision,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -177,10 +174,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
+			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
 			selectorLset,
-			flagsMap,
+			getFlagsMap(cmd.Flags()),
 			*stores,
 			*ruleEndpoints,
 			*enableAutodownsampling,
@@ -194,7 +192,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*strictStores,
 			component.Query,
 		)
-	}
+	})
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -204,6 +202,7 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	requestLoggingDecision string,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -222,6 +221,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
+	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
@@ -308,6 +308,9 @@ func runQuery(
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
+				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
+					return defaultEvaluationInterval.Milliseconds()
+				},
 			},
 		)
 	)
@@ -404,11 +407,17 @@ func runQuery(
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.LogDecision[requestLoggingDecision]
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(
+		api := v1.NewQueryAPI(
 			logger,
 			reg,
 			stores,
@@ -425,7 +434,7 @@ func runQuery(
 			maxConcurrentQueries,
 		)
 
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, webRoutePrefix,
 			httpProbe,

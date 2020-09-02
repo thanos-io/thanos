@@ -3,7 +3,6 @@ title: Getting Started
 type: docs
 menu: thanos
 weight: 1
-slug: /getting-started.md
 ---
 
 # Getting started
@@ -109,7 +108,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 * 2020:
 
   * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
-  * [A Production Thanos Deployment](https://www.omerlh.info/2020/02/08/a-production-thanos-deployment/)
+  * [Monitoring the Beat microservices: A tale of evolution](https://build.thebeat.co/monitoring-the-beat-microservices-a-tale-of-evolution-4e246882606e)
 
 * 2019:
 
@@ -127,7 +126,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
   * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
   * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
   * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
-  * [Thanos usage](https://www.infracloud.io/thanos-ha-scalable-prometheus/)
+  * [Thanos usage](https://www.infracloud.io/blogs/thanos-ha-scalable-prometheus/)
 
 ## Integrations
 

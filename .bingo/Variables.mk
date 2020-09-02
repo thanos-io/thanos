@@ -58,17 +58,17 @@ $(GOJSONTOYAML): .bingo/gojsontoyaml.mod
 	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.0.0-20191212081931-bf2969bbd742"
 	@cd .bingo && $(GO) build -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.0.0-20191212081931-bf2969bbd742 "github.com/brancz/gojsontoyaml"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.27.0
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.29.0
 $(GOLANGCI_LINT): .bingo/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v1.27.0"
-	@cd .bingo && $(GO) build -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.27.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v1.29.0"
+	@cd .bingo && $(GO) build -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.29.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
-HUGO := $(GOBIN)/hugo-v0.55.3
+HUGO := $(GOBIN)/hugo-v0.74.3
 $(HUGO): .bingo/hugo.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/hugo-v0.55.3"
-	@cd .bingo && $(GO) build -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.55.3 "github.com/gohugoio/hugo"
+	@echo "(re)installing $(GOBIN)/hugo-v0.74.3"
+	@cd .bingo && $(GO) build -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.74.3 "github.com/gohugoio/hugo"
 
 JB := $(GOBIN)/jb-v0.4.0
 $(JB): .bingo/jb.mod
@@ -88,11 +88,11 @@ $(JSONNETFMT): .bingo/jsonnetfmt.mod
 	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.16.0"
 	@cd .bingo && $(GO) build -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
-LICHE := $(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6
+LICHE := $(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4
 $(LICHE): .bingo/liche.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6"
-	@cd .bingo && $(GO) build -modfile=liche.mod -o=$(GOBIN)/liche-v0.0.0-20181124191719-2a2e6e56f6c6 "github.com/raviqqe/liche"
+	@echo "(re)installing $(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4"
+	@cd .bingo && $(GO) build -modfile=liche.mod -o=$(GOBIN)/liche-v0.0.0-20200229003944-f57a5d1c5be4 "github.com/raviqqe/liche"
 
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): .bingo/minio.mod
@@ -100,19 +100,13 @@ $(MINIO): .bingo/minio.mod
 	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da"
 	@cd .bingo && $(GO) build -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da "github.com/minio/minio"
 
-MISSPELL := $(GOBIN)/misspell-v0.3.4
-$(MISSPELL): .bingo/misspell.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/misspell-v0.3.4"
-	@cd .bingo && $(GO) build -modfile=misspell.mod -o=$(GOBIN)/misspell-v0.3.4 "github.com/client9/misspell/cmd/misspell"
-
-PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200507164740-ecee9c8abfd1
+PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f
 $(PROMETHEUS_ARRAY): .bingo/prometheus.mod .bingo/prometheus.1.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/prometheus-v2.4.3+incompatible"
 	@cd .bingo && $(GO) build -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v2.4.3+incompatible "github.com/prometheus/prometheus/cmd/prometheus"
-	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20200507164740-ecee9c8abfd1"
-	@cd .bingo && $(GO) build -modfile=prometheus.1.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20200507164740-ecee9c8abfd1 "github.com/prometheus/prometheus/cmd/prometheus"
+	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f"
+	@cd .bingo && $(GO) build -modfile=prometheus.1.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f "github.com/prometheus/prometheus/cmd/prometheus"
 
 PROMTOOL := $(GOBIN)/promtool-v1.8.2-0.20200522113006-f4dd45609a05
 $(PROMTOOL): .bingo/promtool.mod
@@ -131,4 +125,10 @@ $(PROTOC_GEN_GOGOFAST): .bingo/protoc-gen-gogofast.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.1"
 	@cd .bingo && $(GO) build -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.1 "github.com/gogo/protobuf/protoc-gen-gogofast"
+
+SHFMT := $(GOBIN)/shfmt-v3.1.2
+$(SHFMT): .bingo/shfmt.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/shfmt-v3.1.2"
+	@cd .bingo && $(GO) build -modfile=shfmt.mod -o=$(GOBIN)/shfmt-v3.1.2 "mvdan.cc/sh/v3/cmd/shfmt"
 

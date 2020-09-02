@@ -10,17 +10,17 @@ But before that, let's take a closer look at what the Querier component does:
 ## Querier
 
 The Querier component (also called "Query") is essentially a vanilla PromQL Prometheus engine that fetches the data from any service
-that implements Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
+that implements Thanos [StoreAPI](https://thanos.io/tip/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
 This allows compatibility with Grafana or other consumers of Prometheus' API.
 
 Additionally, Querier is capable of deduplicating StoreAPIs that are in the same HA group. We will see how it
 looks in practice later on.
 
-You can read more about Thanos Querier [here](https://thanos.io/components/query.md/)
+You can read more about Thanos Querier [here](https://thanos.io/tip/components/query.md/)
 
 ## Deploying Thanos Querier
 
-Let' now start the Query component. As you remember [Thanos sidecar](https://thanos.io/components/query.md/) exposes `StoreAPI`
+Let' now start the Query component. As you remember [Thanos sidecar](https://thanos.io/tip/components/query.md/) exposes `StoreAPI`
 so we will make sure we point the Querier to the gRPC endpoints of all our three sidecars:
 
 Click below snippet to start the Querier.

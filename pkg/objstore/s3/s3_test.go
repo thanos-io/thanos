@@ -24,6 +24,91 @@ insecure: false`)
 	}
 }
 
+func TestParseConfig_SSEConfig(t *testing.T) {
+	input := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-S3`)
+
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input2 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C`)
+
+	cfg, err = parseConfig(input2)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input3 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C
+  kms_key_id: qweasd`)
+
+	cfg, err = parseConfig(input3)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input4 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C
+  encryption_key: /some/file`)
+
+	cfg, err = parseConfig(input4)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input5 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS`)
+
+	cfg, err = parseConfig(input5)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input6 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab`)
+
+	cfg, err = parseConfig(input6)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input7 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab
+  kms_encryption_context:
+    key: value
+    something: else
+    a: b`)
+
+	cfg, err = parseConfig(input7)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input8 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-MagicKey
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab
+  encryption_key: /some/file`)
+
+	cfg, err = parseConfig(input8)
+	testutil.Ok(t, err)
+	// Since the error handling for "proper type" if done as we're setting up the bucket.
+	testutil.Ok(t, validate(cfg))
+}
+
 func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false`)

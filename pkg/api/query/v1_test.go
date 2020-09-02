@@ -21,20 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
-	"github.com/go-kit/kit/log"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -43,9 +37,9 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 
+	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
-	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -56,9 +50,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
-func TestEndpoints(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestMain(m *testing.M) {
+	testutil.TolerantVerifyLeakMain(m)
+}
 
+func TestEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
 		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
@@ -98,7 +94,7 @@ func TestEndpoints(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	app := db.Appender()
+	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
 			_, err := app.Add(lbl, i*60000, float64(i))
@@ -109,7 +105,10 @@ func TestEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	api := &API{
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
 		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
 		queryEngine: promql.NewEngine(promql.EngineOpts{
 			Logger:     nil,
@@ -117,19 +116,18 @@ func TestEndpoints(t *testing.T) {
 			MaxSamples: 10000,
 			Timeout:    timeout,
 		}),
-		now:  func() time.Time { return now },
 		gate: gate.NewKeeper(nil).NewGate(4),
 	}
 
 	start := time.Unix(0, 0)
 
 	var tests = []struct {
-		endpoint ApiFunc
+		endpoint baseAPI.ApiFunc
 		params   map[string]string
 		query    url.Values
 		method   string
 		response interface{}
-		errType  ErrorType
+		errType  baseAPI.ErrorType
 	}{
 		{
 			endpoint: api.query,
@@ -398,7 +396,7 @@ func TestEndpoints(t *testing.T) {
 				"query": []string{"0.333"},
 				"dedup": []string{"sdfsf"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.queryRange,
@@ -430,7 +428,7 @@ func TestEndpoints(t *testing.T) {
 				"end":   []string{"2"},
 				"step":  []string{"1"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.queryRange,
@@ -439,7 +437,7 @@ func TestEndpoints(t *testing.T) {
 				"start": []string{"0"},
 				"step":  []string{"1"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.queryRange,
@@ -448,7 +446,7 @@ func TestEndpoints(t *testing.T) {
 				"start": []string{"0"},
 				"end":   []string{"2"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		// Bad query expression.
 		{
@@ -457,7 +455,7 @@ func TestEndpoints(t *testing.T) {
 				"query": []string{"invalid][query"},
 				"time":  []string{"1970-01-01T01:02:03+01:00"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.queryRange,
@@ -467,7 +465,7 @@ func TestEndpoints(t *testing.T) {
 				"end":   []string{"100"},
 				"step":  []string{"1"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		// Invalid step.
 		{
@@ -478,7 +476,7 @@ func TestEndpoints(t *testing.T) {
 				"end":   []string{"2"},
 				"step":  []string{"0"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		// Start after end.
 		{
@@ -489,7 +487,7 @@ func TestEndpoints(t *testing.T) {
 				"end":   []string{"1"},
 				"step":  []string{"1"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		// Start overflows int64 internally.
 		{
@@ -500,7 +498,7 @@ func TestEndpoints(t *testing.T) {
 				"end":   []string{"1489667272.372"},
 				"step":  []string{"1"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		// Bad dedup parameter.
 		{
@@ -512,7 +510,7 @@ func TestEndpoints(t *testing.T) {
 				"step":  []string{"1"},
 				"dedup": []string{"sdfsf-range"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.labelValues,
@@ -541,7 +539,7 @@ func TestEndpoints(t *testing.T) {
 			params: map[string]string{
 				"name": "not!!!allowed",
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.series,
@@ -658,7 +656,7 @@ func TestEndpoints(t *testing.T) {
 		// Missing match[] query params in series requests.
 		{
 			endpoint: api.series,
-			errType:  errorBadData,
+			errType:  baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.series,
@@ -666,7 +664,7 @@ func TestEndpoints(t *testing.T) {
 				"match[]": []string{`test_metric2`},
 				"dedup":   []string{"sdfsf-series"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 		},
 		{
 			endpoint: api.series,
@@ -783,7 +781,7 @@ func TestEndpoints(t *testing.T) {
 		// Missing match[] query params in series requests.
 		{
 			endpoint: api.series,
-			errType:  errorBadData,
+			errType:  baseAPI.ErrorBadData,
 			method:   http.MethodPost,
 		},
 		{
@@ -792,7 +790,7 @@ func TestEndpoints(t *testing.T) {
 				"match[]": []string{`test_metric2`},
 				"dedup":   []string{"sdfsf-series"},
 			},
-			errType: errorBadData,
+			errType: baseAPI.ErrorBadData,
 			method:  http.MethodPost,
 		},
 	}
@@ -827,7 +825,7 @@ func TestEndpoints(t *testing.T) {
 
 			resp, _, apiErr := test.endpoint(req.WithContext(ctx))
 			if apiErr != nil {
-				if test.errType == errorNone {
+				if test.errType == baseAPI.ErrorNone {
 					t.Fatalf("Unexpected error: %s", apiErr)
 				}
 				if test.errType != apiErr.Typ {
@@ -835,7 +833,7 @@ func TestEndpoints(t *testing.T) {
 				}
 				return
 			}
-			if test.errType != errorNone {
+			if test.errType != baseAPI.ErrorNone {
 				t.Fatalf("Expected error of type %q but got none", test.errType)
 			}
 
@@ -846,82 +844,6 @@ func TestEndpoints(t *testing.T) {
 			return
 		}
 
-	}
-}
-
-func TestRespondSuccess(t *testing.T) {
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Respond(w, "test", nil)
-	}))
-	defer s.Close()
-
-	resp, err := http.Get(s.URL)
-	if err != nil {
-		t.Fatalf("Error on test request: %s", err)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	defer func() { testutil.Ok(t, resp.Body.Close()) }()
-	if err != nil {
-		t.Fatalf("Error reading response body: %s", err)
-	}
-
-	if resp.StatusCode != 200 {
-		t.Fatalf("Return code %d expected in success response but got %d", 200, resp.StatusCode)
-	}
-	if h := resp.Header.Get("Content-Type"); h != "application/json" {
-		t.Fatalf("Expected Content-Type %q but got %q", "application/json", h)
-	}
-
-	var res response
-	if err = json.Unmarshal([]byte(body), &res); err != nil {
-		t.Fatalf("Error unmarshaling JSON body: %s", err)
-	}
-
-	exp := &response{
-		Status: statusSuccess,
-		Data:   "test",
-	}
-	if !reflect.DeepEqual(&res, exp) {
-		t.Fatalf("Expected response \n%v\n but got \n%v\n", res, exp)
-	}
-}
-
-func TestRespondError(t *testing.T) {
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		RespondError(w, &ApiError{errorTimeout, errors.New("message")}, "test")
-	}))
-	defer s.Close()
-
-	resp, err := http.Get(s.URL)
-	if err != nil {
-		t.Fatalf("Error on test request: %s", err)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	defer func() { testutil.Ok(t, resp.Body.Close()) }()
-	if err != nil {
-		t.Fatalf("Error reading response body: %s", err)
-	}
-
-	if want, have := http.StatusServiceUnavailable, resp.StatusCode; want != have {
-		t.Fatalf("Return code %d expected in error response but got %d", want, have)
-	}
-	if h := resp.Header.Get("Content-Type"); h != "application/json" {
-		t.Fatalf("Expected Content-Type %q but got %q", "application/json", h)
-	}
-
-	var res response
-	if err = json.Unmarshal([]byte(body), &res); err != nil {
-		t.Fatalf("Error unmarshaling JSON body: %s", err)
-	}
-
-	exp := &response{
-		Status:    statusError,
-		Data:      "test",
-		ErrorType: errorTimeout,
-		Error:     "message",
-	}
-	if !reflect.DeepEqual(&res, exp) {
-		t.Fatalf("Expected response \n%v\n but got \n%v\n", res, exp)
 	}
 }
 
@@ -957,6 +879,10 @@ func TestParseTime(t *testing.T) {
 		}, {
 			input:  "2015-06-03T14:21:58.555+01:00",
 			result: ts,
+		}, {
+			// Test float rounding.
+			input:  "1543578564.705",
+			result: time.Unix(1543578564, 705*1e6),
 		},
 	}
 
@@ -1026,37 +952,6 @@ func TestParseDuration(t *testing.T) {
 		}
 		if !test.fail && d != test.result {
 			t.Errorf("Expected duration %v for input %q but got %v", test.result, test.input, d)
-		}
-	}
-}
-
-func TestOptionsMethod(t *testing.T) {
-	r := route.New()
-	api := &API{
-		gate: gate.NewKeeper(nil).NewGate(4),
-	}
-	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
-
-	s := httptest.NewServer(r)
-	defer s.Close()
-
-	req, err := http.NewRequest("OPTIONS", s.URL+"/any_path", nil)
-	if err != nil {
-		t.Fatalf("Error creating OPTIONS request: %s", err)
-	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("Error executing OPTIONS request: %s", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("Expected status %d, got %d", http.StatusNoContent, resp.StatusCode)
-	}
-
-	for h, v := range corsHeaders {
-		if resp.Header.Get(h) != v {
-			t.Fatalf("Expected %q for header %q, got %q", v, h, resp.Header.Get(h))
 		}
 	}
 }
@@ -1148,7 +1043,7 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		api := API{
+		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
 			gate:                   gate.NewKeeper(nil).NewGate(4),
 		}
@@ -1244,48 +1139,44 @@ func TestRulesHandler(t *testing.T) {
 		g: map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup{
 			rulespb.RulesRequest_ALL: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all,
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all,
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(10 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 				{
-					Name:                              "grp2",
-					File:                              "/path/to/groupfile2",
-					Rules:                             all[3:],
-					Interval:                          10,
-					EvaluationDurationSeconds:         2142,
-					LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_ABORT,
+					Name:                      "grp2",
+					File:                      "/path/to/groupfile2",
+					Rules:                     all[3:],
+					Interval:                  10,
+					EvaluationDurationSeconds: 2142,
+					LastEvaluation:            time.Time{}.Add(100 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_ABORT,
 				},
 			},
 			rulespb.RulesRequest_RECORD: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all[:2],
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all[:2],
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(20 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
 			rulespb.RulesRequest_ALERT: {
 				{
-					Name:                              "grp",
-					File:                              "/path/to/groupfile1",
-					Rules:                             all[2:],
-					Interval:                          1,
-					EvaluationDurationSeconds:         214,
-					LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
-					DeprecatedPartialResponseStrategy: 0,
-					PartialResponseStrategy:           storepb.PartialResponseStrategy_WARN,
+					Name:                      "grp",
+					File:                      "/path/to/groupfile1",
+					Rules:                     all[2:],
+					Interval:                  1,
+					EvaluationDurationSeconds: 214,
+					LastEvaluation:            time.Time{}.Add(30 * time.Minute),
+					PartialResponseStrategy:   storepb.PartialResponseStrategy_WARN,
 				},
 			},
 		},
@@ -1318,7 +1209,7 @@ func TestRulesHandler(t *testing.T) {
 			Type:           "recording",
 		},
 		testpromcompatibility.AlertingRule{
-			State:          all[2].GetAlert().State.String(),
+			State:          strings.ToLower(all[2].GetAlert().State.String()),
 			Name:           all[2].GetAlert().Name,
 			Query:          all[2].GetAlert().Query,
 			Labels:         storepb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
@@ -1332,7 +1223,7 @@ func TestRulesHandler(t *testing.T) {
 				{
 					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
 					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
-					State:                   all[2].GetAlert().Alerts[0].State.String(),
+					State:                   strings.ToLower(all[2].GetAlert().Alerts[0].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[0].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
@@ -1340,7 +1231,7 @@ func TestRulesHandler(t *testing.T) {
 				{
 					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
 					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
-					State:                   all[2].GetAlert().Alerts[1].State.String(),
+					State:                   strings.ToLower(all[2].GetAlert().Alerts[1].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[1].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[1].PartialResponseStrategy.String(),
@@ -1349,7 +1240,7 @@ func TestRulesHandler(t *testing.T) {
 			Type: "alerting",
 		},
 		testpromcompatibility.AlertingRule{
-			State:          all[3].GetAlert().State.String(),
+			State:          strings.ToLower(all[3].GetAlert().State.String()),
 			Name:           all[3].GetAlert().Name,
 			Query:          all[3].GetAlert().Query,
 			Labels:         storepb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),
@@ -1359,6 +1250,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
 			Annotations:    nil,
+			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
 	}
@@ -1367,24 +1259,22 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll,
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(10 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll,
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(10 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 					{
-						Name:                              "grp2",
-						File:                              "/path/to/groupfile2",
-						Rules:                             expectedAll[3:],
-						Interval:                          10,
-						EvaluationTime:                    2142,
-						LastEvaluation:                    time.Time{}.Add(100 * time.Minute),
-						PartialResponseStrategy:           "ABORT",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp2",
+						File:                    "/path/to/groupfile2",
+						Rules:                   expectedAll[3:],
+						Interval:                10,
+						EvaluationTime:          2142,
+						LastEvaluation:          time.Time{}.Add(100 * time.Minute),
+						PartialResponseStrategy: "ABORT",
 					},
 				},
 			},
@@ -1394,14 +1284,13 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll[:2],
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(20 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll[:2],
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(20 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 				},
 			},
@@ -1411,14 +1300,13 @@ func TestRulesHandler(t *testing.T) {
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
 					{
-						Name:                              "grp",
-						File:                              "/path/to/groupfile1",
-						Rules:                             expectedAll[2:],
-						Interval:                          1,
-						EvaluationTime:                    214,
-						LastEvaluation:                    time.Time{}.Add(30 * time.Minute),
-						PartialResponseStrategy:           "WARN",
-						DeprecatedPartialResponseStrategy: "WARN",
+						Name:                    "grp",
+						File:                    "/path/to/groupfile1",
+						Rules:                   expectedAll[2:],
+						Interval:                1,
+						EvaluationTime:          214,
+						LastEvaluation:          time.Time{}.Add(30 * time.Minute),
+						PartialResponseStrategy: "WARN",
 					},
 				},
 			},

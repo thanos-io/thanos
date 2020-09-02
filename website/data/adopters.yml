@@ -105,3 +105,18 @@ adopters:
 - name: Hetzner
   url: https://www.hetzner.com
   logo: hetzner.png
+- name: FLAT ZONE s.r.o.
+  url: https://www.flatzone.cz
+  logo: flatzone.png
+- name: Beat
+  url: https://thebeat.co
+  logo: thebeat.png
+- name: Mobiuspace
+  url: https://www.mobiuspace.com
+  logo: mobiuspace.png
+- name: TiDB Cloud
+  url: https://tidbcloud.com
+  logo: tidbcloud.png
+- name: Talend
+  url: https://www.talend.com
+  logo: talend.png

@@ -9,20 +9,21 @@
 // 	* Watch on changes against certain file e.g (`cfgFile`).
 // 	* Optionally, specify different different output file for watched `cfgFile` (`cfgOutputFile`).
 // 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
-// 	* Watch on changes against certain directories (`ruleDires`).
+// 	* Watch on changes against certain directories (`watchedDirs`).
 //
-// Once any of those two changes Prometheus on given `reloadURL` will be notified, causing Prometheus to reload configuration and rules.
+// Once any of those two changes, Prometheus on given `reloadURL` will be notified, causing Prometheus to reload configuration and rules.
 //
 // This and below for reloader:
 //
 // 	u, _ := url.Parse("http://localhost:9090")
-// 	rl := reloader.New(
-// 		nil,
-// 		reloader.ReloadURLFromBase(u),
-// 		"/path/to/cfg",
-// 		"/path/to/cfg.out",
-// 		[]string{"/path/to/dirs"},
-// 	)
+// 	rl := reloader.New(nil, nil, &reloader.Options{
+// 		ReloadURL:     reloader.ReloadURLFromBase(u),
+// 		CfgFile:       "/path/to/cfg",
+// 		CfgOutputFile: "/path/to/cfg.out",
+// 		WatchedDirs:      []string{"/path/to/dirs"},
+// 		WatchInterval: 3 * time.Minute,
+// 		RetryInterval: 5 * time.Second,
+//  })
 //
 // The url of reloads can be generated with function ReloadURLFromBase().
 // It will append the default path of reload into the given url:
@@ -41,7 +42,7 @@
 // 	// ...
 // 	cancel()
 //
-// By default, reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
+// Reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
 // even if it is no changes.
 //
 // A basic example of configuration template with environment variables:
@@ -85,39 +86,56 @@ type Reloader struct {
 	reloadURL     *url.URL
 	cfgFile       string
 	cfgOutputFile string
-	ruleDirs      []string
+	watchedDirs   []string
 	watchInterval time.Duration
 	retryInterval time.Duration
 
-	lastCfgHash  []byte
-	lastRuleHash []byte
+	lastCfgHash         []byte
+	lastWatchedDirsHash []byte
 
 	reloads      prometheus.Counter
 	reloadErrors prometheus.Counter
 	watches      prometheus.Gauge
 	watchEvents  prometheus.Counter
 	watchErrors  prometheus.Counter
+	configErrors prometheus.Counter
+}
+
+// Options bundles options for the Reloader.
+type Options struct {
+	// ReloadURL is a prometheus URL to trigger reloads.
+	ReloadURL *url.URL
+	// CfgFile is a path to the prometheus config file to watch.
+	CfgFile string
+	// CfgOutputFile is a path for the output config file.
+	// If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
+	// will be substituted and the output written into the given path. Prometheus should then use
+	// cfgOutputFile as its config file path.
+	CfgOutputFile string
+	// WatchedDirs is a collection of paths for this reloader to watch over.
+	WatchedDirs []string
+	// WatchInterval controls how often reloader re-reads config and directories.
+	WatchInterval time.Duration
+	// RetryInterval controls how often reloader retries config reload in case of error.
+	RetryInterval time.Duration
 }
 
 var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
 
-// New creates a new reloader that watches the given config file and rule directory
+// New creates a new reloader that watches the given config file and directories
 // and triggers a Prometheus reload upon changes.
-// If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
-// will be substituted and the output written into the given path. Prometheus should then use
-// cfgOutputFile as its config file path.
-func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFile string, cfgOutputFile string, ruleDirs []string) *Reloader {
+func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	r := &Reloader{
 		logger:        logger,
-		reloadURL:     reloadURL,
-		cfgFile:       cfgFile,
-		cfgOutputFile: cfgOutputFile,
-		ruleDirs:      ruleDirs,
-		watchInterval: 3 * time.Minute,
-		retryInterval: 5 * time.Second,
+		reloadURL:     o.ReloadURL,
+		cfgFile:       o.CfgFile,
+		cfgOutputFile: o.CfgOutputFile,
+		watchedDirs:   o.WatchedDirs,
+		watchInterval: o.WatchInterval,
+		retryInterval: o.RetryInterval,
 
 		reloads: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
@@ -129,6 +147,12 @@ func New(logger log.Logger, reg prometheus.Registerer, reloadURL *url.URL, cfgFi
 			prometheus.CounterOpts{
 				Name: "reloader_reloads_failed_total",
 				Help: "Total number of reload requests that failed.",
+			},
+		),
+		configErrors: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Name: "reloader_config_apply_errors_total",
+				Help: "Total number of config applies that failed.",
 			},
 		),
 		watches: promauto.With(reg).NewGauge(
@@ -158,12 +182,12 @@ func (r *Reloader) WithWatchInterval(duration time.Duration) {
 	r.watchInterval = duration
 }
 
-// Watch starts to watch periodically the config file and rules and process them until the context
+// Watch starts to watch periodically the config file and directories and process them until the context
 // gets canceled. Config file gets env expanded if cfgOutputFile is specified and reload is trigger if
-// config or rules changed.
+// config or directories changed.
 // Watch watchers periodically based on r.watchInterval.
 // For config file it watches it directly as well via fsnotify.
-// It watches rule dirs as well, but lot's of edge cases are missing, so rely on interval mostly.
+// It watches directories as well, but lot's of edge cases are missing, so rely on interval mostly.
 func (r *Reloader) Watch(ctx context.Context) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -183,11 +207,11 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 	}
 
-	// Watch rule dirs in best effort manner.
-	for _, ruleDir := range r.ruleDirs {
-		watchables[filepath.Dir(ruleDir)] = struct{}{}
-		if err := watcher.Add(ruleDir); err != nil {
-			return errors.Wrapf(err, "add rule dir %s to watcher", ruleDir)
+	// Watch directories in best effort manner.
+	for _, dir := range r.watchedDirs {
+		watchables[filepath.Dir(dir)] = struct{}{}
+		if err := watcher.Add(dir); err != nil {
+			return errors.Wrapf(err, "add dir %s to watcher", dir)
 		}
 	}
 
@@ -196,10 +220,10 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 	r.watches.Set(float64(len(watchables)))
 	level.Info(r.logger).Log(
-		"msg", "started watching config file and non-recursively rule dirs for changes",
+		"msg", "started watching config file and directories for changes",
 		"cfg", r.cfgFile,
 		"out", r.cfgOutputFile,
-		"dirs", strings.Join(r.ruleDirs, ","))
+		"dirs", strings.Join(r.watchedDirs, ","))
 
 	for {
 		select {
@@ -218,8 +242,8 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 
 		if err := r.apply(ctx); err != nil {
-			// Critical error.
-			return err
+			r.configErrors.Inc()
+			level.Error(r.logger).Log("msg", "apply error", "err", err)
 		}
 	}
 }
@@ -229,8 +253,8 @@ func (r *Reloader) Watch(ctx context.Context) error {
 // Reload is retried in retryInterval until watchInterval.
 func (r *Reloader) apply(ctx context.Context) error {
 	var (
-		cfgHash  []byte
-		ruleHash []byte
+		cfgHash         []byte
+		watchedDirsHash []byte
 	)
 	if r.cfgFile != "" {
 		h := sha256.New()
@@ -277,17 +301,17 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	h := sha256.New()
-	for _, ruleDir := range r.ruleDirs {
-		walkDir, err := filepath.EvalSymlinks(ruleDir)
+	for _, dir := range r.watchedDirs {
+		walkDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			return errors.Wrap(err, "ruleDir symlink eval")
+			return errors.Wrap(err, "dir symlink eval")
 		}
 		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 
-			// filepath.Walk uses Lstat to retriev os.FileInfo. Lstat does not
+			// filepath.Walk uses Lstat to retrieve os.FileInfo. Lstat does not
 			// follow symlinks. Make sure to follow a symlink before checking
 			// if it is a directory.
 			targetFile, err := os.Stat(path)
@@ -308,11 +332,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "build hash")
 		}
 	}
-	if len(r.ruleDirs) > 0 {
-		ruleHash = h.Sum(nil)
+	if len(r.watchedDirs) > 0 {
+		watchedDirsHash = h.Sum(nil)
 	}
 
-	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastRuleHash, ruleHash) {
+	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastWatchedDirsHash, watchedDirsHash) {
 		// Nothing to do.
 		return nil
 	}
@@ -329,12 +353,12 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 
 		r.lastCfgHash = cfgHash
-		r.lastRuleHash = ruleHash
+		r.lastWatchedDirsHash = watchedDirsHash
 		level.Info(r.logger).Log(
 			"msg", "Prometheus reload triggered",
 			"cfg_in", r.cfgFile,
 			"cfg_out", r.cfgOutputFile,
-			"rule_dirs", strings.Join(r.ruleDirs, ", "))
+			"watched_dirs", strings.Join(r.watchedDirs, ", "))
 		return nil
 	}); err != nil {
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)

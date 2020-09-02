@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/gate"
@@ -39,12 +38,11 @@ type sample struct {
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
-	t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
 	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
 	queryableCreator := NewQueryableCreator(nil, nil, testProxy, 2, 5*time.Second)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
-	queryable := queryableCreator(false, nil, oneHourMillis, false, false)
+	queryable := queryableCreator(false, nil, nil, oneHourMillis, false, false)
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
 	testutil.Ok(t, err)
@@ -59,7 +57,6 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 
 // Tests E2E how PromQL works with downsampled data.
 func TestQuerier_DownsampledData(t *testing.T) {
-	t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
@@ -72,7 +69,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	}
 
 	timeout := 10 * time.Second
-	q := NewQueryableCreator(nil, nil, testProxy, 2, timeout)(false, nil, 9999999, false, false)
+	q := NewQueryableCreator(nil, nil, testProxy, 2, timeout)(false, nil, nil, 9999999, false, false)
 	engine := promql.NewEngine(
 		promql.EngineOpts{
 			MaxSamples: math.MaxInt32,
@@ -510,13 +507,11 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, nil, tcase.mint, tcase.maxt, tcase.replicaLabels, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout)
+				q := newQuerier(context.Background(), nil, nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
 					t.Run("querier.Select", func(t *testing.T) {
-						t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 						res := q.Select(false, tcase.hints, tcase.matchers...)
 						testSelectResponse(t, sc.expected, res)
 
@@ -528,8 +523,6 @@ func TestQuerier_Select(t *testing.T) {
 					})
 					// Integration test: Make sure the PromQL would select exactly the same.
 					t.Run("through PromQL with 100s step", func(t *testing.T) {
-						t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 						catcher := &querierResponseCatcher{t: t, Querier: q}
 						q, err := e.NewRangeQuery(&mockedQueryable{catcher}, tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
 						testutil.Ok(t, err)
@@ -680,7 +673,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, s, false, 0, true, false, g, timeout)
+		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, g, timeout)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -691,8 +684,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
@@ -722,8 +713,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
@@ -754,7 +743,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, s, true, 0, true, false, g, timeout)
+		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, g, timeout)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -765,8 +754,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
@@ -791,8 +778,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
@@ -815,8 +800,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 }
 
 func TestSortReplicaLabel(t *testing.T) {
-	t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 	tests := []struct {
 		input       []storepb.Series
 		exp         []storepb.Series
@@ -882,8 +865,6 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 }
 
 func TestDedupSeriesSet(t *testing.T) {
-	t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 	tests := []struct {
 		input       []series
 		exp         []series
@@ -1213,8 +1194,6 @@ func TestDedupSeriesSet(t *testing.T) {
 }
 
 func TestDedupSeriesIterator(t *testing.T) {
-	t.Cleanup(leaktest.CheckTimeout(t, 10*time.Second))
-
 	// The deltas between timestamps should be at least 10000 to not be affected
 	// by the initial penalty of 5000, that will cause the second iterator to seek
 	// ahead this far at least once.

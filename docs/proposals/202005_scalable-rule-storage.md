@@ -41,8 +41,7 @@ Allow specifying one of the following flags:
 
 * `--remote-write`
 * `--remote-write.config` or `--remote-write.config-file` flag following the same scheme as
-[`--query.config`, and
-`--query.config-file`](https://thanos.io/components/rule.md/#query-api)
+[`--query.config`, and `--query.config-file`](https://thanos.io/tip/components/rule.md/#query-api)
 * `--remote-write.tenant-label-name` which label-value to use to set the tenant to be communicated to the receive component
 
 If any of these are specified the ruler would run a stateless mode, without

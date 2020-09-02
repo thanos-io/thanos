@@ -19,7 +19,7 @@ Thanos is a set of components that can be composed into a highly available metri
 system with unlimited storage capacity, which can be added seamlessly on top of existing
 Prometheus deployments.
 
-Thanos is a [CNCF](https://www.cncf.io/) Sandbox project.
+Thanos is a [CNCF](https://www.cncf.io/) Incubation project.
 
 Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides
@@ -34,8 +34,8 @@ Concretely the aims of the project are:
 
 ## Getting Started
 
-* **[Getting Started](https://thanos.io/getting-started.md/)**
-* [Design](https://thanos.io/design.md/)
+* **[Getting Started](https://thanos.io/tip/thanos/getting-started.md/)**
+* [Design](https://thanos.io/tip/thanos/design.md/)
 * [Blog posts](docs/getting-started.md#blog-posts)
 * [Talks](docs/getting-started.md#talks)
 * [Proposals](docs/proposals)

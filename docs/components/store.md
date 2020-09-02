@@ -44,12 +44,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -81,35 +81,38 @@ Flags:
       --index-cache.config-file=<file-path>
                                  Path to YAML file that contains index cache
                                  configuration. See format details:
-                                 https://thanos.io/components/store.md/#index-cache
+                                 https://thanos.io/tip/components/store.md/#index-cache
       --index-cache.config=<content>
                                  Alternative to 'index-cache.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains index cache configuration. See format
                                  details:
-                                 https://thanos.io/components/store.md/#index-cache
+                                 https://thanos.io/tip/components/store.md/#index-cache
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  reserved strictly to reuse for chunks in
                                  memory.
       --store.grpc.series-sample-limit=0
                                  Maximum amount of samples returned via a single
-                                 Series call. 0 means no limit. NOTE: For
-                                 efficiency we take 120 as the number of samples
-                                 in chunk (it cannot be bigger than that), so
-                                 the actual number of samples might be lower,
-                                 even though the maximum could be hit.
+                                 Series call. The Series call fails if this
+                                 limit is exceeded. 0 means no limit. NOTE: For
+                                 efficiency the limit is internally implemented
+                                 as 'chunks limit' considering each chunk
+                                 contains 120 samples (it's the max number of
+                                 samples each chunk can contain), so the actual
+                                 number of samples might be lower, even though
+                                 the maximum could be hit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --block-sync-concurrency=20
@@ -229,8 +232,7 @@ The `in-memory` index cache is enabled by default and its max size can be config
 
 Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]: # "../flags/config_index_cache_in_memory.txt yaml"
-
+[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -247,8 +249,7 @@ All the settings are **optional**:
 
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]: # "../flags/config_index_cache_memcached.txt yaml"
-
+[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
 config:
@@ -257,8 +258,8 @@ config:
   max_idle_connections: 0
   max_async_concurrency: 0
   max_async_buffer_size: 0
-  max_item_size: 1MiB
   max_get_multi_concurrency: 0
+  max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
 ```

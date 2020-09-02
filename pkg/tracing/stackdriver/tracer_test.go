@@ -9,20 +9,20 @@ package stackdriver
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/opentracing/basictracer-go"
 )
+
+func TestMain(m *testing.M) {
+	testutil.TolerantVerifyLeakMain(m)
+}
 
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
 // it will be still enabled for all spans within this span.
 func TestContextTracing_ClientEnablesTracing(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	m := &basictracer.InMemorySpanRecorder{}
 	r := &forceRecorder{wrapped: m}
 

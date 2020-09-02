@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -26,18 +27,19 @@ import (
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
-// partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
+// partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeMatchers [][]storepb.LabelMatcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
 	keeper := gate.NewKeeper(reg)
 
-	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeMatchers [][]storepb.LabelMatcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
 		return &queryable{
 			logger:               logger,
 			reg:                  reg,
 			replicaLabels:        replicaLabels,
+			storeMatchers:        storeMatchers,
 			proxy:                proxy,
 			deduplicate:          deduplicate,
 			maxResolutionMillis:  maxResolutionMillis,
@@ -54,6 +56,7 @@ type queryable struct {
 	logger               log.Logger
 	reg                  prometheus.Registerer
 	replicaLabels        []string
+	storeMatchers        [][]storepb.LabelMatcher
 	proxy                storepb.StoreServer
 	deduplicate          bool
 	maxResolutionMillis  int64
@@ -66,7 +69,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateKeeper.NewGate(q.maxConcurrentSelects), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, q.reg, mint, maxt, q.replicaLabels, q.storeMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateKeeper.NewGate(q.maxConcurrentSelects), q.selectTimeout), nil
 }
 
 type querier struct {
@@ -76,6 +79,7 @@ type querier struct {
 	cancel              func()
 	mint, maxt          int64
 	replicaLabels       map[string]struct{}
+	storeMatchers       [][]storepb.LabelMatcher
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxResolutionMillis int64
@@ -93,6 +97,7 @@ func newQuerier(
 	reg prometheus.Registerer,
 	mint, maxt int64,
 	replicaLabels []string,
+	storeMatchers [][]storepb.LabelMatcher,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
@@ -120,6 +125,7 @@ func newQuerier(
 		mint:                mint,
 		maxt:                maxt,
 		replicaLabels:       rl,
+		storeMatchers:       storeMatchers,
 		proxy:               proxy,
 		deduplicate:         deduplicate,
 		maxResolutionMillis: maxResolutionMillis,
@@ -196,7 +202,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		matchers[i] = m.String()
 	}
 
-	// The querier has a context but it gets cancelled, as soon as query evaluation is completed, by the engine.
+	// The querier has a context but it gets canceled, as soon as query evaluation is completed, by the engine.
 	// We want to prevent this from happening for the async storea API calls we make while preserving tracing context.
 	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
 	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
@@ -252,6 +258,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
+
+	// TODO: Pass it using the SerieRequest instead of relying on context
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
@@ -324,7 +333,12 @@ func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
-	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{Label: name, PartialResponseDisabled: !q.partialResponse})
+	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label:                   name,
+		PartialResponseDisabled: !q.partialResponse,
+		Start:                   q.mint,
+		End:                     q.maxt,
+	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
 	}
@@ -342,7 +356,11 @@ func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
 
-	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{PartialResponseDisabled: !q.partialResponse})
+	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		PartialResponseDisabled: !q.partialResponse,
+		Start:                   q.mint,
+		End:                     q.maxt,
+	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
 	}

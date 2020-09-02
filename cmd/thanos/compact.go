@@ -22,19 +22,22 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
+	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -75,22 +78,24 @@ func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
+func registerCompact(app *extkingpin.App) {
 	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
-	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runCompact(g, logger, reg, component.Compact, *conf)
-	}
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
+	})
 }
 
 func runCompact(
 	g *run.Group,
 	logger log.Logger,
+	tracer opentracing.Tracer,
 	reg *prometheus.Registry,
 	component component.Component,
 	conf compactConfig,
+	flagsMap map[string]string,
 ) error {
 	deleteDelay := time.Duration(conf.deleteDelay)
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
@@ -173,7 +178,7 @@ func runCompact(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
 	if err != nil {
 		return err
 	}
@@ -304,6 +309,12 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
+
+			for _, meta := range sy.Metas() {
+				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				downsampleMetrics.downsamples.WithLabelValues(groupKey)
+				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
+			}
 			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
@@ -388,10 +399,21 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, path.Join(conf.webConf.externalPrefix, "/global"), conf.webConf.prefixHeaderName)
 		global.Register(r, ins)
 
+		api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
 		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
-		f.UpdateOnChange(global.Set)
+		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			global.Set(blocks, err)
+			api.Set(blocks, err)
+		})
 
 		srv.Handle("/", r)
 
@@ -445,7 +467,7 @@ type compactConfig struct {
 	label                                          string
 }
 
-func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
+func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
@@ -508,6 +530,4 @@ func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) *compactConfig {
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
-
-	return cc
 }

@@ -17,12 +17,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -49,7 +50,7 @@ type RuleSpec interface {
 }
 
 // stringError forces the error to be a string
-// when marshalled into a JSON.
+// when marshaled into a JSON.
 type stringError struct {
 	originalErr error
 }
@@ -527,8 +528,6 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = &stringError{originalErr: err}
-
 	if err == nil {
 		status.LastCheck = time.Now()
 		mint, maxt := store.TimeRange()
@@ -536,6 +535,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.StoreType = store.StoreType()
 		status.MinTime = mint
 		status.MaxTime = maxt
+		status.LastError = nil
+	} else {
+		status.LastError = &stringError{originalErr: err}
 	}
 
 	s.storeStatuses[store.addr] = &status

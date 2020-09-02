@@ -41,7 +41,7 @@ Then everywhere use native markdown absolute path to the project repository if y
 [title](/Makefile)
 ```
 
-Small [post processing script](/scripts/websitepreprocess.sh) adjusts link for Hugo rendering.
+Small [post processing script](/scripts/website/websitepreprocess.sh) adjusts link for Hugo rendering.
 
 NOTE: Spaces matters so: `[xxx]( link` and `[xxx] (link` will not work.
 

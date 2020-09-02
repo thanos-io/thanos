@@ -65,14 +65,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(3), "thanos_store_nodes_grpc_connections"))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
 		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
@@ -140,14 +140,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(3), "thanos_store_nodes_grpc_connections"))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
 		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
@@ -212,14 +212,14 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil, nil, "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(2), "thanos_store_nodes_grpc_connections"))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
 		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,

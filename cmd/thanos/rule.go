@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,10 +26,13 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	tsdb "github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
+
 	"github.com/thanos-io/thanos/pkg/alert"
+	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -36,12 +40,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
-	v1 "github.com/thanos-io/thanos/pkg/rules/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -51,11 +55,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
-func registerRule(m map[string]setupFunc, app *kingpin.Application) {
+func registerRule(app *extkingpin.App) {
 	comp := component.Rule
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
@@ -77,13 +80,13 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("2h"))
 	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
 		Default("48h"))
-
+	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").Duration()
-	alertmgrsConfig := extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
+	alertmgrsConfig := extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
 	alertmgrsDNSSDInterval := modelDuration(cmd.Flag("alertmanagers.sd-dns-interval", "Interval between DNS resolutions of Alertmanager hosts.").
 		Default("30s"))
 
@@ -95,12 +98,14 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
+	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
 
-	queryConfig := extflag.RegisterPathOrContent(cmd, "query.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", false)
+	queryConfig := extflag.RegisterPathOrContent(cmd, "query.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", false)
 
 	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contains addresses of query API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
@@ -120,7 +125,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -134,7 +139,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			NoLockfile:        true,
+			NoLockfile:        *noLockFile,
 			WALCompression:    *walCompression,
 		}
 
@@ -172,6 +177,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
+			*requestLoggingDecision,
 			reload,
 			lset,
 			*alertmgrs,
@@ -204,8 +210,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			comp,
 			*allowOutOfOrderUpload,
+			getFlagsMap(cmd.Flags()),
 		)
-	}
+	})
 }
 
 // RuleMetrics defines thanos rule metrics.
@@ -259,6 +266,7 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	requestLoggingDecision string,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
@@ -291,6 +299,7 @@ func runRule(
 	dnsSDResolver string,
 	comp component.Component,
 	allowOutOfOrderUpload bool,
+	flagsMap map[string]string,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -350,6 +359,12 @@ func runRule(
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
+
+	level.Debug(logger).Log("msg", "removing storage lock file if any")
+	if err := removeLockfileIfAny(logger, dataDir); err != nil {
+		return errors.Wrap(err, "remove storage lock files")
+	}
+
 	{
 		done := make(chan struct{})
 		g.Add(func() error {
@@ -574,11 +589,17 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.LogDecision[requestLoggingDecision]
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr)
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins)
+		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, webRoutePrefix,
 			httpProbe,
@@ -619,7 +640,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, allowOutOfOrderUpload)
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, false, allowOutOfOrderUpload)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -640,6 +661,21 @@ func runRule(
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
+	return nil
+}
+
+func removeLockfileIfAny(logger log.Logger, dataDir string) error {
+	absdir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(absdir, "lock")); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	level.Info(logger).Log("msg", "a leftover lockfile found and removed")
 	return nil
 }
 

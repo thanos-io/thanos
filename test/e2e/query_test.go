@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -100,14 +102,14 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetrics(e2e.Equals(5), "thanos_store_nodes_grpc_connections"))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
 	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
 		Deduplicate: false,
@@ -166,23 +168,175 @@ func TestQuery(t *testing.T) {
 	})
 }
 
-func TestQueryRoutePrefix(t *testing.T) {
+func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_query_route_prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
+	externalPrefix := "test"
+
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
 		nil,
 		nil,
 		nil,
-		"test",
+		"",
+		externalPrefix,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
+	checkNetworkRequests(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryExternalPrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_external_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	externalPrefix := "thanos"
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		"",
+		externalPrefix,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
+
+	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
+
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_external_prefix_and_route_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	externalPrefix := "thanos"
+	routePrefix := "test"
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(), "1",
+		nil,
+		nil,
+		nil,
+		routePrefix,
+		externalPrefix,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
+
+	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
+	t.Cleanup(querierProxy.Close)
+
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+}
+
+func TestQueryLabelNames(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_label_names")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(receiver))
+
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(),
+		"1",
+		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
+		[]string{},
+		nil,
+		"",
+		"",
+	)
+
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	labelNames(t, ctx, q.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) > 0
+	})
+
+	// Outside time range.
+	labelNames(t, ctx, q.HTTPEndpoint(), timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+		return len(res) == 0
+	})
+}
+
+func TestQueryLabelValues(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_label_values")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(receiver))
+
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+	q, err := e2ethanos.NewQuerier(
+		s.SharedDir(),
+		"1",
+		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
+		[]string{},
+		nil,
+		"",
+		"",
+	)
+
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	labelValues(t, ctx, q.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		return len(res) > 0
+	})
+
+	// Outside time range.
+	labelValues(t, ctx, q.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+		return len(res) == 0
+	})
+}
+
+func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
 
@@ -196,9 +350,9 @@ func TestQueryRoutePrefix(t *testing.T) {
 		}
 	})
 
-	err = chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		network.Enable(),
-		chromedp.Navigate("http://"+q.HTTPEndpoint()+"/test/graph"),
+		chromedp.Navigate(addr),
 		chromedp.WaitVisible(`body`),
 	)
 	testutil.Ok(t, err)
@@ -266,4 +420,63 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, op
 		r.Timestamp = 0 // Does not matter for us.
 	}
 	testutil.Equals(t, expected, result)
+}
+
+func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64, check func(res []string) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), start, end)
+		if err != nil {
+			return err
+		}
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
+}
+
+func labelValues(t *testing.T, ctx context.Context, addr, label string, start, end int64, check func(res []string) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, start, end)
+		if err != nil {
+			return err
+		}
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
+}
+
+func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q, start, end, step, opts)
+		if err != nil {
+			return err
+		}
+
+		if len(warnings) > 0 {
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
 }

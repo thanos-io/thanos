@@ -4,6 +4,7 @@
 package receive
 
 import (
+	"context"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -19,7 +20,7 @@ import (
 
 // Appendable returns an Appender.
 type Appendable interface {
-	Appender() (storage.Appender, error)
+	Appender(ctx context.Context) (storage.Appender, error)
 }
 
 type TenantStorage interface {
@@ -38,7 +39,7 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 	}
 }
 
-func (r *Writer) Write(tenantID string, wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
 	var (
 		numOutOfOrder  = 0
 		numDuplicates  = 0
@@ -50,7 +51,7 @@ func (r *Writer) Write(tenantID string, wreq *prompb.WriteRequest) error {
 		return errors.Wrap(err, "get tenant appendable")
 	}
 
-	app, err := s.Appender()
+	app, err := s.Appender(ctx)
 	if err == tsdb.ErrNotReady {
 		return err
 	}
@@ -130,7 +131,7 @@ func nilErrFn() error {
 	return nil
 }
 
-func (f *fakeAppendable) Appender() (storage.Appender, error) {
+func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
 	errf := f.appenderErr
 	if errf == nil {
 		errf = nilErrFn
@@ -149,7 +150,8 @@ type fakeAppender struct {
 
 var _ storage.Appender = &fakeAppender{}
 
-func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender {
+// TODO(kakkoyun): Linter - `addFastErr` always receives `nil`.
+func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
 	if addErr == nil {
 		addErr = nilErrFn
 	}

@@ -32,7 +32,7 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 If you choose to use the sidecar to also upload data to object storage:
 
 * Must specify object storage (`--objstore.*` flags)
-* It only uploads uncompacted Prometheus blocks. For compacted blocks, see [Upload compacted blocks](./sidecar.md/#upload-compacted-blocks-experimental).
+* It only uploads uncompacted Prometheus blocks. For compacted blocks, see [Upload compacted blocks](./sidecar.md/#upload-compacted-blocks).
 * The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction on order to use Thanos sidecar upload, otherwise leave local compaction on if sidecar just exposes StoreAPI and your retention is normal. The default of `2h` is recommended.
   Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the uploaded data corruption when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesytem via its internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before the sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
 * The retention is recommended to not be lower than three times the min block duration, so 6 hours. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
@@ -70,7 +70,7 @@ config:
   bucket: example-bucket
 ```
 
-## Upload compacted blocks (EXPERIMENTAL)
+## Upload compacted blocks
 
 If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus. Values greater than 1 in the `compaction.level` field of a Prometheus block’s `meta.json` file indicate level of compaction.
 
@@ -85,7 +85,7 @@ To use this, the Prometheus compaction needs to be disabled. This can be done by
 ```$
 usage: thanos sidecar [<flags>]
 
-sidecar for Prometheus server
+Sidecar for Prometheus server
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -97,12 +97,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -140,16 +140,22 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...
                                  Rule directories for the reloader to refresh
                                  (repeated field).
+      --reloader.watch-interval=3m
+                                 Controls how often reloader re-reads config and
+                                 rules.
+      --reloader.retry-interval=5s
+                                 Controls how often reloader retries config
+                                 reload in case of error.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.

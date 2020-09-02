@@ -12,18 +12,26 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
+	"go.uber.org/atomic"
+	"go.uber.org/goleak"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
 func TestReloader_ConfigApply(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
 
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
@@ -43,9 +51,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		reloads.Store(reloads.Load().(int) + 1) // The only writer.
 		resp.WriteHeader(http.StatusOK)
 	})
-	go func() {
-		_ = srv.Serve(l)
-	}()
+	go func() { _ = srv.Serve(l) }()
 	defer func() { testutil.Ok(t, srv.Close()) }()
 
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
@@ -55,18 +61,26 @@ func TestReloader_ConfigApply(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	testutil.Ok(t, os.Mkdir(dir+"/in", os.ModePerm))
-	testutil.Ok(t, os.Mkdir(dir+"/out", os.ModePerm))
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
 
 	var (
-		input  = path.Join(dir, "in", "cfg.yaml.tmpl")
-		output = path.Join(dir, "out", "cfg.yaml")
+		input  = filepath.Join(dir, "in", "cfg.yaml.tmpl")
+		output = filepath.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, nil, reloadURL, input, output, nil)
-	reloader.watchInterval = 9999 * time.Hour // Disable interval to test watch logic only.
-	reloader.retryInterval = 100 * time.Millisecond
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       input,
+		CfgOutputFile: output,
+		WatchedDirs:   nil,
+		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+		RetryInterval: 100 * time.Millisecond,
+	})
 
-	testNoConfig(t, reloader)
+	// Fail without config.
+	err = reloader.Watch(ctx)
+	testutil.NotOk(t, err)
+	testutil.Assert(t, strings.HasSuffix(err.Error(), "no such file or directory"), "expect error since there is no input config.")
 
 	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
@@ -75,98 +89,80 @@ config:
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
 
-	testUnsetVariables(t, reloader)
+	// Fail with config but without unset variables.
+	err = reloader.Watch(ctx)
+	testutil.NotOk(t, err)
+	testutil.Assert(t, strings.HasSuffix(err.Error(), `found reference to unset environment variable "TEST_RELOADER_THANOS_ENV"`), "expect error since there envvars are not set.")
 
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV", "2"))
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV2", "3"))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	rctx, cancel2 := context.WithCancel(ctx)
 	g := sync.WaitGroup{}
 	g.Add(1)
 	go func() {
 		defer g.Done()
-		defer cancel()
+		testutil.Ok(t, reloader.Watch(rctx))
+	}()
 
-		reloadsSeen := 0
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(300 * time.Millisecond):
-			}
+	reloadsSeen := 0
+	attemptsCnt := 0
+	for {
+		select {
+		case <-ctx.Done():
+			break
+		case <-time.After(300 * time.Millisecond):
+		}
 
-			rel := reloads.Load().(int)
-			if rel <= reloadsSeen {
-				continue
-			}
-			reloadsSeen = rel
+		rel := reloads.Load().(int)
+		reloadsSeen = rel
 
-			switch rel {
-			case 1:
-				// Initial apply seen (without doing nothing)
-
-				// Output looks as expected?
-				f, err := ioutil.ReadFile(output)
-				testutil.Ok(t, err)
-
-				testutil.Equals(t, `
+		if reloadsSeen == 1 {
+			// Initial apply seen (without doing nothing).
+			f, err := ioutil.ReadFile(output)
+			testutil.Ok(t, err)
+			testutil.Equals(t, `
 config:
   a: 1
   b: 2
   c: 3
 `, string(f))
 
-				// Change config, expect reload in another iteration.
-				testutil.Ok(t, ioutil.WriteFile(input, []byte(`
+			// Change config, expect reload in another iteration.
+			testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
   a: changed
   b: $(TEST_RELOADER_THANOS_ENV)
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
-			case 2:
-				f, err := ioutil.ReadFile(output)
-				testutil.Ok(t, err)
-
-				testutil.Equals(t, `
+		} else if reloadsSeen == 2 {
+			// Another apply, ensure we see change.
+			f, err := ioutil.ReadFile(output)
+			testutil.Ok(t, err)
+			testutil.Equals(t, `
 config:
   a: changed
   b: 2
   c: 3
 `, string(f))
-			}
 
-			if rel > 1 {
-				// All good.
-				return
+			// Change the mode so reloader can't read the file.
+			testutil.Ok(t, os.Chmod(input, os.ModeDir))
+			attemptsCnt += 1
+			// That was the second attempt to reload config. All good, break.
+			if attemptsCnt == 2 {
+				break
 			}
 		}
-	}()
-	err = reloader.Watch(ctx)
-	testutil.Ok(t, err)
-	cancel()
+	}
+	cancel2()
 	g.Wait()
-	testutil.Equals(t, 2, reloads.Load().(int))
-}
 
-func testNoConfig(t *testing.T, reloader *Reloader) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	err := reloader.Watch(ctx)
-	cancel()
-	testutil.NotOk(t, err)
-	testutil.Assert(t, strings.HasSuffix(err.Error(), "no such file or directory"), "expect error since there is no input config.")
-}
-
-func testUnsetVariables(t *testing.T, reloader *Reloader) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	err := reloader.Watch(ctx)
-	cancel()
-	testutil.NotOk(t, err)
-	testutil.Assert(t, strings.HasSuffix(err.Error(), `found reference to unset environment variable "TEST_RELOADER_THANOS_ENV"`), "expect error since there envvars are not set.")
+	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV"))
+	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV2"))
 }
 
 func TestReloader_RuleApply(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -205,9 +201,14 @@ func TestReloader_RuleApply(t *testing.T) {
 	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
 
-	reloader := New(nil, nil, reloadURL, "", "", []string{dir, path.Join(dir, "rule-dir")})
-	reloader.watchInterval = 100 * time.Millisecond
-	reloader.retryInterval = 100 * time.Millisecond
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       "",
+		CfgOutputFile: "",
+		WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
+		WatchInterval: 100 * time.Millisecond,
+		RetryInterval: 100 * time.Millisecond,
+	})
 
 	// Some initial state.
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
@@ -224,10 +225,12 @@ func TestReloader_RuleApply(t *testing.T) {
 		reloadsSeen := 0
 		init := false
 		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(300 * time.Millisecond):
+			case <-time.After(500 * time.Millisecond):
 			}
 
 			rel := reloads.Load().(int)
@@ -235,7 +238,6 @@ func TestReloader_RuleApply(t *testing.T) {
 				continue
 			}
 			init = true
-
 			reloadsSeen = rel
 
 			t.Log("Performing step number", rel)

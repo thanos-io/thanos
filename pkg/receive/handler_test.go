@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -23,9 +22,10 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 func TestCountCause(t *testing.T) {
@@ -183,7 +183,6 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 }
 
 func TestReceiveQuorum(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
@@ -520,7 +519,6 @@ func TestReceiveQuorum(t *testing.T) {
 }
 
 func TestReceiveWithConsistencyDelay(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }

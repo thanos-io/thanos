@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,20 +15,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"gopkg.in/yaml.v3"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v3"
 )
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Appender() storage.Appender { return nopAppender{} }
+func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
 
 type nopAppender struct{}
 
@@ -35,10 +38,16 @@ func (n nopAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) { 
 func (n nopAppender) AddFast(ref uint64, t int64, v float64) error            { return nil }
 func (n nopAppender) Commit() error                                           { return nil }
 func (n nopAppender) Rollback() error                                         { return nil }
-func (n nopAppender) Appender() (storage.Appender, error)                     { return n, nil }
+func (n nopAppender) Appender(_ context.Context) (storage.Appender, error)    { return n, nil }
+
+type nopQueryable struct{}
+
+func (n nopQueryable) Querier(_ context.Context, _, _ int64) (storage.Querier, error) {
+	return storage.NoopQuerier(), nil
+}
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
-func TestRun(t *testing.T) {
+func TestRun_Subqueries(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule_run")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
@@ -65,6 +74,7 @@ groups:
 			Logger:     log.NewLogfmtLogger(os.Stderr),
 			Context:    context.Background(),
 			Appendable: nopAppendable{},
+			Queryable:  nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {
@@ -77,17 +87,16 @@ groups:
 		},
 		labels.FromStrings("replica", "1"),
 	)
-	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
+	testutil.Ok(t, thanosRuleMgr.Update(1*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
 
 	thanosRuleMgr.Run()
 	defer thanosRuleMgr.Stop()
 
 	select {
-	case <-time.After(2 * time.Minute):
+	case <-time.After(1 * time.Minute):
 		t.Fatal("timeout while waiting on rule manager query evaluation")
 	case <-queryDone:
 	}
-
 	testutil.Equals(t, "rate(some_metric[1h:5m] offset 1d)", query)
 }
 
@@ -154,13 +163,15 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
+	reg := prometheus.NewRegistry()
 
 	thanosRuleMgr := NewManager(
 		context.Background(),
-		nil,
+		reg,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
@@ -178,10 +189,24 @@ groups:
 		filepath.Join(dir, "non_existing.yaml"),
 		filepath.Join(dir, "subdir", "no_strategy.yaml"),
 	})
-
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.Contains(err.Error(), "wrong.yaml: failed to unmarshal \"afafsdgsdgs\" as 'partial_response_strategy'"), err.Error())
 	testutil.Assert(t, strings.Contains(err.Error(), "non_existing.yaml: no such file or directory"), err.Error())
+
+	// Still failed update should load at least partially correct rules.
+	// Also, check metrics: Regression test: https://github.com/thanos-io/thanos/issues/3083
+	testutil.Equals(t,
+		map[string]float64{
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/abort.yaml;something2,strategy=abort}", dir):            1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/bdir/no_strategy.yaml;something8,strategy=abort}", dir): 1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something6,strategy=abort}", dir):         1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something7,strategy=abort}", dir):         1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/no_strategy.yaml;something1,strategy=abort}", dir):      1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/combined.yaml;something5,strategy=warn}", dir):           1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/warn.yaml;something3,strategy=warn}", dir):               1,
+		},
+		extprom.CurrentGaugeValuesFor(t, reg, "prometheus_rule_group_rules"),
+	)
 
 	g := thanosRuleMgr.RuleGroups()
 	sort.Slice(g, func(i, j int) bool {
@@ -242,6 +267,12 @@ groups:
 			testutil.Equals(t, exp[i].file, p.File)
 		})
 	}
+	defer func() {
+		// Update creates go routines. We don't need rules mngrs to run, just to parse things, but let it start and stop
+		// at the end to correctly test leaked go routines.
+		thanosRuleMgr.Run()
+		thanosRuleMgr.Stop()
+	}()
 }
 
 func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
@@ -261,20 +292,18 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
 	b, err := yaml.Marshal(c)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `groups:
-  - name: something1
-    rules:
-      - alert: some
-        expr: up
-  - name: something2
-    rules:
-      - alert: some
-        expr: rate(some_metric[1h:5m] offset 1d)
+    - name: something1
+      rules:
+        - alert: some
+          expr: up
+    - name: something2
+      rules:
+        - alert: some
+          expr: rate(some_metric[1h:5m] offset 1d)
 `, string(b))
 }
 
 func TestManager_Rules(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	dir, err := ioutil.TempDir("", "test_rule_run")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
@@ -287,7 +316,8 @@ func TestManager_Rules(t *testing.T) {
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger: log.NewLogfmtLogger(os.Stderr),
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {

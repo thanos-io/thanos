@@ -124,9 +124,9 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 	return c, nil
 }
 
-// Run starts the ConfigWatcher until the given context is cancelled.
+// Run starts the ConfigWatcher until the given context is canceled.
 func (cw *ConfigWatcher) Run(ctx context.Context) {
-	defer cw.stop()
+	defer cw.Stop()
 
 	cw.refresh(ctx)
 
@@ -238,8 +238,8 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	}
 }
 
-// stop shuts down the config watcher.
-func (cw *ConfigWatcher) stop() {
+// Stop shuts down the config watcher.
+func (cw *ConfigWatcher) Stop() {
 	level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
 
 	done := make(chan struct{})

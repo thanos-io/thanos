@@ -8,7 +8,6 @@ DOCKER_CI_TAG     ?= test
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
 GOPATH            ?= $(shell go env GOPATH)
-
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
 
@@ -21,6 +20,9 @@ GOPROXY           ?= https://proxy.golang.org
 export GOPROXY
 
 GOTEST_OPTS ?= -failfast -timeout 10m -v
+BIN_DIR ?= $(shell pwd)/tmp/bin
+OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
+ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
@@ -74,7 +76,7 @@ $(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
-	   @./scripts/build-react-app.sh
+	   @scripts/build-react-app.sh
 
 .PHONY: assets
 assets: # Repacks all static assets into go file for easier deploy.
@@ -113,7 +115,7 @@ build: check-git deps $(PROMU)
 
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
-crossbuild: deps $(PROMU)
+crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
@@ -122,14 +124,19 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
+
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
+ifeq ($(OS)_$(ARCH), linux_x86_64)
 docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" .
 	@rm ./thanos_tmp_for_docker
+else
+docker: docker-multi-stage
+endif
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
@@ -147,30 +154,39 @@ docker-push:
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
+	@echo ">> generating docs"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
+	@echo ">> cleaning whte noise"
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(EMBEDMD) $(LICHE) build
+	@echo ">> checking docs generation"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
-	@$(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checkin GitHub as we are often rate limited from GitHub Actions.
+	@echo ">> checking links (DISABLED for now)"
+	# TODO(bwplotka): Fix it!
+	#@time $(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
+	#@time $(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checking GitHub as we are often rate-limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"check documentation")
+	$(call require_clean_work_tree,'run make docs and commit changes')
 
-.PHONY: check-comments
-check-comments: ## Checks Go code comments if they have trailing period (excludes protobuffers and vendor files). Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
-	@printf ">> checking Go comments trailing periods\n\n\n"
-	@./scripts/build-check-comments.sh
+.PHONY:shell-format
+shell-format: $(SHFMT)
+	@echo ">> formatting shell scripts"
+	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
 
-.PHONY: format
-format: ## Formats Go code including imports and cleans up white noise.
-format: $(GOIMPORTS) check-comments
-	@echo ">> formatting code"
+.PHONY:format
+format: ## Formats code including imports and cleans up white noise.
+format: go-format shell-format
+	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+
+.PHONY: go-format
+go-format: ## Formats Go code including imports.
+go-format: $(GOIMPORTS)
+	@echo ">> formatting go code"
 	@gofmt -s -w $(FILES_TO_FMT)
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
-	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
@@ -195,13 +211,6 @@ test: check-git install-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
-
-.PHONY: test-ci
-test-ci: ## Runs test for CI, so excluding object storage integrations that we don't have configured yet.
-test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
-test-ci:
-	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
-	$(MAKE) test
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
@@ -230,9 +239,9 @@ install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
 docker-ci: install-deps
 	# Copy all to tmp local dir as this is required by docker.
-	@rm -rf ./tmp/bin
-	@mkdir -p ./tmp/bin
-	@cp -r $(GOBIN)/* ./tmp/bin
+	@rm -rf $(BIN_DIR)
+	@mkdir -p $(BIN_DIR)
+	@cp -r $(GOBIN)/* $(BIN_DIR)
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
 	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
@@ -249,18 +258,22 @@ endif
 .PHONY: web-pre-process
 web-pre-process:
 	@echo ">> running documentation website pre processing"
-	@bash scripts/websitepreprocess.sh
+	scripts/website/websitepreprocess.sh
 
 .PHONY: web
 web: ## Builds our website.
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
 	# TODO(bwplotka): Make it --gc
+	@rm -rf "$(WEB_DIR)/public"
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
 .PHONY:lint
 lint: ## Runs various static analysis against our code.
-lint: go-lint react-app-lint
+lint: go-lint react-app-lint shell-lint
+	@echo ">> detecting white noise"
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	$(call require_clean_work_tree,'detected white noise, run make lint and commit changes')
 
 # PROTIP:
 # Add
@@ -268,8 +281,8 @@ lint: go-lint react-app-lint
 #      --mem-profile-path string   Path to memory profile output file
 # to debug big allocations during linting.
 .PHONY: go-lint
-go-lint: check-git deps $(GOLANGCI_LINT) $(MISSPELL) $(FAILLINT)
-	$(call require_clean_work_tree,"detected not clean master before running lint")
+go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
+	$(call require_clean_work_tree,'detected not clean master before running lint, previous job changed something?')
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
@@ -278,51 +291,28 @@ github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/t
 github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
-NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}" ./...
+NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
+sync/atomic=go.uber.org/atomic" ./...
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
-	@echo ">> examining all of the Go files"
-	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run
-	@echo ">> detecting misspells"
-	@find . -type f | grep -v vendor/ | grep -v pkg/ui/react-app/node_modules | grep -v pkg/ui/static | grep -vE '\./\..*' | xargs $(MISSPELL) -error
-	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"detected white noise")
 	@echo ">> ensuring Copyright headers"
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
-	$(call require_clean_work_tree,"detected files without copyright")
+	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
+
+.PHONY:shell-lint
+shell-lint: ## Runs static analysis against our shell scripts.
+shell-lint: $(SHELLCHECK)
+	@echo ">> linting all of the shell script files"
+	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*" -not -path "*node_modules*")
 
 .PHONY: web-serve
 web-serve: ## Builds and serves Thanos website on localhost.
 web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
-
-# Check https://github.com/coreos/prometheus-operator/blob/master/scripts/jsonnet/Dockerfile for the image.
-JSONNET_CONTAINER_CMD:=docker run --rm \
-		-u="$(shell id -u):$(shell id -g)" \
-		-v "$(shell go env GOCACHE):/.cache/go-build" \
-		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
-		-w "/go/src/github.com/thanos-io/thanos" \
-		-e USER=deadbeef \
-		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci:release-0.36
-
-.PHONY: examples-in-container
-examples-in-container:
-	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JB='/go/bin/jb' jsonnet-vendor
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
-		EMBEDMD='/go/bin/embedmd' \
-		JSONNET='/go/bin/jsonnet' \
-		JB='/go/bin/jb' \
-		PROMTOOL='/go/bin/promtool' \
-		GOJSONTOYAML='/go/bin/gojsontoyaml' \
-		GOLANGCILINT='/go/bin/golangci-lint' \
-		examples
 
 .PHONY: examples
 examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
@@ -358,11 +348,6 @@ jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
-.PHONY: jsonnet-format-in-container
-jsonnet-format-in-container:
-	$(JSONNET_CONTAINER_CMD) find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
-		xargs -n 1 -- jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
-
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
@@ -370,7 +355,7 @@ example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rule
 
 .PHONY: check-examples
 check-examples: examples example-rules-lint
-	$(call require_clean_work_tree,'all generated files should be committed,check examples')
+	$(call require_clean_work_tree,'all generated files should be committed, run make check-examples and commit changes.')
 
 .PHONY: examples-clean
 examples-clean:
@@ -378,6 +363,15 @@ examples-clean:
 	rm -f examples/alerts/rules.yaml
 	rm -f examples/dashboards/*.json
 	rm -f examples/tmp/*.yaml
+
+# non-phony targets
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+SHELLCHECK ?= $(BIN_DIR)/shellcheck
+$(SHELLCHECK): $(BIN_DIR)
+	@echo "Downloading Shellcheck"
+	curl -sNL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.$(OS).$(ARCH).tar.xz" | tar --strip-components=1 -xJf - -C $(BIN_DIR)
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)

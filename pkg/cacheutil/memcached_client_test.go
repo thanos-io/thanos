@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -26,15 +26,34 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 	}{
 		"should pass on valid config": {
 			config: MemcachedClientConfig{
-				Addresses: []string{"127.0.0.1:11211"},
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
 			},
 			expected: nil,
 		},
 		"should fail on no addresses": {
 			config: MemcachedClientConfig{
-				Addresses: []string{},
+				Addresses:                 []string{},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
 			},
 			expected: errMemcachedConfigNoAddrs,
+		},
+		"should fail on max_async_concurrency <= 0": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       0,
+				DNSProviderUpdateInterval: time.Second,
+			},
+			expected: errMemcachedMaxAsyncConcurrencyNotPositive,
+		},
+		"should fail on dns_provider_update_interval <= 0": {
+			config: MemcachedClientConfig{
+				Addresses:           []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency: 1,
+			},
+			expected: errMemcachedDNSUpdateIntervalNotPositive,
 		},
 	}
 
@@ -46,8 +65,6 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 }
 
 func TestNewMemcachedClient(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	// Should return error on empty YAML config.
 	conf := []byte{}
 	cache, err := NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
@@ -110,8 +127,6 @@ dns_provider_update_interval: 1s
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	ctx := context.Background()
 	config := defaultMemcachedClientConfig
 	config.Addresses = []string{"127.0.0.1:11211"}
@@ -132,13 +147,11 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 
 	testutil.Equals(t, 2.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
 	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
-	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet, reasonOther)))
 	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.skipped.WithLabelValues(opSet, reasonMaxItemSize)))
 }
 
 func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	ctx := context.Background()
 	config := defaultMemcachedClientConfig
 	config.Addresses = []string{"127.0.0.1:11211"}
@@ -160,13 +173,11 @@ func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
 
 	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
 	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
-	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet, reasonOther)))
 	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(client.skipped.WithLabelValues(opSet, reasonMaxItemSize)))
 }
 
 func TestMemcachedClient_GetMulti(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	tests := map[string]struct {
 		maxBatchSize          int
 		maxConcurrency        int
@@ -371,7 +382,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 
 			// Ensure metrics are tracked.
 			testutil.Equals(t, float64(testData.expectedGetMultiCount), prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
-			testutil.Equals(t, float64(testData.mockedGetMultiErrors), prom_testutil.ToFloat64(client.failures.WithLabelValues(opGetMulti)))
+			testutil.Equals(t, float64(testData.mockedGetMultiErrors), prom_testutil.ToFloat64(client.failures.WithLabelValues(opGetMulti, reasonOther)))
 		})
 	}
 }

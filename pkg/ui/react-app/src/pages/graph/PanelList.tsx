@@ -21,15 +21,11 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   metrics: string[];
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
-  useDeduplication: boolean;
-  usePartialResponse: boolean;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
   metrics = [],
   useLocalTime,
-  useDeduplication,
-  usePartialResponse,
   pathPrefix,
   queryHistoryEnabled,
   ...rest
@@ -84,6 +80,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           onExecuteQuery={handleExecuteQuery}
           key={id}
           options={options}
+          id={id}
           onOptionsChanged={opts =>
             callAll(setPanels, updateURL)(panels.map(p => (id === p.id ? { ...p, options: opts } : p)))
           }
@@ -99,8 +96,6 @@ export const PanelListContent: FC<PanelListProps> = ({
             )
           }
           useLocalTime={useLocalTime}
-          useDeduplication={useDeduplication}
-          usePartialResponse={usePartialResponse}
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
@@ -117,8 +112,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
-  const [useDeduplication, setUseDeduplication] = useLocalStorage('use-deduplication', true);
-  const [usePartialResponse, setUsePartialResponse] = useLocalStorage('use-partial-response', false);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
 
@@ -156,22 +149,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       >
         Use local time
       </Checkbox>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="use-deduplication-checkbox"
-        onChange={({ target }) => setUseDeduplication(target.checked)}
-        defaultChecked={useDeduplication}
-      >
-        Use Deduplication
-      </Checkbox>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="use-partial-response-checkbox"
-        onChange={({ target }) => setUsePartialResponse(target.checked)}
-        defaultChecked={usePartialResponse}
-      >
-        Use Partial Response
-      </Checkbox>
       {(delta > 30 || timeErr) && (
         <Alert color="danger">
           <strong>Warning: </strong>
@@ -190,8 +167,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         panels={decodePanelOptionsFromQueryString(window.location.search)}
         pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
-        usePartialResponse={usePartialResponse}
-        useDeduplication={useDeduplication}
         metrics={metricsRes.data}
         queryHistoryEnabled={enableQueryHistory}
       />

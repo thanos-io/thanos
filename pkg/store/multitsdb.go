@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -13,6 +14,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -24,14 +27,15 @@ import (
 )
 
 // MultiTSDBStore implements the Store interface backed by multiple TSDBStore instances.
+// TODO(bwplotka): Remove this and use Proxy instead. Details: https://github.com/thanos-io/thanos/issues/2864
 type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
-	tsdbStores func() map[string]*TSDBStore
+	tsdbStores func() map[string]storepb.StoreServer
 }
 
 // NewMultiTSDBStore creates a new MultiTSDBStore.
-func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]*TSDBStore) *MultiTSDBStore {
+func NewMultiTSDBStore(logger log.Logger, _ prometheus.Registerer, component component.SourceStoreAPI, tsdbStores func() map[string]storepb.StoreServer) *MultiTSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -89,59 +93,84 @@ type tenantSeriesSetServer struct {
 
 	ctx context.Context
 
-	warnCh warnSender
-	recv   chan *storepb.Series
-	cur    *storepb.Series
+	directCh directSender
+	recv     chan *storepb.Series
+	cur      *storepb.Series
 
 	err    error
 	tenant string
+
+	closers []io.Closer
 }
 
+// TODO(bwplotka): Remove tenant awareness; keep it simple with single functionality.
+// Details https://github.com/thanos-io/thanos/issues/2864.
 func newTenantSeriesSetServer(
 	ctx context.Context,
 	tenant string,
-	warnCh warnSender,
+	directCh directSender,
 ) *tenantSeriesSetServer {
 	return &tenantSeriesSetServer{
-		ctx:    ctx,
-		tenant: tenant,
-		warnCh: warnCh,
-		recv:   make(chan *storepb.Series),
+		ctx:      ctx,
+		tenant:   tenant,
+		directCh: directCh,
+		recv:     make(chan *storepb.Series),
 	}
 }
 
-func (s *tenantSeriesSetServer) Context() context.Context {
-	return s.ctx
-}
+func (s *tenantSeriesSetServer) Context() context.Context { return s.ctx }
 
-func (s *tenantSeriesSetServer) Series(store *TSDBStore, r *storepb.SeriesRequest) {
+func (s *tenantSeriesSetServer) Series(store storepb.StoreServer, r *storepb.SeriesRequest) {
 	var err error
 	tracing.DoInSpan(s.ctx, "multitsdb_tenant_series", func(_ context.Context) {
 		err = store.Series(r, s)
 	})
-
 	if err != nil {
-		if r.PartialResponseDisabled {
+		if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 			s.err = errors.Wrapf(err, "get series for tenant %s", s.tenant)
 		} else {
 			// Consistently prefix tenant specific warnings as done in various other places.
 			err = errors.New(prefixTenantWarning(s.tenant, err.Error()))
-			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+			s.directCh.send(storepb.NewWarnSeriesResponse(err))
 		}
 	}
-
 	close(s.recv)
 }
 
 func (s *tenantSeriesSetServer) Send(r *storepb.SeriesResponse) error {
 	series := r.GetSeries()
+	if series == nil {
+		// Proxy non series responses directly to client
+		s.directCh.send(r)
+		return nil
+	}
+
+	// TODO(bwplotka): Consider avoid copying / learn why it has to copied.
 	chunks := make([]storepb.AggrChunk, len(series.Chunks))
 	copy(chunks, series.Chunks)
-	s.recv <- &storepb.Series{
+
+	// For series, pass it to our AggChunkSeriesSet.
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.recv <- &storepb.Series{
 		Labels: series.Labels,
 		Chunks: chunks,
+	}:
+		return nil
 	}
-	return nil
+}
+
+func (s *tenantSeriesSetServer) Delegate(closer io.Closer) {
+	s.closers = append(s.closers, closer)
+}
+
+func (s *tenantSeriesSetServer) Close() error {
+	var merr tsdb_errors.MultiError
+	for _, c := range s.closers {
+		merr.Add(c.Close())
+	}
+	return merr.Err()
 }
 
 func (s *tenantSeriesSetServer) Next() (ok bool) {
@@ -156,29 +185,32 @@ func (s *tenantSeriesSetServer) At() ([]storepb.Label, []storepb.AggrChunk) {
 	return s.cur.Labels, s.cur.Chunks
 }
 
-func (s *tenantSeriesSetServer) Err() error {
-	return s.err
-}
+func (s *tenantSeriesSetServer) Err() error { return s.err }
 
 // Series returns all series for a requested time range and label matcher. The
 // returned data may exceed the requested time bounds. The data returned may
 // have been read and merged from multiple underlying TSDBStore instances.
 func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "multitsdb_series")
+	defer span.Finish()
+
 	stores := s.tsdbStores()
 	if len(stores) == 0 {
 		return nil
 	}
 
-	var (
-		g, gctx   = errgroup.WithContext(srv.Context())
-		span, ctx = tracing.StartSpan(gctx, "multitsdb_series")
-		// Allow to buffer max 10 series response.
-		// Each might be quite large (multi chunk long series given by sidecar).
-		respSender, respRecv, closeFn = newRespCh(gctx, 10)
-	)
-	defer span.Finish()
+	g, gctx := errgroup.WithContext(ctx)
 
+	// Allow to buffer max 10 series response.
+	// Each might be quite large (multi chunk long series given by sidecar).
+	respSender, respCh := newCancelableRespChannel(gctx, 10)
+
+	var closers []io.Closer
 	g.Go(func() error {
+		// This go routine is responsible for calling store's Series concurrently. Merged results
+		// are passed to respCh and sent concurrently to client (if buffer of 10 have room).
+		// When this go routine finishes or is canceled, respCh channel is closed.
+
 		var (
 			seriesSet []storepb.SeriesSet
 			wg        = &sync.WaitGroup{}
@@ -186,7 +218,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 
 		defer func() {
 			wg.Wait()
-			closeFn()
+			close(respCh)
 		}()
 
 		for tenant, store := range stores {
@@ -203,6 +235,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 				ss.Series(store, r)
 			}()
 
+			closers = append(closers, ss)
 			seriesSet = append(seriesSet, ss)
 		}
 
@@ -214,14 +247,22 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 		}
 		return mergedSet.Err()
 	})
-
-	for resp := range respRecv {
-		if err := srv.Send(resp); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+	g.Go(func() error {
+		// Go routine for gathering merged responses and sending them over to client. It stops when
+		// respCh channel is closed OR on error from client.
+		for resp := range respCh {
+			if err := srv.Send(resp); err != nil {
+				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+			}
 		}
+		return nil
+	})
+	err := g.Wait()
+	for _, c := range closers {
+		runutil.CloseWithLogOnErr(s.logger, c, "close tenant series request")
 	}
+	return err
 
-	return g.Wait()
 }
 
 // LabelNames returns all known label names.

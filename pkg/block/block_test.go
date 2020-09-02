@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -24,8 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-
-	"github.com/oklog/ulid"
 )
 
 func TestIsBlockDir(t *testing.T) {
@@ -75,7 +73,7 @@ func TestIsBlockDir(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 
@@ -179,8 +177,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
+	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir, err := ioutil.TempDir("", "test-block-delete")
@@ -226,8 +223,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestMarkForDeletion(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
+	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-delete")

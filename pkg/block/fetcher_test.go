@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -31,7 +30,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
 )
 
 func newTestFetcherMetrics() *fetcherMetrics {
@@ -311,8 +309,8 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
       source_labels:
       - message
     `
-	var relabelConfig []*relabel.Config
-	testutil.Ok(t, yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig))
+	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml))
+	testutil.Ok(t, err)
 
 	f := NewLabelShardedMetaFilter(relabelConfig)
 
@@ -377,8 +375,8 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 `
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			var relabelConfig []*relabel.Config
-			testutil.Ok(t, yaml.Unmarshal([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), &relabelConfig))
+			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)))
+			testutil.Ok(t, err)
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
 
@@ -880,13 +878,13 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 func TestReplicaLabelRemover_Modify(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	rm := NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"})
 
 	for _, tcase := range []struct {
-		name     string
-		input    map[ulid.ULID]*metadata.Meta
-		expected map[ulid.ULID]*metadata.Meta
-		modified float64
+		name                string
+		input               map[ulid.ULID]*metadata.Meta
+		expected            map[ulid.ULID]*metadata.Meta
+		modified            float64
+		replicaLabelRemover *ReplicaLabelRemover
 	}{
 		{
 			name: "without replica labels",
@@ -900,7 +898,8 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
 			},
-			modified: 0,
+			modified:            0,
+			replicaLabelRemover: NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"}),
 		},
 		{
 			name: "with replica labels",
@@ -916,11 +915,27 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
 				ULID(4): {Thanos: metadata.Thanos{Labels: map[string]string{"replica": "deduped"}}},
 			},
-			modified: 5.0,
+			modified:            5.0,
+			replicaLabelRemover: NewReplicaLabelRemover(log.NewNopLogger(), []string{"replica", "rule_replica"}),
+		},
+		{
+			name: "no replica label specified in the ReplicaLabelRemover",
+			input: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
+			},
+			expected: map[ulid.ULID]*metadata.Meta{
+				ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something"}}},
+				ULID(3): {Thanos: metadata.Thanos{Labels: map[string]string{"message": "something1"}}},
+			},
+			modified:            0,
+			replicaLabelRemover: NewReplicaLabelRemover(log.NewNopLogger(), []string{}),
 		},
 	} {
 		m := newTestFetcherMetrics()
-		testutil.Ok(t, rm.Modify(ctx, tcase.input, m.modified))
+		testutil.Ok(t, tcase.replicaLabelRemover.Modify(ctx, tcase.input, m.modified))
 
 		testutil.Equals(t, tcase.modified, promtest.ToFloat64(m.modified.WithLabelValues(replicaRemovedMeta)))
 		testutil.Equals(t, tcase.expected, tcase.input)
@@ -1024,7 +1039,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
@@ -1049,7 +1064,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
 		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
@@ -1180,5 +1195,21 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 			}
 		})
 	}
+}
 
+func Test_ParseRelabelConfig(t *testing.T) {
+	_, err := ParseRelabelConfig([]byte(`
+    - action: drop
+      regex: "A"
+      source_labels:
+      - cluster
+    `))
+	testutil.Ok(t, err)
+
+	_, err = ParseRelabelConfig([]byte(`
+    - action: labelmap
+      regex: "A"
+    `))
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }

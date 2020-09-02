@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/jpillora/backoff"
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -49,12 +50,19 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// Labels for metrics.
+	labelSuccess = "success"
+	labelError   = "error"
 )
 
-// conflictErr is returned whenever an operation fails due to any conflict-type error.
-var conflictErr = errors.New("conflict")
+var (
+	// conflictErr is returned whenever an operation fails due to any conflict-type error.
+	conflictErr = errors.New("conflict")
 
-var errBadReplica = errors.New("replica count exceeds replication factor")
+	errBadReplica  = errors.New("replica count exceeds replication factor")
+	errNotReady    = errors.New("target not ready")
+	errUnavailable = errors.New("target not available")
+)
 
 // Options for the web Handler.
 type Options struct {
@@ -80,13 +88,15 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx      sync.RWMutex
-	hashring Hashring
-	peers    *peerGroup
+	mtx        sync.RWMutex
+	hashring   Hashring
+	peers      *peerGroup
+	expBackoff backoff.Backoff
+	peerStates map[string]*retryState
 
-	// Metrics.
-	forwardRequestsTotal *prometheus.CounterVec
-	replicationFactor    prometheus.Gauge
+	forwardRequests   *prometheus.CounterVec
+	replications      *prometheus.CounterVec
+	replicationFactor prometheus.Gauge
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -100,10 +110,22 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		router:  route.New(),
 		options: o,
 		peers:   newPeerGroup(o.DialOpts...),
-		forwardRequestsTotal: promauto.With(o.Registry).NewCounterVec(
+		expBackoff: backoff.Backoff{
+			Factor: 2,
+			Min:    100 * time.Millisecond,
+			Max:    30 * time.Second,
+			Jitter: true,
+		},
+		forwardRequests: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
+			}, []string{"result"},
+		),
+		replications: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_replications_total",
+				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
 		replicationFactor: promauto.With(o.Registry).NewGauge(
@@ -113,6 +135,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			},
 		),
 	}
+
+	h.forwardRequests.WithLabelValues(labelSuccess)
+	h.forwardRequests.WithLabelValues(labelError)
+	h.replications.WithLabelValues(labelSuccess)
+	h.replications.WithLabelValues(labelError)
 
 	if o.ReplicationFactor > 1 {
 		h.replicationFactor.Set(float64(o.ReplicationFactor))
@@ -145,7 +172,10 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 func (h *Handler) Hashring(hashring Hashring) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
+
 	h.hashring = hashring
+	h.expBackoff.Reset()
+	h.peerStates = make(map[string]*retryState)
 }
 
 // Verifies whether the server is ready or not.
@@ -289,7 +319,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	switch err {
 	case nil:
 		return
-	case tsdb.ErrNotReady:
+	case errNotReady:
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	case errUnavailable:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case conflictErr:
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -355,10 +387,22 @@ func (h *Handler) writeQuorum() int {
 }
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
-// requests succeeds or fails or if context is cancelled.
-func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+// requests succeeds or fails or if context is canceled.
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+	var errs terrors.MultiError
+
+	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
+	defer func() {
+		if errs.Err() != nil {
+			// NOTICE: The cancel function is not used on all paths intentionally,
+			// if there is no error when quorum successThreshold is reached,
+			// let forward requests to optimistically run until timeout.
+			cancel()
+		}
+	}()
+
 	logger := log.With(h.logger, "tenant", tenant)
-	if id, ok := middleware.RequestIDFromContext(ctx); ok {
+	if id, ok := middleware.RequestIDFromContext(pctx); ok {
 		logger = log.With(logger, "request-id", id)
 	}
 
@@ -374,16 +418,21 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
-				tracing.DoInSpan(ctx, "receive_replicate", func(ctx context.Context) {
+				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
 					err = h.replicate(ctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
+					h.replications.WithLabelValues(labelError).Inc()
 					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
 					return
 				}
+
+				h.replications.WithLabelValues(labelSuccess).Inc()
 				ec <- nil
 			}(endpoint)
+
 			continue
 		}
 
@@ -396,9 +445,10 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
 				defer wg.Done()
+
 				var err error
-				tracing.DoInSpan(ctx, "receive_tsdb_write", func(ctx context.Context) {
-					err = h.writer.Write(tenant, wreqs[endpoint])
+				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
+					err = h.writer.Write(fctx, tenant, wreqs[endpoint])
 				})
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
@@ -407,7 +457,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 						if countCause(errs, isConflict) > 0 {
 							err = errors.Wrap(conflictErr, errs.Error())
 						} else if countCause(errs, isNotReady) > 0 {
-							err = tsdb.ErrNotReady
+							err = errNotReady
 						} else {
 							err = errors.New(errs.Error())
 						}
@@ -416,8 +466,8 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 					return
 				}
 				ec <- nil
-
 			}(endpoint)
+
 			continue
 		}
 
@@ -432,19 +482,31 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 			defer func() {
 				// This is an actual remote forward request so report metric here.
 				if err != nil {
-					h.forwardRequestsTotal.WithLabelValues("error").Inc()
+					h.forwardRequests.WithLabelValues(labelError).Inc()
 					return
 				}
-				h.forwardRequestsTotal.WithLabelValues("success").Inc()
+				h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			}()
 
-			cl, err = h.peers.get(ctx, endpoint)
+			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
 				ec <- errors.Wrapf(err, "get peer connection for endpoint %v", endpoint)
 				return
 			}
+
+			h.mtx.RLock()
+			b, ok := h.peerStates[endpoint]
+			if ok {
+				if time.Now().Before(b.nextAllowed) {
+					h.mtx.RUnlock()
+					ec <- errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint)
+					return
+				}
+			}
+			h.mtx.RUnlock()
+
 			// Create a span to track the request made to another receive node.
-			tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
 				// Actually make the request against the endpoint we determined should handle these time series.
 				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
 					Timeseries: wreqs[endpoint].Timeseries,
@@ -454,9 +516,28 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 				})
 			})
 			if err != nil {
+				// Check if peer connection is unavailable, don't attempt to send requests constantly.
+				if st, ok := status.FromError(err); ok {
+					if st.Code() == codes.Unavailable {
+						h.mtx.Lock()
+						if b, ok := h.peerStates[endpoint]; ok {
+							b.attempt++
+							dur := h.expBackoff.ForAttempt(b.attempt)
+							b.nextAllowed = time.Now().Add(dur)
+							level.Debug(h.logger).Log("msg", "target unavailable backing off", "for", dur)
+						} else {
+							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
+						}
+						h.mtx.Unlock()
+					}
+				}
 				ec <- errors.Wrapf(err, "forwarding request to endpoint %v", endpoint)
 				return
 			}
+			h.mtx.Lock()
+			delete(h.peerStates, endpoint)
+			h.mtx.Unlock()
+
 			ec <- nil
 		}(endpoint)
 	}
@@ -467,7 +548,7 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is cancelled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
 			for err := range ec {
@@ -478,14 +559,11 @@ func (h *Handler) fanoutForward(ctx context.Context, tenant string, replicas map
 		}()
 	}()
 
-	var (
-		success int
-		errs    terrors.MultiError
-	)
+	var success int
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-fctx.Done():
+			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
 				return errs
@@ -533,25 +611,19 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 	h.mtx.RUnlock()
 
-	var err error
-	ctx, cancel := context.WithTimeout(ctx, h.options.ForwardTimeout)
-	defer func() {
-		// If there is no error, let forward requests optimistically run until timeout.
-		if err != nil {
-			cancel()
-		}
-	}()
-
 	quorum := h.writeQuorum()
-	err = h.fanoutForward(ctx, tenant, replicas, wreqs, quorum)
-	if countCause(err, isNotReady) >= quorum {
-		return tsdb.ErrNotReady
-	}
-	if countCause(err, isConflict) >= quorum {
-		return errors.Wrap(conflictErr, "did not meet success threshold due to conflict")
-	}
-	if err != nil {
-		return errors.Wrap(err, "replicate")
+	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
+	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
+		if countCause(err, isNotReady) >= quorum {
+			return errors.Wrap(errNotReady, "replicate: quorum not reached")
+		}
+		if countCause(err, isConflict) >= quorum {
+			return errors.Wrap(conflictErr, "replicate: quorum not reached")
+		}
+		if countCause(err, isUnavailable) >= quorum {
+			return errors.Wrap(errUnavailable, "replicate: quorum not reached")
+		}
+		return errors.Wrap(err, "unexpected error, before quorum is reached")
 	}
 
 	return nil
@@ -566,7 +638,9 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	switch err {
 	case nil:
 		return &storepb.WriteResponse{}, nil
-	case tsdb.ErrNotReady:
+	case errNotReady:
+		return nil, status.Error(codes.Unavailable, err.Error())
+	case errUnavailable:
 		return nil, status.Error(codes.Unavailable, err.Error())
 	case conflictErr:
 		return nil, status.Error(codes.AlreadyExists, err.Error())
@@ -610,8 +684,22 @@ func isConflict(err error) bool {
 
 // isNotReady returns whether or not the given error represents a not ready error.
 func isNotReady(err error) bool {
-	return err == tsdb.ErrNotReady ||
+	return err == errNotReady ||
+		err == tsdb.ErrNotReady ||
 		status.Code(err) == codes.Unavailable
+}
+
+// isUnavailable returns whether or not the given error represents an unavailable error.
+func isUnavailable(err error) bool {
+	return err == errUnavailable ||
+		status.Code(err) == codes.Unavailable
+}
+
+// retryState encapsulates the number of request attempt made against a peer and,
+// next allowed time for the next attempt.
+type retryState struct {
+	attempt     float64
+	nextAllowed time.Time
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {

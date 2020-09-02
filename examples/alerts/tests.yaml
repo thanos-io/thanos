@@ -22,47 +22,47 @@ tests:
       exp_samples:
         - labels: '{}'
           value: 120
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod)
       eval_time: 2m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
           value: 43
-        - labels: '{pod="thanos-sidecar-pod-1"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
           value: 42
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
-      eval_time: 5m
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod)
+      eval_time: 10m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
           value: 0
-        - labels: '{pod="thanos-sidecar-pod-1"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
           value: 0
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
-      eval_time: 6m
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod)
+      eval_time: 11m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
           value: 0
-        - labels: '{pod="thanos-sidecar-pod-1"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
           value: 0
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
-      eval_time: 5m
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod)
+      eval_time: 10m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
-          value: 300
-        - labels: '{pod="thanos-sidecar-pod-1"}'
-          value: 300
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
-      eval_time: 6m
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
+          value: 600
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
+          value: 600
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod)
+      eval_time: 11m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
-          value: 360
-        - labels: '{pod="thanos-sidecar-pod-1"}'
-          value: 360
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod) >= 300
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
+          value: 660
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
+          value: 660
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, pod) >= 600
       eval_time: 12m
       exp_samples:
-        - labels: '{pod="thanos-sidecar-pod-0"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
           value: 720
-        - labels: '{pod="thanos-sidecar-pod-1"}'
+        - labels: '{job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
           value: 720
   alert_rule_test:
   - eval_time: 1m
@@ -71,24 +71,54 @@ tests:
     alertname: ThanosSidecarUnhealthy
   - eval_time: 3m
     alertname: ThanosSidecarUnhealthy
-  - eval_time: 5m
+  - eval_time: 10m
     alertname: ThanosSidecarUnhealthy
     exp_alerts:
     - exp_labels:
         severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'
-  - eval_time: 6m
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 600 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 600 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
+  - eval_time: 11m
     alertname: ThanosSidecarUnhealthy
     exp_alerts:
     - exp_labels:
         severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 660 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 660 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 12m
     alertname: ThanosSidecarUnhealthy
     exp_alerts:
     - exp_labels:
         severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-0
       exp_annotations:
-        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 720 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        pod: thanos-sidecar-pod-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 720 seconds.'
+        summary: 'Thanos Sidecar is unhealthy.'

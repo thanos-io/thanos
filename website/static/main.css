@@ -39,7 +39,7 @@ pre {
     padding: 1rem;
 }
 
-.list-group-item-thanos {
+.list-group-item-docs {
     color: #6D41FF;
     border: 0;
     padding: 0.5rem;
@@ -47,7 +47,7 @@ pre {
     text-indent: 1rem;
 }
 
-.list-group-item-thanos:hover {
+.list-group-item-docs:hover {
     color: #6D41FF;
 }
 
@@ -119,11 +119,15 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
   }
 
 /* SideMenu Collapse */
+.docs-menu{
+    text-transform: capitalize;
+}
+
 .menuinput {
     display: none;
 }
 
-.menulabel-thanos {
+.menulabel-docs {
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -140,7 +144,7 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
     transform: rotateX(180deg);
 }
 
-.sidemenu-thanos .list-group {
+.sidemenu-docs .list-group {
     transform: scaleY(0);
     height: 0;
 }

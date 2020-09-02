@@ -1,11 +1,10 @@
 import React, { FC, useState, Fragment } from 'react';
-import { Link } from '@reach/router';
 import { Alert, Collapse, Table, Badge } from 'reactstrap';
 import { RuleStatus } from './AlertContents';
 import { Rule } from '../../types/types';
 import { faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { createExpressionLink } from '../../utils/index';
+import { createExternalExpressionLink } from '../../utils/index';
 
 interface CollapsibleAlertPanelProps {
   rule: Rule;
@@ -31,10 +30,10 @@ const CollapsibleAlertPanel: FC<CollapsibleAlertPanelProps> = ({ rule, showAnnot
         <pre style={{ background: '#f5f5f5', padding: 15 }}>
           <code>
             <div>
-              name: <Link to={createExpressionLink(`ALERTS{alertname="${rule.name}"}`)}>{rule.name}</Link>
+              name: <a href={createExternalExpressionLink(`ALERTS{alertname="${rule.name}"}`)}>{rule.name}</a>
             </div>
             <div>
-              expr: <Link to={createExpressionLink(rule.query)}>{rule.query}</Link>
+              expr: <a href={createExternalExpressionLink(rule.query)}>{rule.query}</a>
             </div>
             <div>
               <div>labels:</div>

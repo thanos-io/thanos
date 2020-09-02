@@ -19,8 +19,9 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/objects"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -55,12 +56,7 @@ func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 		return nil, err
 	}
 
-	authOpts, err := authOptsFromConfig(sc)
-	if err != nil {
-		return nil, err
-	}
-
-	provider, err := openstack.AuthenticatedClient(authOpts)
+	provider, err := openstack.AuthenticatedClient(authOptsFromConfig(sc))
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +189,7 @@ func parseConfig(conf []byte) (*SwiftConfig, error) {
 	return &sc, err
 }
 
-func authOptsFromConfig(sc *SwiftConfig) (gophercloud.AuthOptions, error) {
+func authOptsFromConfig(sc *SwiftConfig) gophercloud.AuthOptions {
 	authOpts := gophercloud.AuthOptions{
 		IdentityEndpoint: sc.AuthUrl,
 		Username:         sc.Username,
@@ -237,7 +233,7 @@ func authOptsFromConfig(sc *SwiftConfig) (gophercloud.AuthOptions, error) {
 			authOpts.Scope.ProjectID = sc.ProjectID
 		}
 	}
-	return authOpts, nil
+	return authOpts
 }
 
 func (c *Container) createContainer(name string) error {

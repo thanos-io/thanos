@@ -31,8 +31,12 @@ type Bucket struct {
 }
 
 func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader string) *Bucket {
+	tmplVariables := map[string]string{
+		"Component": component.Bucket.String(),
+	}
+
 	return &Bucket{
-		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", queryTmplFuncs(), externalPrefix, prefixHeader, component.Bucket),
+		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", queryTmplFuncs(), tmplVariables, externalPrefix, prefixHeader, component.Bucket),
 		Blocks:         "[]",
 		Label:          label,
 		externalPrefix: externalPrefix,

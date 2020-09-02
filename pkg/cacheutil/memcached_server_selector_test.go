@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/facette/natsort"
-	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -42,8 +41,6 @@ func TestNatSort(t *testing.T) {
 }
 
 func TestMemcachedJumpHashSelector_PickServer(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	tests := []struct {
 		addrs        []string
 		key          string
@@ -90,8 +87,6 @@ func TestMemcachedJumpHashSelector_PickServer(t *testing.T) {
 }
 
 func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	tests := []struct {
 		input    []string
 		expected []string
@@ -123,8 +118,6 @@ func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServers(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	servers := []string{"127.0.0.1:11211", "127.0.0.2:11211", "127.0.0.3:11211"}
 	selector := MemcachedJumpHashSelector{}
 	testutil.Ok(t, selector.SetServers(servers...))
@@ -151,8 +144,6 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	servers := []string{
 		"127.0.0.1:11211",
 		"127.0.0.2:11211",
@@ -205,8 +196,6 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldReturnErrNoServersOnNoServers(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	s := MemcachedJumpHashSelector{}
 	_, err := s.PickServer("foo")
 	testutil.Equals(t, memcache.ErrNoServers, err)

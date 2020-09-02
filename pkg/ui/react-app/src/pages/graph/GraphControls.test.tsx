@@ -9,8 +9,10 @@ import TimeInput from './TimeInput';
 const defaultGraphControlProps = {
   range: 60 * 60 * 24,
   endTime: 1572100217898,
+  useLocalTime: false,
   resolution: 10,
   stacked: false,
+  maxSourceResolution: '0s',
 
   onChangeRange: (): void => {
     // Do nothing.
@@ -22,6 +24,9 @@ const defaultGraphControlProps = {
     // Do nothing.
   },
   onChangeStacking: (): void => {
+    // Do nothing.
+  },
+  onChangeMaxSourceResolution: (): void => {
     // Do nothing.
   },
 };
@@ -169,5 +174,12 @@ describe('GraphControls', () => {
         fail('Expected onClick to be defined but it was not');
       }
     });
+  });
+
+  it('renders a select box for max source resolution', () => {
+    const controls = shallow(<GraphControls {...defaultGraphControlProps} />);
+    const input = controls.find(Input).filterWhere(input => input.prop('className') === 'max-source-resolution-input');
+    expect(input.prop('type')).toEqual('select');
+    expect(input.prop('value')).toEqual('0s');
   });
 });

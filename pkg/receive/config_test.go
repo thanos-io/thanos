@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestValidateConfig(t *testing.T) {
@@ -43,34 +45,30 @@ func TestValidateConfig(t *testing.T) {
 			err: nil, // means it's valid.
 		},
 	} {
-		var content []byte
-		var err error
-		if content, err = json.Marshal(tc.cfg); err != nil {
-			t.Error(err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			content, err := json.Marshal(tc.cfg)
+			testutil.Ok(t, err)
 
-		tmpfile, err := ioutil.TempFile("", "configwatcher_test.*.json")
-		if err != nil {
-			t.Fatalf("case %q: unexpectedly failed creating the temp file: %v", tc.name, err)
-		}
-		defer os.Remove(tmpfile.Name())
+			tmpfile, err := ioutil.TempFile("", "configwatcher_test.*.json")
+			testutil.Ok(t, err)
 
-		if _, err := tmpfile.Write(content); err != nil {
-			t.Fatalf("case %q: unexpectedly failed writing to the temp file: %v", tc.name, err)
-		}
+			defer func() {
+				testutil.Ok(t, os.Remove(tmpfile.Name()))
+			}()
 
-		if err := tmpfile.Close(); err != nil {
-			t.Fatalf("case %q: unexpectedly failed closing the temp file: %v", tc.name, err)
-		}
+			_, err = tmpfile.Write(content)
+			testutil.Ok(t, err)
 
-		cw, err := NewConfigWatcher(nil, nil, tmpfile.Name(), 1)
-		if err != nil {
-			t.Fatalf("case %q: unexpectedly failed creating config watcher: %v", tc.name, err)
-		}
+			err = tmpfile.Close()
+			testutil.Ok(t, err)
 
-		if err := cw.ValidateConfig(); err != nil && !errors.Is(err, tc.err) {
-			t.Errorf("case %q: got unexpected error: %v", tc.name, err)
-			continue
-		}
+			cw, err := NewConfigWatcher(nil, nil, tmpfile.Name(), 1)
+			testutil.Ok(t, err)
+			defer cw.Stop()
+
+			if err := cw.ValidateConfig(); err != nil && !errors.Is(err, tc.err) {
+				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
+			}
+		})
 	}
 }

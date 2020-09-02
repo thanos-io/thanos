@@ -318,7 +318,7 @@ available space and just reuses that no? (: Well, it's not that easy. TL;DR is t
 <tr><td>
 
 ```go
-var messages []string{}
+var messages []string
 for _, msg := range recv {
     messages = append(messages, msg)
 
@@ -328,7 +328,7 @@ for _, msg := range recv {
         // will be garbage collected only after
         // some time (seconds), which
         // can create enormous memory pressure.
-        messages = []string{}
+        messages = []string
     }
 }
 ```
@@ -338,7 +338,7 @@ for _, msg := range recv {
 <tr><td>
 
 ```go
-var messages []string{}
+var messages []string
 for _, msg := range recv {
     messages = append(messages, msg)
 
@@ -1016,16 +1016,18 @@ Misspell is amazing, it catches typos in comments and docs.
 
 No Grammarly plugin for this yet ): (We wish).
 
-Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L317).
+Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L#300), using [golangci-lint](https://github.com/golangci/golangci-lint) / [misspell](https://github.com/client9/misspell).
 
 #### Comments Should be Full Sentences
 
 All comments should be full sentences. They should start with an uppercase letter and end with a period.
 
-Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L194).
+Ensured [here](https://github.com/thanos-io/thanos/blob/40526f52f54d4501737e5246c0e71e56dd7e0b2d/Makefile#L300) using [golangci-lint](https://github.com/golangci/golangci-lint) / [godot](https://github.com/tetafro/godot).
 
 # Bash
 
 Overall try to NOT use bash. For scripts longer than 30 lines, consider writing it in Go as we did [here](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/scripts/copyright/copyright.go).
 
 If you have to, we follow the Google Shell style guide: https://google.github.io/styleguide/shellguide.html
+Ensured [here](https://github.com/thanos-io/thanos/blob/040b69b0b7c8e1be3890054bcb16389fa975eb45/Makefile#L165) using [shfmt](https://github.com/mvdan/sh).
+We also use [shellcheck](https://github.com/koalaman/shellcheck) to check any script errors.

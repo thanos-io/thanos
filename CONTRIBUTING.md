@@ -133,8 +133,7 @@ $ git push origin <your_branch_for_new_pr>
 1. If you don't have a live object store ready, you can use the `make test-local` command.
 
 NOTE: this command skips tests against live object storage systems by specifying environment variables; this causes the
-store-specific tests to be run against memory and filesystem object storages only. The CI tests run `make test-ci` instead
-(uses GCS, AWS).
+store-specific tests to be run against memory and filesystem object storage types only. The CI tests run uses GCS, AWS and Swift.
 
 Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
 
