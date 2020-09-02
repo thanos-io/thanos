@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
@@ -19,6 +20,14 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+)
+
+const (
+	// Name of the cache control header.
+	cacheControlHeader = "Cache-Control"
+
+	// Value that cacheControlHeader has if the response indicates that the results should not be cached.
+	noStoreValue = "no-store"
 )
 
 var (
@@ -105,6 +114,14 @@ func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Req
 
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
+
+	for _, value := range r.Header.Values(cacheControlHeader) {
+		if strings.Contains(value, noStoreValue) {
+			result.CachingOptions.Disabled = true
+			break
+		}
+	}
+
 	return &result, nil
 }
 
