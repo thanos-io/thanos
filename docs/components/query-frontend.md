@@ -50,9 +50,9 @@ It uses the cortex cache module so supports all that is supported there.
 [embedmd]:# (../flags/config_frontend_cache.txt yaml)
 ```yaml
 - limits:
-    maxquerylength: 0s
-    maxqueryparallelism: 0
-    maxcachefreshness: 0s
+    max_query_length: 0s
+    max_query_parallelism: 0
+    max_cache_freshness: 0s
   queryrange:
     split_queries_by_interval: 0s
     split_queries_by_day: false
@@ -98,7 +98,6 @@ It uses the cortex cache module so supports all that is supported there.
     max_retries: 0
     parallelise_shardable_queries: false
   frontend:
-    max_outstanding_per_tenant: 0
     compress_responses: false
     downstream_url: ""
     log_queries_longer_than: 0s
