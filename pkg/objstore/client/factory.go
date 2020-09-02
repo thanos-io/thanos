@@ -12,6 +12,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -20,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type ObjProvider string
@@ -38,6 +39,8 @@ const (
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
+	// TODO(kakkoyun): Optional with defaults.
+	Timeout objstore.Timeout `yaml:"timeout"` // omitempty?
 }
 
 // NewBucket initializes and returns new object storage clients.
@@ -76,5 +79,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), bucket, reg)), nil
+	return objstore.NewTracingBucket(
+		objstore.BucketWithMetrics(bucket.Name(),
+			objstore.BucketWithTimeout(bucket, bucketConf.Timeout),
+			reg)), nil
 }

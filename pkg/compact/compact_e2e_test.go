@@ -23,6 +23,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -133,7 +134,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks)
+		grouper := NewDefaultGrouper(nil, nil, bkt, false, false, blocksMarkedForDeletion, garbageCollectedBlocks)
 		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
@@ -195,7 +196,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
+		grouper := NewDefaultGrouper(logger, reg, bkt, false, false, blocksMarkedForDeletion, garbageCollectedBlocks)
 		bComp, err := NewBucketCompactor(logger, sy, grouper, comp, dir, bkt, 2)
 		testutil.Ok(t, err)
 

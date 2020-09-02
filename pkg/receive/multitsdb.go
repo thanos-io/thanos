@@ -30,9 +30,10 @@ import (
 )
 
 type MultiTSDB struct {
+	logger log.Logger
+	reg    prometheus.Registerer
+
 	dataDir         string
-	logger          log.Logger
-	reg             prometheus.Registerer
 	tsdbOpts        *tsdb.Options
 	tenantLabelName string
 	labels          labels.Labels

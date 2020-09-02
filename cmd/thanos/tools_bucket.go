@@ -19,12 +19,15 @@ import (
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -44,8 +47,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"github.com/thanos-io/thanos/pkg/verifier"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 )
 
 const extpromPrefix = "thanos_bucket_"

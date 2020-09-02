@@ -223,22 +223,23 @@ type DefaultGrouper struct {
 	logger                   log.Logger
 	acceptMalformedIndex     bool
 	enableVerticalCompaction bool
-	compactions              *prometheus.CounterVec
-	compactionRunsStarted    *prometheus.CounterVec
-	compactionRunsCompleted  *prometheus.CounterVec
-	compactionFailures       *prometheus.CounterVec
-	verticalCompactions      *prometheus.CounterVec
-	garbageCollectedBlocks   prometheus.Counter
-	blocksMarkedForDeletion  prometheus.Counter
+	// TODO(kakkoyun): Create a metric struct.
+	compactions             *prometheus.CounterVec
+	compactionRunsStarted   *prometheus.CounterVec
+	compactionRunsCompleted *prometheus.CounterVec
+	compactionFailures      *prometheus.CounterVec
+	verticalCompactions     *prometheus.CounterVec
+	garbageCollectedBlocks  prometheus.Counter
+	blocksMarkedForDeletion prometheus.Counter
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
 func NewDefaultGrouper(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	bkt objstore.Bucket,
 	acceptMalformedIndex bool,
 	enableVerticalCompaction bool,
-	reg prometheus.Registerer,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 ) *DefaultGrouper {
@@ -316,15 +317,16 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 // Group captures a set of blocks that have the same origin labels and downsampling resolution.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger                      log.Logger
-	bkt                         objstore.Bucket
-	key                         string
-	labels                      labels.Labels
-	resolution                  int64
-	mtx                         sync.Mutex
-	blocks                      map[ulid.ULID]*metadata.Meta
-	acceptMalformedIndex        bool
-	enableVerticalCompaction    bool
+	logger                   log.Logger
+	bkt                      objstore.Bucket
+	key                      string
+	labels                   labels.Labels
+	resolution               int64
+	mtx                      sync.Mutex
+	blocks                   map[ulid.ULID]*metadata.Meta
+	acceptMalformedIndex     bool
+	enableVerticalCompaction bool
+	// TODO(kakkoyun): Create a metric struct.
 	compactions                 prometheus.Counter
 	compactionRunsStarted       prometheus.Counter
 	compactionRunsCompleted     prometheus.Counter

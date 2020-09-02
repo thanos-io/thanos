@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -277,7 +278,7 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
+	grouper := compact.NewDefaultGrouper(logger, reg, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, blocksMarkedForDeletion, garbageCollectedBlocks)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, comp, compactDir, bkt, conf.compactionConcurrency)
 	if err != nil {

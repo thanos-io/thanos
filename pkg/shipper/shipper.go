@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -73,11 +74,12 @@ func newMetrics(reg prometheus.Registerer, uploadCompacted bool) *metrics {
 // them to a remote data store.
 type Shipper struct {
 	logger  log.Logger
-	dir     string
 	metrics *metrics
-	bucket  objstore.Bucket
-	labels  func() labels.Labels
-	source  metadata.SourceType
+
+	dir    string
+	bucket objstore.Bucket
+	labels func() labels.Labels
+	source metadata.SourceType
 
 	uploadCompacted        bool
 	allowOutOfOrderUploads bool
