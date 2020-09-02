@@ -5,7 +5,6 @@ package queryfrontend
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
@@ -22,13 +21,15 @@ const (
 	labelQueryRange = "query_range"
 )
 
+// NewTripperware returns a Tripperware configured with middlewares to
+// limit, align, split, retry and cache requests.
+// Not using the cortex one as it uses  query parallelisations based on
+// storage sharding configuration and query ASTs.
 func NewTripperWare(
+	cfg queryrange.Config,
 	limits queryrange.Limits,
-	cacheConfig *queryrange.ResultsCacheConfig,
 	codec queryrange.Codec,
 	cacheExtractor queryrange.Extractor,
-	splitQueryInterval time.Duration,
-	maxRetries int,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
@@ -50,24 +51,19 @@ func NewTripperWare(
 		queryrange.StepAlignMiddleware,
 	)
 
-	if splitQueryInterval != 0 {
+	if cfg.SplitQueriesByInterval != 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", metrics),
-			queryrange.SplitByIntervalMiddleware(splitQueryInterval, limits, codec, reg),
+			queryrange.SplitByIntervalMiddleware(cfg.SplitQueriesByInterval, limits, codec, reg),
 		)
 	}
 
-	if cacheConfig != nil {
-		// constSplitter will panic when splitQueryInterval is 0.
-		if splitQueryInterval == 0 {
-			return nil, errors.New("cannot create results cache middleware when split interval is 0")
-		}
-
+	if cfg.CacheResults {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			*cacheConfig,
-			newThanosCacheKeyGenerator(splitQueryInterval),
+			cfg.ResultsCacheConfig,
+			newThanosCacheKeyGenerator(cfg.SplitQueriesByInterval),
 			limits,
 			codec,
 			cacheExtractor,
@@ -85,11 +81,11 @@ func NewTripperWare(
 		)
 	}
 
-	if maxRetries > 0 {
+	if cfg.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", metrics),
-			queryrange.NewRetryMiddleware(logger, maxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+			queryrange.NewRetryMiddleware(logger, cfg.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 

@@ -27,7 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
-	responsecache "github.com/thanos-io/thanos/pkg/queryfrontend/cache"
+	frontendcache "github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -57,9 +57,6 @@ var (
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
-	}
-	responseCacheConfigs = map[responsecache.ResponseCacheProvider]interface{}{
-		responsecache.INMEMORY: responsecache.InMemoryResponseCacheConfig{},
 	}
 )
 
@@ -95,13 +92,6 @@ func main() {
 		}
 	}
 
-	for typ, config := range responseCacheConfigs {
-		if err := generate(responsecache.ResponseCacheConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
-			os.Exit(1)
-		}
-	}
-
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
 	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
@@ -115,6 +105,13 @@ func main() {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)
 	}
+
+	frontendCfg := frontendcache.DefaultConfig()
+	if err := generate([]frontendcache.Config{frontendCfg}, "frontend_cache", *outputDir); err != nil {
+		level.Error(logger).Log("msg", "failed to generate", "type", "frontend_cache", "err", err)
+		os.Exit(1)
+	}
+
 	logger.Log("msg", "success")
 }
 

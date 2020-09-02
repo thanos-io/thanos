@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: It now uses the corex module fully and it support all backends that are supported there.
+
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - in release process.
 
 :warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.

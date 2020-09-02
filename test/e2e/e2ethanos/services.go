@@ -23,7 +23,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
 
@@ -406,29 +405,43 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 	return compactor, nil
 }
 
-func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.ResponseCacheConfig) (*e2e.HTTPService, error) {
-	respCacheConfigBytes, err := yaml.Marshal(respCacheConf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "generate response cache config file: %v", respCacheConf)
-	}
+// func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.ResponseCacheConfig) (*e2e.HTTPService, error) {
+// 	respCacheConfigBytes, err := yaml.Marshal(respCacheConf)
+// 	if err != nil {
+// 		return nil, errors.Wrapf(err, "generate response cache config file: %v", respCacheConf)
+// 	}
 
-	args := e2e.BuildArgs(map[string]string{
-		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
-		"--http-address":                      ":8080",
-		"--query-frontend.downstream-url":     downstreamURL,
-		"--log.level":                         logLevel,
-		"--query-range.response-cache-config": string(respCacheConfigBytes),
-	})
+// 	args := e2e.BuildArgs(map[string]string{
+// 		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
+// 		"--http-address":                      ":8080",
+// 		"--query-frontend.downstream-url":     downstreamURL,
+// 		"--log.level":                         logLevel,
+// 		"--query-range.response-cache-config": string(respCacheConfigBytes),
+// 	})
 
-	queryFrontend := e2e.NewHTTPService(
-		fmt.Sprintf("query-frontend-%s", name),
-		DefaultImage(),
-		e2e.NewCommand("query-frontend", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
-		8080,
+// 	queryFrontend := e2e.NewHTTPService(
+// 		fmt.Sprintf("query-frontend-%s", name),
+// 		DefaultImage(),
+// 		e2e.NewCommand("query-frontend", args...),
+// 		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+// 		8080,
+// 	)
+// 	queryFrontend.SetUser(strconv.Itoa(os.Getuid()))
+// 	queryFrontend.SetBackoff(defaultBackoffConfig)
+
+// 	return queryFrontend, nil
+// }
+
+func NewMemcached(name string) *e2e.ConcreteService {
+	memcached := e2e.NewConcreteService(
+		fmt.Sprintf("memcached-%s", name),
+		"docker.io/memcached:1.6.3-alpine",
+		e2e.NewCommand("memcached", []string{"-m 1024", "-I 1m", "-c 1024", "-v"}...),
+		nil,
+		11211,
 	)
-	queryFrontend.SetUser(strconv.Itoa(os.Getuid()))
-	queryFrontend.SetBackoff(defaultBackoffConfig)
+	memcached.SetUser(strconv.Itoa(os.Getuid()))
+	memcached.SetBackoff(defaultBackoffConfig)
 
-	return queryFrontend, nil
+	return memcached
 }
