@@ -1,24 +1,29 @@
 package queryfrontend
 
 import (
-	"github.com/cortexproject/cortex/pkg/chunk/cache"
+	"time"
+
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/cortexproject/cortex/pkg/util/validation"
 )
 
+type Limits struct {
+	MaxQueryLength      time.Duration
+	MaxQueryParallelism int
+	MaxCacheFreshness   time.Duration
+}
 type Config struct {
-	Cache      cache.Config
-	Limits     validation.Limits
+	Limits     Limits
 	QueryRange queryrange.Config
 	Frontend   frontend.Config
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Cache:      cache.Config{},
-		Limits:     validation.Limits{},
-		QueryRange: queryrange.Config{},
-		Frontend:   frontend.Config{},
+		Limits: Limits{},
+		QueryRange: queryrange.Config{
+			ResultsCacheConfig: queryrange.ResultsCacheConfig{},
+		},
+		Frontend: frontend.Config{},
 	}
 }

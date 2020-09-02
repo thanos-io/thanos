@@ -94,12 +94,7 @@ func runQueryFrontend(
 	cfg *config,
 	comp component.Component,
 ) error {
-
-	err := cfg.Cache.Validate()
-	if err != nil {
-		return errors.Wrap(err, "error validating cache config")
-	}
-	err = cfg.QueryRange.Validate(logger)
+	err := cfg.QueryRange.Validate(logger)
 	if err != nil {
 		return errors.Wrap(err, "error validating query range config")
 	}
@@ -114,7 +109,11 @@ func runQueryFrontend(
 	}
 	defer fe.Close()
 
-	limits, err := validation.NewOverrides(cfg.Limits, nil)
+	limits, err := validation.NewOverrides(validation.Limits{
+		MaxQueryLength:      cfg.Limits.MaxQueryLength,
+		MaxQueryParallelism: cfg.Limits.MaxQueryParallelism,
+		MaxCacheFreshness:   cfg.Limits.MaxCacheFreshness,
+	}, nil)
 	if err != nil {
 		return errors.Wrap(err, "initialiase limits")
 	}

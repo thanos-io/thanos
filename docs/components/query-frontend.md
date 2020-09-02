@@ -49,77 +49,10 @@ It uses the cortex cache module so supports all that is supported there.
 
 [embedmd]:# (../flags/config_frontend_cache.txt yaml)
 ```yaml
-- cache:
-    enable_fifocache: false
-    default_validity: 0s
-    background:
-      writeback_goroutines: 0
-      writeback_buffer: 0
-    memcached:
-      expiration: 0s
-      batch_size: 0
-      parallelism: 0
-    memcached_client:
-      host: ""
-      service: ""
-      addresses: ""
-      timeout: 0s
-      max_idle_conns: 0
-      update_interval: 0s
-      consistent_hash: false
-    redis:
-      endpoint: ""
-      timeout: 0s
-      expiration: 0s
-      max_idle_conns: 0
-      max_active_conns: 0
-      password: ""
-      enable_tls: false
-      idle_timeout: 0s
-      wait_on_pool_exhaustion: false
-      max_conn_lifetime: 0s
-    fifocache:
-      max_size_bytes: ""
-      max_size_items: 0
-      validity: 0s
-      size: 0
-    prefix: ""
-  limits:
-    ingestion_rate: 0
-    ingestion_rate_strategy: ""
-    ingestion_burst_size: 0
-    accept_ha_samples: false
-    ha_cluster_label: ""
-    ha_replica_label: ""
-    drop_labels: []
-    max_label_name_length: 0
-    max_label_value_length: 0
-    max_label_names_per_series: 0
-    max_metadata_length: 0
-    reject_old_samples: false
-    reject_old_samples_max_age: 0s
-    creation_grace_period: 0s
-    enforce_metadata_metric_name: false
-    enforce_metric_name: false
-    user_subring_size: 0
-    max_series_per_query: 0
-    max_samples_per_query: 0
-    max_series_per_user: 0
-    max_series_per_metric: 0
-    max_global_series_per_user: 0
-    max_global_series_per_metric: 0
-    min_chunk_length: 0
-    max_metadata_per_user: 0
-    max_metadata_per_metric: 0
-    max_global_metadata_per_user: 0
-    max_global_metadata_per_metric: 0
-    max_chunks_per_query: 0
-    max_query_length: 0s
-    max_query_parallelism: 0
-    cardinality_limit: 0
-    max_cache_freshness: 0s
-    per_tenant_override_config: ""
-    per_tenant_override_period: 0s
+- limits:
+    maxquerylength: 0s
+    maxqueryparallelism: 0
+    maxcachefreshness: 0s
   queryrange:
     split_queries_by_interval: 0s
     split_queries_by_day: false
