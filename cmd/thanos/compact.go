@@ -10,6 +10,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -295,6 +296,19 @@ func runCompact(
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
+	var cleanMtx sync.Mutex
+	cleanPartialMarked := func() error {
+		cleanMtx.Lock()
+		defer cleanMtx.Unlock()
+
+		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "error cleaning marked blocks")
+		}
+		return nil
+	}
+
 	compactMainFn := func() error {
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction")
@@ -339,12 +353,7 @@ func runCompact(
 			return errors.Wrap(err, "retention failed")
 		}
 
-		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning blocks")
-		}
-		return nil
+		return cleanPartialMarked()
 	}
 
 	g.Add(func() error {
@@ -415,6 +424,16 @@ func runCompact(
 		})
 
 		srv.Handle("/", r)
+
+		// Periodically remove partial blocks and blocks marked for deletion
+		// since one iteration potentially could take a long time.
+		g.Add(func() error {
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				return cleanPartialMarked()
+			})
+		}, func(error) {
+			cancel()
+		})
 
 		g.Add(func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, conf.waitInterval)

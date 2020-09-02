@@ -51,6 +51,8 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 			}
 			s.blocksCleaned.Inc()
 			level.Info(s.logger).Log("msg", "deleted block marked for deletion", "block", deletionMark.ID)
+			// Delete it from the map. It will be repopulated on the next sync if it still exists.
+			delete(deletionMarkMap, deletionMark.ID)
 		}
 	}
 
