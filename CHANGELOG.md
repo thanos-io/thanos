@@ -17,6 +17,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
 - [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
 - [#3388](https://github.com/thanos-io/thanos/pull/3378) Tools: Bucket replicator now can specify block IDs to copy.
+- [#3121](https://github.com/thanos-io/thanos/pull/3121) Receive: Added `--receive.hashrings` alternative to `receive.hashrings-file` flag (lower priority). Content of JSON file that contains the hashring configuration.
 
 ### Fixed
 
@@ -110,8 +111,13 @@ Highlights:
 
 ### Added
 
+<<<<<<< HEAD
 - [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memacached cache.
   - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
+=======
+- [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memcached cache.
+    - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
+>>>>>>> dedc7164 (Add ability to consume content of the hashring directly)
 - [#3166](https://github.com/thanos-io/thanos/pull/3166) UIs: Added UI for passing a `storeMatch[]` parameter to queries.
 - [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Added debug level logging for responses between 300-399
 - [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allowed passing a `storeMatch[]` to Labels APIs; Time range metadata based store filtering is supported on Labels APIs.
@@ -133,7 +139,7 @@ Highlights:
 - [#3022](https://github.com/thanos-io/thanos/pull/3022) \*: Thanos images are now build with Go 1.15.
 - [#3205](https://github.com/thanos-io/thanos/pull/3205) \*: Updated TSDB to ~2.21
 
-## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
+## [v0.15.0](https://github.com/thanos-io/thanos/releases/v0.15.0) - 2020.09.07
 
 Highlights:
 

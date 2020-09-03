@@ -19,8 +19,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -63,8 +65,7 @@ func registerReceive(app *extkingpin.App) {
 
 	retention := extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
-	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
-		PlaceHolder("<path>").String()
+	hashringsFile := extflag.RegisterPathOrContent(cmd, "receive.hashrings", "JSON file that contains the hashring configuration.", false)
 
 	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
@@ -158,7 +159,8 @@ func registerReceive(app *extkingpin.App) {
 			tsdbOpts,
 			*ignoreBlockSize,
 			lset,
-			cw,
+			hashringsFile,
+			refreshInterval,
 			*localEndpoint,
 			*tenantHeader,
 			*defaultTenantID,
@@ -197,7 +199,8 @@ func runReceive(
 	tsdbOpts *tsdb.Options,
 	ignoreBlockSize bool,
 	lset labels.Labels,
-	cw *receive.ConfigWatcher,
+	hashringsFile *extflag.PathOrContent,
+	refreshInterval *model.Duration,
 	endpoint string,
 	tenantHeader string,
 	defaultTenantID string,
@@ -373,7 +376,13 @@ func runReceive(
 		// watcher, we close the chan ourselves.
 		updates := make(chan receive.Hashring, 1)
 
-		if cw != nil {
+		// The Hashrings config file path given initializing config watcher.
+		if configPath, err := hashringsFile.Path(); err != nil {
+			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, configPath, *refreshInterval)
+			if err != nil {
+				return errors.Wrap(err, "failed to initialize config watcher")
+			}
+
 			// Check the hashring configuration on before running the watcher.
 			if err := cw.ValidateConfig(); err != nil {
 				cw.Stop()
@@ -383,15 +392,33 @@ func runReceive(
 
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				return receive.HashringFromConfig(ctx, updates, cw)
+				return receive.HashringFromConfigWatcher(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})
 		} else {
+			configContent, err := hashringsFile.Content()
+			if err != nil {
+				return errors.Wrap(err, "failed to read hashrings configuration file")
+			}
+
+			var ring receive.Hashring
+			// The Hashrings config file content given initialize configuration from content.
+			if len(configContent) > 0 {
+				ring, err = receive.HashringFromConfig(configContent)
+				if err != nil {
+					close(updates)
+					return errors.Wrap(err, "failed to validate hashring configuration file")
+				}
+			} else {
+				// The hashring file is not specified use single node hashring.
+				ring = receive.SingleNodeHashring(endpoint)
+			}
+
 			cancel := make(chan struct{})
 			g.Add(func() error {
 				defer close(updates)
-				updates <- receive.SingleNodeHashring(endpoint)
+				updates <- ring
 				<-cancel
 				return nil
 			}, func(error) {
