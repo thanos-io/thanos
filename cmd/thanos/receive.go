@@ -65,7 +65,7 @@ func registerReceive(app *extkingpin.App) {
 
 	retention := extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
-	hashringsFile := extflag.RegisterPathOrContent(cmd, "receive.hashrings", "JSON file that contains the hashring configuration.", false)
+	hashringsFile := extflag.RegisterPathOrContent(cmd, "receive.hashrings", "File that contains the hashring configuration.", false)
 
 	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
