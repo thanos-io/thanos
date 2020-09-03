@@ -15,9 +15,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -34,8 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
 )
 
 var (
@@ -75,7 +77,7 @@ func main() {
 	}
 
 	for typ, config := range bucketConfigs {
-		if err := generate(client.BucketConfig{Type: typ, Config: config}, generateName("bucket_", string(typ)), *outputDir); err != nil {
+		if err := generate(client.BucketConfig{Type: typ, Config: config, Timeout: objstore.DefaultTimeout}, generateName("bucket_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}

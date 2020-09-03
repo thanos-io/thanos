@@ -37,17 +37,16 @@ const (
 )
 
 type BucketConfig struct {
-	Type   ObjProvider `yaml:"type"`
-	Config interface{} `yaml:"config"`
-	// TODO(kakkoyun): Optional with defaults.
-	Timeout objstore.Timeout `yaml:"timeout"` // omitempty?
+	Type    ObjProvider      `yaml:"type"`
+	Config  interface{}      `yaml:"config"`
+	Timeout objstore.Timeout `yaml:"timeout"`
 }
 
 // NewBucket initializes and returns new object storage clients.
 // NOTE: confContentYaml can contain secrets.
 func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registerer, component string) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading bucket configuration")
-	bucketConf := &BucketConfig{}
+	bucketConf := &BucketConfig{Timeout: objstore.DefaultTimeout}
 	if err := yaml.UnmarshalStrict(confContentYaml, bucketConf); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
 	}

@@ -96,6 +96,14 @@ config:
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -244,6 +252,14 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 #### Using GOOGLE_APPLICATION_CREDENTIALS
@@ -328,6 +344,14 @@ config:
   container: ""
   endpoint: ""
   max_retries: 0
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 ### OpenStack Swift
@@ -356,6 +380,14 @@ config:
   project_domain_name: ""
   region_name: ""
   container_name: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 ### Tencent COS
@@ -373,6 +405,14 @@ config:
   app_id: ""
   secret_key: ""
   secret_id: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
@@ -390,6 +430,14 @@ config:
   bucket: ""
   access_key_id: ""
   access_key_secret: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
 
 Use --objstore.config-file to reference to this configuration file.
@@ -409,4 +457,12 @@ This is mainly useful for testing and demos.
 type: FILESYSTEM
 config:
   directory: ""
+timeout:
+  iter: 0s
+  get: 5s
+  get_range: 30s
+  exists: 5s
+  upload: 10m0s
+  delete: 5s
+  attributes: 1m0s
 ```
