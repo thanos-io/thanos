@@ -85,7 +85,10 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	var c cache.Cache
 	switch strings.ToUpper(string(config.Type)) {
 	case string(GROUPCACHE):
-		c = cache.NewGroupcacheCache(logger, reg, "caching-bucket")
+		c, err = cache.NewGroupcacheCache(logger, reg, "caching-bucket", backendConfig)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create groupcache")
+		}
 	case string(MEMCACHED):
 		var memcached cacheutil.MemcachedClient
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)

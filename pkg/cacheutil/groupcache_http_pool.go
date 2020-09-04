@@ -14,7 +14,6 @@ import (
 	"github.com/golang/groupcache"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 )
@@ -22,9 +21,8 @@ import (
 type groupcacheHTTPPool struct {
 	logger log.Logger
 
-	config GroupcacheConfig
-
-	peers *groupcache.HTTPPool
+	config GroupcacheHTTPPoolConfig
+	peers  *groupcache.HTTPPool
 
 	// DNS provider used to keep the groupcache peer list updated.
 	dnsProvider *dns.Provider
@@ -33,20 +31,9 @@ type groupcacheHTTPPool struct {
 	stop chan struct{}
 }
 
-// parseGroupcacheConfig unmarshals a buffer into a GroupcacheConfig with default values.
-func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
-	config := defaultGroupcacheConfig
-	if err := yaml.Unmarshal(conf, &config);
-		err != nil {
-		return GroupcacheConfig{}, err
-	}
-
-	return config, nil
-}
-
 // NewGroupcacheHTTPPool makes a new MemcachedClient.
 func NewGroupcacheHTTPPool(logger log.Logger, reg prometheus.Registerer, me string, conf []byte) (*groupcacheHTTPPool, error) {
-	config, err := parseGroupcacheConfig(conf)
+	config, err := ParseGroupcacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +47,7 @@ func NewGroupcacheHTTPPoolWithConfig(logger log.Logger, _ prometheus.Registerer,
 		return nil, err
 	}
 
-	return &groupcacheHTTPPool{logger: logger, config: config, peers: groupcache.NewHTTPPool(me)}, nil // me  TODO(kakkoyun): Test
+	return &groupcacheHTTPPool{logger: logger, config: config.HTTPPoolConfig, peers: groupcache.NewHTTPPool(me)}, nil // me  TODO(kakkoyun): Test.
 }
 
 func (c *groupcacheHTTPPool) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
@@ -71,7 +58,7 @@ func (c *groupcacheHTTPPool) UpdateLoop() error {
 	ticker := time.NewTicker(c.config.DNSProviderUpdateInterval)
 	defer ticker.Stop()
 
-	// TODO(kakkoyun): Error handling
+	// TODO(kakkoyun): Error handling.
 	for {
 		select {
 		case <-ticker.C:

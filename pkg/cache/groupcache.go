@@ -11,6 +11,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/golang/groupcache"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 )
 
 // Groupcache is a golang/groupcache-based cache.
@@ -18,7 +20,7 @@ type Groupcache struct {
 	logger log.Logger
 	group  *groupcache.Group
 
-	// Metrics. ??
+	// Metrics: Custom collector!
 	// requests prometheus.Counter
 	// hits     prometheus.Counter
 
@@ -28,15 +30,20 @@ type Groupcache struct {
 	// g.group.CacheStats(groupcache.HotCache)
 }
 
-func NewGroupcacheCache(logger log.Logger, _ prometheus.Registerer, name string) *Groupcache {
-	var cacheBytes int64 = 1024 << 20 // TODO(kakkoyun): Leave enough headroom. 2x
+func NewGroupcacheCache(logger log.Logger, _ prometheus.Registerer, name string, conf []byte) (*Groupcache, error) {
+	config, err := cacheutil.ParseGroupcacheConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Groupcache{
 		logger: logger,
-		group: groupcache.NewGroup(name, cacheBytes, groupcache.GetterFunc( // TODO(kakkoyun): Get as parameter, but from where?
+		group: groupcache.NewGroup(name, config.CacheBytes, groupcache.GetterFunc(
 			func(ctx context.Context, key string, dest groupcache.Sink) error {
+				// TODO(kakkoyun): !!
 				return nil
 			})),
-	}
+	}, nil
 }
 
 // Store data into the cache.

@@ -56,9 +56,9 @@ var (
 		trclient.LIGHTSTEP:   lightstep.Config{},
 	}
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
-		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
-		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
-		// TODO(kkaoyun): !!!
+		storecache.INMEMORY:   storecache.InMemoryIndexCacheConfig{},
+		storecache.MEMCACHED:  cacheutil.MemcachedClientConfig{},
+		storecache.GROUPCACHE: storecache.GroupcacheIndexCacheConfig{},
 	}
 	responseCacheConfigs = map[responsecache.ResponseCacheProvider]interface{}{
 		responsecache.INMEMORY: responsecache.InMemoryResponseCacheConfig{},

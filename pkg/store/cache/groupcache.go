@@ -11,7 +11,34 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"gopkg.in/yaml.v2"
 )
+
+var (
+	DefaultGroupcacheIndexCacheConfig = GroupcacheIndexCacheConfig{
+		PostingsCacheBytes: 250 * 1024 * 1024,
+		SeriesCacheBytes:   250 * 1024 * 1024,
+	}
+)
+
+// GroupcacheIndexCacheConfig holds the in-memory index cache config.
+type GroupcacheIndexCacheConfig struct {
+	// PostingsCacheBytes represents overall maximum number of bytes postings cache can contain.
+	PostingsCacheBytes int64 `yaml:"postings_cache_bytes"`
+
+	// SeriesCacheBytes represents overall maximum number of bytes series cache can contain.
+	SeriesCacheBytes int64 `yaml:"series_cache_bytes"`
+}
+
+// parseGroupcacheIndexCacheConfig unmarshals a buffer into a GroupcacheIndexCacheConfig with default values.
+func parseGroupcacheIndexCacheConfig(conf []byte) (GroupcacheIndexCacheConfig, error) {
+	config := DefaultGroupcacheIndexCacheConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return GroupcacheIndexCacheConfig{}, err
+	}
+
+	return config, nil
+}
 
 // GroupcacheIndexCache is a golang/groupcache-based index cache.
 type GroupcacheIndexCache struct {
@@ -20,13 +47,35 @@ type GroupcacheIndexCache struct {
 	postings *groupcache.Group
 	series   *groupcache.Group
 
-	// // Metrics. ??
+	// Metrics: Custom collector!
 	// requests *prometheus.CounterVec
 	// hits     *prometheus.CounterVec
 }
 
-func NewGroupcacheCache(logger log.Logger, _ prometheus.Registerer) *GroupcacheIndexCache {
-	return &GroupcacheIndexCache{logger: logger}
+func NewGroupcacheIndexCache(logger log.Logger, reg prometheus.Registerer, conf []byte) (*GroupcacheIndexCache, error) {
+	config, err := parseGroupcacheIndexCacheConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewGroupcacheIndexCacheWithConfig(logger, reg, config)
+}
+
+func NewGroupcacheIndexCacheWithConfig(logger log.Logger, _ prometheus.Registerer, config GroupcacheIndexCacheConfig) (*GroupcacheIndexCache, error) {
+	// TODO(kakkoyun): sync.Once
+	return &GroupcacheIndexCache{
+		logger: logger,
+		postings: groupcache.NewGroup("postings", config.PostingsCacheBytes, groupcache.GetterFunc(
+			func(ctx context.Context, key string, dest groupcache.Sink) error {
+				// TODO(kakkoyun): !!
+				return nil
+			})),
+		series: groupcache.NewGroup("series", config.SeriesCacheBytes, groupcache.GetterFunc(
+			func(ctx context.Context, key string, dest groupcache.Sink) error {
+				// TODO(kakkoyun): !!
+				return nil
+			})),
+	}, nil
 }
 
 // StorePostings stores postings for a single series.
@@ -42,7 +91,7 @@ func (g *GroupcacheIndexCache) FetchMultiPostings(ctx context.Context, blockID u
 	for _, l := range lbls {
 		key := cacheKey{blockID, cacheKeyPostings(l)}.string()
 		var data []byte // TODO(kakkayun): Use a pool.
-		if err := g.series.Get(ctx, key, groupcache.AllocatingByteSliceSink(&data)); err != nil {
+		if err := g.postings.Get(ctx, key, groupcache.AllocatingByteSliceSink(&data)); err != nil {
 			misses = append(misses, l)
 		}
 		hits[l] = data

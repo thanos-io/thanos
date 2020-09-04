@@ -42,7 +42,8 @@ func NewResponseCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheCon
 	case string(INMEMORY):
 		resultsCacheConf, err = newInMemoryResponseCacheConfig(backendConfig)
 	case string(GROUPCACHE):
-		// TODO(kakkoyun): Implement ME!
+		// TODO(kakkoyun): Implement ME! Open an issue for it.
+		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
 	default:
 		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
 	}
