@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/felixge/fgprof"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -94,6 +95,7 @@ func registerProfiler(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/debug/fgprof", fgprof.Handler())
 }
 
 func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
