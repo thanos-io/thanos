@@ -23,6 +23,7 @@ import (
 	"go.uber.org/automaxprocs/maxprocs"
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
 )
 
@@ -102,19 +103,6 @@ func main() {
 
 	// Some packages still use default Register. Replace to have those metrics.
 	prometheus.DefaultRegisterer = metrics
-
-	// Memberlist uses go-metrics.
-	sink, err := gprom.NewPrometheusSink()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
-		os.Exit(1)
-	}
-	gmetricsConfig := gmetrics.DefaultConfig("thanos_" + cmd)
-	gmetricsConfig.EnableRuntimeMetrics = false
-	if _, err = gmetrics.NewGlobal(gmetricsConfig, sink); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
-		os.Exit(1)
-	}
 
 	var g run.Group
 	var tracer opentracing.Tracer
