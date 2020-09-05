@@ -30,7 +30,7 @@
             for panel in super.panels
           ],
         }
-        for row in super.rows
+        for row in if "rows" in super then super.rows else []
       ],
 
       templating+: {
