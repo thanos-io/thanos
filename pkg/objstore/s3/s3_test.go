@@ -161,7 +161,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 http_config:
   insecure_skip_verify: false
@@ -176,7 +175,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 put_user_metadata:
   "X-Amz-Acl": "bucket-owner-full-control"
@@ -195,7 +193,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 http_config:
   insecure_skip_verify: false
@@ -210,14 +207,29 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 part_size: 104857600
 http_config:
   insecure_skip_verify: false
   idle_conn_timeout: 50s`)
-
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
 	testutil.Assert(t, cfg2.PartSize == 1024*1024*100, "when part size should be set to 100MiB")
+}
+
+func TestParseConfig_OldSEEncryptionFieldShouldFail(t *testing.T) {
+	input := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"
+access_key: "access_key"
+insecure: false
+signature_version2: false
+encrypt_sse: false
+secret_key: "secret_key"
+see_encryption: true
+put_user_metadata:
+  "X-Amz-Acl": "bucket-owner-full-control"
+http_config:
+  idle_conn_timeout: 0s`)
+	_, err := parseConfig(input)
+	testutil.NotOk(t, err)
 }

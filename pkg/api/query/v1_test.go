@@ -1040,6 +1040,14 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 			result:                   int64((1 * time.Hour) / 6),
 			fail:                     true,
 		},
+		// maxSourceResolution param can be overwritten.
+		{
+			maxSourceResolutionParam: "1m",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64(time.Minute / (1000 * 1000)),
+			fail:                     false,
+		},
 	}
 
 	for i, test := range tests {

@@ -347,8 +347,8 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		router := route.New()
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName)
-		bucketUI.Register(router, ins)
+		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName, "", component.Bucket)
+		bucketUI.Register(router, true, ins)
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
@@ -393,7 +393,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		}
 		fetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			bucketUI.Set(blocks, err)
-			api.Set(blocks, err)
+			api.SetGlobal(blocks, err)
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
