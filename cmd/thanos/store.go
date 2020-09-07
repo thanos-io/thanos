@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -151,7 +152,7 @@ func registerStore(app *extkingpin.App) {
 			*webPrefixHeaderName,
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
-			getFlagsMap(cmd.Model().Flags),
+			getFlagsMap(cmd.Flags()),
 		)
 	})
 }
