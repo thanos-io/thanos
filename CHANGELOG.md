@@ -13,18 +13,6 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
 
-:warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
-
-* [#3095](https://github.com/thanos-io/thanos/pull/3095) Rule: update manager when all rule files are removed.
-* [#3098](https://github.com/thanos-io/thanos/pull/3098) ui: Fix Block Viewer for Compactor and Store
-* [#3105](https://github.com/thanos-io/thanos/pull/3105) Query: Fix overwriting maxSourceResolution when auto downsampling is enabled.
-* [#3010](https://github.com/thanos-io/thanos/pull/3010) Querier: Added a flag to override the default look back delta in promql. The flag should be set to at least 2 times the slowest scrape interval or left unset to use the Prometheus defaults of 5min.
-
----
-sse_config:
-  type: SSE-S3
-```
-
 Highlights:
 * Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
 query scheduling and parallelization (based on Cortex Query Frontend).
