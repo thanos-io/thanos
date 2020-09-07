@@ -94,12 +94,9 @@ func runQueryFrontend(
 	cfg *config,
 	comp component.Component,
 ) error {
-	if len(cfg.Frontend.DownstreamURL) == 0 {
-		return errors.New("downstream URL should be configured")
-	}
-	err := cfg.QueryRange.Validate(logger)
+	err := cfg.Validate()
 	if err != nil {
-		return errors.Wrap(err, "error validating query range config")
+		return errors.Wrap(err, "error validating the config")
 	}
 
 	fe, err := frontend.New(frontend.Config{

@@ -55,8 +55,7 @@ It uses the cortex cache module so supports all that is supported there.
     max_cache_freshness: 0s
   queryrange:
     split_queries_by_interval: 0s
-    split_queries_by_day: false
-    align_queries_with_step: false
+    max_retries: 0
     results_cache:
       cache:
         enable_fifocache: false
@@ -94,9 +93,6 @@ It uses the cortex cache module so supports all that is supported there.
           size: 0
         prefix: ""
       max_freshness: 0s
-    cache_results: false
-    max_retries: 0
-    parallelise_shardable_queries: false
   frontend:
     compress_responses: false
     downstream_url: ""

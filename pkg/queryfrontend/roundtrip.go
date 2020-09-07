@@ -22,11 +22,11 @@ const (
 )
 
 // NewTripperware returns a Tripperware configured with middlewares to
-// limit, align, split, retry and cache requests.
+// limit, align, split,cache requests and retry.
 // Not using the cortex one as it uses  query parallelisations based on
 // storage sharding configuration and query ASTs.
 func NewTripperWare(
-	cfg queryrange.Config,
+	queryRange QueryRange,
 	limits queryrange.Limits,
 	codec queryrange.Codec,
 	cacheExtractor queryrange.Extractor,
@@ -51,19 +51,19 @@ func NewTripperWare(
 		queryrange.StepAlignMiddleware,
 	)
 
-	if cfg.SplitQueriesByInterval != 0 {
+	if queryRange.SplitQueriesByInterval != 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", metrics),
-			queryrange.SplitByIntervalMiddleware(cfg.SplitQueriesByInterval, limits, codec, reg),
+			queryrange.SplitByIntervalMiddleware(queryRange.SplitQueriesByInterval, limits, codec, reg),
 		)
 	}
 
-	if cfg.CacheResults {
+	if queryRange.ResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			cfg.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(cfg.SplitQueriesByInterval),
+			*queryRange.ResultsCacheConfig,
+			newThanosCacheKeyGenerator(queryRange.SplitQueriesByInterval),
 			limits,
 			codec,
 			cacheExtractor,
@@ -81,11 +81,11 @@ func NewTripperWare(
 		)
 	}
 
-	if cfg.MaxRetries > 0 {
+	if queryRange.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", metrics),
-			queryrange.NewRetryMiddleware(logger, cfg.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+			queryrange.NewRetryMiddleware(logger, queryRange.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 
