@@ -66,6 +66,9 @@ It uses the cortex cache module so supports all that is supported there.
     max_idle_conns: 0
     update_interval: 0s
     consistent_hash: false
+    circuit_breaker_consecutive_failures: 0
+    circuit_breaker_timeout: 0s
+    circuit_breaker_interval: 0s
   redis:
     endpoint: ""
     timeout: 0s
@@ -117,6 +120,10 @@ Flags:
                               priority). Content of YAML file with tracing
                               configuration. See format details:
                               https://thanos.io/tip/tracing.md/#configuration
+      --http-address="0.0.0.0:10902"
+                              Listen host:port for HTTP endpoints.
+      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
+                              Server.
       --query-range.split-queries-by-interval=24h
                               Split queries by an interval and execute in
                               parallel, 0 disables it.
@@ -144,10 +151,6 @@ Flags:
                               Alternative to 'query-range.cache-config-file'
                               flag (lower priority). Content of YAML file that
                               contains response cache configuration.
-      --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
       --query-frontend.downstream-url="http://localhost:9090"
                               URL of downstream Prometheus Query compatible API.
       --query-frontend.compress-http-responses
