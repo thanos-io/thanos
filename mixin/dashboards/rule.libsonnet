@@ -95,7 +95,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.row('gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +
-          g.grpcQpsPanel('server', '%(namespaceLabel)s="$namespace",job=~"$job",grpc_type="unary"') % thanos.rule
+          g.grpcQpsPanel('server', '%(namespaceLabel)s="$namespace",job=~"$job",grpc_type="unary"' % thanos.rule)
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
