@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -296,19 +295,8 @@ func (c *Container) Upload(_ context.Context, name string, r io.Reader) error {
 		return errors.Wrap(err, "swift failed to create file")
 	}
 	defer runutil.CloseWithLogOnErr(c.logger, file, "swift upload obj close")
-	switch f := file.(type) {
-	case io.ReaderFrom:
-		if _, err := f.ReadFrom(r); err != nil {
-			return errors.Wrap(err, "swift failed to write uploaded file")
-		}
-	default:
-		buf, err := ioutil.ReadAll(r)
-		if err != nil {
-			return errors.Wrap(err, "swift failed to read uploaded file")
-		}
-		if _, err = file.Write(buf); err != nil {
-			return errors.Wrap(err, "swift failed to write uploaded file")
-		}
+	if _, err := io.Copy(file, r); err != nil {
+		return errors.Wrap(err, "failed to write uploaded file to swift")
 	}
 	return nil
 }
