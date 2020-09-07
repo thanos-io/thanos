@@ -45,7 +45,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Successful Upload', 'Shows the relative time of last successful upload to the object-store bucket.') +
           g.tablePanel(
-            ['time() - max(thanos_objstore_bucket_last_successful_upload_time{namespace="$namespace",%(selector)s}) by (job, bucket)'] % thanos.sidecar,
+            ['time() - max(thanos_objstore_bucket_last_successful_upload_time{namespace="$namespace",%(selector)s}) by (job, bucket)' % thanos.sidecar],
             {
               Value: {
                 alias: 'Uploaded Ago',
