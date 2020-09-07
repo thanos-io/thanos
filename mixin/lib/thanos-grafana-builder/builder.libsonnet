@@ -147,18 +147,18 @@ local template = grafana.template;
     yaxes: $.yaxes({ format: 'percentunit', max: 1 }),
   } + $.stack,
 
-  resourceUtilizationRow()::
+  resourceUtilizationRow(namespace, selector)::
     $.row('Resources')
     .addPanel(
       $.panel('Memory Used') +
       $.queryPanel(
         [
-          'go_memstats_alloc_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
-          'go_memstats_heap_alloc_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
-          'rate(go_memstats_alloc_bytes_total{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}[30s])',
-          'rate(go_memstats_heap_alloc_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}[30s])',
-          'go_memstats_stack_inuse_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
-          'go_memstats_heap_inuse_bytes{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
+          'go_memstats_alloc_bytes{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}' % [namespace, selector],
+          'go_memstats_heap_alloc_bytes{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}' % [namespace, selector],
+          'rate(go_memstats_alloc_bytes_total{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}[30s])' % [namespace, selector],
+          'rate(go_memstats_heap_alloc_bytes{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}[30s])' % [namespace, selector],
+          'go_memstats_stack_inuse_bytes{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}' % [namespace, selector],
+          'go_memstats_heap_inuse_bytes{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}' % [namespace, selector],
         ],
         [
           'alloc all {{pod}}',
@@ -174,14 +174,14 @@ local template = grafana.template;
     .addPanel(
       $.panel('Goroutines') +
       $.queryPanel(
-        'go_goroutines{namespace="$namespace",job=~"$job"}',
+        'go_goroutines{%s="$namespace",%s}' % [namespace, selector],
         '{{pod}}'
       )
     )
     .addPanel(
       $.panel('GC Time Quantiles') +
       $.queryPanel(
-        'go_gc_duration_seconds{namespace="$namespace",job=~"$job",kubernetes_pod_name=~"$pod"}',
+        'go_gc_duration_seconds{%s="$namespace",%s,kubernetes_pod_name=~"$pod"}' % [namespace, selector],
         '{{quantile}} {{pod}}'
       )
     ) +

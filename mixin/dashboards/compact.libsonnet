@@ -129,7 +129,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.resourceUtilizationRow()
+        g.resourceUtilizationRow(thanos.compact.namespaceLabel, thanos.compact.selector)
       ) +
       g.template('namespace', thanos.dashboard.namespaceMetric) +
       g.template('job', 'up', '%(namespaceLabel)s="$namespace",%(selector)s' % thanos.compact, true, '%(jobPrefix)s.*' % thanos.compact) +
