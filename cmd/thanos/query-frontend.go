@@ -126,7 +126,7 @@ func runQueryFrontend(
 		MaxCacheFreshness:   cfg.Limits.MaxCacheFreshness,
 	}, nil)
 	if err != nil {
-		return errors.Wrap(err, "initialiase limits")
+		return errors.Wrap(err, "initialize limits")
 	}
 
 	codec := queryfrontend.NewThanosCodec(cfg.partialResponseStrategy)

@@ -106,7 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := generate([]cache.Config{cache.Config{}}, "frontend_cache", *outputDir); err != nil {
+	if err := generate([]cache.Config{{}}, "frontend_cache", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "frontend_cache", "err", err)
 		os.Exit(1)
 	}

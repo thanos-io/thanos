@@ -35,6 +35,9 @@ type QueryRange struct {
 // Validate validates the config.
 func (cfg *QueryRange) Validate() error {
 	if cfg.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+		if cfg.SplitQueriesByInterval <= 0 {
+			return errors.New("split queries interval should be greater then 0")
+		}
 		if err := cfg.ResultsCacheConfig.CacheConfig.Validate(); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config")
 		}
@@ -50,7 +53,10 @@ type Config struct {
 
 // Validate validates the config.
 func (cfg *Config) Validate() error {
-	err := errors.Wrapf(cfg.QueryRange.Validate(), "query range config validation")
-	err = errors.Wrapf(cfg.Frontend.Validate(), "frontend config validation")
+	err := errors.Wrap(cfg.QueryRange.Validate(), "query range config validation")
+	if err != nil {
+		return err
+	}
+	err = errors.Wrap(cfg.Frontend.Validate(), "frontend config validation")
 	return err
 }

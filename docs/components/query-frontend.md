@@ -90,7 +90,7 @@ It uses the cortex cache module so supports all that is supported there.
 
 ### Slow Query Log
 
-Query Frontend supports `--query-frontend.log_queries_longer_than` flag to log queries running longer then some duration.
+Query Frontend supports `--query-frontend.log_queries_longer_than` flag to log queries running longer than some duration.
 
 ## Naming
 
