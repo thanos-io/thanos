@@ -8,8 +8,8 @@ trap 'kill 0' SIGTERM
 MINIO_ENABLED=${MINIO_ENABLED:-""}
 MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
 MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
-PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"./prometheus"}
-THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"./thanos"}
+PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
+THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
 S3_ENDPOINT=""
 
 if [ ! $(command -v "$PROMETHEUS_EXECUTABLE") ]; then
@@ -288,5 +288,7 @@ ${THANOS_EXECUTABLE} rule \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
   ${OBJSTORECFG} &
+
+echo "all started; waiting for signal"
 
 wait

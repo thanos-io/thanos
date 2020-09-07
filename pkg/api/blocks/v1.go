@@ -18,9 +18,10 @@ import (
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
 type BlocksAPI struct {
-	baseAPI    *api.BaseAPI
-	logger     log.Logger
-	blocksInfo *BlocksInfo
+	baseAPI          *api.BaseAPI
+	logger           log.Logger
+	globalBlocksInfo *BlocksInfo
+	loadedBlocksInfo *BlocksInfo
 }
 
 type BlocksInfo struct {
@@ -35,7 +36,11 @@ func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, flagsMap),
 		logger:  logger,
-		blocksInfo: &BlocksInfo{
+		globalBlocksInfo: &BlocksInfo{
+			Blocks: []metadata.Meta{},
+			Label:  label,
+		},
+		loadedBlocksInfo: &BlocksInfo{
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
@@ -51,19 +56,32 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 }
 
 func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError) {
-	return bapi.blocksInfo, nil, nil
+	viewParam := r.URL.Query().Get("view")
+	if viewParam == "loaded" {
+		return bapi.loadedBlocksInfo, nil, nil
+	}
+	return bapi.globalBlocksInfo, nil, nil
 }
 
-// Set updates the blocks' metadata in the API.
-func (bapi *BlocksAPI) Set(blocks []metadata.Meta, err error) {
+func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 	if err != nil {
 		// Last view is maintained.
-		bapi.blocksInfo.RefreshedAt = time.Now()
-		bapi.blocksInfo.Err = err
+		b.RefreshedAt = time.Now()
+		b.Err = err
 		return
 	}
 
-	bapi.blocksInfo.RefreshedAt = time.Now()
-	bapi.blocksInfo.Blocks = blocks
-	bapi.blocksInfo.Err = err
+	b.RefreshedAt = time.Now()
+	b.Blocks = blocks
+	b.Err = err
+}
+
+// SetGlobal updates the global blocks' metadata in the API.
+func (bapi *BlocksAPI) SetGlobal(blocks []metadata.Meta, err error) {
+	bapi.globalBlocksInfo.set(blocks, err)
+}
+
+// SetLoaded updates the local blocks' metadata in the API.
+func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
+	bapi.loadedBlocksInfo.set(blocks, err)
 }

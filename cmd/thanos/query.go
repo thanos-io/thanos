@@ -58,7 +58,7 @@ func registerQuery(app *extkingpin.App) {
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
-	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
@@ -69,6 +69,8 @@ func registerQuery(app *extkingpin.App) {
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
+
+	lookbackDelta := cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").Duration()
 
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
@@ -174,6 +176,7 @@ func registerQuery(app *extkingpin.App) {
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
+			*lookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
@@ -221,6 +224,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
+	lookbackDelta time.Duration,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
@@ -311,6 +315,7 @@ func runQuery(
 				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
 					return defaultEvaluationInterval.Milliseconds()
 				},
+				LookbackDelta: lookbackDelta,
 			},
 		)
 	)
