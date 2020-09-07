@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/weaveworks/common/user"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -36,7 +37,7 @@ type config struct {
 	http httpConfig
 	queryfrontend.Config
 
-	pathOrContent          extflag.PathOrContent
+	cachePathOrContent     extflag.PathOrContent
 	requestLoggingDecision string
 	// partialResponseStrategy is the default strategy used
 	// when parsing thanos query request.
@@ -66,7 +67,7 @@ func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
 	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.partialResponseStrategy)
 
-	cfg.pathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.cachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
 
 	cfg.http.registerFlag(cmd)
 
@@ -94,7 +95,17 @@ func runQueryFrontend(
 	cfg *config,
 	comp component.Component,
 ) error {
-	err := cfg.Validate()
+	cacheConfContentYaml, err := cfg.cachePathOrContent.Content()
+	if err != nil {
+		return err
+	}
+	if len(cacheConfContentYaml) > 0 {
+		if err := yaml.UnmarshalStrict(cacheConfContentYaml, &cfg.QueryRange.ResultsCacheConfig.CacheConfig); err != nil {
+			return errors.Wrap(err, "parsing cache config YAML file")
+		}
+	}
+
+	err = cfg.Validate()
 	if err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}

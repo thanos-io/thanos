@@ -3,374 +3,407 @@
 
 package e2e_test
 
-// func TestQueryFrontend(t *testing.T) {
-// 	t.Parallel()
+import (
+	"context"
+	"testing"
+	"time"
 
-// 	s, err := e2e.NewScenario("e2e_test_query_frontend")
-// 	testutil.Ok(t, err)
-// 	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/cortexproject/cortex/pkg/chunk/cache"
+	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 
-// 	now := time.Now()
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
+)
 
-// 	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
+func TestQueryFrontend(t *testing.T) {
+	t.Parallel()
 
-// 	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, "", "")
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(q))
+	s, err := e2e.NewScenario("e2e_test_query_frontend")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-// 	inMemoryCacheConfig := cache.ResponseCacheConfig{
-// 		Type: cache.INMEMORY,
-// 		Config: cache.InMemoryResponseCacheConfig{
-// 			MaxSizeItems: 1000,
-// 			Validity:     time.Hour,
-// 		},
-// 	}
+	now := time.Now()
 
-// 	queryFrontend, err := e2ethanos.NewQueryFrontend("1", "http://"+q.NetworkHTTPEndpoint(), inMemoryCacheConfig)
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-// 	t.Cleanup(cancel)
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, "", "")
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
 
-// 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	inMemoryCacheConfig := queryfrontend.Config{
+		Frontend: queryfrontend.Frontend{
+			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
+		},
+		QueryRange: queryfrontend.QueryRange{
+			ResultsCacheConfig: queryrange.ResultsCacheConfig{
+				CacheConfig: cache.Config{
+					EnableFifoCache: true,
+					Fifocache: cache.FifoCacheConfig{
+						MaxSizeItems: 1000,
+						Validity:     time.Hour,
+					},
+				},
+			},
+		},
+	}
 
-// 	// Ensure we can get the result from Querier first so that it
-// 	// doesn't need to retry when we send queries to the frontend later.
-// 	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
-// 		Deduplicate: false,
-// 	}, []model.Metric{
-// 		{
-// 			"job":        "myself",
-// 			"prometheus": "test",
-// 			"replica":    "0",
-// 		},
-// 	})
+	queryFrontend, err := e2ethanos.NewQueryFrontend("1", inMemoryCacheConfig)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
 
-// 	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2e.WithLabelMatchers(
-// 		labels.MustNewMatcher(labels.MatchEqual, "handler", "query")))
-// 	testutil.Ok(t, err)
-// 	testutil.Equals(t, 1, len(vals))
-// 	queryTimes := vals[0]
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	t.Cleanup(cancel)
 
-// 	t.Run("query frontend works for instant query", func(t *testing.T) {
-// 		queryAndAssertSeries(t, ctx, queryFrontend.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
-// 			Deduplicate: false,
-// 		}, []model.Metric{
-// 			{
-// 				"job":        "myself",
-// 				"prometheus": "test",
-// 				"replica":    "0",
-// 			},
-// 		})
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query"))),
-// 		)
+	// Ensure we can get the result from Querier first so that it
+	// doesn't need to retry when we send queries to the frontend later.
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "test",
+			"replica":    "0",
+		},
+	})
 
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(queryTimes+1),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query"))),
-// 		)
-// 	})
+	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2e.WithLabelMatchers(
+		labels.MustNewMatcher(labels.MatchEqual, "handler", "query")))
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, len(vals))
+	queryTimes := vals[0]
 
-// 	t.Run("query frontend works for labels APIs", func(t *testing.T) {
-// 		// LabelNames and LabelValues API should still work via query frontend.
-// 		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-// 			return len(res) > 0
-// 		})
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "label_names"))),
-// 		)
+	t.Run("query frontend works for instant query", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, queryFrontend.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "test",
+				"replica":    "0",
+			},
+		})
 
-// 		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-// 			return len(res) > 0
-// 		})
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "label_values"))),
-// 		)
-// 	})
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query"))),
+		)
 
-// 	t.Run("query frontend works for range query and it can cache results", func(t *testing.T) {
-// 		rangeQuery(
-// 			t,
-// 			ctx,
-// 			queryFrontend.HTTPEndpoint(),
-// 			queryUpWithoutInstance,
-// 			timestamp.FromTime(now.Add(-time.Hour)),
-// 			timestamp.FromTime(now.Add(time.Hour)),
-// 			14,
-// 			promclient.QueryOptions{},
-// 			func(res model.Matrix) bool {
-// 				return len(res) > 0
-// 			},
-// 		)
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(queryTimes+1),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query"))),
+		)
+	})
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_gets_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+	t.Run("query frontend works for labels APIs", func(t *testing.T) {
+		// LabelNames and LabelValues API should still work via query frontend.
+		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) > 0
+		})
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "label_names"))),
+		)
 
-// 		// Query is only 2h so it won't be split.
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
+		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) > 0
+		})
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "label_values"))),
+		)
+	})
 
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
-// 		)
-// 	})
+	t.Run("query frontend works for range query and it can cache results", func(t *testing.T) {
+		rangeQuery(
+			t,
+			ctx,
+			queryFrontend.HTTPEndpoint(),
+			queryUpWithoutInstance,
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(time.Hour)),
+			14,
+			promclient.QueryOptions{},
+			func(res model.Matrix) bool {
+				return len(res) > 0
+			},
+		)
 
-// 	t.Run("same range query, cache hit.", func(t *testing.T) {
-// 		// Run the same range query again, the result can be retrieved from cache directly.
-// 		rangeQuery(
-// 			t,
-// 			ctx,
-// 			queryFrontend.HTTPEndpoint(),
-// 			queryUpWithoutInstance,
-// 			timestamp.FromTime(now.Add(-time.Hour)),
-// 			timestamp.FromTime(now.Add(time.Hour)),
-// 			14,
-// 			promclient.QueryOptions{},
-// 			func(res model.Matrix) bool {
-// 				return len(res) > 0
-// 			},
-// 		)
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_gets_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+		// Query is only 2h so it won't be split.
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
 
-// 		// Query is only 2h so it won't be split.
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
+		)
+	})
 
-// 		// One more request is needed in order to satisfy the req range.
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
-// 		)
-// 	})
+	t.Run("same range query, cache hit.", func(t *testing.T) {
+		// Run the same range query again, the result can be retrieved from cache directly.
+		rangeQuery(
+			t,
+			ctx,
+			queryFrontend.HTTPEndpoint(),
+			queryUpWithoutInstance,
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(time.Hour)),
+			14,
+			promclient.QueryOptions{},
+			func(res model.Matrix) bool {
+				return len(res) > 0
+			},
+		)
 
-// 	t.Run("range query > 24h should be split", func(t *testing.T) {
-// 		rangeQuery(
-// 			t,
-// 			ctx,
-// 			queryFrontend.HTTPEndpoint(),
-// 			queryUpWithoutInstance,
-// 			timestamp.FromTime(now.Add(-time.Hour)),
-// 			timestamp.FromTime(now.Add(24*time.Hour)),
-// 			14,
-// 			promclient.QueryOptions{},
-// 			func(res model.Matrix) bool {
-// 				return len(res) > 0
-// 			},
-// 		)
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(3),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_hits"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_gets_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+		// Query is only 2h so it won't be split.
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
 
-// 		// Query is 25h so it will be split to 2 requests.
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "cortex_frontend_split_queries_total"))
+		// One more request is needed in order to satisfy the req range.
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
+		)
+	})
 
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(4),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
-// 		)
-// 	})
-// }
+	t.Run("range query > 24h should be split", func(t *testing.T) {
+		rangeQuery(
+			t,
+			ctx,
+			queryFrontend.HTTPEndpoint(),
+			queryUpWithoutInstance,
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(24*time.Hour)),
+			14,
+			promclient.QueryOptions{},
+			func(res model.Matrix) bool {
+				return len(res) > 0
+			},
+		)
 
-// func TestQueryFrontendMemcachedCache(t *testing.T) {
-// 	t.Parallel()
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(3),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_hits"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
-// 	s, err := e2e.NewScenario("e2e_test_query_frontend_memcached")
-// 	testutil.Ok(t, err)
-// 	t.Cleanup(e2ethanos.CleanScenario(t, s))
+		// Query is 25h so it will be split to 2 requests.
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "cortex_frontend_split_queries_total"))
 
-// 	now := time.Now()
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(4),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
+		)
+	})
+}
 
-// 	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
+func TestQueryFrontendMemcachedCache(t *testing.T) {
+	t.Parallel()
 
-// 	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, "", "")
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(q))
+	s, err := e2e.NewScenario("e2e_test_query_frontend_memcached")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-// 	memcached := e2ethanos.NewMemcached("1")
-// 	testutil.Ok(t, s.StartAndWaitReady(memcached))
+	now := time.Now()
 
-// 	memCachedConfig := cache.ResponseCacheConfig{
-// 		Type: cache.MEMCACHED,
-// 		Config: cache.MemcachedResponseCacheConfig{
-// 			Memcached: cacheutil.MemcachedClientConfig{
-// 				Addresses:                 []string{memcached.NetworkEndpoint(11211)},
-// 				MaxIdleConnections:        100,
-// 				MaxAsyncConcurrency:       20,
-// 				MaxGetMultiConcurrency:    100,
-// 				MaxGetMultiBatchSize:      0,
-// 				Timeout:                   time.Minute,
-// 				MaxAsyncBufferSize:        10000,
-// 				DNSProviderUpdateInterval: 10 * time.Second,
-// 			},
-// 		},
-// 	}
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
 
-// 	queryFrontend, err := e2ethanos.NewQueryFrontend("1", "http://"+q.NetworkHTTPEndpoint(), memCachedConfig)
-// 	testutil.Ok(t, err)
-// 	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, "", "")
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-// 	t.Cleanup(cancel)
+	memcached := e2ethanos.NewMemcached("1")
+	testutil.Ok(t, s.StartAndWaitReady(memcached))
 
-// 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	memCachedConfig := queryfrontend.Config{
+		Frontend: queryfrontend.Frontend{
+			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
+		},
+		QueryRange: queryfrontend.QueryRange{
+			ResultsCacheConfig: queryrange.ResultsCacheConfig{
+				CacheConfig: cache.Config{
+					Memcache: cache.MemcachedConfig{
+						BatchSize:   20,
+						Parallelism: 100,
+					},
+					MemcacheClient: cache.MemcachedClientConfig{
+						Addresses:      memcached.NetworkEndpoint(11211),
+						MaxIdleConns:   100,
+						UpdateInterval: 10 * time.Second,
+						Timeout:        time.Minute,
+					},
+				},
+			},
+		},
+	}
 
-// 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_memcached_client_info"))
+	queryFrontend, err := e2ethanos.NewQueryFrontend("1", memCachedConfig)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
 
-// 	// Ensure we can get the result from Querier first so that it
-// 	// doesn't need to retry when we send queries to the frontend later.
-// 	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
-// 		Deduplicate: false,
-// 	}, []model.Metric{
-// 		{
-// 			"job":        "myself",
-// 			"prometheus": "test",
-// 			"replica":    "0",
-// 		},
-// 	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	t.Cleanup(cancel)
 
-// 	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2e.WithLabelMatchers(
-// 		labels.MustNewMatcher(labels.MatchEqual, "handler", "query")))
-// 	testutil.Ok(t, err)
-// 	testutil.Equals(t, 1, len(vals))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-// 	t.Run("query frontend works for range query and it can cache results", func(t *testing.T) {
-// 		rangeQuery(
-// 			t,
-// 			ctx,
-// 			queryFrontend.HTTPEndpoint(),
-// 			queryUpWithoutInstance,
-// 			timestamp.FromTime(now.Add(-time.Hour)),
-// 			timestamp.FromTime(now.Add(time.Hour)),
-// 			14,
-// 			promclient.QueryOptions{},
-// 			func(res model.Matrix) bool {
-// 				return len(res) > 0
-// 			},
-// 		)
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_memcached_client_info"))
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
-// 		)
+	// Ensure we can get the result from Querier first so that it
+	// doesn't need to retry when we send queries to the frontend later.
+	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "test",
+			"replica":    "0",
+		},
+	})
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"thanos_memcached_operations_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "getmulti"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"thanos_memcached_operations_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "set"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_cache_memcached_requests_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_cache_memcached_hits_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_memcached_operation_failures_total"))
+	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2e.WithLabelMatchers(
+		labels.MustNewMatcher(labels.MatchEqual, "handler", "query")))
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, len(vals))
 
-// 		// Query is only 2h so it won't be split.
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
+	t.Run("query frontend works for range query and it can cache results", func(t *testing.T) {
+		rangeQuery(
+			t,
+			ctx,
+			queryFrontend.HTTPEndpoint(),
+			queryUpWithoutInstance,
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(time.Hour)),
+			14,
+			promclient.QueryOptions{},
+			func(res model.Matrix) bool {
+				return len(res) > 0
+			},
+		)
 
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(1),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
-// 		)
-// 	})
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
+		)
 
-// 	t.Run("same range query, cache hit.", func(t *testing.T) {
-// 		// Run the same range query again, the result can be retrieved from cache directly.
-// 		rangeQuery(
-// 			t,
-// 			ctx,
-// 			queryFrontend.HTTPEndpoint(),
-// 			queryUpWithoutInstance,
-// 			timestamp.FromTime(now.Add(-time.Hour)),
-// 			timestamp.FromTime(now.Add(time.Hour)),
-// 			14,
-// 			promclient.QueryOptions{},
-// 			func(res model.Matrix) bool {
-// 				return len(res) > 0
-// 			},
-// 		)
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"thanos_memcached_operations_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "getmulti"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"thanos_memcached_operations_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "set"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_cache_memcached_requests_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_cache_memcached_hits_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_memcached_operation_failures_total"))
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"thanos_query_frontend_queries_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
-// 		)
+		// Query is only 2h so it won't be split.
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
 
-// 		// Query is only 2h so it won't be split.
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(1),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
+		)
+	})
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"thanos_memcached_operations_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "getmulti"))),
-// 		)
-// 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"thanos_memcached_operations_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "set"))),
-// 		)
+	t.Run("same range query, cache hit.", func(t *testing.T) {
+		// Run the same range query again, the result can be retrieved from cache directly.
+		rangeQuery(
+			t,
+			ctx,
+			queryFrontend.HTTPEndpoint(),
+			queryUpWithoutInstance,
+			timestamp.FromTime(now.Add(-time.Hour)),
+			timestamp.FromTime(now.Add(time.Hour)),
+			14,
+			promclient.QueryOptions{},
+			func(res model.Matrix) bool {
+				return len(res) > 0
+			},
+		)
 
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_cache_memcached_requests_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_cache_memcached_hits_total"))
-// 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_memcached_operation_failures_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"thanos_query_frontend_queries_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "op", "query_range"))),
+		)
 
-// 		// One more request is needed in order to satisfy the req range.
-// 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-// 			e2e.Equals(2),
-// 			[]string{"http_requests_total"},
-// 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
-// 		)
-// 	})
-// }
+		// Query is only 2h so it won't be split.
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
+
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"thanos_memcached_operations_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "getmulti"))),
+		)
+		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"thanos_memcached_operations_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "operation", "set"))),
+		)
+
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_cache_memcached_requests_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_cache_memcached_hits_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "thanos_memcached_operation_failures_total"))
+
+		// One more request is needed in order to satisfy the req range.
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(
+			e2e.Equals(2),
+			[]string{"http_requests_total"},
+			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "handler", "query_range"))),
+		)
+	})
+}

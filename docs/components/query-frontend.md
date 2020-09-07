@@ -49,54 +49,40 @@ It uses the cortex cache module so supports all that is supported there.
 
 [embedmd]:# (../flags/config_frontend_cache.txt yaml)
 ```yaml
-- limits:
-    max_query_length: 0s
-    max_query_parallelism: 0
-    max_cache_freshness: 0s
-  queryrange:
-    split_queries_by_interval: 0s
-    max_retries: 0
-    results_cache:
-      cache:
-        enable_fifocache: false
-        default_validity: 0s
-        background:
-          writeback_goroutines: 0
-          writeback_buffer: 0
-        memcached:
-          expiration: 0s
-          batch_size: 0
-          parallelism: 0
-        memcached_client:
-          host: ""
-          service: ""
-          addresses: ""
-          timeout: 0s
-          max_idle_conns: 0
-          update_interval: 0s
-          consistent_hash: false
-        redis:
-          endpoint: ""
-          timeout: 0s
-          expiration: 0s
-          max_idle_conns: 0
-          max_active_conns: 0
-          password: ""
-          enable_tls: false
-          idle_timeout: 0s
-          wait_on_pool_exhaustion: false
-          max_conn_lifetime: 0s
-        fifocache:
-          max_size_bytes: ""
-          max_size_items: 0
-          validity: 0s
-          size: 0
-        prefix: ""
-      max_freshness: 0s
-  frontend:
-    compress_responses: false
-    downstream_url: ""
-    log_queries_longer_than: 0s
+- enable_fifocache: false
+  default_validity: 0s
+  background:
+    writeback_goroutines: 0
+    writeback_buffer: 0
+  memcached:
+    expiration: 0s
+    batch_size: 0
+    parallelism: 0
+  memcached_client:
+    host: ""
+    service: ""
+    addresses: ""
+    timeout: 0s
+    max_idle_conns: 0
+    update_interval: 0s
+    consistent_hash: false
+  redis:
+    endpoint: ""
+    timeout: 0s
+    expiration: 0s
+    max_idle_conns: 0
+    max_active_conns: 0
+    password: ""
+    enable_tls: false
+    idle_timeout: 0s
+    wait_on_pool_exhaustion: false
+    max_conn_lifetime: 0s
+  fifocache:
+    max_size_bytes: ""
+    max_size_items: 0
+    validity: 0s
+    size: 0
+  prefix: ""
 ```
 
 ### Slow Query Log

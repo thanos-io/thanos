@@ -59,10 +59,10 @@ func NewTripperWare(
 		)
 	}
 
-	if queryRange.ResultsCacheConfig != nil {
+	if queryRange.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			*queryRange.ResultsCacheConfig,
+			queryRange.ResultsCacheConfig,
 			newThanosCacheKeyGenerator(queryRange.SplitQueriesByInterval),
 			limits,
 			codec,

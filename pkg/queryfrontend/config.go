@@ -27,14 +27,14 @@ func (cfg *Frontend) Validate() error {
 }
 
 type QueryRange struct {
-	SplitQueriesByInterval time.Duration                  `yaml:"split_queries_by_interval"`
-	MaxRetries             int                            `yaml:"max_retries"`
-	ResultsCacheConfig     *queryrange.ResultsCacheConfig `yaml:"results_cache"`
+	SplitQueriesByInterval time.Duration                 `yaml:"split_queries_by_interval"`
+	MaxRetries             int                           `yaml:"max_retries"`
+	ResultsCacheConfig     queryrange.ResultsCacheConfig `yaml:"results_cache"`
 }
 
 // Validate validates the config.
 func (cfg *QueryRange) Validate() error {
-	if cfg.ResultsCacheConfig != nil {
+	if cfg.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
 		if err := cfg.ResultsCacheConfig.CacheConfig.Validate(); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config")
 		}
@@ -53,14 +53,4 @@ func (cfg *Config) Validate() error {
 	err := errors.Wrapf(cfg.QueryRange.Validate(), "query range config validation")
 	err = errors.Wrapf(cfg.Frontend.Validate(), "frontend config validation")
 	return err
-}
-
-func DefaultConfig() Config {
-	return Config{
-		Limits: Limits{},
-		QueryRange: QueryRange{
-			ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
-		},
-		Frontend: Frontend{},
-	}
 }

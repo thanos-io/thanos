@@ -319,7 +319,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		MaxSourceResolution: 1 * hour,
 	}
 
-	cacheConf := &queryrange.ResultsCacheConfig{
+	cacheConf := queryrange.ResultsCacheConfig{
 		CacheConfig: cortexcache.Config{
 			EnableFifoCache: true,
 			Fifocache: cortexcache.FifoCacheConfig{

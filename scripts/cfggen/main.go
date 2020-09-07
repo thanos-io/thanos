@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/fatih/structtag"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -27,7 +28,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -106,8 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	frontendCfg := queryfrontend.DefaultConfig()
-	if err := generate([]queryfrontend.Config{frontendCfg}, "frontend_cache", *outputDir); err != nil {
+	if err := generate([]cache.Config{cache.Config{}}, "frontend_cache", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "frontend_cache", "err", err)
 		os.Exit(1)
 	}
