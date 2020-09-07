@@ -123,7 +123,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.resourceUtilizationRow()
       ) +
-      g.template('namespace', thanos.dashboard.namespaceQuery) +
+      g.template('namespace', thanos.dashboard.namespaceMetric) +
       g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule) +
       g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.rule, true, '.*'),
 

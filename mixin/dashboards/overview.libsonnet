@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   grafanaDashboards+:: {
     'overview.json':
       g.dashboard(thanos.overview.title) +
-      g.template('namespace', thanos.dashboard.namespaceQuery),
+      g.template('namespace', thanos.dashboard.namespaceMetric),
   },
 } +
 {
