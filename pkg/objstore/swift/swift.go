@@ -106,7 +106,7 @@ func configFromEnv() (*Config, error) {
 	return &config, nil
 }
 
-func connectionFromConfig(sc *Config) (*swift.Connection, error) {
+func connectionFromConfig(sc *Config) *swift.Connection {
 	connection := swift.Connection{
 		Domain:         sc.DomainName,
 		DomainId:       sc.DomainId,
@@ -124,7 +124,7 @@ func connectionFromConfig(sc *Config) (*swift.Connection, error) {
 		ConnectTimeout: time.Duration(sc.ConnectTimeout),
 		Timeout:        time.Duration(sc.Timeout),
 	}
-	return &connection, nil
+	return &connection
 }
 
 type Container struct {
@@ -160,11 +160,7 @@ func ensureContainer(connection *swift.Connection, name string, createIfNotExist
 }
 
 func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool) (*Container, error) {
-	connection, err := connectionFromConfig(sc)
-	if err != nil {
-		return nil, errors.Wrap(err, "swift load config")
-	}
-
+	connection := connectionFromConfig(sc)
 	if err := connection.Authenticate(); err != nil {
 		return nil, errors.Wrap(err, "swift authentication")
 	}
