@@ -15,7 +15,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 :warning: **WARNING** :warning: Thanos Rule's `/api/v1/rules` endpoint no longer returns the old, deprecated `partial_response_strategy`. The old, deprecated value has been fixed to `WARN` for quite some time. _Please_ use `partialResponseStrategy`.
 
-:warning: **WARNING** :warning: The `sse_encryption` value is now deprecated in favour of `sse_config`. If you used `sse_encryption`, the migration strategy is to set up the following block:
+:warning: **WARNING** :warning: The `encryption_sse` value is now deprecated in favour of `sse_config`. If you used `encryption_sse`, the migration strategy is to set up the following block:
 
 ```yaml
 
