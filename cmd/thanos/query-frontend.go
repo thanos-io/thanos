@@ -17,12 +17,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/weaveworks/common/user"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -44,7 +44,7 @@ type config struct {
 	partialResponseStrategy bool
 }
 
-func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
+func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &config{}
@@ -82,9 +82,9 @@ func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.requestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
-	}
+	})
 }
 
 func runQueryFrontend(

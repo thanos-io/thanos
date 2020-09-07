@@ -29,7 +29,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
@@ -58,7 +58,7 @@ import (
 )
 
 // registerRule registers a rule command.
-func registerRule(m map[string]setupFunc, app *kingpin.Application) {
+func registerRule(app *extkingpin.App) {
 	comp := component.Rule
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
@@ -125,7 +125,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -173,8 +173,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
-		flagsMap := getFlagsMap(cmd.Model().Flags)
-
 		return runRule(g,
 			logger,
 			reg,
@@ -212,9 +210,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*dnsSDResolver,
 			comp,
 			*allowOutOfOrderUpload,
-			flagsMap,
+			getFlagsMap(cmd.Flags()),
 		)
-	}
+	})
 }
 
 // RuleMetrics defines thanos rule metrics.

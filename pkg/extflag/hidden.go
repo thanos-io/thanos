@@ -7,13 +7,13 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-// HiddenCmdClause returns CmdClause that hides created flags.
-func HiddenCmdClause(c CmdClause) CmdClause {
+// HiddenCmdClause returns FlagClause that hides created flags.
+func HiddenCmdClause(c FlagClause) FlagClause {
 	return hidden{c: c}
 }
 
 type hidden struct {
-	c CmdClause
+	c FlagClause
 }
 
 func (h hidden) Flag(name, help string) *kingpin.FlagClause {

@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -37,7 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -78,16 +78,14 @@ func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
+func registerCompact(app *extkingpin.App) {
 	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
-	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		flagsMap := getFlagsMap(cmd.Model().Flags)
-
-		return runCompact(g, logger, tracer, reg, component.Compact, *conf, flagsMap)
-	}
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
+	})
 }
 
 func runCompact(
@@ -468,7 +466,7 @@ type compactConfig struct {
 	label                                          string
 }
 
-func (cc *compactConfig) registerFlag(cmd *kingpin.CmdClause) {
+func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",

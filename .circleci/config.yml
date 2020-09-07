@@ -4,7 +4,7 @@ version: 2
 defaults: &defaults
   docker:
     # Built by Thanos make docker-ci
-    - image: &default-docker-image quay.io/thanos/thanos-ci:v1.2-go1.14.2-node
+    - image: &default-docker-image quay.io/thanos/thanos-ci:v1.2-go1.15-node
 
 jobs:
   test:
@@ -30,6 +30,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
+            GOBIN: "/go/bin"
             THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
@@ -66,6 +67,8 @@ jobs:
   publish_master:
     <<: *defaults
     working_directory: /go/src/github.com/thanos-io/thanos
+    environment:
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:

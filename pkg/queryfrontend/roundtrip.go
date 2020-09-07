@@ -5,6 +5,7 @@ package queryfrontend
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
@@ -52,10 +53,14 @@ func NewTripperWare(
 	)
 
 	if queryRange.SplitQueriesByInterval != 0 {
+		// TODO(yeya24): make interval dynamic in next pr.
+		queryIntervalFn := func(_ queryrange.Request) time.Duration {
+			return queryRange.SplitQueriesByInterval
+		}
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", metrics),
-			queryrange.SplitByIntervalMiddleware(queryRange.SplitQueriesByInterval, limits, codec, reg),
+			queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 		)
 	}
 
@@ -68,6 +73,7 @@ func NewTripperWare(
 			codec,
 			cacheExtractor,
 			nil,
+			shouldCache,
 			reg,
 		)
 		if err != nil {
@@ -107,4 +113,15 @@ func NewTripperWare(
 			return next.RoundTrip(r)
 		})
 	}, nil
+}
+
+// Don't go to response cache if StoreMatchers are set.
+func shouldCache(r queryrange.Request) bool {
+	if thanosReq, ok := r.(*ThanosRequest); ok {
+		if len(thanosReq.StoreMatchers) > 0 {
+			return false
+		}
+	}
+
+	return !r.GetCachingOptions().Disabled
 }

@@ -2,7 +2,6 @@
 title: Binary index-header
 type: docs
 menu: operating
-slug: /binary-index-header.md
 ---
 
 # Binary index-header

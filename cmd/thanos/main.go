@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
 	"go.uber.org/automaxprocs/maxprocs"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -32,7 +33,31 @@ const (
 	logFormatJson   = "json"
 )
 
-type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, <-chan struct{}, bool) error
+func setupLogger(logLevel, logFormat, debugName string) log.Logger {
+	var lvl level.Option
+	switch logLevel {
+	case "error":
+		lvl = level.AllowError()
+	case "warn":
+		lvl = level.AllowWarn()
+	case "info":
+		lvl = level.AllowInfo()
+	case "debug":
+		lvl = level.AllowDebug()
+	default:
+		panic("unexpected log level")
+	}
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	if logFormat == logFormatJson {
+		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+	}
+	logger = level.NewFilter(logger, lvl)
+
+	if debugName != "" {
+		logger = log.With(logger, "name", debugName)
+	}
+	return log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+}
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -40,75 +65,34 @@ func main() {
 		runtime.SetBlockProfileRate(10)
 	}
 
-	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
-
-	app.Version(version.Print("thanos"))
-	app.HelpFlag.Short('h')
-
+	app := extkingpin.NewApp(kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus").Version(version.Print("thanos")))
 	debugName := app.Flag("debug.name", "Name to add as prefix to log lines.").Hidden().String()
-
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
 	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
-
 	tracingConfig := regCommonTracingFlags(app)
 
-	cmds := map[string]setupFunc{}
-	registerSidecar(cmds, app)
-	registerStore(cmds, app)
-	registerQuery(cmds, app)
-	registerRule(cmds, app)
-	registerCompact(cmds, app)
-	registerTools(cmds, app)
-	registerReceive(cmds, app)
-	registerQueryFrontend(cmds, app)
+	registerSidecar(app)
+	registerStore(app)
+	registerQuery(app)
+	registerRule(app)
+	registerCompact(app)
+	registerTools(app)
+	registerReceive(app)
+	registerQueryFrontend(app)
 
-	cmd, err := app.Parse(os.Args[1:])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments: %v", os.Args))
-		app.Usage(os.Args[1:])
-		os.Exit(2)
-	}
-
-	var logger log.Logger
-	{
-		var lvl level.Option
-		switch *logLevel {
-		case "error":
-			lvl = level.AllowError()
-		case "warn":
-			lvl = level.AllowWarn()
-		case "info":
-			lvl = level.AllowInfo()
-		case "debug":
-			lvl = level.AllowDebug()
-		default:
-			panic("unexpected log level")
-		}
-		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-		if *logFormat == logFormatJson {
-			logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
-		}
-		logger = level.NewFilter(logger, lvl)
-
-		if *debugName != "" {
-			logger = log.With(logger, "name", *debugName)
-		}
-
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-	}
-
-	loggerAdapter := func(template string, args ...interface{}) {
-		level.Debug(logger).Log("msg", fmt.Sprintf(template, args))
-	}
+	cmd, setup := app.Parse()
+	logger := setupLogger(*logLevel, *logFormat, *debugName)
 
 	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
 	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
-	undo, err := maxprocs.Set(maxprocs.Logger(loggerAdapter))
+	undo, err := maxprocs.Set(maxprocs.Logger(func(template string, args ...interface{}) {
+		level.Debug(logger).Log("msg", fmt.Sprintf(template, args))
+	}))
 	defer undo()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
+		level.Warn(logger).Log("warn", errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
 	}
 
 	metrics := prometheus.NewRegistry()
@@ -120,6 +104,7 @@ func main() {
 
 	// Some packages still use default Register. Replace to have those metrics.
 	prometheus.DefaultRegisterer = metrics
+
 	// Memberlist uses go-metrics.
 	sink, err := gprom.NewPrometheusSink()
 	if err != nil {
@@ -135,13 +120,14 @@ func main() {
 
 	var g run.Group
 	var tracer opentracing.Tracer
-
 	// Setup optional tracing.
 	{
-		ctx := context.Background()
+		var (
+			ctx             = context.Background()
+			closer          io.Closer
+			confContentYaml []byte
+		)
 
-		var closer io.Closer
-		var confContentYaml []byte
 		confContentYaml, err = tracingConfig.Content()
 		if err != nil {
 			level.Error(logger).Log("msg", "getting tracing config failed", "err", err)
@@ -177,11 +163,10 @@ func main() {
 			cancel()
 		})
 	}
-
 	// Create a signal channel to dispatch reload events to sub-commands.
 	reloadCh := make(chan struct{}, 1)
 
-	if err := cmds[cmd](&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
+	if err := setup(&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
 		// Use %+v for github.com/pkg/errors error to print with stack.
 		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "preparing %s command failed", cmd)))
 		os.Exit(1)

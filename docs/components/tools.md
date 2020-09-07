@@ -55,6 +55,9 @@ Subcommands:
   tools bucket downsample [<flags>]
     continuously downsamples blocks in an object store bucket
 
+  tools bucket cleanup [<flags>]
+    Cleans up all blocks marked for deletion
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -133,6 +136,9 @@ Subcommands:
 
   tools bucket downsample [<flags>]
     continuously downsamples blocks in an object store bucket
+
+  tools bucket cleanup [<flags>]
+    Cleans up all blocks marked for deletion
 
 
 ```

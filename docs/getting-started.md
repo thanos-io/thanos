@@ -3,7 +3,6 @@ title: Getting Started
 type: docs
 menu: thanos
 weight: 1
-slug: /getting-started.md
 ---
 
 # Getting started

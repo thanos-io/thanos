@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -71,7 +72,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       input,
 		CfgOutputFile: output,
-		RuleDirs:      nil,
+		WatchedDirs:   nil,
 		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
 		RetryInterval: 100 * time.Millisecond,
 	})
@@ -204,7 +205,7 @@ func TestReloader_RuleApply(t *testing.T) {
 		ReloadURL:     reloadURL,
 		CfgFile:       "",
 		CfgOutputFile: "",
-		RuleDirs:      []string{dir, path.Join(dir, "rule-dir")},
+		WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
 		WatchInterval: 100 * time.Millisecond,
 		RetryInterval: 100 * time.Millisecond,
 	})
@@ -224,10 +225,12 @@ func TestReloader_RuleApply(t *testing.T) {
 		reloadsSeen := 0
 		init := false
 		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(300 * time.Millisecond):
+			case <-time.After(500 * time.Millisecond):
 			}
 
 			rel := reloads.Load().(int)
@@ -235,7 +238,6 @@ func TestReloader_RuleApply(t *testing.T) {
 				continue
 			}
 			init = true
-
 			reloadsSeen = rel
 
 			t.Log("Performing step number", rel)

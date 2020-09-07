@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -86,12 +87,11 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	codec := NewThanosCodec(true)
 
 	for _, tc := range []struct {
-		name             string
-		maxRetries       int
-		req              queryrange.Request
-		handlerAndResult func() (*int, http.Handler)
-		expectedError    bool
-		expected         int
+		name       string
+		maxRetries int
+		req        queryrange.Request
+		fail       bool
+		expected   int
 	}{
 		{
 			name:       "not query range, retry won't be triggered 1.",
@@ -102,10 +102,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			handlerAndResult: counter,
-			// Not go through tripperware so no error.
-			expectedError: false,
-			expected:      1,
+			expected: 1,
 		},
 		{
 			name:       "not query range, retry won't be triggered 2.",
@@ -116,34 +113,28 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			handlerAndResult: counter,
-			// Not go through tripperware so no error.
-			expectedError: false,
-			expected:      1,
+			expected: 1,
 		},
 		{
-			name:             "no retry, get counter value 1",
-			maxRetries:       0,
-			req:              testRequest,
-			handlerAndResult: counter,
-			expectedError:    true,
-			expected:         1,
+			name:       "no retry, get counter value 1",
+			maxRetries: 0,
+			req:        testRequest,
+			fail:       true,
+			expected:   1,
 		},
 		{
-			name:             "retry set to 1",
-			maxRetries:       1,
-			req:              testRequest,
-			handlerAndResult: counter,
-			expectedError:    true,
-			expected:         1,
+			name:       "retry set to 1",
+			maxRetries: 1,
+			req:        testRequest,
+			fail:       true,
+			expected:   1,
 		},
 		{
-			name:             "retry set to 3",
-			maxRetries:       3,
-			req:              testRequest,
-			handlerAndResult: counter,
-			expectedError:    true,
-			expected:         3,
+			name:       "retry set to 3",
+			maxRetries: 3,
+			fail:       true,
+			req:        testRequest,
+			expected:   3,
 		},
 	} {
 
@@ -160,7 +151,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 
 			rt, err := newFakeRoundTripper()
 			testutil.Ok(t, err)
-			res, handler := tc.handlerAndResult()
+			res, handler := promqlResults(tc.fail)
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
@@ -168,7 +159,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
-			testutil.Equals(t, tc.expectedError, err != nil)
+			testutil.Equals(t, tc.fail, err != nil)
 
 			testutil.Equals(t, tc.expected, *res)
 		})
@@ -188,12 +179,10 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	codec := NewThanosCodec(true)
 
 	for _, tc := range []struct {
-		name             string
-		splitInterval    time.Duration
-		req              queryrange.Request
-		handlerAndResult func() (*int, http.Handler)
-		expectError      bool
-		expected         int
+		name          string
+		splitInterval time.Duration
+		req           queryrange.Request
+		expected      int
 	}{
 		{
 			name: "non query range request won't be split 1",
@@ -203,10 +192,8 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			splitInterval:    time.Hour,
-			handlerAndResult: counter,
-			expectError:      false,
-			expected:         1,
+			splitInterval: time.Hour,
+			expected:      1,
 		},
 		{
 			name: "non query range request won't be split 2",
@@ -216,42 +203,32 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			splitInterval:    time.Hour,
-			handlerAndResult: counter,
-			expectError:      false,
-			expected:         1,
+			splitInterval: time.Hour,
+			expected:      1,
 		},
 		{
-			name:             "split interval == 0, disable split",
-			req:              testRequest,
-			splitInterval:    0,
-			handlerAndResult: counter,
-			expectError:      true,
-			expected:         1,
+			name:          "split interval == 0, disable split",
+			req:           testRequest,
+			splitInterval: 0,
+			expected:      1,
 		},
 		{
-			name:             "won't be split. Interval == time range",
-			req:              testRequest,
-			splitInterval:    2 * time.Hour,
-			handlerAndResult: counter,
-			expectError:      true,
-			expected:         1,
+			name:          "won't be split. Interval == time range",
+			req:           testRequest,
+			splitInterval: 2 * time.Hour,
+			expected:      1,
 		},
 		{
-			name:             "won't be split. Interval > time range",
-			req:              testRequest,
-			splitInterval:    day,
-			handlerAndResult: counter,
-			expectError:      true,
-			expected:         1,
+			name:          "won't be split. Interval > time range",
+			req:           testRequest,
+			splitInterval: day,
+			expected:      1,
 		},
 		{
-			name:             "split to 2 requests",
-			req:              testRequest,
-			splitInterval:    1 * time.Hour,
-			handlerAndResult: counter,
-			expectError:      true,
-			expected:         2,
+			name:          "split to 2 requests",
+			req:           testRequest,
+			splitInterval: 1 * time.Hour,
+			expected:      2,
 		},
 	} {
 
@@ -265,7 +242,8 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 
 			rt, err := newFakeRoundTripper()
 			testutil.Ok(t, err)
-			res, handler := tc.handlerAndResult()
+			defer rt.Close()
+			res, handler := promqlResults(false)
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
@@ -273,7 +251,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
-			testutil.Equals(t, tc.expectError, err != nil)
+			testutil.Ok(t, err)
 
 			testutil.Equals(t, tc.expected, *res)
 		})
@@ -292,7 +270,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Non query range request, won't be cached.
-	testRequest2 := &ThanosRequest{
+	testRequestInstant := &ThanosRequest{
 		Path:  "/api/v1/query",
 		Start: 0,
 		End:   2 * hour,
@@ -301,7 +279,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// but still in the same downsampling level, so it will be cached in this case.
-	testRequest3 := &ThanosRequest{
+	testRequestSameLevelDownsampling := &ThanosRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -311,12 +289,22 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// and downsampling level so it won't be cached in this case.
-	testRequest4 := &ThanosRequest{
+	testRequestHigherLevelDownsampling := &ThanosRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * hour,
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 1 * seconds,
+		StoreMatchers:       [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}}},
 	}
 
 	cacheConf := queryrange.ResultsCacheConfig{
@@ -343,7 +331,8 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	rt, err := newFakeRoundTripper()
 	testutil.Ok(t, err)
-	res, handler := promqlResults()
+	defer rt.Close()
+	res, handler := promqlResults(false)
 	rt.setHandler(handler)
 
 	for _, tc := range []struct {
@@ -354,10 +343,11 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "non query range request won't be cached", req: testRequest2, expected: 2},
-		{name: "do it again", req: testRequest2, expected: 3},
-		{name: "different max source resolution but still same level", req: testRequest3, expected: 3},
-		{name: "different max source resolution and different level", req: testRequest4, expected: 4},
+		{name: "non query range request won't be cached", req: testRequestInstant, expected: 2},
+		{name: "do it again", req: testRequestInstant, expected: 3},
+		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 3},
+		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 4},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 5},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosRequest{
@@ -366,7 +356,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 				End:   timestamp.FromTime(now.Add(time.Hour)),
 				Step:  10 * seconds,
 			},
-			expected: 5,
+			expected: 6,
 		},
 		{
 			name: "same query as the previous one",
@@ -376,7 +366,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 				End:   timestamp.FromTime(now.Add(time.Hour)),
 				Step:  10 * seconds,
 			},
-			expected: 6,
+			expected: 7,
 		},
 	} {
 
@@ -395,21 +385,9 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 }
 
-// counter is a mock handler used to test retry and split.
-// Copied from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L526.
-func counter() (*int, http.Handler) {
-	count := 0
-	var lock sync.Mutex
-	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lock.Lock()
-		defer lock.Unlock()
-		count++
-	})
-}
-
 // promqlResults is a mock handler used to test cache middleware.
 // Modified from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L547.
-func promqlResults() (*int, http.Handler) {
+func promqlResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
 	q := queryrange.PrometheusResponse{
@@ -431,6 +409,11 @@ func promqlResults() (*int, http.Handler) {
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lock.Lock()
 		defer lock.Unlock()
+
+		// Set fail in the response code to test retry.
+		if fail {
+			w.WriteHeader(500)
+		}
 		if err := json.NewEncoder(w).Encode(q); err != nil {
 			panic(err)
 		}

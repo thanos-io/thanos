@@ -5,7 +5,6 @@ package rules
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -44,7 +43,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		File:                    g.OriginalFile,
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
-		// https://github.com/gogo/protobuf/issues/519
+		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
 		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
 	}
@@ -69,7 +68,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					// https://github.com/gogo/protobuf/issues/519
+					// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		case *rules.RecordingRule:
@@ -81,7 +80,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					// https://github.com/gogo/protobuf/issues/519
+					// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		default:
@@ -306,7 +305,7 @@ type configGroups struct {
 }
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
-// special field in configRuleAdapter file.
+// special field in configGroups.configRuleAdapter struct.
 func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
 		errs            tsdberrors.MultiError
@@ -340,7 +339,6 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 		for _, rg := range rg.Groups {
 			groupsByStrategy[*rg.PartialResponseStrategy] = append(groupsByStrategy[*rg.PartialResponseStrategy], rg)
 		}
-
 		for s, rg := range groupsByStrategy {
 			b, err := yaml.Marshal(configGroups{Groups: rg})
 			if err != nil {
@@ -348,12 +346,17 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 				continue
 			}
 
-			newFn := filepath.Join(m.workDir, fmt.Sprintf("%s.%x.%s", filepath.Base(fn), sha256.Sum256([]byte(fn)), s.String()))
-			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
-				errs.Add(errors.Wrap(err, newFn))
+			// Use full file name appending to work dir, so we can differentiate between different dirs and same filenames(!).
+			// This will be also used as key for file group name.
+			newFn := filepath.Join(m.workDir, s.String(), strings.TrimLeft(fn, m.workDir))
+			if err := os.MkdirAll(filepath.Dir(newFn), os.ModePerm); err != nil {
+				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
 			}
-
+			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
+				errs.Add(errors.Wrapf(err, "write file %v", newFn))
+				continue
+			}
 			filesByStrategy[s] = append(filesByStrategy[s], newFn)
 			ruleFiles[newFn] = fn
 		}
