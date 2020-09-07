@@ -44,8 +44,10 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 ### Caching
 
 Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
-Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
+Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers.
+Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
 It uses the cortex cache module so supports all that is supported there.
+For more details about each configuration parameter visit the [cortex documentation](https://cortexmetrics.io/docs/configuration/configuration-file/).
 
 [embedmd]:# (../flags/config_frontend_cache.txt yaml)
 ```yaml
