@@ -148,8 +148,14 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
-				day, tc.maxRetries, nil, log.NewNopLogger())
+			tpw, err := NewTripperWare(
+				QueryRange{
+					SplitQueriesByInterval: day,
+					MaxRetries:             tc.maxRetries,
+				},
+				&fakeLimits{},
+				codec, nil, nil, log.NewNopLogger(),
+			)
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
@@ -250,8 +256,11 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
-				tc.splitInterval, 0, nil, log.NewNopLogger())
+			tpw, err := NewTripperWare(
+				QueryRange{
+					SplitQueriesByInterval: tc.splitInterval,
+				},
+				&fakeLimits{}, codec, nil, nil, log.NewNopLogger())
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
@@ -324,8 +333,12 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	codec := NewThanosCodec(true)
 
 	now := time.Now()
-	tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, codec, queryrange.PrometheusResponseExtractor{},
-		day, 0, nil, log.NewNopLogger())
+	tpw, err := NewTripperWare(
+		QueryRange{
+			SplitQueriesByInterval: day,
+			ResultsCacheConfig:     cacheConf,
+		},
+		&fakeLimits{}, codec, queryrange.PrometheusResponseExtractor{}, nil, log.NewNopLogger())
 	testutil.Ok(t, err)
 
 	rt, err := newFakeRoundTripper()

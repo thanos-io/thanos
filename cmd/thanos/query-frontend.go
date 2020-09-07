@@ -36,7 +36,7 @@ type config struct {
 	http httpConfig
 	queryfrontend.Config
 
-	contentOrPath          extflag.PathOrContent
+	pathOrContent          extflag.PathOrContent
 	requestLoggingDecision string
 	// partialResponseStrategy is the default strategy used
 	// when parsing thanos query request.
@@ -66,7 +66,7 @@ func registerQueryFrontend(m map[string]setupFunc, app *kingpin.Application) {
 	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.partialResponseStrategy)
 
-	cfg.contentOrPath = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.pathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
 
 	cfg.http.registerFlag(cmd)
 

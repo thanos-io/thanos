@@ -27,7 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
-	frontendcache "github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -106,8 +106,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	frontendCfg := frontendcache.DefaultConfig()
-	if err := generate([]frontendcache.Config{frontendCfg}, "frontend_cache", *outputDir); err != nil {
+	frontendCfg := queryfrontend.DefaultConfig()
+	if err := generate([]queryfrontend.Config{frontendCfg}, "frontend_cache", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "frontend_cache", "err", err)
 		os.Exit(1)
 	}
