@@ -259,7 +259,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	aggrs := aggrsFromFunc(hints.Func)
 
-	// TODO: Pass it using the SerieRequest instead of relying on context
+	// TODO: Pass it using the SeriesRequest instead of relying on context
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
 
 	resp := &seriesServer{ctx: ctx}
@@ -333,6 +333,9 @@ func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
+	// TODO: Pass it using the SeriesRequest instead of relying on context
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
+
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseDisabled: !q.partialResponse,
@@ -355,6 +358,9 @@ func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
+
+	// TODO: Pass it using the SeriesRequest instead of relying on context
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
 
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
 		PartialResponseDisabled: !q.partialResponse,
