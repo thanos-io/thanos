@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 NOTE: As semantic versioning states all 0.y.z releases can contain breaking changes in API (flags, grpc API, any backward compatibility)
 
-We use *breaking :warning:* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
+We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
 
@@ -16,8 +16,8 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 Highlights:
 * Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
 query scheduling and parallelization (based on Cortex Query Frontend).
-* Added various new, improved UIs to Thanos based on React: Querier' BuildInfo & Flags, Ruler UI, BlockViewer.
-* Optimized Sidecar, Store, Receive, Ruler data retrieval with new TSDB ChunkIterator, capping chunks to 120 samples, fixed various leaks.
+* Added various new, improved UIs to Thanos based on React: Querier BuildInfo & Flags, Ruler UI, BlockViewer.
+* Optimized Sidecar, Store, Receive, Ruler data retrieval with new TSDB ChunkIterator (capping chunks to 120 samples), which fixed various leaks.
 * Fixed sample limit on Store Gateway.
 * Added S3 Server Side Encryption options.
 * Tons of other important fixes!
