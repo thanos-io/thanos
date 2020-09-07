@@ -11,7 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: It now uses the Cortex module fully and it support all backends - fifo, memcached, redis.
+- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: It now uses the Cortex module fully and it support all backends - fifo, memcached, redis. Few flags were changed to match the names in the cortex fonfiguration: `split-interval -> split-queries-by-interval`, `response-cache-max-freshness -> max-cache-freshness` , `compress-responses -> compress-http-responses`, `response-cache-config -> cache-config`. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
 
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
 
