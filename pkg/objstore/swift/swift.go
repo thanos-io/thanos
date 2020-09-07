@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/model"
+
 	"github.com/go-kit/kit/log/level"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -37,31 +39,31 @@ var DefaultConfig = Config{
 	AuthVersion:    0, // Means autodetect of the auth API version by the library.
 	ChunkSize:      1024 * 1024 * 1024,
 	Retries:        3,
-	ConnectTimeout: "10s",
-	Timeout:        "5m",
+	ConnectTimeout: model.Duration(10 * time.Second),
+	Timeout:        model.Duration(5 * time.Minute),
 }
 
 type Config struct {
-	AuthVersion          int    `yaml:"auth_version"`
-	AuthUrl              string `yaml:"auth_url"`
-	Username             string `yaml:"username"`
-	UserDomainName       string `yaml:"user_domain_name"`
-	UserDomainID         string `yaml:"user_domain_id"`
-	UserId               string `yaml:"user_id"`
-	Password             string `yaml:"password"`
-	DomainId             string `yaml:"domain_id"`
-	DomainName           string `yaml:"domain_name"`
-	ProjectID            string `yaml:"project_id"`
-	ProjectName          string `yaml:"project_name"`
-	ProjectDomainID      string `yaml:"project_domain_id"`
-	ProjectDomainName    string `yaml:"project_domain_name"`
-	RegionName           string `yaml:"region_name"`
-	ContainerName        string `yaml:"container_name"`
-	ChunkSize            int64  `yaml:"large_object_chunk_size"`
-	SegmentContainerName string `yaml:"large_object_segments_container_name"`
-	Retries              int    `yaml:"retries"`
-	ConnectTimeout       string `yaml:"connect_timeout"`
-	Timeout              string `yaml:"timeout"`
+	AuthVersion          int            `yaml:"auth_version"`
+	AuthUrl              string         `yaml:"auth_url"`
+	Username             string         `yaml:"username"`
+	UserDomainName       string         `yaml:"user_domain_name"`
+	UserDomainID         string         `yaml:"user_domain_id"`
+	UserId               string         `yaml:"user_id"`
+	Password             string         `yaml:"password"`
+	DomainId             string         `yaml:"domain_id"`
+	DomainName           string         `yaml:"domain_name"`
+	ProjectID            string         `yaml:"project_id"`
+	ProjectName          string         `yaml:"project_name"`
+	ProjectDomainID      string         `yaml:"project_domain_id"`
+	ProjectDomainName    string         `yaml:"project_domain_name"`
+	RegionName           string         `yaml:"region_name"`
+	ContainerName        string         `yaml:"container_name"`
+	ChunkSize            int64          `yaml:"large_object_chunk_size"`
+	SegmentContainerName string         `yaml:"large_object_segments_container_name"`
+	Retries              int            `yaml:"retries"`
+	ConnectTimeout       model.Duration `yaml:"connect_timeout"`
+	Timeout              model.Duration `yaml:"timeout"`
 }
 
 func parseConfig(conf []byte) (*Config, error) {
@@ -92,8 +94,8 @@ func configFromEnv() (*Config, error) {
 		ContainerName:        os.Getenv("OS_CONTAINER_NAME"),
 		SegmentContainerName: os.Getenv("SWIFT_SEGMENTS_CONTAINER_NAME"),
 		Retries:              c.Retries,
-		ConnectTimeout:       c.ConnectTimeout.String(),
-		Timeout:              c.Timeout.String(),
+		ConnectTimeout:       model.Duration(c.ConnectTimeout),
+		Timeout:              model.Duration(c.Timeout),
 	}
 	if os.Getenv("SWIFT_CHUNK_SIZE") != "" {
 		var err error
@@ -120,20 +122,8 @@ func connectionFromConfig(sc *Config) (*swift.Connection, error) {
 		TenantId:       sc.ProjectID,
 		TenantDomain:   sc.ProjectDomainName,
 		TenantDomainId: sc.ProjectDomainID,
-	}
-	if sc.ConnectTimeout != "" {
-		connectTimeout, err := time.ParseDuration(sc.ConnectTimeout)
-		if err != nil {
-			return nil, errors.Wrap(err, "swift parsing connectionTimeout")
-		}
-		connection.ConnectTimeout = connectTimeout
-	}
-	if sc.Timeout != "" {
-		timeout, err := time.ParseDuration(sc.Timeout)
-		if err != nil {
-			return nil, errors.Wrap(err, "swift parsing timeout")
-		}
-		connection.Timeout = timeout
+		ConnectTimeout: time.Duration(sc.ConnectTimeout),
+		Timeout:        time.Duration(sc.Timeout),
 	}
 	return &connection, nil
 }
@@ -189,14 +179,13 @@ func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool)
 		return nil, err
 	}
 
-	container := Container{
+	return &Container{
 		logger:            logger,
 		name:              sc.ContainerName,
 		connection:        connection,
 		chunkSize:         sc.ChunkSize,
 		segmentsContainer: sc.SegmentContainerName,
-	}
-	return &container, nil
+	}, nil
 }
 
 // Name returns the container name for swift.
