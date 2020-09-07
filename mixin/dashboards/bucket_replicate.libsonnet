@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Bucket Replicate dashboard',
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     title: error 'must provide title for Thanos Bucket Replicate dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'bucket_replicate.json':
+    'thanos-bucket_replicate.json':
       g.dashboard(thanos.bucket_replicate.title)
       .addRow(
         g.row('Bucket Replicate Runs')

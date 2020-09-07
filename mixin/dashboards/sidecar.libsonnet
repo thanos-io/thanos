@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Sidecar dashboard',
     selector: error 'must provide selector for Thanos Sidecar dashboard',
     title: error 'must provide title for Thanos Sidecar dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'sidecar.json':
+    'thanos-sidecar.json':
       g.dashboard(thanos.sidecar.title)
       .addRow(
         g.row('gRPC (Unary)')

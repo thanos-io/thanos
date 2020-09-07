@@ -6,7 +6,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Overview dashboard',
   },
   grafanaDashboards+:: {
-    'overview.json':
+    'thanos-overview.json':
       g.dashboard(thanos.overview.title) +
       g.template('namespace', thanos.dashboard.namespaceMetric),
   },
@@ -14,7 +14,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 {
   local grafanaDashboards = super.grafanaDashboards,
   grafanaDashboards+:: {
-    'overview.json'+: {
+    'thanos-overview.json'+: {
 
       __enumeratedRows__+:: std.foldl(
         function(acc, row)

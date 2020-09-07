@@ -9,7 +9,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'compact.json':
+    'thanos-compact.json':
       g.dashboard(thanos.compact.title)
       .addRow(
         g.row('Group Compaction')

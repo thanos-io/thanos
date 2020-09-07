@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Store dashboard',
     selector: error 'must provide selector for Thanos Store dashboard',
     title: error 'must provide title for Thanos Store dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'store.json':
+    'thanos-store.json':
       g.dashboard(thanos.store.title)
       .addRow(
         g.row('gRPC (Unary)')

@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Query dashboard',
     selector: error 'must provide selector for Thanos Query dashboard',
     title: error 'must provide title for Thanos Query dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'query.json':
+    'thanos-query.json':
       g.dashboard(thanos.query.title)
       .addRow(
         g.row('Instant Query API')

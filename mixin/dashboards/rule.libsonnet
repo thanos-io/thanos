@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Rule dashboard',
     selector: error 'must provide selector for Thanos Rule dashboard',
     title: error 'must provide title for Thanos Rule dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'rule.json':
+    'thanos-rule.json':
       g.dashboard(thanos.rule.title)
       .addRow(
         g.row('Rule Group Evaluations')

@@ -6,9 +6,10 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     jobPrefix: error 'must provide job prefix for Thanos Receive dashboard',
     selector: error 'must provide selector for Thanos Receive dashboard',
     title: error 'must provide title for Thanos Receive dashboard',
+    namespaceLabel: error 'must provide namespace label', 
   },
   grafanaDashboards+:: {
-    'receive.json':
+    'thanos-receive.json':
       g.dashboard(thanos.receive.title)
       .addRow(
         g.row('WRITE - Incoming Request')
