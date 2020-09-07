@@ -49,6 +49,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &config{}
 
+	cfg.http.registerFlag(cmd)
+
 	cmd.Flag("query-range.split-queries-by-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
 		Default("24h").DurationVar(&cfg.QueryRange.SplitQueriesByInterval)
 
@@ -68,8 +70,6 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("true").BoolVar(&cfg.partialResponseStrategy)
 
 	cfg.cachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
-
-	cfg.http.registerFlag(cmd)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
 		Default("http://localhost:9090").StringVar(&cfg.Frontend.DownstreamURL)
