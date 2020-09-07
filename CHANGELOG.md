@@ -11,8 +11,7 @@ We use *breaking :warning:* word for marking changes that are not backward compa
 
 ## Unreleased
 
-## [v0.15.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.15.0-rc.1) - 2020.09.01
-
+## [v0.15.0](https://github.com/thanos-io/thanos/releases/tag/v0.15.0) - 2020.09.07
 
 Highlights:
 * Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
