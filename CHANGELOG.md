@@ -11,6 +11,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Added
+
+- [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allow passing a `storeMatch[]` to Labels APIs. Also supports time range metadata based store filtering.
+
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
 
 Highlights:
