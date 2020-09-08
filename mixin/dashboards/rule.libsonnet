@@ -17,7 +17,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Rule Group Evaluations') +
           g.queryPanel(
             |||
-              sum by (strategy) (rate(prometheus_rule_evaluations_total{%(namespaceLabel)s="$namespace",%(selector)s}[$interval]))
+              sum by (strategy) (rate(prometheus_rule_evaluations_total{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}[$interval]))
             ||| % thanos.rule,
             '{{ strategy }}',
           )
@@ -26,7 +26,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Rule Group Evaluations Missed') +
           g.queryPanel(
             |||
-              sum by (strategy) (increase(prometheus_rule_group_iterations_missed_total{%(namespaceLabel)s="$namespace",%(selector)s}[$interval]))
+              sum by (strategy) (increase(prometheus_rule_group_iterations_missed_total{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}[$interval]))
             ||| % thanos.rule,
             '{{ strategy }}',
           )
@@ -36,9 +36,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.queryPanel(
             |||
               (
-                max by(rule_group) (prometheus_rule_group_last_duration_seconds{%(namespaceLabel)s="$namespace",%(selector)s})
+                max by(rule_group) (prometheus_rule_group_last_duration_seconds{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s})
                 >
-                sum by(rule_group) (prometheus_rule_group_interval_seconds{%(namespaceLabel)s="$namespace",%(selector)s})
+                sum by(rule_group) (prometheus_rule_group_interval_seconds{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s})
               )
             ||| % thanos.rule,
             '{{ rule_group }}',
@@ -125,7 +125,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow(thanos.rule.namespaceLabel, thanos.rule.selector)
       ) +
       g.template('namespace', thanos.dashboard.namespaceMetric) +
-      g.template('job', 'up', '%(namespaceLabel)s="$namespace",%(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule) +
+      g.template('job', 'up', '%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule) +
       g.template('pod', 'kube_pod_info', '%(namespaceLabel)s="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.rule, true, '.*'),
 
     __overviewRows__+:: [
@@ -133,7 +133,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addPanel(
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
-          'sum(rate(thanos_alert_sender_alerts_sent_total{%(namespaceLabel)s="$namespace",%(selector)s}[$interval])) by (job, alertmanager)' % thanos.rule,
+          'sum(rate(thanos_alert_sender_alerts_sent_total{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}[$interval])) by (job, alertmanager)' % thanos.rule,
           '{{alertmanager}}'
         ) +
         g.addDashboardLink(thanos.rule.title) +
@@ -142,8 +142,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addPanel(
         g.panel('Alert Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
         g.qpsErrTotalPanel(
-          'thanos_alert_sender_errors_total{%(namespaceLabel)s="$namespace",%(selector)s}' % thanos.rule,
-          'thanos_alert_sender_alerts_sent_total{%(namespaceLabel)s="$namespace",%(selector)s}' % thanos.rule,
+          'thanos_alert_sender_errors_total{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}' % thanos.rule,
+          'thanos_alert_sender_alerts_sent_total{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}' % thanos.rule,
         ) +
         g.addDashboardLink(thanos.rule.title)
       )
@@ -151,7 +151,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.sloLatency(
           'Alert Sent Duration',
           'Shows how long has it taken to send alerts to alert manager.',
-          'thanos_alert_sender_latency_seconds_bucket{%(namespaceLabel)s="$namespace",%(selector)s}' % thanos.rule,
+          'thanos_alert_sender_latency_seconds_bucket{%(namespaceLabel)s="$namespace",job=~"$job",%(selector)s}' % thanos.rule,
           0.99,
           0.5,
           1
