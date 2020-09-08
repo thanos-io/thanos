@@ -27,7 +27,7 @@ option (gogoproto.goproto_sizecache_all) = false;
 service Store {
   /// Info returns meta information about a store e.g labels that makes that store unique as well as time range that is
   /// available.
-  rpc Info(InfoRequest) returns (InfoResponse);
+  rpc Info (InfoRequest) returns (InfoResponse);
 
   /// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
   ///
@@ -38,20 +38,21 @@ service Store {
   ///
   /// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
   /// This heavily optimizes the resource usage on Querier / Federated Queries.
-  rpc Series(SeriesRequest) returns (stream SeriesResponse);
+  rpc Series (SeriesRequest) returns (stream SeriesResponse);
 
   /// LabelNames returns all label names that is available.
   /// Currently unimplemented in all Thanos implementations, because Query API does not implement this either.
-  rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
+  rpc LabelNames (LabelNamesRequest) returns (LabelNamesResponse);
 
   /// LabelValues returns all label values for given label name.
-  rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
+  rpc LabelValues (LabelValuesRequest) returns (LabelValuesResponse);
 }
 
 /// WriteableStore represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service WriteableStore {
   // WriteRequest allows you to write metrics to this store via remote write
-  rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
+  rpc RemoteWrite (WriteRequest) returns (WriteResponse) {
+  }
 }
 
 message WriteResponse {
@@ -61,9 +62,11 @@ message WriteRequest {
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  string config = 4;
 }
 
-message InfoRequest {}
+message InfoRequest {
+}
 
 enum StoreType {
   UNKNOWN = 0;
@@ -87,12 +90,12 @@ message InfoResponse {
 }
 
 message SeriesRequest {
-  int64 min_time                 = 1;
-  int64 max_time                 = 2;
+  int64 min_time = 1;
+  int64 max_time = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
 
   int64 max_resolution_window = 4;
-  repeated Aggr aggregates    = 5;
+  repeated Aggr aggregates = 5;
 
   // Deprecated. Use partial_response_strategy instead.
   bool partial_response_disabled = 6;
@@ -110,11 +113,11 @@ message SeriesRequest {
 }
 
 enum Aggr {
-  RAW     = 0;
-  COUNT   = 1;
-  SUM     = 2;
-  MIN     = 3;
-  MAX     = 4;
+  RAW = 0;
+  COUNT = 1;
+  SUM = 2;
+  MIN = 3;
+  MAX = 4;
   COUNTER = 5;
 }
 
@@ -153,7 +156,7 @@ message LabelNamesRequest {
 }
 
 message LabelNamesResponse {
-  repeated string names    = 1;
+  repeated string names = 1;
   repeated string warnings = 2;
 
   /// hints is an opaque data structure that can be used to carry additional information from
@@ -181,7 +184,7 @@ message LabelValuesRequest {
 }
 
 message LabelValuesResponse {
-  repeated string values   = 1;
+  repeated string values = 1;
   repeated string warnings = 2;
 
   /// hints is an opaque data structure that can be used to carry additional information from

@@ -163,11 +163,12 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
-			TenantHeader:      DefaultTenantHeader,
-			ReplicaHeader:     DefaultReplicaHeader,
-			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Second,
-			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			TenantHeader:         DefaultTenantHeader,
+			HashringConfigHeader: DefaultHashringConfigHeader,
+			ReplicaHeader:        DefaultReplicaHeader,
+			ReplicationFactor:    replicationFactor,
+			ForwardTimeout:       5 * time.Second,
+			Writer:               NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers

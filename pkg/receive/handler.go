@@ -50,6 +50,9 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// DefaultHashringConfigHeader is the default header used to designate the hashring config hash of a write request.
+	DefaultHashringConfigHeader = "THANOS-HASHRING-CONFIG"
+
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
@@ -59,25 +62,27 @@ var (
 	// conflictErr is returned whenever an operation fails due to any conflict-type error.
 	conflictErr = errors.New("conflict")
 
-	errBadReplica  = errors.New("replica count exceeds replication factor")
-	errNotReady    = errors.New("target not ready")
-	errUnavailable = errors.New("target not available")
+	errBadReplica             = errors.New("replica count exceeds replication factor")
+	errNotReady               = errors.New("target not ready")
+	errUnavailable            = errors.New("target not available")
+	errHashringConfigMismatch = errors.New("hashring configuration does not match")
 )
 
 // Options for the web Handler.
 type Options struct {
-	Writer            *Writer
-	ListenAddress     string
-	Registry          prometheus.Registerer
-	TenantHeader      string
-	DefaultTenantID   string
-	ReplicaHeader     string
-	Endpoint          string
-	ReplicationFactor uint64
-	Tracer            opentracing.Tracer
-	TLSConfig         *tls.Config
-	DialOpts          []grpc.DialOption
-	ForwardTimeout    time.Duration
+	Writer               *Writer
+	ListenAddress        string
+	Registry             prometheus.Registerer
+	TenantHeader         string
+	DefaultTenantID      string
+	ReplicaHeader        string
+	Endpoint             string
+	HashringConfigHeader string
+	ReplicationFactor    uint64
+	Tracer               opentracing.Tracer
+	TLSConfig            *tls.Config
+	DialOpts             []grpc.DialOption
+	ForwardTimeout       time.Duration
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -250,10 +255,14 @@ type replica struct {
 	replicated bool
 }
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, config string, wreq *prompb.WriteRequest) error {
 	// The replica value in the header is one-indexed, thus we need >.
 	if rep > h.options.ReplicationFactor {
 		return errBadReplica
+	}
+
+	if h.hashring.ConfigHash() != config {
+		return errHashringConfigMismatch
 	}
 
 	r := replica{
@@ -315,7 +324,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
+	config := r.Header.Get(h.options.HashringConfigHeader)
+	if len(config) == 0 {
+		config = h.hashring.ConfigHash()
+	}
+
+	err = h.handleRequest(ctx, rep, tenant, config, &wreq)
 	switch err {
 	case nil:
 		return
@@ -327,6 +341,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errHashringConfigMismatch:
+		http.Error(w, err.Error(), http.StatusPreconditionFailed) // TODO(kakkoyun): ???
 	default:
 		level.Error(h.logger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -513,6 +529,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					Tenant:     tenant,
 					// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
 					Replica: int64(replicas[endpoint].n + 1),
+					Config:  h.hashring.ConfigHash(),
 				})
 			})
 			if err != nil {
@@ -634,7 +651,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, r.Config, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	switch err {
 	case nil:
 		return &storepb.WriteResponse{}, nil
@@ -646,6 +663,8 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errBadReplica:
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	case errHashringConfigMismatch:
+		return nil, status.Error(codes.FailedPrecondition, err.Error()) // TODO(kakkoyun): ???
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}

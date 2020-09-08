@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -82,6 +83,8 @@ func registerReceive(app *extkingpin.App) {
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
 	forwardTimeout := extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
+
+	hashringConfigHeader := cmd.Flag("receive.hashring-config-header", "HTTP header to specify hashring configuration for write requests.").Default(receive.DefaultHashringConfigHeader).String()
 
 	tsdbMinBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
@@ -165,6 +168,7 @@ func registerReceive(app *extkingpin.App) {
 			*tenantLabelName,
 			*replicaHeader,
 			*replicationFactor,
+			*hashringConfigHeader,
 			time.Duration(*forwardTimeout),
 			*allowOutOfOrderUpload,
 			component.Receive,
@@ -204,6 +208,7 @@ func runReceive(
 	tenantLabelName string,
 	replicaHeader string,
 	replicationFactor uint64,
+	hashringConfigHeader string,
 	forwardTimeout time.Duration,
 	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
@@ -261,18 +266,19 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     rwAddress,
-		Registry:          reg,
-		Endpoint:          endpoint,
-		TenantHeader:      tenantHeader,
-		DefaultTenantID:   defaultTenantID,
-		ReplicaHeader:     replicaHeader,
-		ReplicationFactor: replicationFactor,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    forwardTimeout,
+		Writer:               writer,
+		ListenAddress:        rwAddress,
+		Registry:             reg,
+		Endpoint:             endpoint,
+		TenantHeader:         tenantHeader,
+		DefaultTenantID:      defaultTenantID,
+		ReplicaHeader:        replicaHeader,
+		ReplicationFactor:    replicationFactor,
+		HashringConfigHeader: hashringConfigHeader,
+		Tracer:               tracer,
+		TLSConfig:            rwTLSConfig,
+		DialOpts:             dialOpts,
+		ForwardTimeout:       forwardTimeout,
 	})
 
 	grpcProbe := prober.NewGRPC()

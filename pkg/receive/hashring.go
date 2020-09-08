@@ -5,12 +5,14 @@ package receive
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -36,6 +38,8 @@ type Hashring interface {
 	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
 	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
+	// ConfigHash string returns the hash of the loaded configuration.
+	ConfigHash() string
 }
 
 // hash returns a hash for the given tenant and time series.
@@ -71,6 +75,11 @@ func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (stri
 	return string(s), nil
 }
 
+// ConfigHash implements the Hashring interface.
+func (s SingleNodeHashring) ConfigHash() string {
+	return string(s)
+}
+
 // simpleHashring represents a group of nodes handling write requests.
 type simpleHashring []string
 
@@ -85,6 +94,15 @@ func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
 	return s[(hash(tenant, ts)+n)%uint64(len(s))], nil
+}
+
+// ConfigHash string returns the hash of the loaded configuration.
+func (s simpleHashring) ConfigHash() string {
+	h := sha256.New()
+	for _, v := range s {
+		h.Write([]byte(v))
+	}
+	return string(h.Sum(nil))
 }
 
 // multiHashring represents a set of hashrings.
@@ -133,6 +151,15 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		}
 	}
 	return "", errors.New("no matching hashring to handle tenant")
+}
+
+// ConfigHash string returns the hash of the loaded configuration.
+func (m *multiHashring) ConfigHash() string {
+	h := sha256.New()
+	for _, v := range m.hashrings {
+		h.Write([]byte(v.ConfigHash()))
+	}
+	return string(h.Sum(nil))
 }
 
 // newMultiHashring creates a multi-tenant hashring for a given slice of
