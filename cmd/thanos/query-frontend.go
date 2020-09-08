@@ -103,6 +103,14 @@ func runQueryFrontend(
 			return errors.Wrap(err, "parsing cache config YAML file")
 		}
 	}
+	if cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer <= 0 {
+		cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer = 10000
+		level.Info(logger).Log("msg", "WriteBackBuffer not set so using the default", "WriteBackBuffer", cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer)
+	}
+	if cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines <= 0 {
+		cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines = 10
+		level.Info(logger).Log("msg", "WriteBackGoroutines not set so using the default", "WriteBackGoroutines", cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines)
+	}
 
 	err = cfg.Validate()
 	if err != nil {
