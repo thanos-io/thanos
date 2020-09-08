@@ -9,7 +9,7 @@ owner: bwplotka, Harshitha1234, metalmatze
 ### Ticket: https://github.com/thanos-io/thanos/issues/1598
 ## Summary
 
-This design document proposes deletion of series for object storage in Thanos. This feature mainly causes changes in the Compactor and Store components and the object storage itself where the changes are expected to be reflected.
+This design document proposes deletion of series for object storage in Thanos. This feature mainly causes changes in the Store component and masks the series from objstore corresponding to the user deletion requests and does not trigger actual deletions in the object storage which is proposed to be the future work extension of the current proposal.
 
 ## Motivation
 
@@ -23,7 +23,6 @@ The main motivation for considering deletions in the object storage are the foll
 ## Goals
 
 *   Unblock users and allow series deletion in the object storage using tombstones.
-*   Deal with compaction and downsampling of blocks with tombstones.
 *   Performing deletions at admin level.
 
 ## Proposed Approach
@@ -55,7 +54,6 @@ The main motivation for considering deletions in the object storage are the foll
 *   The entered details are processed by the CLI tool to create a tombstone file (unique for a request and irrespective of the presence of series), and the file is uploaded to the object storage making it accessible to all components.
 *   **Filename optimization**: The filename is created from the hash of matchers, minTime and maxTime. This helps re-write an existing tombstone, whenever a same request is made in the future hence avoiding duplication of the same request. (NOTE: Requests which entail common deletions still creates different tombstones.)
 *   Store Gateway masks the series on processing the global tombstone files from the object storage. At chunk level, whenever there's a match with the data corresponding to atleast one of the tombstones, we skip the chunk, potentially resulting in the masking of chunk.
-*   During compaction or downsampling, we check if the blocks being considered have series corresponding to a tombstone file, if so we delete the data and continue with the process.
 
 ## Considerations
 
@@ -94,7 +92,6 @@ Reasons for not choosing 4 i.e., **Custom format global - appendable file**:
 
 *   Add a CLI tool which creates tombstones
 *   Store Gateway should be able to mask based on the tombstones from object storage
-*   Compactor solves the tombstones as per the proposed approach
 
 ## Challenges
 
@@ -104,6 +101,7 @@ Reasons for not choosing 4 i.e., **Custom format global - appendable file**:
 
 ## Future Work
 
+*   Performing actual deletions in the object storage and rewriting the blocks based on tombstones by the compactor.
 *   Have a max waiting duration feature for performing deletions where a default value is considered if explicitly not specified by the user. (only after this time passes the deletions are performed by the compactor in the next compaction cycle)
 *   Have the undoing deletions feature and there are two proposed ways
     *   API to undelete a time series - maybe delete the whole tombstones file?
