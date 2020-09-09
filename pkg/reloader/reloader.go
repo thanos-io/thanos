@@ -185,11 +185,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		return nil
 	}
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return errors.Wrap(err, "create watcher")
-	}
-	defer runutil.CloseWithLogOnErr(r.logger, watcher, "config watcher close")
+	defer runutil.CloseWithLogOnErr(r.logger, r.watcher, "config watcher close")
 
 	if r.cfgFile != "" {
 		if err := r.watcher.addFile(r.cfgFile); err != nil {
@@ -221,13 +217,13 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		"out", r.cfgOutputFile,
 		"dirs", strings.Join(r.watchedDirs, ","))
 
-	applyCtx, cancel := context.WithTimeout(ctx, r.watchInterval)
+	applyCtx, applyCancel := context.WithTimeout(ctx, r.watchInterval)
 
 	for {
 		select {
 		case <-applyCtx.Done():
 			if ctx.Err() != nil {
-				cancel()
+				applyCancel()
 				wg.Wait()
 				return nil
 			}
@@ -235,8 +231,8 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 
 		// Reset the watch timeout.
-		cancel()
-		applyCtx, cancel = context.WithTimeout(ctx, r.watchInterval)
+		applyCancel()
+		applyCtx, applyCancel = context.WithTimeout(ctx, r.watchInterval)
 
 		r.configApply.Inc()
 		if err := r.apply(applyCtx); err != nil {
@@ -470,6 +466,16 @@ func newWatcher(logger log.Logger, reg prometheus.Registerer, delayInterval time
 	}
 }
 
+// Close implements the io.Closer interface.
+func (w *watcher) Close() error {
+	if w.w == nil {
+		return nil
+	}
+	watcher := w.w
+	w.w = nil
+	return watcher.Close()
+}
+
 func (w *watcher) addPath(name string) error {
 	if w.w == nil {
 		fsWatcher, err := fsnotify.NewWatcher()
@@ -502,8 +508,10 @@ func (w *watcher) addFile(name string) error {
 func (w *watcher) run(ctx context.Context) {
 	defer runutil.CloseWithLogOnErr(w.logger, w.w, "config watcher close")
 
-	var wg sync.WaitGroup
-	notify := make(chan struct{})
+	var (
+		wg     sync.WaitGroup
+		notify = make(chan struct{})
+	)
 
 	wg.Add(1)
 	go func() {
