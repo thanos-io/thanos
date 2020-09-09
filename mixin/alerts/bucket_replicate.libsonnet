@@ -20,13 +20,15 @@
               severity: 'critical',
             },
             annotations: {
-              message: 'Thanos Replicate has disappeared from Prometheus target discovery.',
+              description: 'Thanos Replicate has disappeared from Prometheus target discovery.',
+              summary: 'Thanos Replicate has disappeared from Prometheus target discovery.',
             },
           },
           {
             alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
-              message: 'Thanos Replicate failing to run, {{ $value | humanize }}% of attempts failed.',
+              description: 'Thanos Replicate failing to run, {{ $value | humanize }}% of attempts failed.',
+              summary: 'Thanose Replicate is failing to run.',
             },
             expr: |||
               (
@@ -43,7 +45,8 @@
           {
             alert: 'ThanosBucketReplicateRunLatency',
             annotations: {
-              message: 'Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for the replicate operations.',
+              description: 'Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for the replicate operations.',
+              summary: 'Thanos Replicate has a high latency for replicate operations.',
             },
             expr: |||
               (

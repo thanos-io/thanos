@@ -13,21 +13,40 @@ import (
 )
 
 func TestParseLastModified(t *testing.T) {
+	location, _ := time.LoadLocation("GMT")
 	tests := map[string]struct {
 		headerValue string
 		expectedVal time.Time
 		expectedErr string
+		format      string
 	}{
 		"no header": {
 			expectedErr: "Last-Modified header not found",
 		},
-		"invalid header value": {
-			headerValue: "invalid",
-			expectedErr: `parse Last-Modified: parsing time "invalid" as "2006-01-02T15:04:05Z07:00": cannot parse "invalid" as "2006"`,
-		},
-		"valid header value": {
+		"empty format string to default RFC3339 format": {
 			headerValue: "2015-11-06T10:07:11.000Z",
 			expectedVal: time.Date(2015, time.November, 6, 10, 7, 11, 0, time.UTC),
+			format:      "",
+		},
+		"valid RFC3339 header value": {
+			headerValue: "2015-11-06T10:07:11.000Z",
+			expectedVal: time.Date(2015, time.November, 6, 10, 7, 11, 0, time.UTC),
+			format:      time.RFC3339,
+		},
+		"invalid RFC3339 header value": {
+			headerValue: "invalid",
+			expectedErr: `parse Last-Modified: parsing time "invalid" as "2006-01-02T15:04:05Z07:00": cannot parse "invalid" as "2006"`,
+			format:      time.RFC3339,
+		},
+		"valid RFC1123 header value": {
+			headerValue: "Fri, 24 Feb 2012 06:07:48 GMT",
+			expectedVal: time.Date(2012, time.February, 24, 6, 7, 48, 0, location),
+			format:      time.RFC1123,
+		},
+		"invalid RFC1123 header value": {
+			headerValue: "invalid",
+			expectedErr: `parse Last-Modified: parsing time "invalid" as "Mon, 02 Jan 2006 15:04:05 MST": cannot parse "invalid" as "Mon"`,
+			format:      time.RFC1123,
 		},
 	}
 
@@ -38,14 +57,14 @@ func TestParseLastModified(t *testing.T) {
 				meta.Add(alioss.HTTPHeaderLastModified, testData.headerValue)
 			}
 
-			actual, err := ParseLastModified(meta)
+			actual, err := ParseLastModified(meta, testData.format)
 
 			if testData.expectedErr != "" {
 				testutil.NotOk(t, err)
 				testutil.Equals(t, testData.expectedErr, err.Error())
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, testData.expectedVal, actual)
+				testutil.Assert(t, testData.expectedVal.Equal(actual))
 			}
 		})
 	}

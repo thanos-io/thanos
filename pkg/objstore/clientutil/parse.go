@@ -34,9 +34,14 @@ func ParseContentLength(m http.Header) (int64, error) {
 }
 
 // ParseLastModified returns the timestamp parsed from the Last-Modified
-// HTTP header in input (expected to be in the RFC3339 format).
-func ParseLastModified(m http.Header) (time.Time, error) {
-	const name = "Last-Modified"
+// HTTP header in input.
+// Passing an second parameter, named f, to specify the time format.
+// If f is empty then RFC3339 will be used as default format.
+func ParseLastModified(m http.Header, f string) (time.Time, error) {
+	const (
+		name          = "Last-Modified"
+		defaultFormat = time.RFC3339
+	)
 
 	v, ok := m[name]
 	if !ok {
@@ -47,7 +52,11 @@ func ParseLastModified(m http.Header) (time.Time, error) {
 		return time.Time{}, errors.Errorf("%s header has no values", name)
 	}
 
-	mod, err := time.Parse(time.RFC3339, v[0])
+	if len(f) == 0 {
+		f = defaultFormat
+	}
+
+	mod, err := time.Parse(f, v[0])
 	if err != nil {
 		return time.Time{}, errors.Wrapf(err, "parse %s", name)
 	}

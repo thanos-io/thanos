@@ -300,7 +300,7 @@ Prometheus.Graph.prototype.checkTimeDrift = function() {
     var browserTime = new Date().getTime() / 1000;
     $.ajax({
         method: "GET",
-        url: PATH_PREFIX + "api/v1/query?query=time()",
+        url: PATH_PREFIX + "/api/v1/query?query=time()",
         dataType: "json",
             success: function(json, textStatus) {
             if (json.status !== "success") {
@@ -328,7 +328,7 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
   var self = this;
   $.ajax({
       method: "GET",
-      url: PATH_PREFIX + "api/v1/label/__name__/values",
+      url: PATH_PREFIX + "/api/v1/label/__name__/values",
       dataType: "json",
       success: function(json, textStatus) {
         if (json.status !== "success") {
@@ -567,11 +567,11 @@ Prometheus.Graph.prototype.submitQuery = function() {
     params.end = endDate;
     params.step = resolution;
     params.max_source_resolution = maxSourceResolution;
-    url = PATH_PREFIX + "api/v1/query_range";
+    url = PATH_PREFIX + "/api/v1/query_range";
     success = function(json, textStatus) { self.handleGraphResponse(json, textStatus); };
   } else {
     params.time = moment;
-    url = PATH_PREFIX + "api/v1/query";
+    url = PATH_PREFIX + "/api/v1/query";
     success = function(json, textStatus) { self.handleConsoleResponse(json, textStatus); };
   }
   self.params = params;
@@ -1271,7 +1271,7 @@ function init() {
   });
 
   $.ajax({
-    url: PATH_PREFIX + "static/js/graph_template.handlebar?v=" + BUILD_VERSION,
+    url: PATH_PREFIX + "/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
     success: function(data) {
 
       graphTemplate = data;

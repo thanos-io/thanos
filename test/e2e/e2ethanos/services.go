@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
 
@@ -37,7 +38,7 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.18.1"
+	return "quay.io/prometheus/prometheus:v2.19.3"
 }
 
 func DefaultAlertmanagerImage() string {
@@ -75,7 +76,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 			"--log.level":                       logLevel,
 			"--web.listen-address":              ":9090",
 		})...),
-		e2e.NewReadinessProbe(9090, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
 		9090,
 	)
 	prom.SetUser(strconv.Itoa(os.Getuid()))
@@ -103,7 +104,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 			"--tsdb.path":         dataDir,
 			"--log.level":         logLevel,
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -113,7 +114,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses []string, routePrefix string) (*Service, error) {
+func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -163,11 +164,15 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		args = append(args, "--web.route-prefix="+routePrefix)
 	}
 
+	if externalPrefix != "" {
+		args = append(args, "--web.external-prefix="+externalPrefix)
+	}
+
 	querier := NewService(
 		fmt.Sprintf("querier-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -218,7 +223,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 		8081,
@@ -267,7 +272,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 			"--query.sd-dns-interval":         "1s",
 			"--resend-delay":                  "5s",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -307,7 +312,7 @@ receivers:
 			"--web.get-concurrency": "1",
 			"--web.timeout":         "2m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 	)
 	s.SetUser(strconv.Itoa(os.Getuid()))
@@ -351,7 +356,7 @@ func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig,
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
 		})...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -392,11 +397,38 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 			"--selector.relabel-config": string(relabelConfigBytes),
 			"--wait":                    "",
 		}), extArgs...)...),
-		e2e.NewReadinessProbe(8080, "/-/ready", 200),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 	)
 	compactor.SetUser(strconv.Itoa(os.Getuid()))
 	compactor.SetBackoff(defaultBackoffConfig)
 
 	return compactor, nil
+}
+
+func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.ResponseCacheConfig) (*e2e.HTTPService, error) {
+	respCacheConfigBytes, err := yaml.Marshal(respCacheConf)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate response cache config file: %v", respCacheConf)
+	}
+
+	args := e2e.BuildArgs(map[string]string{
+		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
+		"--http-address":                      ":8080",
+		"--query-frontend.downstream-url":     downstreamURL,
+		"--log.level":                         logLevel,
+		"--query-range.response-cache-config": string(respCacheConfigBytes),
+	})
+
+	queryFrontend := e2e.NewHTTPService(
+		fmt.Sprintf("query-frontend-%s", name),
+		DefaultImage(),
+		e2e.NewCommand("query-frontend", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+	)
+	queryFrontend.SetUser(strconv.Itoa(os.Getuid()))
+	queryFrontend.SetBackoff(defaultBackoffConfig)
+
+	return queryFrontend, nil
 }

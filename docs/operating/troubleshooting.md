@@ -2,11 +2,9 @@
 title: Troubleshooting
 type: docs
 menu: operating
-slug: /troubleshooting.md
 ---
 
 # Troubleshooting; Common cases
-
 
 ## Overlaps
 
@@ -29,13 +27,15 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 
 ### Reasons
 
+- You are running Thanos (sidecar, ruler or receive) older than 0.13.0. During transient upload errors there is a possibility to have overlaps caused by the compactor not being aware of all blocks See: [this](https://github.com/thanos-io/thanos/issues/2753)
 - Misconfiguraiton of sidecar/ruler: Same external labels or no external labels across many block producers.
 - Running multiple compactors for single block "stream", even for short duration.
 - Manually uploading blocks to the bucket.
-- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/proposals/201901-read-write-operations-bucket.md)
+- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/tip/proposals/201901-read-write-operations-bucket.md)
 
 ### Solutions
 
+- Upgrade sidecar, ruler and receive to 0.13.0+
 - Compactor can be blocked for some time, but if it is urgent. Mitigate by removing overlap or better: Backing up somewhere else (you can rename block ULID to non-ulid).
 - Who uploaded the block? Search for logs with this ULID across all sidecars/rulers. Check access logs to object storage. Check debug/metas or meta.json of problematic block to see how blocks looks like and what is the `source`.
 - Determine what you misconfigured.
@@ -50,6 +50,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 ```shell
 level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="changing probe status" status=not-ready reason="request flags against http://localhost:9090/api/v1/status/config: Get \"http://localhost:9090/api/v1/status/config\": dial tcp 127.0.0.1:9090: connect: connection refused"
 ```
+
 * This issue might happen when thanos is not configured properly.
 
 ### Possible Solution
@@ -64,6 +65,7 @@ level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="ch
 ```shell
 level=info ts=2020-04-18T03:16:32.158536285Z caller=grpc.go:137 service=gRPC/server component=sidecar msg="internal server shutdown" err="no external labels configured on Prometheus server, uniquely identifying external labels must be configured"
 ```
+
 * This issue happens when thanos doesn't recognise prometheus
 
 ### Possible Solution

@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -37,7 +37,7 @@ func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	t.Helper()
 
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
@@ -171,7 +171,7 @@ func getExternalLabels() labels.Labels {
 func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	t.Helper()
 
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -351,8 +351,9 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		})
 	}
 }
+
 func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -378,14 +379,26 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	proxy, err := NewPrometheusStore(nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
-	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{})
+	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{"a"}, resp.Names)
+
+	// Outside time range.
+	resp, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Names)
 }
 
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -413,15 +426,27 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
 	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+
+	// Outside time range.
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Values)
 }
 
 // Test to check external label values retrieve.
 func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -461,7 +486,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -526,7 +551,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_Info(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	defer testutil.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -545,7 +570,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(456), resp.MaxTime)
 }
 
-func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
+func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender storage.Appender, newStore func() storepb.StoreServer) {
 	baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
 
 	offset := int64(2*math.MaxUint16 + 5)
@@ -580,30 +605,30 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appe
 		{Name: "region", Value: "eu-west"},
 	}, firstSeries.Labels)
 
-	testutil.Equals(t, 3, len(firstSeries.Chunks))
+	testutil.Equals(t, 1093, len(firstSeries.Chunks))
 
 	chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[0].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
+	testutil.Equals(t, 120, chunk.NumSamples())
 
 	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[1].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
+	testutil.Equals(t, 120, chunk.NumSamples())
 
-	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[2].Raw.Data)
+	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[len(firstSeries.Chunks)-1].Raw.Data)
 	testutil.Ok(t, err)
-	testutil.Equals(t, 5, chunk.NumSamples())
+	testutil.Equals(t, 35, chunk.NumSamples())
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/396.
-func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t, p.Appender(), func() storepb.StoreServer {
+	testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t, p.Appender(), func() storepb.StoreServer {
 		testutil.Ok(t, p.Start())
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
@@ -619,12 +644,4 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 
 		return proxy
 	})
-}
-
-func TestRuleGroupToProto(t *testing.T) {
-
-}
-
-func TestRuleGroupFromProto(t *testing.T) {
-
 }

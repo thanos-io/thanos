@@ -222,6 +222,26 @@ Thanos Querier has the ability to perform concurrent select request per query. I
 The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
 Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
 
+### Store filtering
+
+It's possible to provide a set of matchers to the Querier api to select specific stores to be used during the query using the `storeMatch[]` parameter. It is useful when debugging a slow/broken store.
+It uses the same format as the matcher of [Prometheus' federate api](https://prometheus.io/docs/prometheus/latest/querying/api/#finding-series-by-label-matchers).
+Note that at the moment the querier only supports the `__address__` which contain the address of the store as it is shown on the `/stores` endpoint of the UI.
+
+Example:
+```
+- targets:
+  - prometheus-foo.thanos-sidecar:10901
+  - prometheus-bar.thanos-sidecar:10901
+```
+
+```
+http://localhost:10901/api/v1/query?query=up&dedup=true&partial_response=true&storeMatch[]={__address__=~"prometheus-foo.*"}
+```
+
+Will only return metrics from `prometheus-foo.thanos-sidecar:10901`
+
+
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path.
@@ -279,12 +299,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -314,9 +334,10 @@ Flags:
                                  returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
-                                 thanos UI to be served on a sub-path. This
+                                 thanos UI to be served on a sub-path. Defaults
+                                 to the value of --web.external-prefix. This
                                  option is analogous to --web.route-prefix of
-                                 Promethus.
+                                 Prometheus.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
                                  URLs in the UI query web interface. Actual
                                  endpoints are still served on / or the
@@ -336,9 +357,29 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --log.request.decision=LogFinishCall
+                                 Request Logging for logging the start and end
+                                 of requests. LogFinishCall is enabled by
+                                 default. LogFinishCall : Logs the finish call
+                                 of the requests. LogStartAndFinishCall : Logs
+                                 the start and finish call of the requests.
+                                 NoLogCall : Disable request logging.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.lookback-delta=QUERY.LOOKBACK-DELTA
+                                 The maximum lookback duration for retrieving
+                                 metrics during expression evaluations. PromQL
+                                 always evaluates the query for the certain
+                                 timestamp (query range timestamps are deduced
+                                 by step). Since scrape intervals might be
+                                 different, PromQL looks back for given amount
+                                 of time to get latest sample. If it exceeds the
+                                 maximum lookback delta it assumes series is
+                                 stale and returns none (a gap). This is why
+                                 lookback delta should be set to at least 2
+                                 times of the slowest scrape interval. If unset
+                                 it will use the promql default of 5m.
       --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.

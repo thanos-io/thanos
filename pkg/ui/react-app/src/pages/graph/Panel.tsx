@@ -4,6 +4,7 @@ import { Alert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } f
 
 import moment from 'moment-timezone';
 
+import Checkbox from '../../components/Checkbox';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -14,11 +15,10 @@ import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
 interface PanelProps {
+  id: string;
   options: PanelOptions;
   onOptionsChanged: (opts: PanelOptions) => void;
   useLocalTime: boolean;
-  useDeduplication: boolean;
-  usePartialResponse: boolean;
   pastQueries: string[];
   metricNames: string[];
   removePanel: () => void;
@@ -41,6 +41,9 @@ export interface PanelOptions {
   endTime: number | null; // Timestamp in milliseconds.
   resolution: number | null; // Resolution in seconds.
   stacked: boolean;
+  maxSourceResolution: string;
+  useDeduplication: boolean;
+  usePartialResponse: boolean;
 }
 
 export enum PanelType {
@@ -55,6 +58,9 @@ export const PanelDefaultOptions: PanelOptions = {
   endTime: null,
   resolution: null,
   stacked: false,
+  maxSourceResolution: '0s',
+  useDeduplication: true,
+  usePartialResponse: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -71,15 +77,29 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       stats: null,
       exprInputValue: props.options.expr,
     };
+
+    this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
+    this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps) {
-    const { endTime, range, resolution, type } = this.props.options;
+    const {
+      endTime,
+      range,
+      resolution,
+      type,
+      maxSourceResolution,
+      useDeduplication,
+      usePartialResponse,
+    } = this.props.options;
     if (
       prevOpts.endTime !== endTime ||
       prevOpts.range !== range ||
       prevOpts.resolution !== resolution ||
-      prevOpts.type !== type
+      prevOpts.type !== type ||
+      prevOpts.maxSourceResolution !== maxSourceResolution ||
+      prevOpts.useDeduplication !== useDeduplication ||
+      prevOpts.usePartialResponse !== usePartialResponse
     ) {
       this.executeQuery();
     }
@@ -114,8 +134,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     const resolution = this.props.options.resolution || Math.max(Math.floor(this.props.options.range / 250), 1);
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
-      dedup: this.props.useDeduplication.toString(),
-      partial_response: this.props.useDeduplication.toString(),
+      dedup: this.props.options.useDeduplication.toString(),
+      partial_response: this.props.options.usePartialResponse.toString(),
     });
 
     let path: string;
@@ -125,6 +145,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('start', startTime.toString());
         params.append('end', endTime.toString());
         params.append('step', resolution.toString());
+        params.append('max_source_resolution', this.props.options.maxSourceResolution);
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
@@ -213,6 +234,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ resolution: resolution });
   };
 
+  handleChangeMaxSourceResolution = (maxSourceResolution: string) => {
+    this.setOptions({ maxSourceResolution });
+  };
+
   handleChangeType = (type: PanelType) => {
     this.setState({ data: null });
     this.setOptions({ type: type });
@@ -222,8 +247,16 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ stacked: stacked });
   };
 
+  handleChangeDeduplication = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ useDeduplication: event.target.checked });
+  };
+
+  handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ usePartialResponse: event.target.checked });
+  };
+
   render() {
-    const { pastQueries, metricNames, options } = this.props;
+    const { pastQueries, metricNames, options, id } = this.props;
     return (
       <div className="panel">
         <Row>
@@ -242,6 +275,26 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>{this.state.error && <Alert color="danger">{this.state.error}</Alert>}</Col>
+        </Row>
+        <Row>
+          <Col>
+            <Checkbox
+              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+              id={`use-deduplication-checkbox-${id}`}
+              onChange={this.handleChangeDeduplication}
+              defaultChecked={options.useDeduplication}
+            >
+              Use Deduplication
+            </Checkbox>
+            <Checkbox
+              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+              id={`use-partial-resp-checkbox-${id}`}
+              onChange={this.handleChangePartialResponse}
+              defaultChecked={options.usePartialResponse}
+            >
+              Use Partial Response
+            </Checkbox>
+          </Col>
         </Row>
         <Row>
           <Col>
@@ -290,10 +343,12 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                       useLocalTime={this.props.useLocalTime}
                       resolution={options.resolution}
                       stacked={options.stacked}
+                      maxSourceResolution={options.maxSourceResolution}
                       onChangeRange={this.handleChangeRange}
                       onChangeEndTime={this.handleChangeEndTime}
                       onChangeResolution={this.handleChangeResolution}
                       onChangeStacking={this.handleChangeStacking}
+                      onChangeMaxSourceResolution={this.handleChangeMaxSourceResolution}
                     />
                     <GraphTabContent
                       data={this.state.data}

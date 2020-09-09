@@ -15,12 +15,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -37,9 +38,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
-func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Receive
-	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
+func registerReceive(app *extkingpin.App) {
+	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
@@ -69,7 +69,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	refreshInterval := modelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
-	local := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
+	localEndpoint := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
 
 	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).String()
 
@@ -81,15 +81,21 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
-	forwardTimeout := modelDuration(cmd.Flag("receive-forward-timeout", "Timeout for forward requests.").Default("5s").Hidden())
+	forwardTimeout := modelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
 	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
-	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
-
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
+	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
+	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
+		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().Bool()
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -107,20 +113,20 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
-			NoLockfile:        true,
+			NoLockfile:        *noLockFile,
 			WALCompression:    *walCompression,
 		}
 
 		// Local is empty, so try to generate a local endpoint
 		// based on the hostname and the listening port.
-		if *local == "" {
+		if *localEndpoint == "" {
 			hostname, err := os.Hostname()
 			if hostname == "" || err != nil {
 				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
 			}
-			parts := strings.Split(*rwAddress, ":")
+			parts := strings.Split(*grpcBindAddr, ":")
 			port := parts[len(parts)-1]
-			*local = fmt.Sprintf("http://%s:%s/api/v1/receive", hostname, port)
+			*localEndpoint = fmt.Sprintf("%s:%s", hostname, port)
 		}
 
 		return runReceive(
@@ -149,16 +155,17 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*ignoreBlockSize,
 			lset,
 			cw,
-			*local,
+			*localEndpoint,
 			*tenantHeader,
 			*defaultTenantID,
 			*tenantLabelName,
 			*replicaHeader,
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
-			comp,
+			*allowOutOfOrderUpload,
+			component.Receive,
 		)
-	}
+	})
 }
 
 func runReceive(
@@ -194,11 +201,11 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
+	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
-	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
-
+	level.Warn(logger).Log("msg", "setting up receive")
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
 	if err != nil {
 		return err
@@ -246,6 +253,7 @@ func runReceive(
 		lset,
 		tenantLabelName,
 		bkt,
+		allowOutOfOrderUpload,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
@@ -276,8 +284,8 @@ func runReceive(
 
 	// dbReady signals when TSDB is ready and the Store gRPC server can start.
 	dbReady := make(chan struct{}, 1)
-	// updateDB signals when TSDB needs to be flushed and updated.
-	updateDB := make(chan struct{}, 1)
+	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
+	hashringChangedChan := make(chan struct{}, 1)
 	// uploadC signals when new blocks should be uploaded.
 	uploadC := make(chan struct{}, 1)
 	// uploadDone signals when uploading has finished.
@@ -285,29 +293,52 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
-		// TSDB.
+		log.With(logger, "component", "storage")
+		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_attempted_total",
+			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
+		})
+		dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_multi_db_updates_completed_total",
+			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
+		})
+
+		level.Debug(logger).Log("msg", "removing storage lock files if any")
+		if err := dbs.RemoveLockFilesIfAny(); err != nil {
+			return errors.Wrap(err, "remove storage lock files")
+		}
+
+		// TSDBs reload logic, listening on hashring changes.
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
 
-			// Before quitting, ensure the WAL is flushed and the DB is closed.
+			// Before quitting, ensure the WAL is flushed and the DBs are closed.
 			defer func() {
+				level.Info(logger).Log("msg", "shutting down storage")
 				if err := dbs.Flush(); err != nil {
-					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
+					level.Error(logger).Log("err", err, "msg", "failed to flush storage")
+				} else {
+					level.Info(logger).Log("msg", "storage is flushed successfully")
 				}
+				if err := dbs.Close(); err != nil {
+					level.Error(logger).Log("err", err, "msg", "failed to close storage")
+					return
+				}
+				level.Info(logger).Log("msg", "storage is closed")
 			}()
 
 			for {
 				select {
 				case <-cancel:
 					return nil
-				case _, ok := <-updateDB:
+				case _, ok := <-hashringChangedChan:
 					if !ok {
 						return nil
 					}
-
-					level.Info(logger).Log("msg", "updating DB")
+					dbUpdatesStarted.Inc()
+					level.Info(logger).Log("msg", "updating storage")
 
 					if err := dbs.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
@@ -320,7 +351,8 @@ func runReceive(
 						<-uploadDone
 					}
 					statusProber.Ready()
-					level.Info(logger).Log("msg", "tsdb started, and server is ready to receive web requests")
+					level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
+					dbUpdatesCompleted.Inc()
 					dbReady <- struct{}{}
 				}
 			}
@@ -340,6 +372,7 @@ func runReceive(
 		if cw != nil {
 			// Check the hashring configuration on before running the watcher.
 			if err := cw.ValidateConfig(); err != nil {
+				cw.Stop()
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
 			}
@@ -364,7 +397,7 @@ func runReceive(
 
 		cancel := make(chan struct{})
 		g.Add(func() error {
-			defer close(updateDB)
+			defer close(hashringChangedChan)
 			for {
 				select {
 				case h, ok := <-updates:
@@ -372,10 +405,10 @@ func runReceive(
 						return nil
 					}
 					webHandler.Hashring(h)
-					msg := "hashring has changed; server is not ready to receive web requests."
+					msg := "hashring has changed; server is not ready to receive web requests"
 					statusProber.NotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
-					updateDB <- struct{}{}
+					hashringChangedChan <- struct{}{}
 				case <-cancel:
 					return nil
 				}
@@ -467,57 +500,67 @@ func runReceive(
 	}
 
 	if upload {
-		level.Debug(logger).Log("msg", "upload enabled")
-		if err := dbs.Sync(context.Background()); err != nil {
-			level.Warn(logger).Log("msg", "initial upload failed", "err", err)
+		logger := log.With(logger, "component", "uploader")
+		upload := func(ctx context.Context) error {
+			level.Debug(logger).Log("msg", "upload starting")
+			start := time.Now()
+
+			if err := dbs.Sync(ctx); err != nil {
+				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
+				return err
+			}
+			level.Debug(logger).Log("msg", "upload done", "elapsed", time.Since(start))
+			return nil
 		}
-
 		{
-			// Run the uploader in a loop.
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-					if err := dbs.Sync(ctx); err != nil {
-						level.Warn(logger).Log("msg", "interval upload failed", "err", err)
-					}
-
-					return nil
-				})
-			}, func(error) {
-				cancel()
-			})
+			level.Info(logger).Log("msg", "upload enabled, starting initial sync")
+			if err := upload(context.Background()); err != nil {
+				return errors.Wrap(err, "initial upload failed")
+			}
+			level.Info(logger).Log("msg", "initial sync done")
 		}
-
 		{
-			// Upload on demand.
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				// Ensure we clean up everything properly.
 				defer func() {
 					runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 				}()
+
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
-					<-uploadC
-					if err := dbs.Sync(context.Background()); err != nil {
-						level.Warn(logger).Log("msg", "on demnad upload failed", "err", err)
+					<-uploadC // Closed by storage routine when it's done.
+					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
+					ctx, cancel := context.WithCancel(context.Background())
+					if err := dbs.Sync(ctx); err != nil {
+						cancel()
+						level.Error(logger).Log("msg", "the final upload failed", "err", err)
+						return
 					}
+					cancel()
+					level.Info(logger).Log("msg", "the final cut block was uploaded")
 				}()
+
 				defer close(uploadDone)
+
+				// Run the uploader in a loop.
+				tick := time.NewTicker(30 * time.Second)
+				defer tick.Stop()
+
 				for {
 					select {
 					case <-ctx.Done():
 						return nil
-					default:
-					}
-					select {
-					case <-ctx.Done():
-						return nil
 					case <-uploadC:
-						if err := dbs.Sync(ctx); err != nil {
-							level.Warn(logger).Log("err", err)
+						// Upload on demand.
+						if err := upload(ctx); err != nil {
+							level.Warn(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
+					case <-tick.C:
+						if err := upload(ctx); err != nil {
+							level.Warn(logger).Log("msg", "recurring upload failed", "err", err)
+						}
 					}
 				}
 			}, func(error) {

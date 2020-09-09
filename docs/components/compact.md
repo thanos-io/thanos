@@ -49,6 +49,8 @@ Ideally, you will have equal retention set (or no retention at all) to all resol
 
 Not setting this flag, or setting it to `0d`, i.e. `--retention.resolution-X=0d`, will mean that samples at the `X` resolution level will be kept forever.
 
+Please note that blocks are only deleted after they completely "fall off" of the specified retention policy. In other words, the "max time" of a block needs to be older than the amount of time you had specified.
+
 ## Storage space consumption
 
 In fact, downsampling doesn't save you any space but instead it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is required by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), but it gives massive advantage on querying long ranges.
@@ -90,12 +92,12 @@ Flags:
       --tracing.config-file=<file-path>
                                 Path to YAML file with tracing configuration.
                                 See format details:
-                                https://thanos.io/tracing.md/#configuration
+                                https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag (lower
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
-                                https://thanos.io/tracing.md/#configuration
+                                https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
@@ -105,13 +107,13 @@ Flags:
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
-                                https://thanos.io/storage.md/#configuration
+                                https://thanos.io/tip/thanos/storage.md/#configuration
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of
@@ -141,6 +143,10 @@ Flags:
       --block-sync-concurrency=20
                                 Number of goroutines to use when syncing block
                                 metadata from object storage.
+      --block-viewer.global.sync-block-interval=1m
+                                Repeat interval for syncing the blocks between
+                                local and remote view for /global Block Viewer
+                                UI.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
       --delete-delay=48h        Time before a block marked for deletion is

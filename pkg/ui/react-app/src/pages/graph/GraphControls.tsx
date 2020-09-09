@@ -13,14 +13,22 @@ interface GraphControlsProps {
   useLocalTime: boolean;
   resolution: number | null;
   stacked: boolean;
+  maxSourceResolution: string;
 
   onChangeRange: (range: number) => void;
   onChangeEndTime: (endTime: number | null) => void;
   onChangeResolution: (resolution: number | null) => void;
   onChangeStacking: (stacked: boolean) => void;
+  onChangeMaxSourceResolution: (maxSourceResolution: string) => void;
 }
 
 class GraphControls extends Component<GraphControlsProps> {
+  constructor(props: GraphControlsProps) {
+    super(props);
+
+    this.handleMaxSourceResChange = this.handleMaxSourceResChange.bind(this);
+  }
+
   private rangeRef = React.createRef<HTMLInputElement>();
   private resolutionRef = React.createRef<HTMLInputElement>();
 
@@ -87,6 +95,10 @@ class GraphControls extends Component<GraphControlsProps> {
     }
   }
 
+  handleMaxSourceResChange(event: React.ChangeEvent<HTMLInputElement>): void {
+    this.props.onChangeMaxSourceResolution(event.target.value);
+  }
+
   render() {
     return (
       <Form inline className="graph-controls" onSubmit={e => e.preventDefault()}>
@@ -142,6 +154,19 @@ class GraphControls extends Component<GraphControlsProps> {
             <FontAwesomeIcon icon={faChartArea} fixedWidth />
           </Button>
         </ButtonGroup>
+
+        <Input
+          type="select"
+          value={this.props.maxSourceResolution}
+          onChange={this.handleMaxSourceResChange}
+          className="max-source-resolution-input"
+          bsSize="sm"
+        >
+          <option value="auto">Auto downsampling</option>
+          <option value="0s">Only raw data</option>
+          <option value="5m">Max 5m downsampling</option>
+          <option value="1h">Max 1h downsampling</option>
+        </Input>
       </Form>
     );
   }

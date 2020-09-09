@@ -4,23 +4,6 @@ This document explain the process of contributing to the Thanos project.
 
 First of all please follow the [CODE_OF_CONDUCT](https://github.com/thanos-io/thanos/blob/master/CODE_OF_CONDUCT.md) in all your interactions with the project.
 
-## TOC
-
-- [Contributing](#contributing)
-  * [TOC](#toc)
-  * [Thanos Philosophy](#thanos-philosophy)
-  * [Feedback / Issues](#feedback---issues)
-  * [Adding New Features / Components](#adding-new-features---components)
-  * [Components Naming](#components-naming)
-  * [Development](#development)
-    + [Prerequisites](#prerequisites)
-    + [First steps](#first-steps)
-    + [Pull Request Process](#pull-request-process)
-    + [Dependency management](#dependency-management)
-    + [Advanced testing](#advanced-testing)
-
-<small><i>Table of contents generated with <a href='http://ecotrust-canada.github.io/markdown-toc/'>markdown-toc</a></i></small>
-
 ## Thanos Philosophy
 
 The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
@@ -150,8 +133,7 @@ $ git push origin <your_branch_for_new_pr>
 1. If you don't have a live object store ready, you can use the `make test-local` command.
 
 NOTE: this command skips tests against live object storage systems by specifying environment variables; this causes the
-store-specific tests to be run against memory and filesystem object storages only. The CI tests run `make test-ci` instead
-(uses GCS, AWS).
+store-specific tests to be run against memory and filesystem object storage types only. The CI tests run uses GCS, AWS and Swift.
 
 Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
 

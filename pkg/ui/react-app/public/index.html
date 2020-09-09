@@ -11,11 +11,14 @@
 
     <!--
       This constant's placeholder magic value is replaced during serving by Thanos
-      and set to Thanos's external URL path. It gets prepended to all links back
+      and set to Thanos' external URL path. It gets prepended to all links back
       to Thanos, both for asset loading as well as API accesses.
     -->
-    <script>const GLOBAL_PATH_PREFIX='';</script>
-    <script>const THANOS_COMPONENT='query';</script>
+    <script>const GLOBAL_PATH_PREFIX="{{ pathPrefix }}";</script>
+    <script>
+      const THANOS_COMPONENT="{{ .Component }}";
+      const THANOS_QUERY_URL="{{ .queryURL }}";
+    </script>
 
     <!--
       manifest.json provides metadata used when your web app is added to the
@@ -31,7 +34,7 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>Thanos Expression Browser</title>
+    <title>Thanos | Highly available Prometheus setup</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -6,18 +6,18 @@ package prober
 import (
 	"io"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"go.uber.org/atomic"
 )
 
 type check func() bool
 
 // HTTPProbe represents health and readiness status of given component, and provides HTTP integration.
 type HTTPProbe struct {
-	ready   uint32
-	healthy uint32
+	ready   atomic.Uint32
+	healthy atomic.Uint32
 }
 
 // NewHTTP returns HTTPProbe representing readiness and healthiness of given component.
@@ -49,34 +49,33 @@ func (p *HTTPProbe) handler(logger log.Logger, c check) http.HandlerFunc {
 
 // isReady returns true if component is ready.
 func (p *HTTPProbe) isReady() bool {
-	ready := atomic.LoadUint32(&p.ready)
+	ready := p.ready.Load()
 	return ready > 0
 }
 
 // isHealthy returns true if component is healthy.
 func (p *HTTPProbe) isHealthy() bool {
-	healthy := atomic.LoadUint32(&p.healthy)
+	healthy := p.healthy.Load()
 	return healthy > 0
 }
 
 // Ready sets components status to ready.
 func (p *HTTPProbe) Ready() {
-	atomic.SwapUint32(&p.ready, 1)
+	p.ready.Swap(1)
 }
 
 // NotReady sets components status to not ready with given error as a cause.
 func (p *HTTPProbe) NotReady(err error) {
-	atomic.SwapUint32(&p.ready, 0)
+	p.ready.Swap(0)
 
 }
 
 // Healthy sets components status to healthy.
 func (p *HTTPProbe) Healthy() {
-	atomic.SwapUint32(&p.healthy, 1)
-
+	p.healthy.Swap(1)
 }
 
 // NotHealthy sets components status to not healthy with given error as a cause.
 func (p *HTTPProbe) NotHealthy(err error) {
-	atomic.SwapUint32(&p.healthy, 0)
+	p.healthy.Swap(0)
 }

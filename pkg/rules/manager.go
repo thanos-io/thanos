@@ -5,7 +5,6 @@ package rules
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,10 +22,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"gopkg.in/yaml.v3"
+
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"gopkg.in/yaml.v3"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -43,6 +43,9 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		File:                    g.OriginalFile,
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
+		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
+		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
+		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
 	}
 
 	for _, r := range g.Rules() {
@@ -65,7 +68,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// UTC needed due to https://github.com/gogo/protobuf/issues/519.
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		case *rules.RecordingRule:
 			ret.Rules = append(ret.Rules, &rulespb.Rule{
@@ -76,7 +80,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
-					LastEvaluation:            rule.GetEvaluationTimestamp(),
+					// UTC needed due to https://github.com/gogo/protobuf/issues/519.
+					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
 				}}})
 		default:
 			// We cannot do much, let's panic, API will recover.
@@ -95,7 +100,7 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 			Labels:                  rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
 			Annotations:             rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
-			ActiveAt:                &ruleAlert.ActiveAt,
+			ActiveAt:                &ruleAlert.ActiveAt, //nolint:exportloopref
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}
@@ -143,9 +148,10 @@ func NewManager(
 	return m
 }
 
+// Run is non blocking, in opposite to TSDB manager, which is blocking.
 func (m *Manager) Run() {
 	for _, mgr := range m.mgrs {
-		mgr.Run()
+		go mgr.Run()
 	}
 }
 
@@ -154,8 +160,8 @@ func (m *Manager) Stop() {
 		mgr.Stop()
 	}
 }
-
 func (m *Manager) protoRuleGroups() []*rulespb.RuleGroup {
+
 	rg := m.RuleGroups()
 	res := make([]*rulespb.RuleGroup, 0, len(rg))
 	for _, g := range rg {
@@ -299,13 +305,19 @@ type configGroups struct {
 }
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
-// special field in configRuleAdapter file.
+// special field in configGroups.configRuleAdapter struct.
 func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
 		errs            tsdberrors.MultiError
 		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
 		ruleFiles       = map[string]string{}
 	)
+
+	// Initialize filesByStrategy for existing managers' strategies to make
+	// sure that managers are updated when they have no rules configured.
+	for strategy := range m.mgrs {
+		filesByStrategy[strategy] = make([]string, 0)
+	}
 
 	if err := os.RemoveAll(m.workDir); err != nil {
 		return errors.Wrapf(err, "remove %s", m.workDir)
@@ -333,7 +345,6 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 		for _, rg := range rg.Groups {
 			groupsByStrategy[*rg.PartialResponseStrategy] = append(groupsByStrategy[*rg.PartialResponseStrategy], rg)
 		}
-
 		for s, rg := range groupsByStrategy {
 			b, err := yaml.Marshal(configGroups{Groups: rg})
 			if err != nil {
@@ -341,12 +352,17 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 				continue
 			}
 
-			newFn := filepath.Join(m.workDir, fmt.Sprintf("%s.%x.%s", filepath.Base(fn), sha256.Sum256([]byte(fn)), s.String()))
-			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
-				errs.Add(errors.Wrap(err, newFn))
+			// Use full file name appending to work dir, so we can differentiate between different dirs and same filenames(!).
+			// This will be also used as key for file group name.
+			newFn := filepath.Join(m.workDir, s.String(), strings.TrimLeft(fn, m.workDir))
+			if err := os.MkdirAll(filepath.Dir(newFn), os.ModePerm); err != nil {
+				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
 			}
-
+			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
+				errs.Add(errors.Wrapf(err, "write file %v", newFn))
+				continue
+			}
 			filesByStrategy[s] = append(filesByStrategy[s], newFn)
 			ruleFiles[newFn] = fn
 		}
@@ -378,6 +394,8 @@ func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) er
 
 	pgs := make([]*rulespb.RuleGroup, 0, len(groups))
 	for _, g := range groups {
+		// https://github.com/gogo/protobuf/issues/519
+		g.LastEvaluation = g.LastEvaluation.UTC()
 		if r.Type == rulespb.RulesRequest_ALL {
 			pgs = append(pgs, g)
 			continue

@@ -245,12 +245,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tracing.md/#configuration
+                                 https://thanos.io/tip/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -282,6 +282,9 @@ Flags:
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
+      --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
+                                 In any case, the lockfiles will be deleted on
+                                 next startup.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --alertmanagers.url=ALERTMANAGERS.URL ...
                                  Alertmanager replica URLs to push firing
@@ -299,7 +302,7 @@ Flags:
       --alertmanagers.config-file=<file-path>
                                  Path to YAML file that contains alerting
                                  configuration. See format details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
@@ -308,7 +311,7 @@ Flags:
                                  (lower priority). Content of YAML file that
                                  contains alerting configuration. See format
                                  details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
@@ -346,16 +349,23 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --log.request.decision=LogFinishCall
+                                 Request Logging for logging the start and end
+                                 of requests. LogFinishCall is enabled by
+                                 default. LogFinishCall : Logs the finish call
+                                 of the requests. LogStartAndFinishCall : Logs
+                                 the start and finish call of the requests.
+                                 NoLogCall : Disable request logging.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
-                                 https://thanos.io/storage.md/#configuration
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --query=<query> ...        Addresses of statically configured query API
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
@@ -364,14 +374,14 @@ Flags:
       --query.config-file=<file-path>
                                  Path to YAML file that contains query API
                                  servers configuration. See format details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
       --query.config=<content>   Alternative to 'query.config-file' flag (lower
                                  priority). Content of YAML file that contains
                                  query API servers configuration. See format
                                  details:
-                                 https://thanos.io/components/rule.md/#configuration.
+                                 https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
       --query.sd-files=<path> ...

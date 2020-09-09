@@ -10,7 +10,7 @@ component and can be invoked in a single command.
 Let's take a look at all the Thanos commands:
 
 ```
-docker run --rm quay.io/thanos/thanos:v0.12.2 --help
+docker run --rm quay.io/thanos/thanos:v0.13.0 --help
 ```{{execute}}
 
 You should see multiple commands that solves different purposes.
@@ -26,14 +26,14 @@ In this step we will focus on `thanos sidecar`:
 
 Sidecar as the name suggests should be deployed together with Prometheus. Sidecar has multiple features:
 
-* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). StoreAPI
+* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/tip/integrations.md/#storeapi). StoreAPI
 is a generic gRPC API allowing Thanos components to fetch metrics from various systems and backends.
 * It is essentially in further long term storage options described in [next]() courses.
 * It is capable to watch for configuration and Prometheus rules (alerting or recording) and notify Prometheus for dynamic reloads:
   * optionally substitute with environment variables
   * optionally decompress if gzipp-ed
 
-You can read more about sidecar [here](https://thanos.io/components/sidecar.md/)
+You can read more about sidecar [here](https://thanos.io/tip/components/sidecar.md/)
 
 ## Installation
 
@@ -53,7 +53,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-eu1 \
     -u root \
-    quay.io/thanos/thanos:v0.12.2 \
+    quay.io/thanos/thanos:v0.13.0 \
     sidecar \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
@@ -68,7 +68,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-us1 \
     -u root \
-    quay.io/thanos/thanos:v0.12.2 \
+    quay.io/thanos/thanos:v0.13.0 \
     sidecar \
     --http-address 0.0.0.0:19091 \
     --grpc-address 0.0.0.0:19191 \
@@ -81,7 +81,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus1_us1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-1-sidecar-us1 \
     -u root \
-    quay.io/thanos/thanos:v0.12.2 \
+    quay.io/thanos/thanos:v0.13.0 \
     sidecar \
     --http-address 0.0.0.0:19092 \
     --grpc-address 0.0.0.0:19192 \

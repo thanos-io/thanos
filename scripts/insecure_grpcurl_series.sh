@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 HELP='
 insecure_grpcurl_series.sh allows you to use call StoreAPI.Series gRPC method and receive streamed series in JSON format.
@@ -12,7 +12,7 @@ Usage:
 
 STORE_API_HOSTPORT=$1
 if [ -z "${STORE_API_HOSTPORT}" ]; then
-  echo "\$1 is missing (STORE_API_HOSTPORT). Expected host:port string for the target StoreAPI to grpcurl against, e.g. localhost:10901"
+  echo '$1 is missing (STORE_API_HOSTPORT). Expected host:port string for the target StoreAPI to grpcurl against, e.g. localhost:10901'
   echo "${HELP}"
   exit 1
 fi
@@ -52,11 +52,10 @@ SERIES_REQUEST='{
 
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 
-pushd ${DIR}/../pkg/store/storepb/
+cd $DIR/../pkg/ || exit
 grpcurl \
   -import-path="${GOGOPROTO_ROOT}" \
   -import-path=. \
-  -proto=rpc.proto \
+  -proto=store/storepb/rpc.proto \
   -plaintext \
   -d="${SERIES_REQUEST}" "${STORE_API_HOSTPORT}" thanos.Store/Series
-popd

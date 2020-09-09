@@ -44,9 +44,7 @@ func TestAuthOptsFromConfig(t *testing.T) {
 		ProjectDomainName: "projectDomain",
 	}
 
-	authOpts, err := authOptsFromConfig(input)
-	testutil.Ok(t, err)
-
+	authOpts := authOptsFromConfig(input)
 	testutil.Equals(t, "http://identity.something.com/v3", authOpts.IdentityEndpoint)
 	testutil.Equals(t, "thanos", authOpts.Username)
 	testutil.Equals(t, "userDomain", authOpts.DomainName)

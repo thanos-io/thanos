@@ -26,22 +26,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        ) +
-        g.collapse
-      )
-      .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
@@ -57,22 +41,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        ) +
-        g.collapse
-      )
-      .addRow(
         g.row('Bucket Operations')
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
@@ -84,14 +52,16 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of executed operations against the bucket.') +
-          g.qpsErrTotalPanel(
-            'thanos_objstore_bucket_operation_failures_total{namespace="$namespace",job=~"$job"}',
-            'thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}',
-          )
+          g.queryPanel(
+            'sum by (job, operation) (rate(thanos_objstore_bucket_operation_failures_total{namespace="$namespace",job=~"$job"}[$interval])) / sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}[$interval]))',
+            '{{job}} {{operation}}'
+          ) +
+          { yaxes: g.yaxes({ format: 'percentunit' }) } +
+          g.stack,
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute operations against the bucket, in quantiles.') +
-          g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', 'namespace="$namespace",job=~"$job"')
+          $.latencyByOperationPanel('thanos_objstore_bucket_operation_duration_seconds', 'namespace="$namespace",job=~"$job"')
         )
       )
       .addRow(
@@ -273,5 +243,36 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.addDashboardLink(thanos.store.title)
       ),
     ],
+  },
+
+  latencyByOperationPanel(metricName, selector, multiplier='1'):: {
+    nullPointMode: 'null as zero',
+    targets: [
+      {
+        expr: 'histogram_quantile(0.99, sum(rate(%s_bucket{%s}[$interval])) by (job, operation, le)) * %s' % [metricName, selector, multiplier],
+        format: 'time_series',
+        intervalFactor: 2,
+        legendFormat: 'P99 {{job}}',
+        refId: 'A',
+        step: 10,
+      },
+      {
+        expr: 'sum(rate(%s_sum{%s}[$interval])) by (job, operation) * %s / sum(rate(%s_count{%s}[$interval])) by (job, operation)' % [metricName, selector, multiplier, metricName, selector],
+        format: 'time_series',
+        intervalFactor: 2,
+        legendFormat: 'mean {{job}}',
+        refId: 'B',
+        step: 10,
+      },
+      {
+        expr: 'histogram_quantile(0.50, sum(rate(%s_bucket{%s}[$interval])) by (job, operation, le)) * %s' % [metricName, selector, multiplier],
+        format: 'time_series',
+        intervalFactor: 2,
+        legendFormat: 'P50 {{job}}',
+        refId: 'C',
+        step: 10,
+      },
+    ],
+    yaxes: g.yaxes('s'),
   },
 }

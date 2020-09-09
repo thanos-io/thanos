@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"path"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -25,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -370,7 +370,7 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 	var (
 		wg         sync.WaitGroup
-		numSuccess uint64
+		numSuccess atomic.Uint64
 	)
 	for _, am := range s.alertmanagers {
 		for _, u := range am.dispatcher.Endpoints() {
@@ -396,14 +396,14 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 					s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
 					s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
 
-					atomic.AddUint64(&numSuccess, 1)
+					numSuccess.Inc()
 				})
 			}(am, *u)
 		}
 	}
 	wg.Wait()
 
-	if numSuccess > 0 {
+	if numSuccess.Load() > 0 {
 		return
 	}
 

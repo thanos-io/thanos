@@ -106,6 +106,12 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
+
+			for _, meta := range metas {
+				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				metrics.downsamples.WithLabelValues(groupKey)
+				metrics.downsampleFailures.WithLabelValues(groupKey)
+			}
 			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
@@ -231,10 +237,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
+				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos))
+			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 		}
 	}
 	return nil

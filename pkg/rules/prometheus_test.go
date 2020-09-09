@@ -9,18 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/prometheus/pkg/labels"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestPrometheus_Rules_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()

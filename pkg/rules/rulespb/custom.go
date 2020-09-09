@@ -177,6 +177,34 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 	return 0
 }
 
+func (r *RuleGroups) MarshalJSON() ([]byte, error) {
+	if r.Groups == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		return []byte(`{"groups":[]}`), nil
+	}
+	type plain RuleGroups
+	return json.Marshal((*plain)(r))
+}
+
+// Compare compares rule group x and y and returns:
+//
+//   < 0 if x < y   if rule group r1 is not equal and lexically before rule group r2
+//     0 if x == y  if rule group r1 is logically equal to r2 (r1 and r2 are the "same" rule groups)
+//   > 0 if x > y   if rule group r1 is not equal and lexically after rule group r2
+func (r1 *RuleGroup) Compare(r2 *RuleGroup) int {
+	return strings.Compare(r1.Key(), r2.Key())
+}
+
+// Key returns the group key similar resembling Prometheus logic.
+// See https://github.com/prometheus/prometheus/blob/869f1bc587e667b79721852d5badd9f70a39fc3f/rules/manager.go#L1062-L1065
+func (r *RuleGroup) Key() string {
+	if r == nil {
+		return ""
+	}
+
+	return r.File + ";" + r.Name
+}
+
 func (m *Rule) UnmarshalJSON(entry []byte) error {
 	decider := struct {
 		Type string `json:"type"`
@@ -219,6 +247,10 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 		})
 	}
 	a := m.GetAlert()
+	if a.Alerts == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		a.Alerts = make([]*AlertInstance, 0)
+	}
 	return json.Marshal(struct {
 		*Alert
 		Type string `json:"type"`
@@ -226,6 +258,15 @@ func (m *Rule) MarshalJSON() ([]byte, error) {
 		Alert: a,
 		Type:  RuleAlertingType,
 	})
+}
+
+func (r *RuleGroup) MarshalJSON() ([]byte, error) {
+	if r.Rules == nil {
+		// Ensure that empty slices are marshaled as '[]' and not 'null'.
+		r.Rules = make([]*Rule, 0)
+	}
+	type plain RuleGroup
+	return json.Marshal((*plain)(r))
 }
 
 func (x *AlertState) UnmarshalJSON(entry []byte) error {
@@ -247,7 +288,7 @@ func (x *AlertState) UnmarshalJSON(entry []byte) error {
 }
 
 func (x *AlertState) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(x.String())), nil
+	return []byte(strconv.Quote(strings.ToLower(x.String()))), nil
 }
 
 // Compare compares alert state x and y and returns:

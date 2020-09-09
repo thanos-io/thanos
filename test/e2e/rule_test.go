@@ -29,6 +29,7 @@ import (
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -38,6 +39,7 @@ const (
 	testAlertRuleAbortOnPartialResponse = `
 groups:
 - name: example_abort
+  interval: 100ms
   # Abort should be a default: partial_response_strategy: "ABORT"
   rules:
   - alert: TestAlert_AbortOnPartialResponse
@@ -51,6 +53,7 @@ groups:
 	testAlertRuleWarnOnPartialResponse = `
 groups:
 - name: example_warn
+  interval: 100ms
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_WarnOnPartialResponse
@@ -64,6 +67,7 @@ groups:
 	testAlertRuleAddedLaterWebHandler = `
 groups:
 - name: example
+  interval: 100ms
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_HasBeenLoadedViaWebHandler
@@ -95,7 +99,35 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
+	defer resp.Body.Close()
 	testutil.Equals(t, 200, resp.StatusCode)
+}
+
+func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	testutil.Ok(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	testutil.Ok(t, err)
+
+	var data struct {
+		Status string
+		Data   *rulespb.RuleGroups
+	}
+
+	testutil.Ok(t, json.Unmarshal(body, &data))
+	testutil.Equals(t, "success", data.Status)
+
+	testutil.Assert(t, len(data.Data.Groups) > 0, "expected there to be some rule groups")
+
+	for _, g := range data.Data.Groups {
+		testutil.Assert(t, g.EvaluationDurationSeconds > 0, "expected it to take more than zero seconds to evaluate")
+		testutil.Assert(t, !g.LastEvaluation.IsZero(), "expected the rule group to be evaluated at least once")
+	}
 }
 
 func writeTargets(t *testing.T, path string, addrs ...string) {
@@ -260,7 +292,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 		{
 			EndpointsConfig: http_util.EndpointsConfig{
 				StaticAddresses: func() []string {
-					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil, nil, "")
+					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil, nil, "", "")
 					testutil.Ok(t, err)
 					return []string{q.NetworkHTTPEndpointFor(s.NetworkName())}
 				}(),
@@ -271,7 +303,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -351,21 +383,17 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	t.Run("no query configured", func(t *testing.T) {
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_ruler_query_apis_dns_provider_results"))
-
 		// Check for a few evaluations, check all of them failed.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(10), "prometheus_rule_evaluations_total"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.EqualsAmongTwo, "prometheus_rule_evaluations_total", "prometheus_rule_evaluation_failures_total"))
 
 		// No alerts sent.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_sent_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_errors_total"))
 	})
 
 	var currentFailures float64
@@ -373,7 +401,7 @@ func TestRule(t *testing.T) {
 		// Attach querier to target files.
 		writeTargets(t, filepath.Join(s.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.NetworkHTTPEndpoint())
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_query_apis_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_ruler_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
 
 		var currentVal float64
@@ -391,7 +419,6 @@ func TestRule(t *testing.T) {
 		// Alerts sent.
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(4), "thanos_alert_sender_alerts_sent_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_errors_total"))
 
 		// Alerts received.
 		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))
@@ -464,6 +491,10 @@ func TestRule(t *testing.T) {
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_ruler_alertmanagers_dns_provider_results"))
 	})
 
+	t.Run("rule groups have last evaluation and evaluation duration set", func(t *testing.T) {
+		rulegroupCorrectData(t, ctx, r.HTTPEndpoint())
+	})
+
 	t.Run("reload works", func(t *testing.T) {
 		// Add a new rule via /-/reload.
 		// TODO(GiedriusS): add a test for reloading via SIGHUP. Need to extend e2e framework to expose PIDs.
@@ -531,7 +562,7 @@ func mustUrlParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-// Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
+// Test Ruler behavior on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 

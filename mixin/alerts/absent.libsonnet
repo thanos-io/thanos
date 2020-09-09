@@ -26,7 +26,8 @@
               severity: 'critical',
             },
             annotations: {
-              message: '%s has disappeared from Prometheus target discovery.' % name,
+              description: '%s has disappeared from Prometheus target discovery.' % name,
+              summary: 'thanos component has disappeared from Prometheus target discovery.',
             },
           }
           for name in std.objectFields(thanos.jobs)

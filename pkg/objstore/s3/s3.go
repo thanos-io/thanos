@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -20,9 +21,9 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/minio/minio-go/v6"
-	"github.com/minio/minio-go/v6/pkg/credentials"
-	"github.com/minio/minio-go/v6/pkg/encrypt"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
@@ -31,8 +32,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// DirDelim is the delimiter used to model a directory structure in an object store bucket.
-const DirDelim = "/"
+const (
+	// DirDelim is the delimiter used to model a directory structure in an object store bucket.
+	DirDelim = "/"
+
+	// SSEKMS is the name of the SSE-KMS method for objectstore encryption.
+	SSEKMS = "SSE-KMS"
+
+	// SSEC is the name of the SSE-C method for objstore encryption.
+	SSEC = "SSE-C"
+
+	// SSES3 is the name of the SSE-S3 method for objstore encryption.
+	SSES3 = "SSE-S3"
+)
 
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
@@ -53,13 +65,22 @@ type Config struct {
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
-	SSEEncryption   bool              `yaml:"encrypt_sse"`
 	SecretKey       string            `yaml:"secret_key"`
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
-	PartSize uint64 `yaml:"part_size"`
+	PartSize  uint64    `yaml:"part_size"`
+	SSEConfig SSEConfig `yaml:"sse_config"`
+}
+
+// SSEConfig deals with the configuration of SSE for Minio. The following options are valid:
+// kmsencryptioncontext == https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context
+type SSEConfig struct {
+	Type                 string            `yaml:"type"`
+	KMSKeyID             string            `yaml:"kms_key_id"`
+	KMSEncryptionContext map[string]string `yaml:"kms_encryption_context"`
+	EncryptionKey        string            `yaml:"encryption_key"`
 }
 
 type TraceConfig struct {
@@ -86,7 +107,7 @@ type Bucket struct {
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
-	if err := yaml.Unmarshal(conf, &config); err != nil {
+	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
 		return Config{}, err
 	}
 
@@ -136,40 +157,69 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		}
 	}
 
-	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, config.Region)
+	client, err := minio.New(config.Endpoint, &minio.Options{
+		Creds:  credentials.NewChainCredentials(chain),
+		Secure: !config.Insecure,
+		Region: config.Region,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   100,
+			IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			// The ResponseHeaderTimeout here is the only change
+			// from the default minio transport, it was introduced
+			// to cover cases where the tcp connection works but
+			// the server never answers. Defaults to 2 minutes.
+			ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
+			// Set this value so that the underlying transport round-tripper
+			// doesn't try to auto decode the body of objects with
+			// content-encoding set to `gzip`.
+			//
+			// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
+			DisableCompression: true,
+			TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
+		},
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
 	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
-	client.SetCustomTransport(&http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   100,
-		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		// The ResponseHeaderTimeout here is the only change
-		// from the default minio transport, it was introduced
-		// to cover cases where the tcp connection works but
-		// the server never answers. Defaults to 2 minutes.
-		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-		// Set this value so that the underlying transport round-tripper
-		// doesn't try to auto decode the body of objects with
-		// content-encoding set to `gzip`.
-		//
-		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-		DisableCompression: true,
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-	})
 
 	var sse encrypt.ServerSide
-	if config.SSEEncryption {
-		sse = encrypt.NewSSE()
+	if config.SSEConfig.Type != "" {
+		switch config.SSEConfig.Type {
+		case SSEKMS:
+			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
+			if err != nil {
+				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
+			}
+
+		case SSEC:
+			key, err := ioutil.ReadFile(config.SSEConfig.EncryptionKey)
+			if err != nil {
+				return nil, err
+			}
+
+			sse, err = encrypt.NewSSEC(key)
+			if err != nil {
+				return nil, errors.Wrap(err, "initialize s3 client SSE-C")
+			}
+
+		case SSES3:
+			sse = encrypt.NewSSE()
+
+		default:
+			sseErrMsg := errors.Errorf("Unsupported type %q was provided. Supported types are SSE-S3, SSE-KMS, SSE-C", config.SSEConfig.Type)
+			return nil, errors.Wrap(sseErrMsg, "Initialize s3 client SSE Config")
+		}
 	}
 
 	if config.TraceConfig.Enable {
@@ -206,6 +256,15 @@ func validate(conf Config) error {
 	if conf.AccessKey != "" && conf.SecretKey == "" {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
+
+	if conf.SSEConfig.Type == SSEC && conf.SSEConfig.EncryptionKey == "" {
+		return errors.New("encryption_key must be set if sse_config.type is set to 'SSE-C'")
+	}
+
+	if conf.SSEConfig.Type == SSEKMS && conf.SSEConfig.KMSKeyID == "" {
+		return errors.New("kms_key_id must be set if sse_config.type is set to 'SSE-KMS'")
+	}
+
 	return nil
 }
 
@@ -228,7 +287,12 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	for object := range b.client.ListObjects(b.name, dir, false, ctx.Done()) {
+	opts := minio.ListObjectsOptions{
+		Prefix:    dir,
+		Recursive: false,
+	}
+
+	for object := range b.client.ListObjects(ctx, b.name, opts) {
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
@@ -260,7 +324,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 			return nil, err
 		}
 	}
-	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
+	r, err := b.client.GetObject(ctx, b.name, name, *opts)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +352,8 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 }
 
 // Exists checks if the given object exists.
-func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
-	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
+func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	_, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -314,7 +378,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	if size < int64(partSize) {
 		partSize = 0
 	}
-	if _, err := b.client.PutObjectWithContext(
+	if _, err := b.client.PutObject(
 		ctx,
 		b.name,
 		name,
@@ -333,8 +397,8 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 }
 
 // Attributes returns information about the specified object.
-func (b *Bucket) Attributes(_ context.Context, name string) (objstore.ObjectAttributes, error) {
-	objInfo, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
+func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	objInfo, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}
@@ -346,8 +410,8 @@ func (b *Bucket) Attributes(_ context.Context, name string) (objstore.ObjectAttr
 }
 
 // Delete removes the object with the given name.
-func (b *Bucket) Delete(_ context.Context, name string) error {
-	return b.client.RemoveObject(b.name, name)
+func (b *Bucket) Delete(ctx context.Context, name string) error {
+	return b.client.RemoveObject(ctx, b.name, name, minio.RemoveObjectOptions{})
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
@@ -391,6 +455,8 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 }
 
 func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucket bool) (objstore.Bucket, func(), error) {
+	ctx := context.Background()
+
 	bc, err := yaml.Marshal(c)
 	if err != nil {
 		return nil, nil, err
@@ -402,7 +468,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 
 	bktToCreate := c.Bucket
 	if c.Bucket != "" && reuseBucket {
-		if err := b.Iter(context.Background(), "", func(f string) error {
+		if err := b.Iter(ctx, "", func(f string) error {
 			return errors.Errorf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "s3 check bucket %s", c.Bucket)
@@ -416,15 +482,15 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 		bktToCreate = objstore.CreateTemporaryTestBucketName(t)
 	}
 
-	if err := b.client.MakeBucket(bktToCreate, location); err != nil {
+	if err := b.client.MakeBucket(ctx, bktToCreate, minio.MakeBucketOptions{Region: location}); err != nil {
 		return nil, nil, err
 	}
 	b.name = bktToCreate
 	t.Log("created temporary AWS bucket for AWS tests with name", bktToCreate, "in", location)
 
 	return b, func() {
-		objstore.EmptyBucket(t, context.Background(), b)
-		if err := b.client.RemoveBucket(bktToCreate); err != nil {
+		objstore.EmptyBucket(t, ctx, b)
+		if err := b.client.RemoveBucket(ctx, bktToCreate); err != nil {
 			t.Logf("deleting bucket %s failed: %s", bktToCreate, err)
 		}
 	}, nil

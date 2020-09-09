@@ -5,17 +5,19 @@
 
 trap 'kill 0' SIGTERM
 
+MINIO_ENABLED=${MINIO_ENABLED:-""}
 MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
 MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
-PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"./prometheus"}
-THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"./thanos"}
+PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
+THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
+S3_ENDPOINT=""
 
-if [ ! $(command -v $PROMETHEUS_EXECUTABLE) ]; then
+if [ ! $(command -v "$PROMETHEUS_EXECUTABLE") ]; then
   echo "Cannot find or execute Prometheus binary $PROMETHEUS_EXECUTABLE, you can override it by setting the PROMETHEUS_EXECUTABLE env variable"
   exit 1
 fi
 
-if [ ! $(command -v $THANOS_EXECUTABLE) ]; then
+if [ ! $(command -v "$THANOS_EXECUTABLE") ]; then
   echo "Cannot find or execute Thanos binary $THANOS_EXECUTABLE, you can override it by setting the THANOS_EXECUTABLE env variable"
   exit 1
 fi
@@ -24,12 +26,12 @@ fi
 # NOTE: If you would like to use an actual S3-compatible API with this setup
 #       set the S3_* environment variables set in the Minio example.
 if [ -n "${MINIO_ENABLED}" ]; then
-  if [ ! $(command -v $MINIO_EXECUTABLE) ]; then
+  if [ ! $(command -v "$MINIO_EXECUTABLE") ]; then
     echo "Cannot find or execute Minio binary $MINIO_EXECUTABLE, you can override it by setting the MINIO_EXECUTABLE env variable"
     exit 1
   fi
 
-  if [ ! $(command -v $MC_EXECUTABLE) ]; then
+  if [ ! $(command -v "$MC_EXECUTABLE") ]; then
     echo "Cannot find or execute Minio client binary $MC_EXECUTABLE, you can override it by setting the MC_EXECUTABLE env variable"
     exit 1
   fi
@@ -69,70 +71,70 @@ fi
 
 # Setup alert / rules config file.
 cat >data/rules.yml <<-EOF
-groups:
-  - name: example
-    rules:
-    - record: job:http_inprogress_requests:sum
-      expr: sum(http_inprogress_requests) by (job)
+	groups:
+	  - name: example
+	    rules:
+	    - record: job:http_inprogress_requests:sum
+	      expr: sum(http_inprogress_requests) by (job)
 EOF
 
 STORES=""
 
 # Start three Prometheus servers monitoring themselves.
 for i in $(seq 0 2); do
-  rm -rf data/prom${i}
-  mkdir -p data/prom${i}/
+  rm -rf data/prom"${i}"
+  mkdir -p data/prom"${i}"/
 
-  cat >data/prom${i}/prometheus.yml <<-EOF
-global:
-  external_labels:
-    prometheus: prom-${i}
-rule_files:
-  - 'rules.yml'
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 5s
-  static_configs:
-  - targets:
-    - "localhost:909${i}"
-    - "localhost:5909${i}"
-    - "localhost:5909${i}"
-    - "localhost:5909${i}"
-- job_name: thanos-sidecar
-  scrape_interval: 5s
-  static_configs:
-  - targets:
-    - "localhost:109${i}2"
-- job_name: thanos-store
-  scrape_interval: 5s
-  static_configs:
-  - targets:
-    - "localhost:10906"
-- job_name: thanos-receive
-  scrape_interval: 5s
-  static_configs:
-  - targets:
-    - "localhost:10909"
-    - "localhost:11909"
-    - "localhost:12909"
-- job_name: thanos-query
-  scrape_interval: 5s
-  static_configs:
-  - targets:
-    - "localhost:10904"
-    - "localhost:10914"
-EOF
+  cat >data/prom"${i}"/prometheus.yml <<-EOF
+		global:
+		  external_labels:
+		    prometheus: prom-${i}
+		rule_files:
+		  - 'rules.yml'
+		scrape_configs:
+		- job_name: prometheus
+		  scrape_interval: 5s
+		  static_configs:
+		  - targets:
+		    - "localhost:909${i}"
+		    - "localhost:5909${i}"
+		    - "localhost:5909${i}"
+		    - "localhost:5909${i}"
+		- job_name: thanos-sidecar
+		  scrape_interval: 5s
+		  static_configs:
+		  - targets:
+		    - "localhost:109${i}2"
+		- job_name: thanos-store
+		  scrape_interval: 5s
+		  static_configs:
+		  - targets:
+		    - "localhost:10906"
+		- job_name: thanos-receive
+		  scrape_interval: 5s
+		  static_configs:
+		  - targets:
+		    - "localhost:10909"
+		    - "localhost:11909"
+		    - "localhost:12909"
+		- job_name: thanos-query
+		  scrape_interval: 5s
+		  static_configs:
+		  - targets:
+		    - "localhost:10904"
+		    - "localhost:10914"
+	EOF
 
-cp data/rules.yml data/prom${i}/rules.yml
+  cp data/rules.yml data/prom${i}/rules.yml
 
   ${PROMETHEUS_EXECUTABLE} \
-    --config.file data/prom${i}/prometheus.yml \
-    --storage.tsdb.path data/prom${i} \
+    --config.file data/prom"${i}"/prometheus.yml \
+    --storage.tsdb.path data/prom"${i}" \
     --log.level warn \
     --web.enable-lifecycle \
     --storage.tsdb.min-block-duration=2h \
     --storage.tsdb.max-block-duration=2h \
-    --web.listen-address 0.0.0.0:909${i} &
+    --web.listen-address 0.0.0.0:909"${i}" &
 
   sleep 0.25
 done
@@ -147,14 +149,14 @@ fi
 # Start one sidecar for each Prometheus server.
 for i in $(seq 0 2); do
   ${THANOS_EXECUTABLE} sidecar \
-    --debug.name sidecar-${i} \
+    --debug.name sidecar-"${i}" \
     --log.level debug \
-    --grpc-address 0.0.0.0:109${i}1 \
+    --grpc-address 0.0.0.0:109"${i}"1 \
     --grpc-grace-period 1s \
-    --http-address 0.0.0.0:109${i}2 \
+    --http-address 0.0.0.0:109"${i}"2 \
     --http-grace-period 1s \
-    --prometheus.url http://localhost:909${i} \
-    --tsdb.path data/prom${i} \
+    --prometheus.url http://localhost:909"${i}" \
+    --tsdb.path data/prom"${i}" \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:109${i}1"
@@ -182,34 +184,35 @@ sleep 0.5
 
 if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
 
-cat <<-EOF > ./data/hashring.json
-[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]
-EOF
+  cat <<-EOF >./data/hashring.json
+		[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]
+	EOF
 
-for i in $(seq 0 1 2); do
-  ${THANOS_EXECUTABLE} receive \
-    --debug.name receive${i} \
-    --log.level debug \
-    --tsdb.path "./data/remote-write-receive-${i}-data" \
-    --grpc-address 0.0.0.0:1${i}907 \
-    --grpc-grace-period 1s \
-    --http-address 0.0.0.0:1${i}909 \
-    --http-grace-period 1s \
-    --receive.replication-factor 1 \
-    --tsdb.min-block-duration 5m \
-    --tsdb.max-block-duration 5m \
-    --label "receive_replica=\"${i}\"" \
-    --receive.local-endpoint 127.0.0.1:1${i}907 \
-    --receive.hashrings-file ./data/hashring.json \
-    ${OBJSTORECFG} \
-    --remote-write.address 0.0.0.0:1${i}908 &
+  for i in $(seq 0 1 2); do
+    ${THANOS_EXECUTABLE} receive \
+      --debug.name receive${i} \
+      --log.level debug \
+      --tsdb.path "./data/remote-write-receive-${i}-data" \
+      --grpc-address 0.0.0.0:1${i}907 \
+      --grpc-grace-period 1s \
+      --http-address 0.0.0.0:1${i}909 \
+      --http-grace-period 1s \
+      --receive.replication-factor 1 \
+      --tsdb.min-block-duration 5m \
+      --tsdb.max-block-duration 5m \
+      --label "receive_replica=\"${i}\"" \
+      --label 'receive="true"' \
+      --receive.local-endpoint 127.0.0.1:1${i}907 \
+      --receive.hashrings-file ./data/hashring.json \
+      --remote-write.address 0.0.0.0:1${i}908 \
+      ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:1${i}907"
-done
+    STORES="${STORES} --store 127.0.0.1:1${i}907"
+  done
 
-for i in $(seq 0 1 2); do
-  mkdir -p "data/local-prometheus-${i}-data/"
-  cat <<EOF >data/local-prometheus-${i}-data/prometheus.yml
+  for i in $(seq 0 1 2); do
+    mkdir -p "data/local-prometheus-${i}-data/"
+    cat <<EOF >data/local-prometheus-${i}-data/prometheus.yml
 global:
   external_labels:
     prometheus: prom${i}
@@ -227,32 +230,33 @@ scrape_configs:
 remote_write:
 - url: http://localhost:1${i}908/api/v1/receive
 EOF
-  ${PROMETHEUS_EXECUTABLE} \
-    --web.listen-address ":5909${i}" \
-    --config.file data/local-prometheus-${i}-data/prometheus.yml \
-    --storage.tsdb.path "data/local-prometheus-${i}-data/" &
-done
+    ${PROMETHEUS_EXECUTABLE} \
+      --web.listen-address ":5909${i}" \
+      --config.file data/local-prometheus-${i}-data/prometheus.yml \
+      --storage.tsdb.path "data/local-prometheus-${i}-data/" &
+  done
 fi
 
 sleep 0.5
 
-QUERIER_JAEGER_CONFIG=$(cat <<-EOF
-type: JAEGER
-config:
-  service_name: thanos-query
-  sampler_type: ratelimiting
-  sampler_param: 2
-EOF
+QUERIER_JAEGER_CONFIG=$(
+  cat <<-EOF
+		type: JAEGER
+		config:
+		  service_name: thanos-query
+		  sampler_type: ratelimiting
+		  sampler_param: 2
+	EOF
 )
 
 # Start two query nodes.
 for i in $(seq 0 1); do
   ${THANOS_EXECUTABLE} query \
-    --debug.name query-${i} \
+    --debug.name query-"${i}" \
     --log.level debug \
-    --grpc-address 0.0.0.0:109${i}3 \
+    --grpc-address 0.0.0.0:109"${i}"3 \
     --grpc-grace-period 1s \
-    --http-address 0.0.0.0:109${i}4 \
+    --http-address 0.0.0.0:109"${i}"4 \
     --http-grace-period 1s \
     --query.replica-label prometheus \
     --tracing.config="${QUERIER_JAEGER_CONFIG}" \
@@ -284,5 +288,7 @@ ${THANOS_EXECUTABLE} rule \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
   ${OBJSTORECFG} &
+
+echo "all started; waiting for signal"
 
 wait

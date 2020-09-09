@@ -13,16 +13,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"go.uber.org/goleak"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestReadDeletionMark(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
+func TestReadDeletionMark(t *testing.T) {
 	ctx := context.Background()
 
 	tmpDir, err := ioutil.TempDir("", "test-read-deletion-mark")

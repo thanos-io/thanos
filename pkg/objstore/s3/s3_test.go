@@ -24,6 +24,91 @@ insecure: false`)
 	}
 }
 
+func TestParseConfig_SSEConfig(t *testing.T) {
+	input := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-S3`)
+
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input2 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C`)
+
+	cfg, err = parseConfig(input2)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input3 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C
+  kms_key_id: qweasd`)
+
+	cfg, err = parseConfig(input3)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input4 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-C
+  encryption_key: /some/file`)
+
+	cfg, err = parseConfig(input4)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input5 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS`)
+
+	cfg, err = parseConfig(input5)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, validate(cfg))
+
+	input6 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab`)
+
+	cfg, err = parseConfig(input6)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input7 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-KMS
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab
+  kms_encryption_context:
+    key: value
+    something: else
+    a: b`)
+
+	cfg, err = parseConfig(input7)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg))
+
+	input8 := []byte(`bucket: abdd
+endpoint: "s3-endpoint"
+sse_config:
+  type: SSE-MagicKey
+  kms_key_id: abcd1234-ab12-cd34-1234567890ab
+  encryption_key: /some/file`)
+
+	cfg, err = parseConfig(input8)
+	testutil.Ok(t, err)
+	// Since the error handling for "proper type" if done as we're setting up the bucket.
+	testutil.Ok(t, validate(cfg))
+}
+
 func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false`)
@@ -76,7 +161,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 http_config:
   insecure_skip_verify: false
@@ -91,7 +175,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 put_user_metadata:
   "X-Amz-Acl": "bucket-owner-full-control"
@@ -110,7 +193,6 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 http_config:
   insecure_skip_verify: false
@@ -125,14 +207,29 @@ endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
 signature_version2: false
-encrypt_sse: false
 secret_key: "secret_key"
 part_size: 104857600
 http_config:
   insecure_skip_verify: false
   idle_conn_timeout: 50s`)
-
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
 	testutil.Assert(t, cfg2.PartSize == 1024*1024*100, "when part size should be set to 100MiB")
+}
+
+func TestParseConfig_OldSEEncryptionFieldShouldFail(t *testing.T) {
+	input := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"
+access_key: "access_key"
+insecure: false
+signature_version2: false
+encrypt_sse: false
+secret_key: "secret_key"
+see_encryption: true
+put_user_metadata:
+  "X-Amz-Acl": "bucket-owner-full-control"
+http_config:
+  idle_conn_timeout: 0s`)
+	_, err := parseConfig(input)
+	testutil.NotOk(t, err)
 }

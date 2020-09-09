@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -15,13 +14,19 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/relabel"
+
+	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -32,14 +37,12 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const fetcherConcurrency = 32
 
 // registerStore registers a store command.
-func registerStore(m map[string]setupFunc, app *kingpin.Application) {
+func registerStore(app *extkingpin.App) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
@@ -52,18 +55,18 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		Default("250MB").Bytes()
 
 	indexCacheConfig := extflag.RegisterPathOrContent(cmd, "index-cache.config",
-		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
+		"YAML file that contains index cache configuration. See format details: https://thanos.io/tip/components/store.md/#index-cache",
 		false)
 
 	cachingBucketConfig := extflag.RegisterPathOrContent(extflag.HiddenCmdClause(cmd), "store.caching-bucket.config",
-		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/components/store.md/#caching-bucket",
+		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/tip/components/store.md/#caching-bucket",
 		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").Bytes()
 
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
-		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: For efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
+		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
@@ -108,7 +111,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				minTime, maxTime)
@@ -149,8 +152,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*webPrefixHeaderName,
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
+			getFlagsMap(cmd.Flags()),
 		)
-	}
+	})
 }
 
 // runStore starts a daemon that serves queries to cluster peers using data from an object store.
@@ -180,6 +184,7 @@ func runStore(
 	externalPrefix, prefixHeader string,
 	postingOffsetsInMemSampling int,
 	cachingBucketConfig *extflag.PathOrContent,
+	flagsMap map[string]string,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -231,7 +236,7 @@ func runStore(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
 	if err != nil {
 		return err
 	}
@@ -276,6 +281,17 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
+	// Limit the concurrency on queries against the Thanos store.
+	if maxConcurrency < 0 {
+		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrency)
+	}
+
+	queriesGate := gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg)).NewGate(maxConcurrency)
+	promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_bucket_store_queries_concurrent_max",
+		Help: "Number of maximum concurrent queries.",
+	}).Set(float64(maxConcurrency))
+
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -283,9 +299,9 @@ func runStore(
 		metaFetcher,
 		dataDir,
 		indexCache,
+		queriesGate,
 		chunkPoolSizeBytes,
-		maxSampleCount,
-		maxConcurrency,
+		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
@@ -352,21 +368,26 @@ func runStore(
 	// Add bucket UI for loaded blocks.
 	{
 		r := route.New()
-		compactorView := ui.NewBucketUI(logger, "", path.Join(externalPrefix, "/loaded"), prefixHeader)
-		compactorView.Register(r, extpromhttp.NewInstrumentationMiddleware(reg))
-		metaFetcher.UpdateOnChange(compactorView.Set)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+
+		compactorView := ui.NewBucketUI(logger, "", externalPrefix, prefixHeader, "/loaded", component)
+		compactorView.Register(r, true, ins)
+
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+			return logging.NoLogCall
+		})}
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
+		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+
+		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			compactorView.Set(blocks, err)
+			api.SetLoaded(blocks, err)
+		})
 		srv.Handle("/", r)
 	}
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
-}
-
-func parseRelabelConfig(contentYaml []byte) ([]*relabel.Config, error) {
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
-		return nil, errors.Wrap(err, "parsing relabel configuration")
-	}
-
-	return relabelConfig, nil
 }

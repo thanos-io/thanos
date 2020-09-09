@@ -10,10 +10,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
+	"go.uber.org/goleak"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestBytesPool(t *testing.T) {
 	chunkPool, err := NewBucketedBytesPool(10, 100, 2, 1000)
@@ -63,7 +68,6 @@ func TestBytesPool(t *testing.T) {
 func TestRacePutGet(t *testing.T) {
 	chunkPool, err := NewBucketedBytesPool(3, 100, 2, 5000)
 	testutil.Ok(t, err)
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	s := sync.WaitGroup{}
 
@@ -74,16 +78,15 @@ func TestRacePutGet(t *testing.T) {
 	stop := make(chan bool, 2)
 
 	f := func(txt string) {
+		defer s.Done()
 		for {
 			select {
 			case <-stop:
-				s.Done()
 				return
 			default:
 				c, err := chunkPool.Get(3)
 				if err != nil {
 					errs <- errors.Wrapf(err, "goroutine %s", txt)
-					s.Done()
 					return
 				}
 
@@ -92,13 +95,11 @@ func TestRacePutGet(t *testing.T) {
 				_, err = fmt.Fprintf(buf, "%s", txt)
 				if err != nil {
 					errs <- errors.Wrapf(err, "goroutine %s", txt)
-					s.Done()
 					return
 				}
 
 				if buf.String() != txt {
 					errs <- errors.New("expected to get the data just written")
-					s.Done()
 					return
 				}
 

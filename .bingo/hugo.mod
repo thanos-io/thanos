@@ -4,6 +4,6 @@ go 1.14
 
 require (
 	github.com/gobuffalo/envy v1.9.0 // indirect
-	// v0.55.3 This needs to match with version in netlify.toml
-	github.com/gohugoio/hugo v0.55.3
+	// v0.74.3 This needs to match with version in netlify.toml
+	github.com/gohugoio/hugo v0.74.3
 )

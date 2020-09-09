@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -16,12 +17,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -47,14 +49,30 @@ type RuleSpec interface {
 	Addr() string
 }
 
+// stringError forces the error to be a string
+// when marshaled into a JSON.
+type stringError struct {
+	originalErr error
+}
+
+// MarshalJSON marshals the error into a string form.
+func (e *stringError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.originalErr.Error())
+}
+
+// Error returns the original underlying error.
+func (e *stringError) Error() string {
+	return e.originalErr.Error()
+}
+
 type StoreStatus struct {
 	Name      string             `json:"name"`
-	LastCheck time.Time          `json:"last_check"`
-	LastError error              `json:"last_error"`
-	LabelSets []storepb.LabelSet `json:"label_sets"`
-	StoreType component.StoreAPI `json:"store_type"`
-	MinTime   int64              `json:"min_time"`
-	MaxTime   int64              `json:"max_time"`
+	LastCheck time.Time          `json:"lastCheck"`
+	LastError *stringError       `json:"lastError"`
+	LabelSets []storepb.LabelSet `json:"labelSets"`
+	StoreType component.StoreAPI `json:"-"`
+	MinTime   int64              `json:"minTime"`
+	MaxTime   int64              `json:"maxTime"`
 }
 
 type grpcStoreSpec struct {
@@ -510,8 +528,6 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = err
-
 	if err == nil {
 		status.LastCheck = time.Now()
 		mint, maxt := store.TimeRange()
@@ -519,6 +535,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.StoreType = store.StoreType()
 		status.MinTime = mint
 		status.MaxTime = maxt
+		status.LastError = nil
+	} else {
+		status.LastError = &stringError{originalErr: err}
 	}
 
 	s.storeStatuses[store.addr] = &status

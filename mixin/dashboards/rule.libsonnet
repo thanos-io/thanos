@@ -11,19 +11,53 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     'rule.json':
       g.dashboard(thanos.rule.title)
       .addRow(
+        g.row('Rule Group Evaluations')
+        .addPanel(
+          g.panel('Rule Group Evaluations') +
+          g.queryPanel(
+            |||
+              sum by (strategy) (rate(prometheus_rule_evaluations_total{namespace="$namespace",job="$job"}[$interval]))
+            |||,
+            '{{ strategy }}',
+          )
+        )
+        .addPanel(
+          g.panel('Rule Group Evaluations Missed') +
+          g.queryPanel(
+            |||
+              sum by (strategy) (increase(prometheus_rule_group_iterations_missed_total{namespace="$namespace",job="$job"}[$interval]))
+            |||,
+            '{{ strategy }}',
+          )
+        )
+        .addPanel(
+          g.panel('Rule Group Evlauations Too Slow') +
+          g.queryPanel(
+            |||
+              (
+                max by(rule_group) (prometheus_rule_group_last_duration_seconds{namespace="$namespace",job="$job"})
+                >
+                sum by(rule_group) (prometheus_rule_group_interval_seconds{namespace="$namespace",job="$job"})
+              )
+            |||,
+            '{{ rule_group }}',
+          )
+        )
+      )
+      .addRow(
         g.row('Alert Sent')
         .addPanel(
           g.panel('Dropped Rate', 'Shows rate of dropped alerts.') +
           g.queryPanel(
             'sum(rate(thanos_alert_sender_alerts_dropped_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, alertmanager)',
-            '{{job}} {{alertmanager}}'
+            '{{alertmanager}}'
           )
         )
         .addPanel(
           g.panel('Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
           g.queryPanel(
             'sum(rate(thanos_alert_sender_alerts_sent_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, alertmanager)',
-            '{{job}} {{alertmanager}}'
+            '{{alertmanager}}'
           ) +
           g.stack
         )
@@ -45,7 +79,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Push Rate', 'Shows rate of queued alerts.') +
           g.queryPanel(
             'sum(rate(thanos_alert_queue_alerts_dropped_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, pod)',
-            '{{job}} {{pod}}'
+            '{{pod}}'
           )
         )
         .addPanel(
@@ -72,22 +106,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        ) +
-        g.collapse
-      )
-      .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
@@ -103,22 +121,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        ) +
-        g.collapse
-      )
-      .addRow(
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
@@ -131,7 +133,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
           'sum(rate(thanos_alert_sender_alerts_sent_total{namespace="$namespace",%(selector)s}[$interval])) by (job, alertmanager)' % thanos.rule,
-          '{{job}} {{alertmanager}}'
+          '{{alertmanager}}'
         ) +
         g.addDashboardLink(thanos.rule.title) +
         g.stack

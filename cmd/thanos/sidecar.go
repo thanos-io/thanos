@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/exthttp"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -40,34 +41,26 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
-	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
+func registerSidecar(app *extkingpin.App) {
+	cmd := app.Command(component.Sidecar.String(), "Sidecar for Prometheus server")
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
-
-	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		rl := reloader.New(
-			log.With(logger, "component", "reloader"),
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
-			reloader.ReloadURLFromBase(conf.prometheus.url),
-			conf.reloader.confFile,
-			conf.reloader.envVarConfFile,
-			conf.reloader.ruleDirectories,
-		)
+			&reloader.Options{
+				ReloadURL:     reloader.ReloadURLFromBase(conf.prometheus.url),
+				CfgFile:       conf.reloader.confFile,
+				CfgOutputFile: conf.reloader.envVarConfFile,
+				WatchedDirs:   conf.reloader.ruleDirectories,
+				WatchInterval: conf.reloader.watchInterval,
+				RetryInterval: conf.reloader.retryInterval,
+			})
 
-		return runSidecar(
-			g,
-			logger,
-			reg,
-			tracer,
-			rl,
-			component.Sidecar,
-			*conf,
-		)
-	}
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+	})
 }
 
 func runSidecar(
@@ -273,12 +266,8 @@ func runSidecar(
 				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
 			}
 
-			var s *shipper.Shipper
-			if conf.shipper.uploadCompacted {
-				s = shipper.NewWithCompacted(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource)
-			} else {
-				s = shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource)
-			}
+			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
+				conf.shipper.uploadCompacted, conf.shipper.allowOutOfOrderUpload)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
@@ -417,7 +406,7 @@ type sidecarConfig struct {
 	limitMinTime thanosmodel.TimeOrDurationValue
 }
 
-func (sc *sidecarConfig) registerFlag(cmd *kingpin.CmdClause) *sidecarConfig {
+func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
@@ -428,5 +417,4 @@ func (sc *sidecarConfig) registerFlag(cmd *kingpin.CmdClause) *sidecarConfig {
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
-	return sc
 }

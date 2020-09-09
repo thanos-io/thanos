@@ -6,11 +6,12 @@ package model
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestBytes_Marshalling(t *testing.T) {
+func TestBytes_Marshaling(t *testing.T) {
 	value := Bytes(1048576)
 
 	encoded, err := yaml.Marshal(&value)

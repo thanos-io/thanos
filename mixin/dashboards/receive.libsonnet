@@ -11,7 +11,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     'receive.json':
       g.dashboard(thanos.receive.title)
       .addRow(
-        g.row('Incoming Request')
+        g.row('WRITE - Incoming Request')
         .addPanel(
           g.panel('Rate', 'Shows rate of incoming requests.') +
           g.httpQpsPanel('http_requests_total', 'handler="receive",namespace="$namespace",job=~"$job"')
@@ -26,23 +26,24 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('Detailed')
+        g.row('WRITE - Replication')
         .addPanel(
-          g.panel('Rate', 'Shows rate of incoming requests.') +
-          g.httpQpsPanelDetailed('http_requests_total', 'handler="receive",namespace="$namespace",job=~"$job"')
+          g.panel('Rate', 'Shows rate of replications to other receive nodes.') +
+          g.queryPanel(
+            'sum(rate(thanos_receive_replications_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'all {{job}}',
+          )
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
-          g.httpErrDetailsPanel('http_requests_total', 'handler="receive",namespace="$namespace",job=~"$job"')
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of replications to other receive nodes.') +
+          g.qpsErrTotalPanel(
+            'thanos_receive_replications_total{namespace="$namespace",job=~"$job",result="error"}',
+            'thanos_receive_replications_total{namespace="$namespace",job=~"$job"}',
+          )
         )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle incoming requests in quantiles.') +
-          g.httpLatencyDetailsPanel('http_request_duration_seconds', 'handler="receive",namespace="$namespace",job=~"$job"')
-        ) +
-        g.collapse
       )
       .addRow(
-        g.row('Forward Request')
+        g.row('WRITE - Forward Request')
         .addPanel(
           g.panel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
           g.queryPanel(
@@ -59,38 +60,37 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.row('gRPC (Unary)')
+        g.row('WRITE - gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method="RemoteWrite"')
         )
       )
       .addRow(
-        g.row('Detailed')
+        g.row('READ - gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcErrorsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
-        ) +
-        g.collapse
+          g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="unary",grpc_method!="RemoteWrite"')
+        )
       )
       .addRow(
-        g.row('gRPC (Stream)')
+        g.row('READ - gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
           g.grpcQpsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
@@ -103,22 +103,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.grpcLatencyPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
-      )
-      .addRow(
-        g.row('Detailed')
-        .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
-          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        )
-        .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
-        ) +
-        g.collapse
       )
       .addRow(
         g.row('Last Updated')

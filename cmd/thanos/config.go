@@ -1,6 +1,8 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
+//nolint:unparam
+// TODO(kakkoyun): Fix linter issues - The pattern we use makes linter unhappy (returning unused config pointers).
 package main
 
 import (
@@ -8,7 +10,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
 
 type grpcConfig struct {
@@ -19,7 +21,7 @@ type grpcConfig struct {
 	tlsSrvClientCA string
 }
 
-func (gc *grpcConfig) registerFlag(cmd *kingpin.CmdClause) *grpcConfig {
+func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-address",
 		"Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").StringVar(&gc.bindAddress)
@@ -43,7 +45,7 @@ type httpConfig struct {
 	gracePeriod model.Duration
 }
 
-func (hc *httpConfig) registerFlag(cmd *kingpin.CmdClause) *httpConfig {
+func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 	cmd.Flag("http-address",
 		"Listen host:port for HTTP endpoints.").
 		Default("0.0.0.0:10902").StringVar(&hc.bindAddress)
@@ -58,7 +60,7 @@ type prometheusConfig struct {
 	readyTimeout time.Duration
 }
 
-func (pc *prometheusConfig) registerFlag(cmd *kingpin.CmdClause) *prometheusConfig {
+func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusConfig {
 	cmd.Flag("prometheus.url",
 		"URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URLVar(&pc.url)
@@ -73,7 +75,7 @@ type connConfig struct {
 	maxIdleConnsPerHost int
 }
 
-func (cc *connConfig) registerFlag(cmd *kingpin.CmdClause) *connConfig {
+func (cc *connConfig) registerFlag(cmd extkingpin.FlagClause) *connConfig {
 	cmd.Flag("receive.connection-pool-size",
 		"Controls the http MaxIdleConns. Default is 0, which is unlimited").
 		IntVar(&cc.maxIdleConns)
@@ -87,7 +89,7 @@ type tsdbConfig struct {
 	path string
 }
 
-func (tc *tsdbConfig) registerFlag(cmd *kingpin.CmdClause) *tsdbConfig {
+func (tc *tsdbConfig) registerFlag(cmd extkingpin.FlagClause) *tsdbConfig {
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").Default("./data").StringVar(&tc.path)
 	return tc
 }
@@ -96,9 +98,11 @@ type reloaderConfig struct {
 	confFile        string
 	envVarConfFile  string
 	ruleDirectories []string
+	watchInterval   time.Duration
+	retryInterval   time.Duration
 }
 
-func (rc *reloaderConfig) registerFlag(cmd *kingpin.CmdClause) *reloaderConfig {
+func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfig {
 	cmd.Flag("reloader.config-file",
 		"Config file watched by the reloader.").
 		Default("").StringVar(&rc.confFile)
@@ -108,21 +112,34 @@ func (rc *reloaderConfig) registerFlag(cmd *kingpin.CmdClause) *reloaderConfig {
 	cmd.Flag("reloader.rule-dir",
 		"Rule directories for the reloader to refresh (repeated field).").
 		StringsVar(&rc.ruleDirectories)
+	cmd.Flag("reloader.watch-interval",
+		"Controls how often reloader re-reads config and rules.").
+		Default("3m").DurationVar(&rc.watchInterval)
+	cmd.Flag("reloader.retry-interval",
+		"Controls how often reloader retries config reload in case of error.").
+		Default("5s").DurationVar(&rc.retryInterval)
+
 	return rc
 }
 
 type shipperConfig struct {
-	uploadCompacted bool
-	ignoreBlockSize bool
+	uploadCompacted       bool
+	ignoreBlockSize       bool
+	allowOutOfOrderUpload bool
 }
 
-func (sc *shipperConfig) registerFlag(cmd *kingpin.CmdClause) *shipperConfig {
+func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
 	cmd.Flag("shipper.upload-compacted",
-		"If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus. Do it once and then disable the flag when done.").
+		"If true shipper will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus. Do it once and then disable the flag when done.").
 		Default("false").BoolVar(&sc.uploadCompacted)
 	cmd.Flag("shipper.ignore-unequal-block-size",
-		"If true sidecar will not require prometheus min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled on your Prometheus instance, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").
+		"If true shipper will not require prometheus min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled on your Prometheus instance, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").
 		Default("false").Hidden().BoolVar(&sc.ignoreBlockSize)
+	cmd.Flag("shipper.allow-out-of-order-uploads",
+		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
+			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
+			"about order.").
+		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
 	return sc
 }
 
@@ -131,7 +148,7 @@ type webConfig struct {
 	prefixHeaderName string
 }
 
-func (wc *webConfig) registerFlag(cmd *kingpin.CmdClause) *webConfig {
+func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
 	cmd.Flag("web.external-prefix",
 		"Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
 		Default("").StringVar(&wc.externalPrefix)

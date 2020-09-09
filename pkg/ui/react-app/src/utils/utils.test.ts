@@ -143,6 +143,9 @@ describe('Utils', () => {
           range: 3600,
           resolution: null,
           stacked: false,
+          maxSourceResolution: 'raw',
+          useDeduplication: true,
+          usePartialResponse: false,
           type: PanelType.Graph,
         },
       },
@@ -154,12 +157,15 @@ describe('Utils', () => {
           range: 3600,
           resolution: null,
           stacked: false,
+          maxSourceResolution: 'auto',
+          useDeduplication: false,
+          usePartialResponse: true,
           type: PanelType.Table,
         },
       },
     ];
     const query =
-      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h';
+      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h&g1.max_source_resolution=auto&g1.deduplicate=0&g1.partial_response=1';
 
     describe('decodePanelOptionsFromQueryString', () => {
       it('returns [] when query is empty', () => {
@@ -187,6 +193,16 @@ describe('Utils', () => {
         expect(parseOption('moment_input=2019-10-25%2023%3A37')).toEqual({
           endTime: moment.utc('2019-10-25 23:37').valueOf(),
         });
+      });
+
+      it('should parse max source res', () => {
+        expect(parseOption('max_source_resolution=auto')).toEqual({ maxSourceResolution: 'auto' });
+      });
+      it('should parse use deduplicate', () => {
+        expect(parseOption('deduplicate=1')).toEqual({ useDeduplication: true });
+      });
+      it('should parse partial_response', () => {
+        expect(parseOption('partial_response=1')).toEqual({ usePartialResponse: true });
       });
 
       describe('step_input', () => {
@@ -223,9 +239,21 @@ describe('Utils', () => {
           toQueryString({
             id: 'asdf',
             key: '0',
-            options: { expr: 'foo', type: PanelType.Graph, stacked: true, range: 0, endTime: null, resolution: 1 },
+            options: {
+              expr: 'foo',
+              type: PanelType.Graph,
+              stacked: true,
+              range: 0,
+              endTime: null,
+              resolution: 1,
+              maxSourceResolution: 'raw',
+              useDeduplication: true,
+              usePartialResponse: false,
+            },
           })
-        ).toEqual('g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0y&g0.step_input=1');
+        ).toEqual(
+          'g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0y&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.step_input=1'
+        );
       });
     });
 

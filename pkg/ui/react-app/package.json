@@ -30,6 +30,8 @@
     "moment": "^2.24.0",
     "moment-timezone": "^0.5.23",
     "popper.js": "^1.14.3",
+    "query-string": "^6.13.1",
+    "rc-slider": "^9.3.1",
     "react": "^16.7.0",
     "react-copy-to-clipboard": "^5.0.1",
     "react-dom": "^16.7.0",
@@ -40,7 +42,8 @@
     "sanitize-html": "^1.20.1",
     "tempusdominus-bootstrap-4": "^5.1.2",
     "tempusdominus-core": "^5.0.3",
-    "typescript": "^3.3.3"
+    "typescript": "^3.3.3",
+    "use-query-params": "^1.1.6"
   },
   "scripts": {
     "start": "react-scripts start",

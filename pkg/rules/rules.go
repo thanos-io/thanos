@@ -130,11 +130,11 @@ func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
 	}
 
 	// Sort groups such that they appear next to each other.
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Compare(groups[j]) < 0 })
 
 	i := 0
 	for _, g := range groups[1:] {
-		if g.Name == groups[i].Name {
+		if g.Compare(groups[i]) == 0 {
 			groups[i].Rules = append(groups[i].Rules, g.Rules...)
 		} else {
 			i++

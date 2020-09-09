@@ -10,7 +10,7 @@ declare const GLOBAL_PATH_PREFIX: string;
 declare const THANOS_COMPONENT: string;
 
 let prefix = GLOBAL_PATH_PREFIX;
-if (GLOBAL_PATH_PREFIX === 'PATH_PREFIX_PLACEHOLDER' || GLOBAL_PATH_PREFIX === '/' || !isPresent(GLOBAL_PATH_PREFIX)) {
+if (GLOBAL_PATH_PREFIX === '{{ pathPrefix }}' || GLOBAL_PATH_PREFIX === '/' || !isPresent(GLOBAL_PATH_PREFIX)) {
   // Either we are running the app outside of Prometheus, so the placeholder value in
   // the index.html didn't get replaced, or we have a '/' prefix, which we also need to
   // normalize to '' to make concatenations work (prefixes like '/foo/bar/' already get
@@ -18,7 +18,7 @@ if (GLOBAL_PATH_PREFIX === 'PATH_PREFIX_PLACEHOLDER' || GLOBAL_PATH_PREFIX === '
   prefix = '';
 }
 let thanosComponent = THANOS_COMPONENT;
-if (THANOS_COMPONENT === '') {
+if (THANOS_COMPONENT === '' || THANOS_COMPONENT === '{{ .Component }}') {
   thanosComponent = 'query';
 }
 
