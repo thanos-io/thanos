@@ -70,10 +70,12 @@ type QueryAPI struct {
 	enableAutodownsampling     bool
 	enableQueryPartialResponse bool
 	enableRulePartialResponse  bool
-	replicaLabels              []string
 
-	storeSet                               *query.StoreSet
+	replicaLabels []string
+	storeSet      *query.StoreSet
+
 	defaultInstantQueryMaxSourceResolution time.Duration
+	defaultLabelLookbackDelta              time.Duration
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -89,6 +91,7 @@ func NewQueryAPI(
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
+	defaultLabelLookbackDelta time.Duration,
 	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
@@ -105,6 +108,7 @@ func NewQueryAPI(
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		defaultLabelLookbackDelta:              defaultLabelLookbackDelta,
 	}
 }
 
@@ -418,11 +422,13 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
 	}
 
-	start, err := parseTimeParam(r, "start", minTime)
+	// If start and end time not specified, we get the last 2h window by default.
+	now := time.Now()
+	start, err := parseTimeParam(r, "start", now.Add(-qapi.defaultLabelLookbackDelta))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
-	end, err := parseTimeParam(r, "end", maxTime)
+	end, err := parseTimeParam(r, "end", now)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -584,11 +590,13 @@ func parseDuration(s string) (time.Duration, error) {
 func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ctx := r.Context()
 
-	start, err := parseTimeParam(r, "start", minTime)
+	// If start and end time not specified, we get the last 2h window by default.
+	now := time.Now()
+	start, err := parseTimeParam(r, "start", now.Add(-qapi.defaultLabelLookbackDelta))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
-	end, err := parseTimeParam(r, "end", maxTime)
+	end, err := parseTimeParam(r, "end", now)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}

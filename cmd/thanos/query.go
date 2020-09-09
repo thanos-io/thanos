@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -80,6 +81,8 @@ func registerQuery(app *extkingpin.App) {
 		Strings()
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
+
+	defaultLabelLookbackDelta := cmd.Flag("query.labels.lookback-delta", "The default lookback duration for retrieving labels through Labels API when the range parameters are not specified.").Default("2h").Duration()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -193,6 +196,7 @@ func registerQuery(app *extkingpin.App) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			time.Duration(*defaultLabelLookbackDelta),
 			*strictStores,
 			component.Query,
 		)
@@ -241,6 +245,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	defaultLabelLookbackDelta time.Duration,
 	strictStores []string,
 	comp component.Component,
 ) error {
@@ -442,6 +447,7 @@ func runQuery(
 			queryReplicaLabels,
 			flagsMap,
 			instantDefaultMaxSourceResolution,
+			defaultLabelLookbackDelta,
 			gate.New(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
