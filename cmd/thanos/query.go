@@ -304,8 +304,14 @@ func runQuery(
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		queryableCreator = query.NewQueryableCreator(logger, reg, proxy, maxConcurrentSelects, queryTimeout)
-		engine           = promql.NewEngine(
+		queryableCreator = query.NewQueryableCreator(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_query_concurrent_selects_", reg),
+			proxy,
+			maxConcurrentSelects,
+			queryTimeout,
+		)
+		engine = promql.NewEngine(
 			promql.EngineOpts{
 				Logger: logger,
 				Reg:    reg,
