@@ -92,7 +92,7 @@ For more details about each configuration parameter visit the [cortex documentat
 
 ### Slow Query Log
 
-Query Frontend supports `--query-frontend.log_queries_longer_than` flag to log queries running longer than some duration.
+Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
 
 ## Naming
 
