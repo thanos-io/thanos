@@ -27,6 +27,7 @@ func ExampleReloader() {
 		WatchedDirs:   []string{"/path/to/dirs"},
 		WatchInterval: 3 * time.Minute,
 		RetryInterval: 5 * time.Second,
+		DelayInterval: 1 * time.Second,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

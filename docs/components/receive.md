@@ -30,6 +30,15 @@ thanos receive \
     --objstore.config-file "bucket.yml"
 ```
 
+The example of `remote_write` Prometheus configuration:
+
+```yaml
+remote_write:
+- url: http://<thanos-receive-container-ip>:10908/api/v1/receive
+```
+
+where `<thanos-receive-containter-ip>` is an IP address reachable by Prometheus Server.
+
 The example content of `bucket.yml`:
 
 ```yaml
