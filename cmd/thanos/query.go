@@ -32,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -426,11 +427,10 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewQueryAPI(
 			logger,
-			reg,
 			stores,
 			engine,
 			queryableCreator,
@@ -442,7 +442,10 @@ func runQuery(
 			queryReplicaLabels,
 			flagsMap,
 			instantDefaultMaxSourceResolution,
-			maxConcurrentQueries,
+			gate.New(
+				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
+				maxConcurrentQueries,
+			),
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
