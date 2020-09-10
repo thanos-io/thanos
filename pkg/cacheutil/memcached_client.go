@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
@@ -329,7 +330,11 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	span, ctx := tracing.StartSpan(ctx, "memcached_set_async")
+	span.LogKV("key", key)
+	defer span.Finish()
+
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()
@@ -340,11 +345,16 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
+		span, _ := tracing.StartSpan(ctx, "memcached_client_set")
+		span.LogKV("key", key, "value_bytes", len(value))
+		defer span.Finish()
+
 		err := c.client.Set(&memcache.Item{
 			Key:        key,
 			Value:      value,
 			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
+
 		if err != nil {
 			// If the PickServer will fail for any reason the server address will be nil
 			// and so missing in the logs. We're OK with that (it's a best effort).
@@ -356,6 +366,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 				"server", serverAddr,
 				"err", err,
 			)
+			span.LogKV("err", err)
 			c.trackError(opSet, err)
 			return
 		}
@@ -373,6 +384,10 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 }
 
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	span, _ := tracing.StartSpan(ctx, "memcached_get_multi")
+	span.LogKV("keys", strings.Join(keys, ", "))
+	defer span.Finish()
+
 	if len(keys) == 0 {
 		return nil
 	}
@@ -472,15 +487,23 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
+
+	span, _ := tracing.StartSpan(ctx, "memcached_client_get_multi")
+	span.LogKV("keys", strings.Join(keys, ", "))
+	defer span.Finish()
+
 	items, err = c.client.GetMulti(keys)
+
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
+		span.LogKV("err", err)
 		c.trackError(opGetMulti, err)
 	} else {
 		var total int
 		for _, it := range items {
 			total += len(it.Value)
 		}
+		span.LogKV("value_bytes_total", len(items))
 		c.dataSize.WithLabelValues(opGetMulti).Observe(float64(total))
 		c.duration.WithLabelValues(opGetMulti).Observe(time.Since(start).Seconds())
 	}
