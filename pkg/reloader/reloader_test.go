@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"go.uber.org/atomic"
 	"go.uber.org/goleak"
 
@@ -75,6 +76,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		WatchedDirs:   nil,
 		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
 		RetryInterval: 100 * time.Millisecond,
+		DelayInterval: 1 * time.Millisecond,
 	})
 
 	// Fail without config.
@@ -148,7 +150,7 @@ config:
 
 			// Change the mode so reloader can't read the file.
 			testutil.Ok(t, os.Chmod(input, os.ModeDir))
-			attemptsCnt += 1
+			attemptsCnt++
 			// That was the second attempt to reload config. All good, break.
 			if attemptsCnt == 2 {
 				break
@@ -162,7 +164,7 @@ config:
 	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV2"))
 }
 
-func TestReloader_RuleApply(t *testing.T) {
+func TestReloader_DirectoriesApply(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
@@ -173,7 +175,7 @@ func TestReloader_RuleApply(t *testing.T) {
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
 		i++
 		if i%2 == 0 {
-			// Every second request, fail to ensure that retry works.
+			// Fail every second request to ensure that retry works.
 			resp.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -189,30 +191,41 @@ func TestReloader_RuleApply(t *testing.T) {
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
 
-	dir, err := ioutil.TempDir("", "reloader-rules-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
+	dir2 := t.TempDir()
 
-	dir2, err := ioutil.TempDir("", "reload-rules-test2")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir2)) }()
-
-	// Symlinked directory.
+	// dir
+	// └─ rule-dir -> dir2/rule-dir
+	// dir2
+	// └─ rule-dir
 	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
 
-	reloader := New(nil, nil, &Options{
-		ReloadURL:     reloadURL,
-		CfgFile:       "",
-		CfgOutputFile: "",
-		WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
-		WatchInterval: 100 * time.Millisecond,
-		RetryInterval: 100 * time.Millisecond,
-	})
+	logger := log.NewNopLogger()
+	reloader := New(
+		logger,
+		nil,
+		&Options{
+			ReloadURL:     reloadURL,
+			CfgFile:       "",
+			CfgOutputFile: "",
+			WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
+			WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+			RetryInterval: 100 * time.Millisecond,
+		})
 
-	// Some initial state.
+	// dir
+	// ├─ rule-dir -> dir2/rule-dir
+	// └─ rule1.yaml
+	// dir2
+	// ├─ rule-dir
+	// │  └─ rule4.yaml
+	// ├─ rule3-001.yaml -> rule3-source.yaml
+	// └─ rule3-source.yaml
+	// The reloader watches 2 directories: dir and dir/rule-dir.
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -241,25 +254,81 @@ func TestReloader_RuleApply(t *testing.T) {
 			reloadsSeen = rel
 
 			t.Log("Performing step number", rel)
-
 			switch rel {
 			case 0:
-				// Add new rule file.
+				// Create rule2.yaml.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// └─ rule2.yaml (*)
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml
 				testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
 			case 1:
-				// Change rule 1 in place.
+				// Update rule1.yaml.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml (*)
+				// └─ rule2.yaml
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml
 				testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule1-changed"), os.ModePerm))
 			case 2:
-				// Add new rule as symlink.
-				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3.yaml")))
+				// Create dir/rule3.yaml (symlink to rule3-001.yaml).
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml
+				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
 				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
 			case 3:
-				// Change rule in symlink.
+				// Update the symlinked file and replace the symlink file to trigger fsnotify.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-002.yaml (*)
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-002.yaml -> rule3-source.yaml (*)
+				// └─ rule3-source.yaml (*)
 				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-002.yaml")))
+				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-002.yaml"), path.Join(dir2, "rule3.yaml")))
+				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+				testutil.Ok(t, os.Remove(path.Join(dir2, "rule3-001.yaml")))
 			case 4:
-				// Change rule in symlinked directory..
+				// Update rule4.yaml in the symlinked directory.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> rule3-source.yaml
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml (*)
+				// └─ rule3-source.yaml
 				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4-changed"), os.ModePerm))
 			}
+
 			if rel > 4 {
 				// All good.
 				return
@@ -272,4 +341,138 @@ func TestReloader_RuleApply(t *testing.T) {
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, 5, reloads.Load().(int))
+}
+
+func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir := t.TempDir()
+	dir2 := t.TempDir()
+
+	// dir
+	// └─ rule-dir -> dir2/rule-dir
+	// dir2
+	// └─ rule-dir
+	testutil.Ok(t, os.Mkdir(path.Join(dir2, "rule-dir"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
+
+	logger := log.NewNopLogger()
+	reloader := New(
+		logger,
+		nil,
+		&Options{
+			ReloadURL:     reloadURL,
+			CfgFile:       "",
+			CfgOutputFile: "",
+			WatchedDirs:   []string{dir, path.Join(dir, "rule-dir")},
+			WatchInterval: 1 * time.Second, // use a small watch interval.
+			RetryInterval: 9999 * time.Hour,
+		},
+	)
+
+	// dir
+	// ├─ rule-dir -> dir2/rule-dir
+	// └─ rule1.yaml
+	// dir2
+	// ├─ rule-dir
+	// │  └─ rule4.yaml
+	// ├─ rule3-001.yaml -> rule3-source.yaml
+	// └─ rule3-source.yaml
+	//
+	// The reloader watches 2 directories: dir and dir/rule-dir.
+	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
+	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		defer cancel()
+
+		reloadsSeen := 0
+		init := false
+		for {
+			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+
+			rel := reloads.Load().(int)
+			if init && rel <= reloadsSeen {
+				continue
+			}
+			init = true
+			reloadsSeen = rel
+
+			t.Log("Performing step number", rel)
+			switch rel {
+			case 0:
+				// Create rule3.yaml (symlink to rule3-001.yaml).
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml
+				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
+				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+			case 1:
+				// Update the symlinked file but do not replace the symlink in dir.
+				//
+				// fsnotify shouldn't send any event because the change happens
+				// in a directory that isn't watched but the reloader should detect
+				// the update thanks to the watch interval.
+				//
+				// dir
+				// ├─ rule-dir -> dir2/rule-dir
+				// ├─ rule1.yaml
+				// ├─ rule2.yaml
+				// └─ rule3.yaml -> dir2/rule3-001.yaml
+				// dir2
+				// ├─ rule-dir
+				// │  └─ rule4.yaml
+				// ├─ rule3-001.yaml -> rule3-source.yaml
+				// └─ rule3-source.yaml (*)
+				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+			}
+
+			if rel > 1 {
+				// All good.
+				return
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	g.Wait()
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, 2, reloads.Load().(int))
 }
