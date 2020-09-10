@@ -52,6 +52,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+const (
+	DedupParam               = "dedup"
+	PartialResponseParam     = "partial_response"
+	MaxSourceResolutionParam = "max_source_resolution"
+	ReplicaLabelsParam       = "replicaLabels[]"
+	StoreMatcherParam        = "storeMatch[]"
+)
+
 // QueryAPI is an API used by Thanos Query.
 type QueryAPI struct {
 	baseAPI         *api.BaseAPI
@@ -139,41 +147,38 @@ type queryData struct {
 }
 
 func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
-	const dedupParam = "dedup"
 	enableDeduplication = true
 
-	if val := r.FormValue(dedupParam); val != "" {
+	if val := r.FormValue(DedupParam); val != "" {
 		var err error
 		enableDeduplication, err = strconv.ParseBool(val)
 		if err != nil {
-			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", dedupParam)}
+			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", DedupParam)}
 		}
 	}
 	return enableDeduplication, nil
 }
 
 func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
-	const replicaLabelsParam = "replicaLabels[]"
 	if err := r.ParseForm(); err != nil {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
 	replicaLabels = qapi.replicaLabels
 	// Overwrite the cli flag when provided as a query parameter.
-	if len(r.Form[replicaLabelsParam]) > 0 {
-		replicaLabels = r.Form[replicaLabelsParam]
+	if len(r.Form[ReplicaLabelsParam]) > 0 {
+		replicaLabels = r.Form[ReplicaLabelsParam]
 	}
 
 	return replicaLabels, nil
 }
 
 func (qapi *QueryAPI) parseStoreMatchersParam(r *http.Request) (storeMatchers [][]storepb.LabelMatcher, _ *api.ApiError) {
-	const storeMatcherParam = "storeMatch[]"
 	if err := r.ParseForm(); err != nil {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
-	for _, s := range r.Form[storeMatcherParam] {
+	for _, s := range r.Form[StoreMatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -189,10 +194,9 @@ func (qapi *QueryAPI) parseStoreMatchersParam(r *http.Request) (storeMatchers []
 }
 
 func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *api.ApiError) {
-	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
 
-	val := r.FormValue(maxSourceResolutionParam)
+	val := r.FormValue(MaxSourceResolutionParam)
 	if qapi.enableAutodownsampling || (val == "auto") {
 		maxSourceResolution = defaultVal
 	}
@@ -200,26 +204,24 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
-			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", MaxSourceResolutionParam)}
 		}
 	}
 
 	if maxSourceResolution < 0 {
-		return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
+		return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("negative '%s' is not accepted. Try a positive integer", MaxSourceResolutionParam)}
 	}
 
 	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
 func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePartialResponse bool) (enablePartialResponse bool, _ *api.ApiError) {
-	const partialResponseParam = "partial_response"
-
 	// Overwrite the cli flag when provided as a query parameter.
-	if val := r.FormValue(partialResponseParam); val != "" {
+	if val := r.FormValue(PartialResponseParam); val != "" {
 		var err error
 		defaultEnablePartialResponse, err = strconv.ParseBool(val)
 		if err != nil {
-			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", partialResponseParam)}
+			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", PartialResponseParam)}
 		}
 	}
 	return defaultEnablePartialResponse, nil
@@ -439,7 +441,12 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, nil, 0, enablePartialResponse, false).
+	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}

@@ -1056,7 +1056,7 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 			gate:                   gate.NewKeeper(nil).NewGate(4),
 		}
 		v := url.Values{}
-		v.Set("max_source_resolution", test.maxSourceResolutionParam)
+		v.Set(MaxSourceResolutionParam, test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
 
 		// If no max_source_resolution is specified fit at least 5 samples between steps.
@@ -1067,6 +1067,54 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 			testutil.Assert(t, maxResMillis != test.result, "case %v: expected %v not to be equal to %v", i, maxResMillis, test.result)
 		}
 
+	}
+}
+
+func TestParseStoreMatchersParam(t *testing.T) {
+	for i, tc := range []struct {
+		storeMatchers string
+		fail          bool
+		result        [][]storepb.LabelMatcher
+	}{
+		{
+			storeMatchers: "123",
+			fail:          true,
+		},
+		{
+			storeMatchers: "foo",
+			fail:          false,
+			result:        [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "foo"}}},
+		},
+		{
+			storeMatchers: `{__address__="localhost:10905"}`,
+			fail:          false,
+			result:        [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10905"}}},
+		},
+		{
+			storeMatchers: `{__address__="localhost:10905", cluster="test"}`,
+			fail:          false,
+			result: [][]storepb.LabelMatcher{{
+				storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10905"},
+				storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "cluster", Value: "test"},
+			}},
+		},
+	} {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			api := QueryAPI{
+				gate: gate.NewKeeper(nil).NewGate(4),
+			}
+			v := url.Values{}
+			v.Set(StoreMatcherParam, tc.storeMatchers)
+			r := &http.Request{PostForm: v}
+
+			storeMatchers, err := api.parseStoreMatchersParam(r)
+			if !tc.fail {
+				testutil.Equals(t, tc.result, storeMatchers)
+				testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
+			} else {
+				testutil.NotOk(t, err)
+			}
+		})
 	}
 }
 
