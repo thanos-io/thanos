@@ -26,7 +26,7 @@ const (
 // limit, align, split,cache requests and retry.
 // Not using the cortex one as it uses  query parallelisations based on
 // storage sharding configuration and query ASTs.
-func NewTripperWare(
+func NewTripperware(
 	queryRange QueryRange,
 	limits queryrange.Limits,
 	codec queryrange.Codec,

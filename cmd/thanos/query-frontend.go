@@ -50,7 +50,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.http.registerFlag(cmd)
 
-	cmd.Flag("query-range.split-queries-by-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
+	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
 		Default("24h").DurationVar(&cfg.QueryRange.SplitQueriesByInterval)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
@@ -62,18 +62,18 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the Frontend.").
 		Default("14").IntVar(&cfg.Limits.MaxQueryParallelism)
 
-	cmd.Flag("query-range.max-cache-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
+	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
 		Default("1m").DurationVar(&cfg.Limits.MaxCacheFreshness)
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.partialResponseStrategy)
 
-	cfg.cachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.cachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
 		Default("http://localhost:9090").StringVar(&cfg.Frontend.DownstreamURL)
 
-	cmd.Flag("query-frontend.compress-http-responses", "Compress HTTP responses.").
+	cmd.Flag("query-frontend.compress-responses", "Compress HTTP responses.").
 		Default("false").BoolVar(&cfg.Frontend.CompressResponses)
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
@@ -137,7 +137,7 @@ func runQueryFrontend(
 	}
 
 	codec := queryfrontend.NewThanosCodec(cfg.partialResponseStrategy)
-	tripperWare, err := queryfrontend.NewTripperWare(
+	tripperWare, err := queryfrontend.NewTripperware(
 		cfg.QueryRange,
 		limits,
 		codec,
