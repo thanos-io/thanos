@@ -168,7 +168,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 	availableBlocks := []*metadata.Meta{}
 
 	metas, partials, err := rs.fetcher.Fetch(ctx)
-	if err != nil && metas == nil {
+	if err != nil {
 		return err
 	}
 
