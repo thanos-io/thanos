@@ -98,7 +98,7 @@ func runQueryFrontend(
 		return err
 	}
 	if len(cacheConfContentYaml) > 0 {
-		cacheConfig, err := queryfrontend.NewCacheConfig(cacheConfContentYaml)
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, cacheConfContentYaml)
 		if err != nil {
 			return errors.Wrap(err, "initializing the query frontend config")
 		}

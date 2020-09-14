@@ -8,6 +8,8 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/yaml.v2"
@@ -50,7 +52,7 @@ type CacheProviderConfig struct {
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.
-func NewCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheConfig, error) {
+func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*queryrange.ResultsCacheConfig, error) {
 	cacheConfig := &CacheProviderConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
@@ -82,6 +84,10 @@ func NewCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheConfig, err
 		var config MemcachedResponseCacheConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
+		}
+		// TODO(krasi) Add support for it in the cortex module.
+		if config.Memcached.MaxItemSize > 0 {
+			level.Warn(logger).Log("message", "MaxItemSize is not yet supported by the memcached client")
 		}
 
 		return &queryrange.ResultsCacheConfig{
