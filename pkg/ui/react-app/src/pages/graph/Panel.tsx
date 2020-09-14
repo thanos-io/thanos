@@ -327,6 +327,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
+          <label>
+            Store Filter: 
+          </label>
           <Checkbox
             wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
             id={`store-match-all-${id}`}
