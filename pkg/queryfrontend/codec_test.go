@@ -10,10 +10,12 @@ import (
 	"testing"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/weaveworks/common/httpgrpc"
+
+	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"github.com/weaveworks/common/httpgrpc"
 )
 
 func TestCodec_DecodeRequest(t *testing.T) {
@@ -218,7 +220,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get("start") == "123" &&
 					r.URL.Query().Get("end") == "456" &&
 					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get("dedup") == "true"
+					r.URL.Query().Get(queryv1.DedupParam) == "true"
 			},
 		},
 		{
@@ -233,7 +235,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get("start") == "123" &&
 					r.URL.Query().Get("end") == "456" &&
 					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get("partial_response") == "true"
+					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
 			},
 		},
 		{
@@ -248,7 +250,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get("start") == "123" &&
 					r.URL.Query().Get("end") == "456" &&
 					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get("max_source_resolution") == "300"
+					r.URL.Query().Get(queryv1.MaxSourceResolutionParam) == "300"
 			},
 		},
 		{
@@ -263,7 +265,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get("start") == "123" &&
 					r.URL.Query().Get("end") == "456" &&
 					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get("max_source_resolution") == "3600"
+					r.URL.Query().Get(queryv1.MaxSourceResolutionParam) == "3600"
 			},
 		},
 	} {
