@@ -44,6 +44,7 @@ export interface PanelOptions {
   maxSourceResolution: string;
   useDeduplication: boolean;
   usePartialResponse: boolean;
+  storeMatches: string[];
 }
 
 export enum PanelType {
@@ -61,6 +62,7 @@ export const PanelDefaultOptions: PanelOptions = {
   maxSourceResolution: '0s',
   useDeduplication: true,
   usePartialResponse: false,
+  storeMatches: [],
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
