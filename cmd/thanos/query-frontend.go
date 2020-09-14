@@ -98,25 +98,21 @@ func runQueryFrontend(
 			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
 			cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration = 24 * time.Hour
 		}
-		cfg.CortexResultsCacheConfig = *cacheConfig
+		cfg.CortexResultsCacheConfig = cacheConfig
 	}
 
-	err = cfg.Validate(logger)
+	err = cfg.Validate()
 	if err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontend.New(cfg.CortexFrontendConfig, logger, reg)
+	fe, err := cortexfrontend.New(*cfg.CortexFrontendConfig, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
 	defer fe.Close()
 
-	tripperWare, err := queryfrontend.NewTripperware(
-		cfg.Config,
-		reg,
-		logger,
-	)
+	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
 		return errors.Wrap(err, "setup query range middlewares")
 	}

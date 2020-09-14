@@ -8,7 +8,6 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/go-kit/kit/log"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/yaml.v2"
@@ -115,9 +114,9 @@ type Config struct {
 	// when parsing thanos query request.
 	PartialResponseStrategy bool
 
-	CortexFrontendConfig     cortexfrontend.Config
-	CortexLimits             cortexvalidation.Limits
-	CortexResultsCacheConfig queryrange.ResultsCacheConfig
+	CortexFrontendConfig     *cortexfrontend.Config
+	CortexLimits             *cortexvalidation.Limits
+	CortexResultsCacheConfig *queryrange.ResultsCacheConfig
 
 	CachePathOrContent     extflag.PathOrContent
 	RequestLoggingDecision string
@@ -127,8 +126,8 @@ type Config struct {
 }
 
 // Validate a fully initialized config.
-func (cfg *Config) Validate(logger log.Logger) error {
-	if cfg.CortexResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+func (cfg *Config) Validate() error {
+	if cfg.CortexResultsCacheConfig != nil {
 		if cfg.SplitQueriesByInterval <= 0 {
 			return errors.New("split queries interval should be greater then 0")
 		}

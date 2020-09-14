@@ -40,7 +40,7 @@ func NewTripperware(
 	queriesCount.WithLabelValues(labelQuery)
 	queriesCount.WithLabelValues(labelQueryRange)
 
-	overrides, err := validation.NewOverrides(config.CortexLimits, nil)
+	overrides, err := validation.NewOverrides(*config.CortexLimits, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize limits")
 	}
@@ -69,10 +69,10 @@ func NewTripperware(
 		)
 	}
 
-	if config.CortexResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+	if config.CortexResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			config.CortexResultsCacheConfig,
+			*config.CortexResultsCacheConfig,
 			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
 			overrides,
 			codec,

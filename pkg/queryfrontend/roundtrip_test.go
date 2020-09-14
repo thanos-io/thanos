@@ -32,7 +32,7 @@ const (
 	day     = 24 * time.Hour
 )
 
-var defaultLimits = cortexvalidation.Limits{
+var defaultLimits = &cortexvalidation.Limits{
 	MaxQueryLength:      7 * 24 * time.Hour,
 	MaxQueryParallelism: 14,
 	MaxCacheFreshness:   time.Minute,
@@ -297,7 +297,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		StoreMatchers:       [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}}},
 	}
 
-	cacheConf := queryrange.ResultsCacheConfig{
+	cacheConf := &queryrange.ResultsCacheConfig{
 		CacheConfig: cortexcache.Config{
 			EnableFifoCache: true,
 			Fifocache: cortexcache.FifoCacheConfig{
@@ -313,6 +313,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		Config{
 			SplitQueriesByInterval:   day,
 			CortexResultsCacheConfig: cacheConf,
+			CortexLimits:             defaultLimits,
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)

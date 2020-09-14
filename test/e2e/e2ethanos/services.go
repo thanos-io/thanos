@@ -407,15 +407,15 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 }
 
 func NewQueryFrontend(name string, config queryfrontend.Config) (*e2e.HTTPService, error) {
-	cacheConfigBytes, err := yaml.Marshal(config.QueryRange.ResultsCacheConfig.CacheConfig)
+	cacheConfigBytes, err := yaml.Marshal(config.CortexResultsCacheConfig.CacheConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "marshal query frontend config file: %v", config.QueryRange.ResultsCacheConfig.CacheConfig)
+		return nil, errors.Wrapf(err, "marshal query frontend config file: %v", config.CortexResultsCacheConfig.CacheConfig)
 	}
 
 	args := e2e.BuildArgs(map[string]string{
 		"--debug.name":                    fmt.Sprintf("query-frontend-%s", name),
 		"--http-address":                  ":8080",
-		"--query-frontend.downstream-url": config.Frontend.DownstreamURL,
+		"--query-frontend.downstream-url": config.CortexFrontendConfig.DownstreamURL,
 		"--log.level":                     logLevel,
 		"--query-range.cache-config":      string(cacheConfigBytes),
 	})
