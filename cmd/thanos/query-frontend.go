@@ -109,7 +109,7 @@ func runQueryFrontend(
 		cfg.CortexResultsCacheConfig = cacheConfig
 	}
 
-	if cfg.Validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
 

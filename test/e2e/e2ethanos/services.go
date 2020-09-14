@@ -413,11 +413,11 @@ func NewQueryFrontend(name string, config queryfrontend.Config) (*e2e.HTTPServic
 	}
 
 	args := e2e.BuildArgs(map[string]string{
-		"--debug.name":                    fmt.Sprintf("query-frontend-%s", name),
-		"--http-address":                  ":8080",
-		"--query-frontend.downstream-url": config.CortexFrontendConfig.DownstreamURL,
-		"--log.level":                     logLevel,
-		"--query-range.cache-config":      string(cacheConfigBytes),
+		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
+		"--http-address":                      ":8080",
+		"--query-frontend.downstream-url":     config.CortexFrontendConfig.DownstreamURL,
+		"--log.level":                         logLevel,
+		"--query-range.response-cache-config": string(cacheConfigBytes),
 	})
 
 	queryFrontend := e2e.NewHTTPService(
