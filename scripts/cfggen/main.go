@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/fatih/structtag"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -28,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -57,6 +57,11 @@ var (
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
+	}
+
+	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]interface{}{
+		queryfrontend.INMEMORY:  queryfrontend.InMemoryResponseCacheConfig{},
+		queryfrontend.MEMCACHED: queryfrontend.MemcachedResponseCacheConfig{},
 	}
 )
 
@@ -92,6 +97,13 @@ func main() {
 		}
 	}
 
+	for typ, config := range queryfrontendCacheConfigs {
+		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("query_frontend_cache_", string(typ)), *outputDir); err != nil {
+			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			os.Exit(1)
+		}
+	}
+
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
 	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
@@ -103,11 +115,6 @@ func main() {
 	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
-		os.Exit(1)
-	}
-
-	if err := generate([]cache.Config{{}}, "frontend_cache", *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "frontend_cache", "err", err)
 		os.Exit(1)
 	}
 

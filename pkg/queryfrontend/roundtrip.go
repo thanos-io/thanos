@@ -27,10 +27,9 @@ const (
 // Not using the cortex one as it uses  query parallelisations based on
 // storage sharding configuration and query ASTs.
 func NewTripperware(
-	queryRange QueryRange,
+	config Config,
 	limits queryrange.Limits,
 	codec queryrange.Codec,
-	cacheExtractor queryrange.Extractor,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
@@ -52,10 +51,10 @@ func NewTripperware(
 		queryrange.StepAlignMiddleware,
 	)
 
-	if queryRange.SplitQueriesByInterval != 0 {
+	if config.SplitQueriesByInterval != 0 {
 		// TODO(yeya24): make interval dynamic in next pr.
 		queryIntervalFn := func(_ queryrange.Request) time.Duration {
-			return queryRange.SplitQueriesByInterval
+			return config.SplitQueriesByInterval
 		}
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
@@ -64,14 +63,14 @@ func NewTripperware(
 		)
 	}
 
-	if queryRange.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+	if config.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			queryRange.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(queryRange.SplitQueriesByInterval),
+			config.ResultsCacheConfig,
+			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
 			limits,
 			codec,
-			cacheExtractor,
+			queryrange.PrometheusResponseExtractor{},
 			nil,
 			shouldCache,
 			reg,
@@ -87,11 +86,11 @@ func NewTripperware(
 		)
 	}
 
-	if queryRange.MaxRetries > 0 {
+	if config.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", metrics),
-			queryrange.NewRetryMiddleware(logger, queryRange.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 

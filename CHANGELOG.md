@@ -11,7 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: It now uses the Cortex module fully and it support all backends - fifo, memcached, redis. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
+- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: Added support for Memacahce cache. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
 
 ### Added
 

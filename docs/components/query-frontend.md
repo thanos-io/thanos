@@ -46,48 +46,35 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
 Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers.
 Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
-It uses the cortex cache module so supports all that is supported there.
-For more details about each configuration parameter visit the [cortex documentation](https://cortexmetrics.io/docs/configuration/configuration-file/).
+Currently, in-memory cache (fifo cache) and memcached are supported.
 
-[embedmd]:# (../flags/config_frontend_cache.txt yaml)
+#### In-memory
+
+[embedmd]:# (../flags/config_query_frontend_cache_in_memory.txt yaml)
 ```yaml
-- enable_fifocache: false
-  default_validity: 0s
-  background:
-    writeback_goroutines: 0
-    writeback_buffer: 0
-  memcached:
-    expiration: 0s
-    batch_size: 0
-    parallelism: 0
-  memcached_client:
-    host: ""
-    service: ""
-    addresses: ""
-    timeout: 0s
-    max_idle_conns: 0
-    update_interval: 0s
-    consistent_hash: false
-    circuit_breaker_consecutive_failures: 0
-    circuit_breaker_timeout: 0s
-    circuit_breaker_interval: 0s
-  redis:
-    endpoint: ""
-    timeout: 0s
-    expiration: 0s
-    max_idle_conns: 0
-    max_active_conns: 0
-    password: ""
-    enable_tls: false
-    idle_timeout: 0s
-    wait_on_pool_exhaustion: false
-    max_conn_lifetime: 0s
-  fifocache:
-    max_size_bytes: ""
-    max_size_items: 0
-    validity: 0s
-    size: 0
-  prefix: ""
+type: IN-MEMORY
+config:
+  max_size: ""
+  max_size_items: 0
+  validity: 0s
+```
+
+#### Memcached
+
+[embedmd]:# (../flags/config_query_frontend_cache_memcached.txt yaml)
+```yaml
+type: MEMCACHED
+config:
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_item_size: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
+  validity: 0s
 ```
 
 ### Slow Query Log

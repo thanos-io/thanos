@@ -8,9 +8,8 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	"github.com/cortexproject/cortex/pkg/querier/frontend"
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/cortexproject/cortex/pkg/util/validation"
+	cortexFrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
+	cortexValidatoin "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -29,18 +28,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/weaveworks/common/user"
-	"gopkg.in/yaml.v2"
 )
 
 type config struct {
 	http httpConfig
 	queryfrontend.Config
-
-	cachePathOrContent     extflag.PathOrContent
-	requestLoggingDecision string
-	// partialResponseStrategy is the default strategy used
-	// when parsing thanos query request.
-	partialResponseStrategy bool
 }
 
 func registerQueryFrontend(app *extkingpin.App) {
@@ -51,35 +43,35 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cfg.http.registerFlag(cmd)
 
 	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
-		Default("24h").DurationVar(&cfg.QueryRange.SplitQueriesByInterval)
+		Default("24h").DurationVar(&cfg.SplitQueriesByInterval)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
-		Default("5").IntVar(&cfg.QueryRange.MaxRetries)
+		Default("5").IntVar(&cfg.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
-		Default("0").DurationVar(&cfg.Limits.MaxQueryLength)
+		Default("0").DurationVar(&cfg.MaxQueryLength)
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the Frontend.").
-		Default("14").IntVar(&cfg.Limits.MaxQueryParallelism)
+		Default("14").IntVar(&cfg.MaxQueryParallelism)
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.Limits.MaxCacheFreshness)
+		Default("1m").DurationVar(&cfg.MaxCacheFreshness)
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
-		Default("true").BoolVar(&cfg.partialResponseStrategy)
+		Default("true").BoolVar(&cfg.PartialResponseStrategy)
 
-	cfg.cachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
-		Default("http://localhost:9090").StringVar(&cfg.Frontend.DownstreamURL)
+		Default("http://localhost:9090").StringVar(&cfg.DownstreamURL)
 
 	cmd.Flag("query-frontend.compress-responses", "Compress HTTP responses.").
-		Default("false").BoolVar(&cfg.Frontend.CompressResponses)
+		Default("false").BoolVar(&cfg.CompressResponses)
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
-		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.Frontend.LogQueriesLongerThan)
+		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.LogQueriesLongerThan)
 
-	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.requestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
@@ -94,22 +86,18 @@ func runQueryFrontend(
 	cfg *config,
 	comp component.Component,
 ) error {
-	cacheConfContentYaml, err := cfg.cachePathOrContent.Content()
+	cacheConfContentYaml, err := cfg.CachePathOrContent.Content()
 	if err != nil {
 		return err
 	}
+
 	if len(cacheConfContentYaml) > 0 {
-		if err := yaml.UnmarshalStrict(cacheConfContentYaml, &cfg.QueryRange.ResultsCacheConfig.CacheConfig); err != nil {
-			return errors.Wrap(err, "parsing cache config YAML file")
+
+		cacheConfig, err := queryfrontend.NewCacheConfig(cacheConfContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "initializing the query frontend config ")
 		}
-	}
-	if cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer <= 0 {
-		cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer = 10000
-		level.Info(logger).Log("msg", "WriteBackBuffer not set so using the default", "WriteBackBuffer", cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackBuffer)
-	}
-	if cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines <= 0 {
-		cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines = 10
-		level.Info(logger).Log("msg", "WriteBackGoroutines not set so using the default", "WriteBackGoroutines", cfg.QueryRange.ResultsCacheConfig.CacheConfig.Background.WriteBackGoroutines)
+		cfg.ResultsCacheConfig = *cacheConfig
 	}
 
 	err = cfg.Validate()
@@ -117,31 +105,30 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := frontend.New(frontend.Config{
-		DownstreamURL:        cfg.Frontend.DownstreamURL,
-		CompressResponses:    cfg.Frontend.CompressResponses,
-		LogQueriesLongerThan: cfg.Frontend.LogQueriesLongerThan,
+	fe, err := cortexFrontend.New(cortexFrontend.Config{
+		DownstreamURL:        cfg.DownstreamURL,
+		CompressResponses:    cfg.CompressResponses,
+		LogQueriesLongerThan: cfg.LogQueriesLongerThan,
 	}, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
 	defer fe.Close()
 
-	limits, err := validation.NewOverrides(validation.Limits{
-		MaxQueryLength:      cfg.Limits.MaxQueryLength,
-		MaxQueryParallelism: cfg.Limits.MaxQueryParallelism,
-		MaxCacheFreshness:   cfg.Limits.MaxCacheFreshness,
+	limits, err := cortexValidatoin.NewOverrides(cortexValidatoin.Limits{
+		MaxQueryLength:      cfg.MaxQueryLength,
+		MaxQueryParallelism: cfg.MaxQueryParallelism,
+		MaxCacheFreshness:   cfg.MaxCacheFreshness,
 	}, nil)
 	if err != nil {
 		return errors.Wrap(err, "initialize limits")
 	}
 
-	codec := queryfrontend.NewThanosCodec(cfg.partialResponseStrategy)
+	codec := queryfrontend.NewThanosCodec(cfg.PartialResponseStrategy)
 	tripperWare, err := queryfrontend.NewTripperware(
-		cfg.QueryRange,
+		cfg.Config,
 		limits,
 		codec,
-		queryrange.PrometheusResponseExtractor{},
 		reg,
 		logger,
 	)
@@ -159,7 +146,7 @@ func runQueryFrontend(
 
 	// Configure Request Logging for HTTP calls.
 	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-		return logging.LogDecision[cfg.requestLoggingDecision]
+		return logging.LogDecision[cfg.RequestLoggingDecision]
 	})}
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
 	ins := extpromhttp.NewInstrumentationMiddleware(reg)
