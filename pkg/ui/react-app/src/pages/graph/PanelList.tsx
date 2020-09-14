@@ -44,17 +44,11 @@ export const PanelListContent: FC<PanelListProps> = ({
         setPanels(panels);
       }
     };
-    // console.log("[PanelListContent]: ");
-    // console.log(metrics);
-    // console.log("[PanelListContent]: ");
-    // console.log(stores);
     // We want useEffect to act only as componentDidMount, but react still complains about the empty dependencies list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleExecuteQuery = (query: string) => {
-    // console.log("Handle: ");
-    // console.log(stores);
     const isSimpleMetric = metrics.indexOf(query) !== -1;
     if (isSimpleMetric || !query.length) {
       return;
@@ -134,10 +128,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       const serverTime = timeRes.data.result[0];
       setDelta(Math.abs(browserTime - serverTime));
     }
-    // console.log("Metrics...");
-    // console.log(metricsRes.data);
-    // console.log("Stores...");
-    // console.log(storesRes.data);
     /**
      * React wants to include browserTime to useEffect dependencies list which will cause a delta change on every re-render
      * Basically it's not recommended to disable this rule, but this is the only way to take control over the useEffect

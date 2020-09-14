@@ -113,8 +113,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   }
 
   componentDidMount() {
-    console.log("Panel: ");
-    console.log(this.props.stores);
     this.executeQuery();
   }
 
@@ -280,8 +278,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     if (event.target.checked)
       storeMatchList.push(event.target.name);
-
-    console.log(storeMatchList);
 
     this.setOptions({ storeMatches: storeMatchList });
   };
