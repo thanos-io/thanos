@@ -53,6 +53,8 @@ export const PanelListContent: FC<PanelListProps> = ({
   }, []);
 
   const handleExecuteQuery = (query: string) => {
+    // console.log("Handle: ");
+    // console.log(stores);
     const isSimpleMetric = metrics.indexOf(query) !== -1;
     if (isSimpleMetric || !query.length) {
       return;
@@ -106,6 +108,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
+          stores={stores}
         />
       ))}
       <Button className="mb-3" color="primary" onClick={addPanel}>
@@ -121,7 +124,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
-  const { response: storesRes, error: storesErr } = useFetch<StoreListProps>(`${pathPrefix}/api/v1/stores`);
+  const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(`${pathPrefix}/api/v1/stores`);
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -131,10 +134,10 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       const serverTime = timeRes.data.result[0];
       setDelta(Math.abs(browserTime - serverTime));
     }
-    console.log("Metrics...");
-    console.log(metricsRes.data);
-    console.log("Stores...");
-    console.log(storesRes.data);
+    // console.log("Metrics...");
+    // console.log(metricsRes.data);
+    // console.log("Stores...");
+    // console.log(storesRes.data);
     /**
      * React wants to include browserTime to useEffect dependencies list which will cause a delta change on every re-render
      * Basically it's not recommended to disable this rule, but this is the only way to take control over the useEffect
@@ -175,14 +178,16 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           Error fetching metrics list: Unexpected response status when fetching metric names: {metricsErr.message}
         </UncontrolledAlert>
       )}
-      <PanelListContent
-        panels={decodePanelOptionsFromQueryString(window.location.search)}
-        pathPrefix={pathPrefix}
-        useLocalTime={useLocalTime}
-        metrics={metricsRes.data}
-        stores={storesRes.data}
-        queryHistoryEnabled={enableQueryHistory}
-      />
+      {!storesLoading && (
+        <PanelListContent
+          panels={decodePanelOptionsFromQueryString(window.location.search)}
+          pathPrefix={pathPrefix}
+          useLocalTime={useLocalTime}
+          metrics={metricsRes.data}
+          stores={storesRes.data}
+          queryHistoryEnabled={enableQueryHistory}
+        />)
+      }
     </>
   );
 };
