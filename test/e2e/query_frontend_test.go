@@ -9,14 +9,11 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/cortexproject/cortex/pkg/querier/frontend"
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/cortexproject/cortex/pkg/util/validation"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -40,23 +37,15 @@ func TestQueryFrontend(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	inMemoryCacheConfig := queryfrontend.Config{
-		CortexFrontendConfig: &frontend.Config{
-			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
+	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+		Config: queryfrontend.InMemoryResponseCacheConfig{
+			MaxSizeItems: 1000,
+			Validity:     time.Hour,
 		},
-		CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{
-			CacheConfig: cache.Config{
-				EnableFifoCache: true,
-				Fifocache: cache.FifoCacheConfig{
-					MaxSizeItems: 1000,
-					Validity:     time.Hour,
-				},
-			},
-		},
-		CortexLimits: &validation.Limits{},
 	}
 
-	queryFrontend, err := e2ethanos.NewQueryFrontend("1", inMemoryCacheConfig)
+	queryFrontend, err := e2ethanos.NewQueryFrontend("1", "http://"+q.NetworkHTTPEndpoint(), inMemoryCacheConfig)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
 
@@ -265,28 +254,23 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	memcached := e2ethanos.NewMemcached("1")
 	testutil.Ok(t, s.StartAndWaitReady(memcached))
 
-	memCachedConfig := queryfrontend.Config{
-		CortexFrontendConfig: &frontend.Config{
-			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
-		},
-		CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{
-			CacheConfig: cache.Config{
-				Memcache: cache.MemcachedConfig{
-					BatchSize:   20,
-					Parallelism: 100,
-				},
-				MemcacheClient: cache.MemcachedClientConfig{
-					Addresses:      memcached.NetworkEndpoint(11211),
-					MaxIdleConns:   100,
-					UpdateInterval: 10 * time.Second,
-					Timeout:        time.Minute,
-				},
+	memCachedConfig := queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.MEMCACHED,
+		Config: queryfrontend.MemcachedResponseCacheConfig{
+			Memcached: cacheutil.MemcachedClientConfig{
+				Addresses:                 []string{memcached.NetworkEndpoint(11211)},
+				MaxIdleConnections:        100,
+				MaxAsyncConcurrency:       20,
+				MaxGetMultiConcurrency:    100,
+				MaxGetMultiBatchSize:      0,
+				Timeout:                   time.Minute,
+				MaxAsyncBufferSize:        10000,
+				DNSProviderUpdateInterval: 10 * time.Second,
 			},
 		},
-		CortexLimits: &validation.Limits{},
 	}
 
-	queryFrontend, err := e2ethanos.NewQueryFrontend("1", memCachedConfig)
+	queryFrontend, err := e2ethanos.NewQueryFrontend("1", "http://"+q.NetworkHTTPEndpoint(), memCachedConfig)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(queryFrontend))
 
