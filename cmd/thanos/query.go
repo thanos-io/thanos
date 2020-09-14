@@ -307,7 +307,7 @@ func runQuery(
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
-			extprom.WrapRegistererWithPrefix("thanos_query_concurrent_selects_", reg),
+			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
 			proxy,
 			maxConcurrentSelects,
 			queryTimeout,
