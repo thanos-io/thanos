@@ -264,7 +264,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   render() {
-    const { pastQueries, metricNames, options, id } = this.props;
+    const { pastQueries, metricNames, options, id, stores } = this.props;
+    const storeTypes = Object.keys(stores);
+
     return (
       <div className="panel">
         <Row>
@@ -302,6 +304,26 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             >
               Use Partial Response
             </Checkbox>
+          </Col>
+        </Row>
+        <Row>
+          <Col>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            name={"All"}
+          >
+            All 
+          </Checkbox>
+          {storeTypes.map(type => (
+            stores[type].map(store => (
+              <Checkbox
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                name={store.name}
+              >
+                {store.name} 
+              </Checkbox>
+            ))
+          ))}
           </Col>
         </Row>
         <Row>
