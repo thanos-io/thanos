@@ -30,7 +30,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -40,7 +39,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/thanos/pkg/api"
-	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -64,7 +62,6 @@ const (
 type QueryAPI struct {
 	baseAPI         *api.BaseAPI
 	logger          log.Logger
-	reg             prometheus.Registerer
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
@@ -82,7 +79,6 @@ type QueryAPI struct {
 // NewQueryAPI returns an initialized QueryAPI type.
 func NewQueryAPI(
 	logger log.Logger,
-	reg *prometheus.Registry,
 	storeSet *query.StoreSet,
 	qe *promql.Engine,
 	c query.QueryableCreator,
@@ -93,15 +89,14 @@ func NewQueryAPI(
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
-	maxConcurrentQueries int,
+	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
 		baseAPI:         api.NewBaseAPI(logger, flagsMap),
 		logger:          logger,
-		reg:             reg,
 		queryEngine:     qe,
 		queryableCreate: c,
-		gate:            gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg)).NewGate(maxConcurrentQueries),
+		gate:            gate,
 		ruleGroups:      ruleGroups,
 
 		enableAutodownsampling:                 enableAutodownsampling,

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/route"
+	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -116,7 +117,7 @@ func TestEndpoints(t *testing.T) {
 			MaxSamples: 10000,
 			Timeout:    timeout,
 		}),
-		gate: gate.NewKeeper(nil).NewGate(4),
+		gate: gate.New(nil, 4),
 	}
 
 	start := time.Unix(0, 0)
@@ -1053,7 +1054,7 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	for i, test := range tests {
 		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
-			gate:                   gate.NewKeeper(nil).NewGate(4),
+			gate:                   gate.New(nil, 4),
 		}
 		v := url.Values{}
 		v.Set(MaxSourceResolutionParam, test.maxSourceResolutionParam)
@@ -1101,7 +1102,7 @@ func TestParseStoreMatchersParam(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			api := QueryAPI{
-				gate: gate.NewKeeper(nil).NewGate(4),
+				gate: promgate.New(4),
 			}
 			v := url.Values{}
 			v.Set(StoreMatcherParam, tc.storeMatchers)
