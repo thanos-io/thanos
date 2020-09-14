@@ -16,6 +16,7 @@ import (
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/ingester/client"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -31,19 +32,10 @@ const (
 	day     = 24 * time.Hour
 )
 
-// fakeLimits implements the Cortex queryrange.Limits interface.
-type fakeLimits struct{}
-
-func (l *fakeLimits) MaxQueryLength(_ string) time.Duration {
-	return 7 * 24 * time.Hour
-}
-
-func (l *fakeLimits) MaxQueryParallelism(_ string) int {
-	return 14
-}
-
-func (l *fakeLimits) MaxCacheFreshness(_ string) time.Duration {
-	return time.Minute
+var defaultLimits = cortexvalidation.Limits{
+	MaxQueryLength:      7 * 24 * time.Hour,
+	MaxQueryParallelism: 14,
+	MaxCacheFreshness:   time.Minute,
 }
 
 // fakeRoundTripper implements the RoundTripper interface.
@@ -83,8 +75,6 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
-
-	codec := NewThanosCodec(true)
 
 	for _, tc := range []struct {
 		name       string
@@ -139,13 +129,12 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(
-				QueryRange{
+			tpw, err := NewTripperware(
+				Config{
 					SplitQueriesByInterval: day,
 					MaxRetries:             tc.maxRetries,
-				},
-				&fakeLimits{},
-				codec, nil, nil, log.NewNopLogger(),
+					CortexLimits:           defaultLimits,
+				}, nil, log.NewNopLogger(),
 			)
 			testutil.Ok(t, err)
 
@@ -155,7 +144,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := codec.EncodeRequest(ctx, tc.req)
+			httpReq, err := NewThanosCodec(true).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -233,11 +222,12 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(
-				QueryRange{
+			tpw, err := NewTripperware(
+				Config{
 					SplitQueriesByInterval: tc.splitInterval,
-				},
-				&fakeLimits{}, codec, nil, nil, log.NewNopLogger())
+					CortexLimits:           defaultLimits,
+				}, nil, log.NewNopLogger(),
+			)
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
@@ -318,15 +308,13 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		},
 	}
 
-	codec := NewThanosCodec(true)
-
 	now := time.Now()
-	tpw, err := NewTripperWare(
-		QueryRange{
-			SplitQueriesByInterval: day,
-			ResultsCacheConfig:     cacheConf,
-		},
-		&fakeLimits{}, codec, queryrange.PrometheusResponseExtractor{}, nil, log.NewNopLogger())
+	tpw, err := NewTripperware(
+		Config{
+			SplitQueriesByInterval:   day,
+			CortexResultsCacheConfig: cacheConf,
+		}, nil, log.NewNopLogger(),
+	)
 	testutil.Ok(t, err)
 
 	rt, err := newFakeRoundTripper()
@@ -373,7 +361,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := codec.EncodeRequest(ctx, tc.req)
+			httpReq, err := NewThanosCodec(true).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)

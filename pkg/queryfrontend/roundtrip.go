@@ -9,6 +9,7 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/cortexproject/cortex/pkg/util/validation"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -28,8 +29,6 @@ const (
 // storage sharding configuration and query ASTs.
 func NewTripperware(
 	config Config,
-	limits queryrange.Limits,
-	codec queryrange.Codec,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
@@ -41,8 +40,13 @@ func NewTripperware(
 	queriesCount.WithLabelValues(labelQuery)
 	queriesCount.WithLabelValues(labelQueryRange)
 
+	overrides, err := validation.NewOverrides(config.CortexLimits, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "initialize limits")
+	}
+
 	metrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
-	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
+	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(overrides)}
 
 	// step align middleware.
 	queryRangeMiddleware = append(
@@ -50,6 +54,8 @@ func NewTripperware(
 		queryrange.InstrumentMiddleware("step_align", metrics),
 		queryrange.StepAlignMiddleware,
 	)
+
+	codec := NewThanosCodec(config.PartialResponseStrategy)
 
 	if config.SplitQueriesByInterval != 0 {
 		// TODO(yeya24): make interval dynamic in next pr.
@@ -59,16 +65,16 @@ func NewTripperware(
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", metrics),
-			queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
+			queryrange.SplitByIntervalMiddleware(queryIntervalFn, overrides, codec, reg),
 		)
 	}
 
-	if config.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+	if config.CortexResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			config.ResultsCacheConfig,
+			config.CortexResultsCacheConfig,
 			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
-			limits,
+			overrides,
 			codec,
 			queryrange.PrometheusResponseExtractor{},
 			nil,

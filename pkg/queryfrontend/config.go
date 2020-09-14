@@ -8,12 +8,14 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/kit/log"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/yaml.v2"
 
+	cortexfrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/pkg/errors"
 )
 
@@ -37,7 +39,8 @@ type InMemoryResponseCacheConfig struct {
 // MemcachedResponseCacheConfig holds the configs for the memcache cache provider.
 type MemcachedResponseCacheConfig struct {
 	Memcached cacheutil.MemcachedClientConfig `yaml:",inline"`
-	Validity  time.Duration                   `yaml:"validity"`
+	// Expiration sets a global expiration limit for all cached items.
+	Expiration time.Duration `yaml:"expiration"`
 }
 
 // CacheProviderConfig is the initial CacheProviderConfig struct holder before parsing it into a specific cache provider.
@@ -59,56 +62,51 @@ func NewCacheConfig(confContentYaml []byte) (*queryrange.ResultsCacheConfig, err
 		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
 	}
 
-	var cache cortexcache.Config
-
 	switch strings.ToUpper(string(cacheConfig.Type)) {
 	case string(INMEMORY):
-
 		var config InMemoryResponseCacheConfig
 		if err := yaml.Unmarshal(backendConfig, &config); err != nil {
 			return nil, err
 		}
 
-		cache = cortexcache.Config{
-			EnableFifoCache: true,
-			Fifocache: cortexcache.FifoCacheConfig{
-				MaxSizeBytes: config.MaxSize,
-				MaxSizeItems: config.MaxSizeItems,
-				Validity:     config.Validity,
+		return &queryrange.ResultsCacheConfig{
+			CacheConfig: cortexcache.Config{
+				EnableFifoCache: true,
+				Fifocache: cortexcache.FifoCacheConfig{
+					MaxSizeBytes: config.MaxSize,
+					MaxSizeItems: config.MaxSizeItems,
+					Validity:     config.Validity,
+				},
 			},
-		}
+		}, nil
 	case string(MEMCACHED):
 		var config MemcachedResponseCacheConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
 		}
 
-		cache = cortexcache.Config{
-			Memcache: cortexcache.MemcachedConfig{
-				Expiration:  config.Validity,
-				Parallelism: config.Memcached.MaxAsyncConcurrency,
-				BatchSize:   config.Memcached.MaxGetMultiBatchSize,
+		return &queryrange.ResultsCacheConfig{
+			CacheConfig: cortexcache.Config{
+				Memcache: cortexcache.MemcachedConfig{
+					Expiration:  config.Expiration,
+					Parallelism: config.Memcached.MaxGetMultiConcurrency,
+					BatchSize:   config.Memcached.MaxGetMultiBatchSize,
+				},
+				MemcacheClient: cortexcache.MemcachedClientConfig{
+					Timeout:        config.Memcached.Timeout,
+					MaxIdleConns:   config.Memcached.MaxIdleConnections,
+					Addresses:      strings.Join(config.Memcached.Addresses, ","),
+					UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
+				},
+				Background: cortexcache.BackgroundConfig{
+					WriteBackBuffer:     config.Memcached.MaxAsyncBufferSize,
+					WriteBackGoroutines: config.Memcached.MaxAsyncConcurrency,
+				},
 			},
-			MemcacheClient: cortexcache.MemcachedClientConfig{
-				Timeout:        config.Memcached.Timeout,
-				MaxIdleConns:   config.Memcached.MaxIdleConnections,
-				Addresses:      strings.Join(config.Memcached.Addresses, ","),
-				UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
-			},
-			Background: cortexcache.BackgroundConfig{
-				WriteBackBuffer:     10000,
-				WriteBackGoroutines: 10,
-			},
-
-			// ???????????????
-		}
+		}, nil
 	default:
 		return nil, errors.Errorf("index cache with type %s is not supported", cacheConfig.Type)
 	}
-
-	return &queryrange.ResultsCacheConfig{
-		CacheConfig: cache,
-	}, nil
 }
 
 // Config holds the query frontend configs.
@@ -117,39 +115,30 @@ type Config struct {
 	// when parsing thanos query request.
 	PartialResponseStrategy bool
 
+	CortexFrontendConfig     cortexfrontend.Config
+	CortexLimits             cortexvalidation.Limits
+	CortexResultsCacheConfig queryrange.ResultsCacheConfig
+
 	CachePathOrContent     extflag.PathOrContent
 	RequestLoggingDecision string
 
-	MaxQueryLength      time.Duration
-	MaxQueryParallelism int
-	MaxCacheFreshness   time.Duration
-
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
-
-	CompressResponses    bool
-	DownstreamURL        string
-	LogQueriesLongerThan time.Duration
-
-	ResultsCacheConfig queryrange.ResultsCacheConfig
 }
 
 // Validate a fully initialized config.
-func (cfg *Config) Validate() error {
-	if cfg.ResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
+func (cfg *Config) Validate(logger log.Logger) error {
+	if cfg.CortexResultsCacheConfig != (queryrange.ResultsCacheConfig{}) {
 		if cfg.SplitQueriesByInterval <= 0 {
 			return errors.New("split queries interval should be greater then 0")
 		}
-		if err := cfg.ResultsCacheConfig.CacheConfig.Validate(); err != nil {
+		if err := cfg.CortexResultsCacheConfig.CacheConfig.Validate(); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config")
 		}
 	}
-	if len(cfg.DownstreamURL) == 0 {
+	if len(cfg.CortexFrontendConfig.DownstreamURL) == 0 {
 		return errors.New("downstream URL should be configured")
 	}
-	if cfg.ResultsCacheConfig.CacheConfig.DefaultValidity == 0 {
-		level.Warn(logger).Log("msg", "memcached cache valid time set to 0, use 24 hours instead")
-		c.validity = memcachedDefaultTTL
-	}
+
 	return nil
 }

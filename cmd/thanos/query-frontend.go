@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	cortexFrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
-	cortexValidatoin "github.com/cortexproject/cortex/pkg/util/validation"
+	cortexfrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -49,13 +48,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("5").IntVar(&cfg.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
-		Default("0").DurationVar(&cfg.MaxQueryLength)
+		Default("0").DurationVar(&cfg.CortexLimits.MaxQueryLength)
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the Frontend.").
-		Default("14").IntVar(&cfg.MaxQueryParallelism)
+		Default("14").IntVar(&cfg.CortexLimits.MaxQueryParallelism)
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.MaxCacheFreshness)
+		Default("1m").DurationVar(&cfg.CortexLimits.MaxCacheFreshness)
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.PartialResponseStrategy)
@@ -63,13 +62,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cfg.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
-		Default("http://localhost:9090").StringVar(&cfg.DownstreamURL)
+		Default("http://localhost:9090").StringVar(&cfg.CortexFrontendConfig.DownstreamURL)
 
 	cmd.Flag("query-frontend.compress-responses", "Compress HTTP responses.").
-		Default("false").BoolVar(&cfg.CompressResponses)
+		Default("false").BoolVar(&cfg.CortexFrontendConfig.CompressResponses)
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
-		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.LogQueriesLongerThan)
+		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexFrontendConfig.LogQueriesLongerThan)
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
@@ -90,45 +89,31 @@ func runQueryFrontend(
 	if err != nil {
 		return err
 	}
-
 	if len(cacheConfContentYaml) > 0 {
-
 		cacheConfig, err := queryfrontend.NewCacheConfig(cacheConfContentYaml)
 		if err != nil {
 			return errors.Wrap(err, "initializing the query frontend config ")
 		}
-		cfg.ResultsCacheConfig = *cacheConfig
+		if cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration == 0 {
+			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
+			cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration = 24 * time.Hour
+		}
+		cfg.CortexResultsCacheConfig = *cacheConfig
 	}
 
-	err = cfg.Validate()
+	err = cfg.Validate(logger)
 	if err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexFrontend.New(cortexFrontend.Config{
-		DownstreamURL:        cfg.DownstreamURL,
-		CompressResponses:    cfg.CompressResponses,
-		LogQueriesLongerThan: cfg.LogQueriesLongerThan,
-	}, logger, reg)
+	fe, err := cortexfrontend.New(cfg.CortexFrontendConfig, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
 	defer fe.Close()
 
-	limits, err := cortexValidatoin.NewOverrides(cortexValidatoin.Limits{
-		MaxQueryLength:      cfg.MaxQueryLength,
-		MaxQueryParallelism: cfg.MaxQueryParallelism,
-		MaxCacheFreshness:   cfg.MaxCacheFreshness,
-	}, nil)
-	if err != nil {
-		return errors.Wrap(err, "initialize limits")
-	}
-
-	codec := queryfrontend.NewThanosCodec(cfg.PartialResponseStrategy)
 	tripperWare, err := queryfrontend.NewTripperware(
 		cfg.Config,
-		limits,
-		codec,
 		reg,
 		logger,
 	)
