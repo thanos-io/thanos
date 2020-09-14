@@ -330,6 +330,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           <Col>
           <Checkbox
             wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id={`store-match-all-${id}`}
+            onChange={this.handleStoreMatchChange}
+            checked={options.storeMatches.length === 0}
             name={"All"}
           >
             All 
@@ -338,6 +341,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             stores[type].map(store => (
               <Checkbox
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`store-match-${store.name}-${id}`}
+                onChange={this.handleStoreMatchChange}
+                checked={options.storeMatches.indexOf(store.name) >= 0}
                 name={store.name}
               >
                 {store.name} 
