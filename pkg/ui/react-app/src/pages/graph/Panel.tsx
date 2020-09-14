@@ -274,7 +274,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
 
     var storeMatchList = this.props.options.storeMatches;
-    storeMatchList.filter((store: string) => {
+    storeMatchList = storeMatchList.filter((store: string) => {
       return store != event.target.name;
     });
 
