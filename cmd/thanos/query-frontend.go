@@ -9,6 +9,8 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	cortexfrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
+	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -37,7 +39,13 @@ type config struct {
 func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
 	cmd := app.Command(comp.String(), "query frontend")
-	cfg := &config{}
+	cfg := &config{
+		Config: queryfrontend.Config{
+			CortexFrontendConfig:     &cortexfrontend.Config{},
+			CortexLimits:             &cortexvalidation.Limits{},
+			CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+		},
+	}
 
 	cfg.http.registerFlag(cmd)
 
@@ -92,7 +100,7 @@ func runQueryFrontend(
 	if len(cacheConfContentYaml) > 0 {
 		cacheConfig, err := queryfrontend.NewCacheConfig(cacheConfContentYaml)
 		if err != nil {
-			return errors.Wrap(err, "initializing the query frontend config ")
+			return errors.Wrap(err, "initializing the query frontend config")
 		}
 		if cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration == 0 {
 			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
@@ -101,8 +109,7 @@ func runQueryFrontend(
 		cfg.CortexResultsCacheConfig = cacheConfig
 	}
 
-	err = cfg.Validate()
-	if err != nil {
+	if cfg.Validate(); err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
 

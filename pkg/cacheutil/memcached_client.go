@@ -101,7 +101,7 @@ type MemcachedClientConfig struct {
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
 
 	// MaxItemSize specifies the maximum size of an item stored in memcached.
-	// Bigger items are skipped to be stored by the client.
+	// Items bigger than MaxItemSize are skipped.
 	// If set to 0, no maximum size is enforced.
 	MaxItemSize model.Bytes `yaml:"max_item_size"`
 

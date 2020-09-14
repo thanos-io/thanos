@@ -10,7 +10,9 @@ import (
 
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/cortexproject/cortex/pkg/chunk/cache"
+	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/cortexproject/cortex/pkg/util/validation"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -39,20 +41,19 @@ func TestQueryFrontend(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	inMemoryCacheConfig := queryfrontend.Config{
-		Frontend: queryfrontend.Frontend{
+		CortexFrontendConfig: &frontend.Config{
 			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
 		},
-		QueryRange: queryfrontend.QueryRange{
-			ResultsCacheConfig: queryrange.ResultsCacheConfig{
-				CacheConfig: cache.Config{
-					EnableFifoCache: true,
-					Fifocache: cache.FifoCacheConfig{
-						MaxSizeItems: 1000,
-						Validity:     time.Hour,
-					},
+		CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{
+			CacheConfig: cache.Config{
+				EnableFifoCache: true,
+				Fifocache: cache.FifoCacheConfig{
+					MaxSizeItems: 1000,
+					Validity:     time.Hour,
 				},
 			},
 		},
+		CortexLimits: &validation.Limits{},
 	}
 
 	queryFrontend, err := e2ethanos.NewQueryFrontend("1", inMemoryCacheConfig)
@@ -265,25 +266,24 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(memcached))
 
 	memCachedConfig := queryfrontend.Config{
-		Frontend: queryfrontend.Frontend{
+		CortexFrontendConfig: &frontend.Config{
 			DownstreamURL: "http://" + q.NetworkHTTPEndpoint(),
 		},
-		QueryRange: queryfrontend.QueryRange{
-			ResultsCacheConfig: queryrange.ResultsCacheConfig{
-				CacheConfig: cache.Config{
-					Memcache: cache.MemcachedConfig{
-						BatchSize:   20,
-						Parallelism: 100,
-					},
-					MemcacheClient: cache.MemcachedClientConfig{
-						Addresses:      memcached.NetworkEndpoint(11211),
-						MaxIdleConns:   100,
-						UpdateInterval: 10 * time.Second,
-						Timeout:        time.Minute,
-					},
+		CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{
+			CacheConfig: cache.Config{
+				Memcache: cache.MemcachedConfig{
+					BatchSize:   20,
+					Parallelism: 100,
+				},
+				MemcacheClient: cache.MemcachedClientConfig{
+					Addresses:      memcached.NetworkEndpoint(11211),
+					MaxIdleConns:   100,
+					UpdateInterval: 10 * time.Second,
+					Timeout:        time.Minute,
 				},
 			},
 		},
+		CortexLimits: &validation.Limits{},
 	}
 
 	queryFrontend, err := e2ethanos.NewQueryFrontend("1", memCachedConfig)
