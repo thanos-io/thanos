@@ -126,7 +126,7 @@ Flags:
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
                               Server.
-      --query-range.split-queries-by-interval=24h
+      --query-range.split-interval=24h
                               Split queries by an interval and execute in
                               parallel, 0 disables it.
       --query-range.max-retries-per-request=5
@@ -138,7 +138,7 @@ Flags:
       --query-range.max-query-parallelism=14
                               Maximum number of queries will be scheduled in
                               parallel by the Frontend.
-      --query-range.max-cache-freshness=1m
+      --query-range.response-cache-max-freshness=1m
                               Most recent allowed cacheable result, to prevent
                               caching very recent results that might still be in
                               flux.
@@ -146,16 +146,17 @@ Flags:
                               Enable partial response for queries if no
                               partial_response param is specified.
                               --no-query-range.partial-response for disabling.
-      --query-range.cache-config-file=<file-path>
+      --query-range.response-cache-config-file=<file-path>
                               Path to YAML file that contains response cache
                               configuration.
-      --query-range.cache-config=<content>
-                              Alternative to 'query-range.cache-config-file'
-                              flag (lower priority). Content of YAML file that
+      --query-range.response-cache-config=<content>
+                              Alternative to
+                              'query-range.response-cache-config-file' flag
+                              (lower priority). Content of YAML file that
                               contains response cache configuration.
       --query-frontend.downstream-url="http://localhost:9090"
                               URL of downstream Prometheus Query compatible API.
-      --query-frontend.compress-http-responses
+      --query-frontend.compress-responses
                               Compress HTTP responses.
       --query-frontend.log-queries-longer-than=0
                               Log queries that are slower than the specified
