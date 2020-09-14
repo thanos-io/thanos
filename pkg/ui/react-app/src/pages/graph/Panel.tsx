@@ -84,6 +84,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
+    this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps) {
@@ -261,6 +262,25 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ usePartialResponse: event.target.checked });
+  };
+
+  handleStoreMatchChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    if (event.target.name === "All") {
+      this.setOptions({ storeMatches: [] });
+      return;
+    }
+
+    var storeMatchList = this.props.options.storeMatches;
+    storeMatchList.filter((store: string) => {
+      return store != event.target.name;
+    });
+
+    if (event.target.checked)
+      storeMatchList.push(event.target.name);
+
+    console.log(storeMatchList);
+
+    this.setOptions({ storeMatches: storeMatchList });
   };
 
   render() {
