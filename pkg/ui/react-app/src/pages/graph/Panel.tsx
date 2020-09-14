@@ -147,6 +147,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       partial_response: this.props.options.usePartialResponse.toString(),
     });
 
+    // add storeMatches to query params
+    this.props.options.storeMatches.map((store: string) => params.append("storeMatch[]", `{__address__="${store}"}`));
+
     let path: string;
     switch (this.props.options.type) {
       case 'graph':
