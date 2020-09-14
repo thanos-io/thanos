@@ -229,8 +229,10 @@ func newMemcachedClient(
 		dnsProvider: dnsProvider,
 		asyncQueue:  make(chan func(), config.MaxAsyncBufferSize),
 		stop:        make(chan struct{}, 1),
-		getMultiGate: gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg)).
-			NewGate(config.MaxGetMultiConcurrency),
+		getMultiGate: gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
+			config.MaxGetMultiConcurrency,
+		),
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{

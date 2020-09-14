@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 
@@ -31,11 +30,10 @@ type Query struct {
 	cwd     string
 	birth   time.Time
 	version api.ThanosVersion
-	reg     prometheus.Registerer
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, externalPrefix, prefixHeader string) *Query {
+func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, externalPrefix, prefixHeader string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
 	}
@@ -49,7 +47,6 @@ func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.St
 		cwd:            runtimeInfo().CWD,
 		birth:          runtimeInfo().StartTime,
 		version:        *api.BuildInfo,
-		reg:            reg,
 		now:            model.Now,
 	}
 }

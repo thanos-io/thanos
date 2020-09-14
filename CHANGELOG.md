@@ -24,7 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
 
 Highlights:
-* Added new Thanos component: [Query Frontend](https://thanos.io/tip/components/query-frontend/) responsible for response caching,
+* Added new Thanos component: [Query Frontend](https://thanos.io/v0.15/components/query-frontend/) responsible for response caching,
 query scheduling and parallelization (based on Cortex Query Frontend).
 * Added various new, improved UIs to Thanos based on React: Querier BuildInfo & Flags, Ruler UI, BlockViewer.
 * Optimized Sidecar, Store, Receive, Ruler data retrieval with new TSDB ChunkIterator (capping chunks to 120 samples), which fixed various leaks.
