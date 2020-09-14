@@ -49,7 +49,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			maxResolutionMillis: maxResolutionMillis,
 			partialResponse:     partialResponse,
 			skipChunks:          skipChunks,
-			gateFn: func() gate.Gate {
+			gateProviderFn: func() gate.Gate {
 				return gate.InstrumentGateDuration(duration, promgate.New(maxConcurrentSelects))
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
@@ -67,14 +67,14 @@ type queryable struct {
 	maxResolutionMillis  int64
 	partialResponse      bool
 	skipChunks           bool
-	gateFn               func() gate.Gate
+	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateFn(), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
 }
 
 type querier struct {
