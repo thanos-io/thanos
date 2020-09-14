@@ -11,6 +11,7 @@ import { GraphTabContent } from './GraphTabContent';
 import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
+import {StoreListProps} from '../../thanos/pages/stores/Stores'
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
@@ -23,6 +24,7 @@ interface PanelProps {
   metricNames: string[];
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
+  stores: StoreListProps;
 }
 
 interface PanelState {
@@ -93,6 +95,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       maxSourceResolution,
       useDeduplication,
       usePartialResponse,
+      // TODO: Add support for Store Matches
     } = this.props.options;
     if (
       prevOpts.endTime !== endTime ||
@@ -102,12 +105,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.maxSourceResolution !== maxSourceResolution ||
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse
+      // Check store matches
     ) {
       this.executeQuery();
     }
   }
 
   componentDidMount() {
+    console.log("Panel: ");
+    console.log(this.props.stores);
     this.executeQuery();
   }
 
