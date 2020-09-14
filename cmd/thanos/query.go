@@ -82,7 +82,7 @@ func registerQuery(app *extkingpin.App) {
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
-	defaultLabelLookbackDelta := cmd.Flag("query.labels.lookback-delta", "The default lookback duration for retrieving labels through Labels API when the range parameters are not specified.").Default("2h").Duration()
+	defaultLabelLookbackDelta := cmd.Flag("query.labels.api-lookback-delta", "The default lookback duration for retrieving labels through Labels API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
