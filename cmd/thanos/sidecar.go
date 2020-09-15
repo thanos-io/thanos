@@ -127,7 +127,7 @@ func runSidecar(
 		})
 		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Second timestamp of the last successful heartbeat.",
+			Help: "Timestamp of the last successful heartbeat in seconds.",
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -205,7 +205,7 @@ func runSidecar(
 		t.MaxIdleConns = conf.connection.maxIdleConns
 		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
