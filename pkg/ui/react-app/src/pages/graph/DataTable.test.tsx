@@ -9,7 +9,7 @@ describe('DataTable', () => {
     it('renders an alert', () => {
       const table = shallow(<DataTable data={null} />);
       const alert = table.find(UncontrolledAlert);
-      expect(Object.keys(alert.props())).toHaveLength(7);
+      expect(Object.keys(alert.props())).toHaveLength(2);
       expect(alert.prop('color')).toEqual('light');
       expect(alert.prop('children')).toEqual('No data queried yet');
     });
@@ -25,7 +25,7 @@ describe('DataTable', () => {
       };
       const table = shallow(<DataTable {...dataTableProps} />);
       const alert = table.find(UncontrolledAlert);
-      expect(Object.keys(alert.props())).toHaveLength(7);
+      expect(Object.keys(alert.props())).toHaveLength(2);
       expect(alert.prop('color')).toEqual('secondary');
       expect(alert.prop('children')).toEqual('Empty query result');
     });
@@ -109,7 +109,7 @@ describe('DataTable', () => {
           .first()
           .render()
           .text()
-      ).toEqual('Warning: Fetched 10001 metrics, only displaying first 10000.');
+      ).toContain('Warning: Fetched 10001 metrics, only displaying first 10000.');
     });
   });
 
@@ -138,7 +138,7 @@ describe('DataTable', () => {
           .first()
           .render()
           .text()
-      ).toEqual('Notice: Showing more than 1000 series, turning off label formatting for performance reasons.');
+      ).toContain('Notice: Showing more than 1000 series, turning off label formatting for performance reasons.');
     });
   });
 
