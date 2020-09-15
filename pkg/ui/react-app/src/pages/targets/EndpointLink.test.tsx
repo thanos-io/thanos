@@ -1,6 +1,6 @@
 import React from 'react';
 import { shallow } from 'enzyme';
-import { Badge, Alert } from 'reactstrap';
+import { Badge, UncontrolledAlert } from 'reactstrap';
 import EndpointLink from './EndpointLink';
 
 describe('EndpointLink', () => {
@@ -32,7 +32,7 @@ describe('EndpointLink', () => {
 
   it('renders an alert if url is invalid', () => {
     const endpointLink = shallow(<EndpointLink endpoint={'afdsacas'} globalUrl={'afdsacas'} />);
-    const err = endpointLink.find(Alert);
-    expect(err.render().text()).toEqual('Error: Invalid URL');
+    const err = endpointLink.find(UncontrolledAlert);
+    expect(err.render().text()).toContain('Error: Invalid URL');
   });
 });
