@@ -1,6 +1,6 @@
 import React, { FC, ReactNode } from 'react';
 
-import { Alert, Table } from 'reactstrap';
+import { UncontrolledAlert, Table } from 'reactstrap';
 
 import SeriesName from './SeriesName';
 import { Metric } from '../../types/types';
@@ -49,11 +49,11 @@ const limitSeries = <S extends InstantSample | RangeSamples>(series: S[]): S[] =
 
 const DataTable: FC<QueryResult> = ({ data }) => {
   if (data === null) {
-    return <Alert color="light">No data queried yet</Alert>;
+    return <UncontrolledAlert color="light">No data queried yet</UncontrolledAlert>;
   }
 
   if (data.result === null || data.result.length === 0) {
-    return <Alert color="secondary">Empty query result</Alert>;
+    return <UncontrolledAlert color="secondary">Empty query result</UncontrolledAlert>;
   }
 
   const maxFormattableSize = 1000;
@@ -111,21 +111,21 @@ const DataTable: FC<QueryResult> = ({ data }) => {
       );
       break;
     default:
-      return <Alert color="danger">Unsupported result value type</Alert>;
+      return <UncontrolledAlert color="danger">Unsupported result value type</UncontrolledAlert>;
   }
 
   return (
     <>
       {limited && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning:</strong> Fetched {data.result.length} metrics, only displaying first {rows.length}.
-        </Alert>
+        </UncontrolledAlert>
       )}
       {!doFormat && (
-        <Alert color="secondary">
+        <UncontrolledAlert color="secondary">
           <strong>Notice:</strong> Showing more than {maxFormattableSize} series, turning off label formatting for
           performance reasons.
-        </Alert>
+        </UncontrolledAlert>
       )}
       <Table hover size="sm" className="data-table">
         <tbody>{rows}</tbody>

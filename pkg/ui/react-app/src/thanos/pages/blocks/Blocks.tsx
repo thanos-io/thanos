@@ -1,6 +1,6 @@
 import React, { FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { useQueryParams, withDefault, NumberParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
@@ -54,7 +54,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     });
   };
 
-  if (err) return <Alert color="danger">{err.toString()}</Alert>;
+  if (err) return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
 
   return (
     <>
@@ -84,7 +84,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
         </div>
       ) : (
-        <Alert color="warning">No blocks found.</Alert>
+        <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
       )}
     </>
   );

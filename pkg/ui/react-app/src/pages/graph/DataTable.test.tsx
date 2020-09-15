@@ -1,14 +1,14 @@
 import * as React from 'react';
 import { shallow } from 'enzyme';
 import DataTable, { QueryResult } from './DataTable';
-import { Alert, Table } from 'reactstrap';
+import { UncontrolledAlert, Table } from 'reactstrap';
 import SeriesName from './SeriesName';
 
 describe('DataTable', () => {
   describe('when data is null', () => {
     it('renders an alert', () => {
       const table = shallow(<DataTable data={null} />);
-      const alert = table.find(Alert);
+      const alert = table.find(UncontrolledAlert);
       expect(Object.keys(alert.props())).toHaveLength(7);
       expect(alert.prop('color')).toEqual('light');
       expect(alert.prop('children')).toEqual('No data queried yet');
@@ -24,7 +24,7 @@ describe('DataTable', () => {
         },
       };
       const table = shallow(<DataTable {...dataTableProps} />);
-      const alert = table.find(Alert);
+      const alert = table.find(UncontrolledAlert);
       expect(Object.keys(alert.props())).toHaveLength(7);
       expect(alert.prop('color')).toEqual('secondary');
       expect(alert.prop('children')).toEqual('Empty query result');
@@ -103,7 +103,7 @@ describe('DataTable', () => {
     });
 
     it('renders a warning', () => {
-      const alerts = dataTable.find(Alert);
+      const alerts = dataTable.find(UncontrolledAlert);
       expect(
         alerts
           .first()
@@ -132,7 +132,7 @@ describe('DataTable', () => {
     const dataTable = shallow(<DataTable {...dataTableProps} />);
 
     it('renders a warning', () => {
-      const alerts = dataTable.find(Alert);
+      const alerts = dataTable.find(UncontrolledAlert);
       expect(
         alerts
           .first()
