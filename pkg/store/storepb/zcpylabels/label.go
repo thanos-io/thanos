@@ -1,60 +1,75 @@
-package storepb
+// Package containing Zero Copy Labels adapter.
+
+package zcpylabels
 
 import (
-	fmt "fmt"
-	io "io"
+	"fmt"
+	"io"
 	"strings"
 	"unsafe"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-// LabelAdapter is a labels.Label that can be marshalled to/from protos.
-type LabelAdapter labels.Label
-
-func yoloString(buf []byte) string {
+func noAllocString(buf []byte) string {
 	return *((*string)(unsafe.Pointer(&buf)))
 }
 
-func (m *LabelAdapter) Marshal() (dAtA []byte, err error) {
+// LabelsFromPromLabels converts Thanos proto no alloc labels to Prometheus labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed labels.Labels.
+func LabelsFromPromLabels(lset labels.Labels) []Label {
+	return *(*[]Label)(unsafe.Pointer(&lset))
+}
+
+// LabelsToPromLabels converts Prometheus labels to Thanos proto no alloc labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed []NoAllocLabels
+func LabelsToPromLabels(lset ...Label) labels.Labels {
+	return *(*labels.Labels)(unsafe.Pointer(&lset))
+}
+
+// Label is a labels.Label that can be marshalled to/from protobuf reusing the same
+// memory address for string bytes.
+type Label labels.Label
+
+func (m *Label) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	data = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(data[:size])
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *LabelAdapter) MarshalTo(dAtA []byte) (int, error) {
+func (m *Label) MarshalTo(data []byte) (int, error) {
 	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
+	return m.MarshalToSizedBuffer(data[:size])
 }
 
-func (m *LabelAdapter) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
+func (m *Label) MarshalToSizedBuffer(data []byte) (int, error) {
+	i := len(data)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Value) > 0 {
 		i -= len(m.Value)
-		copy(dAtA[i:], m.Value)
-		i = encodeVarintTypes(dAtA, i, uint64(len(m.Value)))
+		copy(data[i:], m.Value)
+		i = encodeVarintTypes(data, i, uint64(len(m.Value)))
 		i--
-		dAtA[i] = 0x12
+		data[i] = 0x12
 	}
 	if len(m.Name) > 0 {
 		i -= len(m.Name)
-		copy(dAtA[i:], m.Name)
-		i = encodeVarintTypes(dAtA, i, uint64(len(m.Name)))
+		copy(data[i:], m.Name)
+		i = encodeVarintTypes(data, i, uint64(len(m.Name)))
 		i--
-		dAtA[i] = 0xa
+		data[i] = 0xa
 	}
-	return len(dAtA) - i, nil
+	return len(data) - i, nil
 }
 
-func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *Label) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -66,7 +81,7 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
@@ -94,7 +109,7 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
@@ -112,7 +127,7 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Name = yoloString(dAtA[iNdEx:postIndex])
+			m.Name = noAllocString(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -126,7 +141,7 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
@@ -144,11 +159,11 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = yoloString(dAtA[iNdEx:postIndex])
+			m.Value = noAllocString(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipTypes(dAtA[iNdEx:])
+			skippy, err := skipTypes(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -172,7 +187,7 @@ func (m *LabelAdapter) Unmarshal(dAtA []byte) error {
 }
 
 // Size implements proto.Sizer.
-func (m *LabelAdapter) Size() (n int) {
+func (m *Label) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -190,14 +205,14 @@ func (m *LabelAdapter) Size() (n int) {
 }
 
 // Equal implements proto.Equaler.
-func (bs *LabelAdapter) Equal(other LabelAdapter) bool {
-	return bs.Name == other.Name && bs.Value == other.Value
+func (m *Label) Equal(other Label) bool {
+	return m.Name == other.Name && m.Value == other.Value
 }
 
 // Compare implements proto.Comparer.
-func (bs *LabelAdapter) Compare(other LabelAdapter) int {
-	if c := strings.Compare(bs.Name, other.Name); c != 0 {
+func (m *Label) Compare(other Label) int {
+	if c := strings.Compare(m.Name, other.Name); c != 0 {
 		return c
 	}
-	return strings.Compare(bs.Value, other.Value)
+	return strings.Compare(m.Value, other.Value)
 }

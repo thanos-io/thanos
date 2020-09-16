@@ -9,12 +9,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -50,30 +49,11 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	}
 }
 
-// CompareLabels compares two sets of labels.
-// After lexicographical order, the set with fewer labels comes first.
-func CompareLabels(a, b []Label) int {
-	l := len(a)
-	if len(b) < l {
-		l = len(b)
-	}
-	for i := 0; i < l; i++ {
-		if d := strings.Compare(a[i].Name, b[i].Name); d != 0 {
-			return d
-		}
-		if d := strings.Compare(a[i].Value, b[i].Value); d != 0 {
-			return d
-		}
-	}
-
-	return len(a) - len(b)
-}
-
 type emptySeriesSet struct{}
 
-func (emptySeriesSet) Next() bool                 { return false }
-func (emptySeriesSet) At() ([]Label, []AggrChunk) { return nil, nil }
-func (emptySeriesSet) Err() error                 { return nil }
+func (emptySeriesSet) Next() bool                       { return false }
+func (emptySeriesSet) At() (labels.Labels, []AggrChunk) { return nil, nil }
+func (emptySeriesSet) Err() error                       { return nil }
 
 // EmptySeriesSet returns a new series set that contains no series.
 func EmptySeriesSet() SeriesSet {
@@ -112,7 +92,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 // The set is sorted by the label sets. Chunks may be overlapping or expected of order.
 type SeriesSet interface {
 	Next() bool
-	At() ([]Label, []AggrChunk)
+	At() (labels.Labels, []AggrChunk)
 	Err() error
 }
 
@@ -120,7 +100,7 @@ type SeriesSet interface {
 type mergedSeriesSet struct {
 	a, b SeriesSet
 
-	lset         []Label
+	lset         labels.Labels
 	chunks       []AggrChunk
 	adone, bdone bool
 }
@@ -135,7 +115,7 @@ func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	return s
 }
 
-func (s *mergedSeriesSet) At() ([]Label, []AggrChunk) {
+func (s *mergedSeriesSet) At() (labels.Labels, []AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -155,7 +135,7 @@ func (s *mergedSeriesSet) compare() int {
 	}
 	lsetA, _ := s.a.At()
 	lsetB, _ := s.b.At()
-	return CompareLabels(lsetA, lsetB)
+	return labels.Compare(lsetA, lsetB)
 }
 
 func (s *mergedSeriesSet) Next() bool {
@@ -228,7 +208,7 @@ type uniqueSeriesSet struct {
 
 	peek *Series
 
-	lset   []Label
+	lset   labels.Labels
 	chunks []AggrChunk
 }
 
@@ -236,7 +216,7 @@ func newUniqueSeriesSet(wrapped SeriesSet) *uniqueSeriesSet {
 	return &uniqueSeriesSet{SeriesSet: wrapped}
 }
 
-func (s *uniqueSeriesSet) At() ([]Label, []AggrChunk) {
+func (s *uniqueSeriesSet) At() (labels.Labels, []AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -251,13 +231,14 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: lset, Chunks: chks}
+			s.peek = &Series{Labels: zcpylabels.LabelsFromPromLabels(lset), Chunks: chks}
 			continue
 		}
 
-		if CompareLabels(lset, s.peek.Labels) != 0 {
-			s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
-			s.peek = &Series{Labels: lset, Chunks: chks}
+		zpeek := zcpylabels.LabelsToPromLabels(s.peek.Labels...)
+		if labels.Compare(lset, zpeek) != 0 {
+			s.lset, s.chunks = zpeek, s.peek.Chunks
+			s.peek = &Series{Labels: zcpylabels.LabelsFromPromLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -270,7 +251,7 @@ func (s *uniqueSeriesSet) Next() bool {
 		return false
 	}
 
-	s.lset, s.chunks = s.peek.Labels, s.peek.Chunks
+	s.lset, s.chunks = zcpylabels.LabelsToPromLabels(s.peek.Labels...), s.peek.Chunks
 	s.peek = nil
 	return true
 }
@@ -333,66 +314,6 @@ func (m *Chunk) Compare(b *Chunk) int {
 	return bytes.Compare(m.Data, b.Data)
 }
 
-// LabelsToPromLabels converts Thanos proto labels to Prometheus labels in type safe manner.
-// NOTE: It allocates memory.
-func LabelsToPromLabels(lset []Label) labels.Labels {
-	ret := make(labels.Labels, len(lset))
-	for i, l := range lset {
-		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
-	}
-	return ret
-}
-
-// LabelsToPromLabelsUnsafe converts Thanos proto labels to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []Labels.
-//
-// NOTE: This depends on order of struct fields etc, so use with extreme care.
-func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
-	return *(*[]labels.Label)(unsafe.Pointer(&lset))
-}
-
-// PromLabelsToLabels converts Prometheus labels to Thanos proto labels in type safe manner.
-// NOTE: It allocates memory.
-func PromLabelsToLabels(lset labels.Labels) []Label {
-	ret := make([]Label, len(lset))
-	for i, l := range lset {
-		ret[i] = Label{Name: l.Name, Value: l.Value}
-	}
-	return ret
-}
-
-// PromLabelsToLabelsUnsafe converts Prometheus labels to Thanos proto labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-//
-// NOTE: This depends on order of struct fields etc, so use with extreme care.
-func PromLabelsToLabelsUnsafe(lset labels.Labels) []Label {
-	return *(*[]Label)(unsafe.Pointer(&lset))
-}
-
-// PrompbLabelsToLabelsUnsafe converts Prometheus proto labels to Thanos proto labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-//
-// NOTE: This depends on order of struct fields etc, so use with extreme care.
-func PrompbLabelsToLabelsUnsafe(lset []prompb.Label) []Label {
-	return *(*[]Label)(unsafe.Pointer(&lset))
-}
-
-func LabelsToString(lset []Label) string {
-	var s []string
-	for _, l := range lset {
-		s = append(s, l.String())
-	}
-	return "[" + strings.Join(s, ",") + "]"
-}
-
-func LabelSetsToString(lsets []LabelSet) string {
-	s := []string{}
-	for _, ls := range lsets {
-		s = append(s, LabelsToString(ls.Labels))
-	}
-	return strings.Join(s, "")
-}
-
 func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 	fieldStr, err := strconv.Unquote(string(entry))
 	if err != nil {
@@ -421,7 +342,7 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 // The type conversion is done safely, which means we don't modify extend labels underlying array.
 //
 // In case of existing labels already present in given label set, it will be overwritten by external one.
-func ExtendLabels(lset []Label, extend labels.Labels) []Label {
+func ExtendLabels(lset labels.Labels, extend labels.Labels) labels.Labels {
 	overwritten := map[string]struct{}{}
 	for i, l := range lset {
 		if v := extend.Get(l.Name); v != "" {
@@ -434,14 +355,9 @@ func ExtendLabels(lset []Label, extend labels.Labels) []Label {
 		if _, ok := overwritten[l.Name]; ok {
 			continue
 		}
-		lset = append(lset, Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
+		lset = append(lset, l)
 	}
-	sort.Slice(lset, func(i, j int) bool {
-		return lset[i].Name < lset[j].Name
-	})
+	sort.Sort(lset)
 	return lset
 }
 
@@ -491,4 +407,12 @@ func TranslateFromPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 		res = append(res, &labels.Matcher{Type: t, Name: m.Name, Value: m.Value})
 	}
 	return res, nil
+}
+
+func LabelSetsToString(lsets []LabelSet) string {
+	s := []string{}
+	for _, ls := range lsets {
+		s = append(s, ls.String())
+	}
+	return strings.Join(s, "")
 }

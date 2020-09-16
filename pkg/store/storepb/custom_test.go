@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -27,10 +27,8 @@ type listSeriesSet struct {
 }
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
-	var s Series
-
-	for _, l := range lset {
-		s.Labels = append(s.Labels, Label{Name: l.Name, Value: l.Value})
+	s := Series{
+		Labels: zcpylabels.LabelsFromPromLabels(lset),
 	}
 
 	for _, smpls := range smplChunks {
@@ -69,12 +67,12 @@ func (s *listSeriesSet) Next() bool {
 	return s.idx < len(s.series)
 }
 
-func (s *listSeriesSet) At() ([]Label, []AggrChunk) {
+func (s *listSeriesSet) At() (labels.Labels, []AggrChunk) {
 	if s.idx < 0 || s.idx >= len(s.series) {
 		return nil, nil
 	}
 
-	return s.series[s.idx].Labels, s.series[s.idx].Chunks
+	return zcpylabels.LabelsToPromLabels(s.series[s.idx].Labels...), s.series[s.idx].Chunks
 }
 
 func (s *listSeriesSet) Err() error { return nil }
@@ -83,7 +81,7 @@ type errSeriesSet struct{ err error }
 
 func (errSeriesSet) Next() bool { return false }
 
-func (errSeriesSet) At() ([]Label, []AggrChunk) { return nil, nil }
+func (errSeriesSet) At() (labels.Labels, []AggrChunk) { return nil, nil }
 
 func (e errSeriesSet) Err() error { return e.err }
 
@@ -362,7 +360,7 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 	for gotSS.Next() {
 		lset, chks := gotSS.At()
 
-		r := rawSeries{lset: LabelsToPromLabels(lset), chunks: make([][]sample, len(chks))}
+		r := rawSeries{lset: lset, chunks: make([][]sample, len(chks))}
 		for i, chk := range chks {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
@@ -381,14 +379,14 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 }
 
 func TestExtendLabels(t *testing.T) {
-	testutil.Equals(t, []Label{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels([]Label{{Name: "xb", Value: "2"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
+	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
+		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
 
-	testutil.Equals(t, []Label{{Name: "replica", Value: "01"}},
-		ExtendLabels([]Label{}, labels.FromStrings("replica", "01")))
+	testutil.Equals(t, labels.Labels{{Name: "replica", Value: "01"}},
+		ExtendLabels(labels.Labels{}, labels.FromStrings("replica", "01")))
 
-	testutil.Equals(t, []Label{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels([]Label{{Name: "xb", Value: "2"}, {Name: "replica", Value: "NOT01"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
+	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
+		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "replica", Value: "NOT01"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
 }
 
 // Test the cost of merging series sets for different number of merged sets and their size.
@@ -473,59 +471,4 @@ func benchmarkMergedSeriesSet(b testutil.TB, overlappingChunks bool) {
 			})
 		}
 	}
-}
-
-var testLsetMap = map[string]string{
-	"a":                           "1",
-	"c":                           "2",
-	"d":                           "dsfsdfsdfsdf123414234",
-	"124134235423534534ffdasdfsf": "1",
-	"":                            "",
-	"b":                           "",
-}
-
-func TestPromLabelsToLabelsUnsafe(t *testing.T) {
-	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PromLabelsToLabelsUnsafe(labels.FromMap(testLsetMap)))
-}
-
-func TestLabelsToPromLabelsUnsafe(t *testing.T) {
-	testutil.Equals(t, labels.FromMap(testLsetMap), LabelsToPromLabels(PromLabelsToLabels(labels.FromMap(testLsetMap))))
-	testutil.Equals(t, labels.FromMap(testLsetMap), LabelsToPromLabelsUnsafe(PromLabelsToLabels(labels.FromMap(testLsetMap))))
-}
-
-func TestPrompbLabelsToLabelsUnsafe(t *testing.T) {
-	var pb []prompb.Label
-	for _, l := range labels.FromMap(testLsetMap) {
-		pb = append(pb, prompb.Label{Name: l.Name, Value: l.Value})
-	}
-	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
-	testutil.Equals(t, PromLabelsToLabels(labels.FromMap(testLsetMap)), PrompbLabelsToLabelsUnsafe(pb))
-}
-
-func BenchmarkUnsafeVSSafeLabelsConversion(b *testing.B) {
-	const (
-		fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
-		num    = 10000
-	)
-	lbls := make([]labels.Label, 0, num)
-	for i := 0; i < num; i++ {
-		lbls = append(lbls, labels.Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-	}
-
-	var converted labels.Labels
-	b.Run("safe", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			converted = LabelsToPromLabels(PromLabelsToLabels(lbls))
-		}
-	})
-	testutil.Equals(b, num, len(converted))
-	b.Run("unsafe", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			converted = LabelsToPromLabelsUnsafe(PromLabelsToLabelsUnsafe(lbls))
-		}
-	})
-	testutil.Equals(b, num, len(converted))
-
 }

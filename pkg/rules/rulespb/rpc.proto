@@ -136,5 +136,5 @@ message RecordingRule {
 }
 
 message PromLabels {
-    repeated Label labels = 1 [(gogoproto.nullable) = false];
+    repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels.Label"];
 }
