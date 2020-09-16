@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -97,7 +97,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				MaxSourceResolution: 2000,
 				AutoDownsampling:    true,
 				Dedup:               true,
-				StoreMatchers:       [][]storepb.LabelMatcher{},
+				StoreMatchers:       [][]*labels.Matcher{},
 			},
 		},
 		{
@@ -117,7 +117,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				Step:            1000,
 				Dedup:           true,
 				PartialResponse: true,
-				StoreMatchers:   [][]storepb.LabelMatcher{},
+				StoreMatchers:   [][]*labels.Matcher{},
 			},
 		},
 		{
@@ -131,7 +131,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				Step:            1000,
 				Dedup:           true,
 				PartialResponse: true,
-				StoreMatchers:   [][]storepb.LabelMatcher{},
+				StoreMatchers:   [][]*labels.Matcher{},
 			},
 		},
 		{
@@ -145,7 +145,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				Step:          1000,
 				Dedup:         true,
 				ReplicaLabels: []string{"foo", "bar"},
-				StoreMatchers: [][]storepb.LabelMatcher{},
+				StoreMatchers: [][]*labels.Matcher{},
 			},
 		},
 		{
@@ -158,10 +158,10 @@ func TestCodec_DecodeRequest(t *testing.T) {
 				End:   456000,
 				Step:  1000,
 				Dedup: true,
-				StoreMatchers: [][]storepb.LabelMatcher{
+				StoreMatchers: [][]*labels.Matcher{
 					{
-						storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10901"},
-						storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "cluster", Value: "test"},
+						labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10901"),
+						labels.MustNewMatcher(labels.MatchEqual, "cluster", "test"),
 					},
 				},
 			},

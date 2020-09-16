@@ -14,6 +14,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/labels"
 	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
@@ -22,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -178,11 +180,11 @@ func (s *tenantSeriesSetServer) Next() (ok bool) {
 	return ok
 }
 
-func (s *tenantSeriesSetServer) At() ([]storepb.Label, []storepb.AggrChunk) {
+func (s *tenantSeriesSetServer) At() (labels.Labels, []storepb.AggrChunk) {
 	if s.cur == nil {
 		return nil, nil
 	}
-	return s.cur.Labels, s.cur.Chunks
+	return s.cur.PromLabels(), s.cur.Chunks
 }
 
 func (s *tenantSeriesSetServer) Err() error { return s.err }
@@ -241,9 +243,11 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
-			var series storepb.Series
-			series.Labels, series.Chunks = mergedSet.At()
-			respSender.send(storepb.NewSeriesResponse(&series))
+			lset, chks := mergedSet.At()
+			respSender.send(storepb.NewSeriesResponse(&storepb.Series{
+				Labels: labelpb.LabelsFromPromLabels(lset),
+				Chunks: chks,
+			}))
 		}
 		return mergedSet.Err()
 	})

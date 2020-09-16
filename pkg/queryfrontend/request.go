@@ -9,8 +9,8 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type ThanosRequest struct {
@@ -25,7 +25,7 @@ type ThanosRequest struct {
 	AutoDownsampling    bool
 	MaxSourceResolution int64
 	ReplicaLabels       []string
-	StoreMatchers       [][]storepb.LabelMatcher
+	StoreMatchers       [][]*labels.Matcher
 	CachingOptions      queryrange.CachingOptions
 }
 

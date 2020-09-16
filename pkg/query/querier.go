@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -31,7 +32,7 @@ import (
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeMatchers [][]storepb.LabelMatcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -39,11 +40,11 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeMatchers [][]storepb.LabelMatcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
-			storeMatchers:       storeMatchers,
+			storeDebugMatchers:  storeDebugMatchers,
 			proxy:               proxy,
 			deduplicate:         deduplicate,
 			maxResolutionMillis: maxResolutionMillis,
@@ -61,7 +62,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
-	storeMatchers        [][]storepb.LabelMatcher
+	storeDebugMatchers   [][]*labels.Matcher
 	proxy                storepb.StoreServer
 	deduplicate          bool
 	maxResolutionMillis  int64
@@ -74,7 +75,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
 }
 
 type querier struct {
@@ -83,7 +84,7 @@ type querier struct {
 	cancel              func()
 	mint, maxt          int64
 	replicaLabels       map[string]struct{}
-	storeMatchers       [][]storepb.LabelMatcher
+	storeDebugMatchers  [][]*labels.Matcher
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxResolutionMillis int64
@@ -100,7 +101,7 @@ func newQuerier(
 	logger log.Logger,
 	mint, maxt int64,
 	replicaLabels []string,
-	storeMatchers [][]storepb.LabelMatcher,
+	storeDebugMatchers [][]*labels.Matcher,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
@@ -127,7 +128,7 @@ func newQuerier(
 		mint:                mint,
 		maxt:                maxt,
 		replicaLabels:       rl,
-		storeMatchers:       storeMatchers,
+		storeDebugMatchers:  storeDebugMatchers,
 		proxy:               proxy,
 		deduplicate:         deduplicate,
 		maxResolutionMillis: maxResolutionMillis,
@@ -261,8 +262,8 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	aggrs := aggrsFromFunc(hints.Func)
 
-	// TODO: Pass it using the SeriesRequest instead of relying on context
-	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
+	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
@@ -326,7 +327,7 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 	// With the re-ordered label sets, re-sorting all series aligns the same series
 	// from different replicas sequentially.
 	sort.Slice(set, func(i, j int) bool {
-		return storepb.CompareLabels(set[i].Labels, set[j].Labels) < 0
+		return labels.Compare(labelpb.LabelsToPromLabels(set[i].Labels), labelpb.LabelsToPromLabels(set[j].Labels)) < 0
 	})
 }
 
@@ -335,8 +336,8 @@ func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
-	// TODO: Pass it using the SeriesRequest instead of relying on context
-	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
+	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label:                   name,
@@ -361,8 +362,8 @@ func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
 
-	// TODO: Pass it using the SeriesRequest instead of relying on context
-	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeMatchers)
+	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
+	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
 		PartialResponseDisabled: !q.partialResponse,

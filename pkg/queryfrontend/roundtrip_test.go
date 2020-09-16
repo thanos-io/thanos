@@ -18,11 +18,11 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -294,7 +294,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * seconds,
-		StoreMatchers:       [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}}},
+		StoreMatchers:       [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{

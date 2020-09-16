@@ -7,6 +7,7 @@ package thanos;
 import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
 import "store/storepb/prompb/types.proto";
+import "store/labelpb/types.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "storepb";
@@ -77,7 +78,7 @@ enum StoreType {
 
 message InfoResponse {
   // Deprecated. Use label_sets instead.
-  repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels.Label"];
+  repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.Label"];
   int64 min_time = 2;
   int64 max_time = 3;
   StoreType storeType  = 4;

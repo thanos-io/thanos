@@ -11,8 +11,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -28,7 +29,7 @@ type listSeriesSet struct {
 
 func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
 	s := Series{
-		Labels: zcpylabels.LabelsFromPromLabels(lset),
+		Labels: labelpb.LabelsFromPromLabels(lset),
 	}
 
 	for _, smpls := range smplChunks {
@@ -72,7 +73,7 @@ func (s *listSeriesSet) At() (labels.Labels, []AggrChunk) {
 		return nil, nil
 	}
 
-	return zcpylabels.LabelsToPromLabels(s.series[s.idx].Labels...), s.series[s.idx].Chunks
+	return s.series[s.idx].PromLabels(), s.series[s.idx].Chunks
 }
 
 func (s *listSeriesSet) Err() error { return nil }
@@ -378,17 +379,6 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 	return ret
 }
 
-func TestExtendLabels(t *testing.T) {
-	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
-
-	testutil.Equals(t, labels.Labels{{Name: "replica", Value: "01"}},
-		ExtendLabels(labels.Labels{}, labels.FromStrings("replica", "01")))
-
-	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "replica", Value: "NOT01"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
-}
-
 // Test the cost of merging series sets for different number of merged sets and their size.
 func BenchmarkMergedSeriesSet(b *testing.B) {
 	b.Run("overlapping chunks", func(b *testing.B) {
@@ -470,5 +460,68 @@ func benchmarkMergedSeriesSet(b testutil.TB, overlappingChunks bool) {
 				}
 			})
 		}
+	}
+}
+
+func TestMatchersToString_Translate(t *testing.T) {
+	for _, c := range []struct {
+		ms       []LabelMatcher
+		expected string
+	}{
+		{
+			ms: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+			},
+			expected: `{__name__="up"}`,
+		},
+		{
+			ms: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_NEQ, Value: "up"},
+				{Name: "job", Type: LabelMatcher_EQ, Value: "test"},
+			},
+			expected: `{__name__!="up", job="test"}`,
+		},
+		{
+			ms: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+				{Name: "job", Type: LabelMatcher_RE, Value: "test"},
+			},
+			expected: `{__name__="up", job=~"test"}`,
+		},
+		{
+			ms: []LabelMatcher{
+				{Name: "job", Type: LabelMatcher_NRE, Value: "test"},
+			},
+			expected: `{job!~"test"}`,
+		},
+		{
+			ms: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+				{Name: "__name__", Type: LabelMatcher_NEQ, Value: "up"},
+			},
+			// We cannot use up{__name__!="up"} in this case.
+			expected: `{__name__="up", __name__!="up"}`,
+		},
+	} {
+		t.Run(c.expected, func(t *testing.T) {
+			testutil.Equals(t, c.expected, MatchersToString(c.ms...))
+
+			promMs, err := TranslateFromPromMatchers(c.ms...)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, c.expected, PromMatchersToString(promMs...))
+
+			ms, err := TranslatePromMatchers(promMs...)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, c.ms, ms)
+			testutil.Equals(t, c.expected, MatchersToString(ms...))
+
+			// Is this parsable?
+			promMsParsed, err := parser.ParseMetricSelector(c.expected)
+			testutil.Ok(t, err)
+			testutil.Equals(t, promMs, promMsParsed)
+		})
+
 	}
 }

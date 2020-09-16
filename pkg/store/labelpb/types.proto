@@ -4,7 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "zcpylabels";
+option go_package = "labelpb";
 
 import "gogoproto/gogo.proto";
 
@@ -19,7 +19,7 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-message Labels {
+message LabelSet {
     repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Label"];
 }
 
@@ -28,6 +28,6 @@ message FullCopyLabel {
     string value = 2;
 }
 
-message FullCopyLabels {
+message FullCopyLabelSet {
     repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false];
 }

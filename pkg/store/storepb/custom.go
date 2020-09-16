@@ -13,7 +13,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/store/storepb/zcpylabels"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -231,14 +231,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: zcpylabels.LabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: labelpb.LabelsFromPromLabels(lset), Chunks: chks}
 			continue
 		}
 
-		zpeek := zcpylabels.LabelsToPromLabels(s.peek.Labels...)
-		if labels.Compare(lset, zpeek) != 0 {
-			s.lset, s.chunks = zpeek, s.peek.Chunks
-			s.peek = &Series{Labels: zcpylabels.LabelsFromPromLabels(lset), Chunks: chks}
+		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
+			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
+			s.peek = &Series{Labels: labelpb.LabelsFromPromLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -251,7 +250,7 @@ func (s *uniqueSeriesSet) Next() bool {
 		return false
 	}
 
-	s.lset, s.chunks = zcpylabels.LabelsToPromLabels(s.peek.Labels...), s.peek.Chunks
+	s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
 	s.peek = nil
 	return true
 }
@@ -338,29 +337,6 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.Quote(x.String())), nil
 }
 
-// ExtendLabels extend given labels by extend in labels format.
-// The type conversion is done safely, which means we don't modify extend labels underlying array.
-//
-// In case of existing labels already present in given label set, it will be overwritten by external one.
-func ExtendLabels(lset labels.Labels, extend labels.Labels) labels.Labels {
-	overwritten := map[string]struct{}{}
-	for i, l := range lset {
-		if v := extend.Get(l.Name); v != "" {
-			lset[i].Value = v
-			overwritten[l.Name] = struct{}{}
-		}
-	}
-
-	for _, l := range extend {
-		if _, ok := overwritten[l.Name]; ok {
-			continue
-		}
-		lset = append(lset, l)
-	}
-	sort.Sort(lset)
-	return lset
-}
-
 // TranslatePromMatchers returns proto matchers from Prometheus matchers.
 // NOTE: It allocates memory.
 func TranslatePromMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
@@ -387,6 +363,7 @@ func TranslatePromMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 
 // TranslateFromPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
+// TODO(bwplotka): Create yolo/no-alloc helper.
 func TranslateFromPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
@@ -402,17 +379,81 @@ func TranslateFromPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 		case LabelMatcher_NRE:
 			t = labels.MatchNotRegexp
 		default:
-			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
 		}
-		res = append(res, &labels.Matcher{Type: t, Name: m.Name, Value: m.Value})
+		m, err := labels.NewMatcher(t, m.Name, m.Value)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, m)
 	}
 	return res, nil
 }
 
-func LabelSetsToString(lsets []LabelSet) string {
-	s := []string{}
-	for _, ls := range lsets {
-		s = append(s, ls.String())
+// MatchersToString converts label matchers to string format.
+// String should be parsable as a valid PromQL query metric selector.
+func MatchersToString(ms ...LabelMatcher) string {
+	var res string
+	for i, m := range ms {
+		res += m.PromString()
+		if i < len(ms)-1 {
+			res += ", "
+		}
 	}
-	return strings.Join(s, "")
+	return "{" + res + "}"
+}
+
+// PromMatchersToString converts prometheus label matchers to string format.
+// String should be parsable as a valid PromQL query metric selector.
+func PromMatchersToString(ms ...*labels.Matcher) string {
+	var res string
+	for i, m := range ms {
+		res += m.String()
+		if i < len(ms)-1 {
+			res += ", "
+		}
+	}
+	return "{" + res + "}"
+}
+
+func (m *LabelMatcher) PromString() string {
+	return fmt.Sprintf("%s%s%q", m.Name, m.Type.PromString(), m.Value)
+}
+
+func (x LabelMatcher_Type) PromString() string {
+	typeToStr := map[LabelMatcher_Type]string{
+		LabelMatcher_EQ:  "=",
+		LabelMatcher_NEQ: "!=",
+		LabelMatcher_RE:  "=~",
+		LabelMatcher_NRE: "!~",
+	}
+	if str, ok := typeToStr[x]; ok {
+		return str
+	}
+	panic("unknown match type")
+}
+
+// PromLabels return Prometheus labels.Labels without extra allocation.
+func (m *Series) PromLabels() labels.Labels {
+	return labelpb.LabelsToPromLabels(m.Labels)
+}
+
+// Deprecated.
+// TODO(bwplotka): Remove this once Cortex dep will stop using it.
+type Label = labelpb.Label
+
+// Deprecated.
+// TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
+type LabelSet = labelpb.LabelSet
+
+// Deprecated.
+// TODO(bwplotka): Remove this once Cortex dep will stop using it.
+func CompareLabels(a, b []Label) int {
+	return labels.Compare(labelpb.LabelsToPromLabels(a), labelpb.LabelsToPromLabels(b))
+}
+
+// Deprecated.
+// TODO(bwplotka): Remove this once Cortex dep will stop using it.
+func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
+	return labelpb.LabelsToPromLabels(lset)
 }

@@ -1,13 +1,19 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package containing Zero Copy Labels adapter.
 
-package zcpylabels
+package labelpb
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"unsafe"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
@@ -15,19 +21,28 @@ func noAllocString(buf []byte) string {
 	return *((*string)(unsafe.Pointer(&buf)))
 }
 
-// LabelsFromPromLabels converts Thanos proto no alloc labels to Prometheus labels in type unsafe manner.
+// LabelsFromPromLabels converts Prometheus labels to slice of storepb.Label in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed labels.Labels.
 func LabelsFromPromLabels(lset labels.Labels) []Label {
 	return *(*[]Label)(unsafe.Pointer(&lset))
 }
 
-// LabelsToPromLabels converts Prometheus labels to Thanos proto no alloc labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []NoAllocLabels
-func LabelsToPromLabels(lset ...Label) labels.Labels {
+// LabelsToPromLabels convert slice of storepb.Label to Prometheus labels in type unsafe manner.
+// It reuses the same memory. Caller should abort using passed []Label.
+func LabelsToPromLabels(lset []Label) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// Label is a labels.Label that can be marshalled to/from protobuf reusing the same
+// LabelSetsToPromLabelSets converts slice of storepb.LabelSet to slice of Prometheus labels.
+func LabelSetsToPromLabelSets(lss ...LabelSet) []labels.Labels {
+	res := make([]labels.Labels, 0, len(lss))
+	for _, ls := range lss {
+		res = append(res, ls.PromLabels())
+	}
+	return res
+}
+
+// Label is a labels.Label that can be marshaled to/from protobuf reusing the same
 // memory address for string bytes.
 type Label labels.Label
 
@@ -186,6 +201,21 @@ func (m *Label) Unmarshal(data []byte) error {
 	return nil
 }
 
+func (m *Label) UnmarshalJSON(entry []byte) error {
+	l := FullCopyLabel{}
+
+	if err := json.Unmarshal(entry, &l); err != nil {
+		return errors.Wrapf(err, "labels: label field unmarshal: %v", string(entry))
+	}
+	m.Name = l.Name
+	m.Value = l.Value
+	return nil
+}
+
+func (m *Label) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&FullCopyLabel{Name: m.Name, Value: m.Value})
+}
+
 // Size implements proto.Sizer.
 func (m *Label) Size() (n int) {
 	if m == nil {
@@ -215,4 +245,55 @@ func (m *Label) Compare(other Label) int {
 		return c
 	}
 	return strings.Compare(m.Value, other.Value)
+}
+
+// ExtendLabels extend given labels by extend in labels format.
+// The type conversion is done safely, which means we don't modify extend labels underlying array.
+//
+// In case of existing labels already present in given label set, it will be overwritten by external one.
+func ExtendLabels(lset labels.Labels, extend labels.Labels) labels.Labels {
+	overwritten := map[string]struct{}{}
+	for i, l := range lset {
+		if v := extend.Get(l.Name); v != "" {
+			lset[i].Value = v
+			overwritten[l.Name] = struct{}{}
+		}
+	}
+
+	for _, l := range extend {
+		if _, ok := overwritten[l.Name]; ok {
+			continue
+		}
+		lset = append(lset, l)
+	}
+	sort.Sort(lset)
+	return lset
+}
+
+func PromLabelSetsToString(lsets []labels.Labels) string {
+	s := []string{}
+	for _, ls := range lsets {
+		s = append(s, ls.String())
+	}
+	sort.Strings(s)
+	return strings.Join(s, ",")
+}
+
+func (m *LabelSet) UnmarshalJSON(entry []byte) error {
+	lbls := labels.Labels{}
+	if err := lbls.UnmarshalJSON(entry); err != nil {
+		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
+	}
+	sort.Sort(lbls)
+	m.Labels = LabelsFromPromLabels(lbls)
+	return nil
+}
+
+func (m *LabelSet) MarshalJSON() ([]byte, error) {
+	return m.PromLabels().MarshalJSON()
+}
+
+// PromLabels return Prometheus labels.Labels without extra allocation.
+func (m *LabelSet) PromLabels() labels.Labels {
+	return LabelsToPromLabels(m.Labels)
 }

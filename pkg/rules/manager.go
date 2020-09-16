@@ -26,6 +26,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -62,8 +63,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
 					DurationSeconds:           rule.HoldDuration().Seconds(),
-					Labels:                    rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
-					Annotations:               rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
+					Labels:                    storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(rule.Labels())},
+					Annotations:               storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(rule.Annotations())},
 					Alerts:                    ActiveAlertsToProto(g.PartialResponseStrategy, rule),
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
@@ -76,7 +77,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 				Result: &rulespb.Rule_Recording{Recording: &rulespb.RecordingRule{
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
-					Labels:                    rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+					Labels:                    storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(rule.Labels())},
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
@@ -97,8 +98,8 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 	for i, ruleAlert := range active {
 		ret[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
-			Labels:                  rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
-			Annotations:             rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
+			Labels:                  storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(ruleAlert.Labels)},
+			Annotations:             storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
 			ActiveAt:                &ruleAlert.ActiveAt, //nolint:exportloopref
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
