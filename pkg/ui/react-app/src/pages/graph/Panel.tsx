@@ -11,7 +11,7 @@ import { GraphTabContent } from './GraphTabContent';
 import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
-import {StoreListProps} from '../../thanos/pages/stores/Stores'
+import { StoreListProps } from '../../thanos/pages/stores/Stores'
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
@@ -146,7 +146,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // add storeMatches to query params
-    this.props.options.storeMatches.forEach((store: string) => params.append("storeMatch[]", `{__address__="${store}"}`));
+    this.props.options.storeMatches.forEach((store: string) => params.append('storeMatch[]', `{__address__="${store}"}`));
 
     let path: string;
     switch (this.props.options.type) {
@@ -266,16 +266,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleStoreMatchChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    if (event.target.name === "All") {
+    if (event.target.name === 'All') {
       this.setOptions({ storeMatches: [] });
       return;
     }
 
-    var storeMatchList = this.props.options.storeMatches;
+    let storeMatchList = this.props.options.storeMatches;
     storeMatchList = storeMatchList.filter((store: string) => {
       return store !== event.target.name;
     });
-
     if (event.target.checked)
       storeMatchList.push(event.target.name);
 
@@ -327,31 +326,31 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-          <label>
-            Store Filter: 
-          </label>
-          <Checkbox
-            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-            id={`store-match-all-${id}`}
-            onChange={this.handleStoreMatchChange}
-            checked={options.storeMatches.length === 0}
-            name={"All"}
-          >
-            All 
-          </Checkbox>
-          {storeTypes.map(type => (
-            stores[type].map(store => (
-              <Checkbox
-                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-                id={`store-match-${store.name}-${id}`}
-                onChange={this.handleStoreMatchChange}
-                checked={options.storeMatches.includes(store.name)}
-                name={store.name}
-              >
-                {store.name} 
-              </Checkbox>
-            ))
-          ))}
+            <label>
+              Store Filter: 
+            </label>
+            <Checkbox
+              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+              id={`store-match-all-${id}`}
+              onChange={this.handleStoreMatchChange}
+              checked={options.storeMatches.length === 0}
+              name={"All"}
+            >
+              All 
+            </Checkbox>
+            {storeTypes.map(type => (
+              stores[type].map(store => (
+                <Checkbox
+                  wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                  id={`store-match-${store.name}-${id}`}
+                  onChange={this.handleStoreMatchChange}
+                  checked={options.storeMatches.includes(store.name)}
+                  name={store.name}
+                >
+                  {store.name} 
+                </Checkbox>
+              ))
+            ))}
           </Col>
         </Row>
         <Row>
