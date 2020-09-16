@@ -168,6 +168,12 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           Error fetching metrics list: Unexpected response status when fetching metric names: {metricsErr.message}
         </UncontrolledAlert>
       )}
+      {storesErr && (
+        <Alert color="danger">
+          <strong>Warning: </strong>
+          Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
+        </Alert>
+      )}
       {!storesLoading && (
         <PanelListContent
           panels={decodePanelOptionsFromQueryString(window.location.search)}
