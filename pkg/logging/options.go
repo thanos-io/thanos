@@ -98,6 +98,9 @@ func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
 	if code >= 200 && code < 300 {
 		return level.Debug(logger)
 	}
+	if code >= 300 && code < 400 {
+		return level.Info(logger)
+	}
 	if code >= 400 && code < 500 {
 		return level.Debug(logger)
 	}
