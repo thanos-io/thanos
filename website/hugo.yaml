@@ -38,3 +38,10 @@ params:
   DockerHubRepository: "thanos"
   TwitterHandle: "ThanosMetrics"
   Description: "Highly available Prometheus setup with long term storage capabilities."
+
+# TOC to include h1 - h4
+markup:
+  tableOfContents:
+    endLevel: 4
+    ordered: false
+    startLevel: 1
