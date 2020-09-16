@@ -343,6 +343,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 <Checkbox
                   wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                   id={`store-match-${store.name}-${id}`}
+                  key={`store-match-${store.name}-${id}`}
                   onChange={this.handleStoreMatchChange}
                   checked={options.storeMatches.includes(store.name)}
                   name={store.name}
