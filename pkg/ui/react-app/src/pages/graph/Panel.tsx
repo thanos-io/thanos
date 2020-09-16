@@ -146,7 +146,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // add storeMatches to query params
-    this.props.options.storeMatches.map((store: string) => params.append("storeMatch[]", `{__address__="${store}"}`));
+    this.props.options.storeMatches.forEach((store: string) => params.append("storeMatch[]", `{__address__="${store}"}`));
 
     let path: string;
     switch (this.props.options.type) {
@@ -273,7 +273,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     var storeMatchList = this.props.options.storeMatches;
     storeMatchList = storeMatchList.filter((store: string) => {
-      return store != event.target.name;
+      return store !== event.target.name;
     });
 
     if (event.target.checked)
@@ -345,7 +345,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`store-match-${store.name}-${id}`}
                 onChange={this.handleStoreMatchChange}
-                checked={options.storeMatches.indexOf(store.name) >= 0}
+                checked={options.storeMatches.includes(store.name)}
                 name={store.name}
               >
                 {store.name} 
