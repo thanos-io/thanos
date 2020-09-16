@@ -9,6 +9,7 @@ import {StoreListProps} from '../../thanos/pages/stores/Stores'
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { withStatusIndicator } from '../../components/withStatusIndicator';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
 
@@ -112,6 +113,8 @@ export const PanelListContent: FC<PanelListProps> = ({
   );
 };
 
+const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
+
 const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
@@ -174,16 +177,15 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
         </Alert>
       )}
-      {!storesLoading && (
-        <PanelListContent
-          panels={decodePanelOptionsFromQueryString(window.location.search)}
-          pathPrefix={pathPrefix}
-          useLocalTime={useLocalTime}
-          metrics={metricsRes.data}
-          stores={storesRes.data}
-          queryHistoryEnabled={enableQueryHistory}
-        />)
-      }
+      <PanelListContentWithIndicator
+        panels={decodePanelOptionsFromQueryString(window.location.search)}
+        pathPrefix={pathPrefix}
+        useLocalTime={useLocalTime}
+        metrics={metricsRes.data}
+        stores={storesRes.data}
+        queryHistoryEnabled={enableQueryHistory}
+        isLoading={storesLoading}
+      />
     </>
   );
 };
