@@ -60,7 +60,7 @@ func regCommonTracingFlags(app extkingpin.FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
 		"tracing.config",
-		"YAML file with tracing configuration. See format details: https://thanos.io/tip/tracing.md/#configuration ",
+		"YAML file with tracing configuration. See format details: https://thanos.io/tip/thanos/tracing.md/#configuration ",
 		false,
 	)
 }
