@@ -95,10 +95,7 @@ type options struct {
 
 // DefaultCodeToLevel is the helper mapper that maps HTTP Response codes to log levels.
 func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
-	if code >= 200 && code < 300 {
-		return level.Debug(logger)
-	}
-	if code >= 400 && code < 500 {
+	if code >= 200 && code < 500 {
 		return level.Debug(logger)
 	}
 	return level.Error(logger)
