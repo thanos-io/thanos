@@ -115,7 +115,8 @@ Flags:
                               Server.
       --query-range.split-interval=24h
                               Split queries by an interval and execute in
-                              parallel, 0 disables it.
+                              parallel, it should be greater than 0 when
+                              response-cache-config is configured.
       --query-range.max-retries-per-request=5
                               Maximum number of retries for a single request;
                               beyond this, the downstream error is returned.
