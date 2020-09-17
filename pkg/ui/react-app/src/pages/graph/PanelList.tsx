@@ -5,7 +5,8 @@ import { UncontrolledAlert, Button } from 'reactstrap';
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
-import {StoreListProps} from '../../thanos/pages/stores/Stores'
+import { StoreListProps } from '../../thanos/pages/stores/Stores'
+import { Store } from '../../thanos/pages/stores/store'
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -36,8 +37,15 @@ export const PanelListContent: FC<PanelListProps> = ({
 }) => {
   const [panels, setPanels] = useState(rest.panels);
   const [historyItems, setLocalStorageHistoryItems] = useLocalStorage<string[]>('history', []);
+  const [storeData, setStoreData] = useState([] as Store[]);
 
   useEffect(() => {
+    // convert stores data to a unified stores array
+    let storeList: Store[] = [];
+    for (let type in stores) {
+      storeList.push(...stores[type]);
+    }
+    setStoreData(storeList);
     !panels.length && addPanel();
     window.onpopstate = () => {
       const panels = decodePanelOptionsFromQueryString(window.location.search);
@@ -103,7 +111,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
-          stores={stores}
+          stores={storeData}
         />
       ))}
       <Button className="mb-3" color="primary" onClick={addPanel}>
