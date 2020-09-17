@@ -40,13 +40,13 @@ func NewTripperware(
 	queriesCount.WithLabelValues(labelQuery)
 	queriesCount.WithLabelValues(labelQueryRange)
 
-	overrides, err := validation.NewOverrides(*config.CortexLimits, nil)
+	limits, err := validation.NewOverrides(*config.CortexLimits, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize limits")
 	}
 
 	metrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
-	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(overrides)}
+	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 
 	// step align middleware.
 	queryRangeMiddleware = append(
@@ -65,7 +65,7 @@ func NewTripperware(
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", metrics),
-			queryrange.SplitByIntervalMiddleware(queryIntervalFn, overrides, codec, reg),
+			queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 		)
 	}
 
@@ -74,7 +74,7 @@ func NewTripperware(
 			logger,
 			*config.CortexResultsCacheConfig,
 			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
-			overrides,
+			limits,
 			codec,
 			queryrange.PrometheusResponseExtractor{},
 			nil,

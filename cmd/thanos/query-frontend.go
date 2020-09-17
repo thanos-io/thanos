@@ -31,7 +31,7 @@ import (
 	"github.com/weaveworks/common/user"
 )
 
-type config struct {
+type queryFrontendConfig struct {
 	http httpConfig
 	queryfrontend.Config
 }
@@ -39,7 +39,7 @@ type config struct {
 func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
 	cmd := app.Command(comp.String(), "query frontend")
-	cfg := &config{
+	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
 			CortexFrontendConfig:     &cortexfrontend.Config{},
 			CortexLimits:             &cortexvalidation.Limits{},
@@ -49,7 +49,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.http.registerFlag(cmd)
 
-	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, 0 disables it.").
+	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, it should be greater than 0 when response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.SplitQueriesByInterval)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
@@ -90,7 +90,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	cfg *config,
+	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
 	cacheConfContentYaml, err := cfg.CachePathOrContent.Content()

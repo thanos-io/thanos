@@ -98,7 +98,7 @@ func main() {
 	}
 
 	for typ, config := range queryfrontendCacheConfigs {
-		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("query_frontend_cache_", string(typ)), *outputDir); err != nil {
+		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}

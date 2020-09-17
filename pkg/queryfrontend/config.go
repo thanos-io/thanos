@@ -110,7 +110,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*queryrange.Resu
 			},
 		}, nil
 	default:
-		return nil, errors.Errorf("index cache with type %s is not supported", cacheConfig.Type)
+		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
 	}
 }
 

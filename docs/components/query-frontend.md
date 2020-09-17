@@ -29,7 +29,7 @@ For more information please check out [initial design proposal](https://thanos.i
 ### Splitting
 
 Query Frontend splits a long query into multiple short queries based on the configured `--query-range.split-interval` flag. The default value of `--query-range.split-interval`
-is `24h`. Set it to `0` disables query splitting, but please note that caching is also disabled in this case.
+is `24h`. When caching is enabled it should be greater than `0`.
 
 There are some benefits from query splitting:
 

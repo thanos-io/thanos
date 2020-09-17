@@ -409,7 +409,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 func NewQueryFrontend(name string, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) (*e2e.HTTPService, error) {
 	cacheConfigBytes, err := yaml.Marshal(cacheConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "marshal query frontend config file: %v", cacheConfig)
+		return nil, errors.Wrapf(err, "marshal response cache config file: %v", cacheConfig)
 	}
 
 	args := e2e.BuildArgs(map[string]string{
