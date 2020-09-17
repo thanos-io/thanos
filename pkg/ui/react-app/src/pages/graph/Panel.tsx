@@ -12,7 +12,6 @@ import { GraphTabContent } from './GraphTabContent';
 import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
-import { StoreListProps } from '../../thanos/pages/stores/Stores'
 import { Store } from '../../thanos/pages/stores/store'
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
@@ -273,8 +272,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   render() {
     const { pastQueries, metricNames, options, id, stores } = this.props;
-    const storeTypes = Object.keys(stores);
-
     return (
       <div className="panel">
         <Row>
