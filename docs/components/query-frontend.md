@@ -50,7 +50,7 @@ Currently, in-memory cache (fifo cache) and memcached are supported.
 
 #### In-memory
 
-[embedmd]:# (../flags/config_query_frontend_cache_in_memory.txt yaml)
+[embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -61,7 +61,7 @@ config:
 
 #### Memcached
 
-[embedmd]:# (../flags/config_query_frontend_cache_memcached.txt yaml)
+[embedmd]:# (../flags/config_response_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
 config:
