@@ -83,12 +83,12 @@ Flags:
       --tracing.config-file=<file-path>
                               Path to YAML file with tracing configuration. See
                               format details:
-                              https://thanos.io/tip/tracing.md/#configuration
+                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                               Alternative to 'tracing.config-file' flag (lower
                               priority). Content of YAML file with tracing
                               configuration. See format details:
-                              https://thanos.io/tip/tracing.md/#configuration
+                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --query-range.split-interval=24h
                               Split queries by an interval and execute in
                               parallel, 0 disables it.
