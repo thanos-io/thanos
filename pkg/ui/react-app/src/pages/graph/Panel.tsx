@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 
 import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
+import Select from 'react-select'
 
 import moment from 'moment-timezone';
 
@@ -12,6 +13,7 @@ import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
 import { StoreListProps } from '../../thanos/pages/stores/Stores'
+import { Store } from '../../thanos/pages/stores/store'
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
@@ -24,7 +26,7 @@ interface PanelProps {
   metricNames: string[];
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
-  stores: StoreListProps;
+  stores: Store[];
 }
 
 interface PanelState {
@@ -46,7 +48,7 @@ export interface PanelOptions {
   maxSourceResolution: string;
   useDeduplication: boolean;
   usePartialResponse: boolean;
-  storeMatches: string[];
+  storeMatches: Store[];
 }
 
 export enum PanelType {
@@ -146,7 +148,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // add storeMatches to query params
-    this.props.options.storeMatches.forEach((store: string) => params.append('storeMatch[]', `{__address__="${store}"}`));
+    this.props.options.storeMatches.forEach((store: Store) => params.append('storeMatch[]', `{__address__="${store.name}"}`));
 
     let path: string;
     switch (this.props.options.type) {
@@ -265,20 +267,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ usePartialResponse: event.target.checked });
   };
 
-  handleStoreMatchChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    if (event.target.name === 'All') {
-      this.setOptions({ storeMatches: [] });
-      return;
-    }
-
-    let storeMatchList = this.props.options.storeMatches;
-    storeMatchList = storeMatchList.filter((store: string) => {
-      return store !== event.target.name;
-    });
-    if (event.target.checked)
-      storeMatchList.push(event.target.name);
-
-    this.setOptions({ storeMatches: storeMatchList });
+  handleStoreMatchChange = (selectedStores: any): void => {
+    this.setOptions({ storeMatches: selectedStores });
   };
 
   render() {
@@ -326,32 +316,22 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <label>
-              Store Filter: 
-            </label>
-            <Checkbox
-              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-              id={`store-match-all-${id}`}
-              onChange={this.handleStoreMatchChange}
-              checked={options.storeMatches.length === 0}
-              name={"All"}
-            >
-              All 
-            </Checkbox>
-            {storeTypes.map(type => (
-              stores[type].map(store => (
-                <Checkbox
-                  wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-                  id={`store-match-${store.name}-${id}`}
-                  key={`store-match-${store.name}-${id}`}
-                  onChange={this.handleStoreMatchChange}
-                  checked={options.storeMatches.includes(store.name)}
-                  name={store.name}
-                >
-                  {store.name} 
-                </Checkbox>
-              ))
-            ))}
+            <div className='store-filter-wrapper'>
+              <label className='store-filter-label'>
+                Store Filter: 
+              </label>
+              <Select 
+                options={stores}
+                isMulti
+                getOptionLabel={(option: Store) => option.name}
+                getOptionValue={(option: Store) => option.name}
+                closeMenuOnSelect={false}
+                styles={{ container: (provided, state) => (
+                  { ...provided, marginBottom: 20, zIndex: 3, width: '100%'}
+                )}}
+                onChange={this.handleStoreMatchChange}
+              />
+            </div>
           </Col>
         </Row>
         <Row>
