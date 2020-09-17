@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 
-import { Alert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
+import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
 
 import moment from 'moment-timezone';
 
@@ -274,7 +274,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           </Col>
         </Row>
         <Row>
-          <Col>{this.state.error && <Alert color="danger">{this.state.error}</Alert>}</Col>
+          <Col>{this.state.error && <UncontrolledAlert color="danger">{this.state.error}</UncontrolledAlert>}</Col>
         </Row>
         <Row>
           <Col>

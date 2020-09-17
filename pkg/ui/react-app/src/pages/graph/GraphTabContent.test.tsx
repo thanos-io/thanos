@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { shallow } from 'enzyme';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { GraphTabContent } from './GraphTabContent';
 
 describe('GraphTabContent', () => {
@@ -17,7 +17,7 @@ describe('GraphTabContent', () => {
       children: `Query result is of wrong type '`,
     };
     const graph = shallow(<GraphTabContent {...props} />);
-    const alert = graph.find(Alert);
+    const alert = graph.find(UncontrolledAlert);
     expect(alert.prop('color')).toEqual(props.color);
     expect(alert.childAt(0).text()).toEqual(props.children);
   });
@@ -38,7 +38,7 @@ describe('GraphTabContent', () => {
       },
     };
     const graph = shallow(<GraphTabContent {...props} />);
-    const alert = graph.find(Alert);
+    const alert = graph.find(UncontrolledAlert);
     expect(alert.prop('color')).toEqual(props.color);
     expect(alert.childAt(0).text()).toEqual(props.children);
   });

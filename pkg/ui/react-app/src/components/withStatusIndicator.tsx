@@ -1,5 +1,5 @@
 import React, { FC, ComponentType } from 'react';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
@@ -19,7 +19,7 @@ export const withStatusIndicator = <T extends {}>(Component: ComponentType<T>): 
 }) => {
   if (error) {
     return (
-      <Alert color="danger">
+      <UncontrolledAlert color="danger">
         {customErrorMsg ? (
           customErrorMsg
         ) : (
@@ -27,7 +27,7 @@ export const withStatusIndicator = <T extends {}>(Component: ComponentType<T>): 
             <strong>Error:</strong> Error fetching {componentTitle || Component.displayName}: {error.message}
           </>
         )}
-      </Alert>
+      </UncontrolledAlert>
     );
   }
 

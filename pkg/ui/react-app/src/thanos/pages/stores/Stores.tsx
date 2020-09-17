@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
@@ -20,7 +20,7 @@ export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
           <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
         ))
       ) : (
-        <Alert color="warning">No stores registered.</Alert>
+        <UncontrolledAlert color="warning">No stores registered.</UncontrolledAlert>
       )}
     </>
   );

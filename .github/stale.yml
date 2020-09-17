@@ -24,25 +24,25 @@ pull:
   daysUntilClose: 7
   daysUntilStale: 30
   markComment: >
-    Hello 👋 Looks like there was no activity on this amazing PR for last 30 days.
+    Hello 👋 Looks like there was no activity on this amazing PR for the last 30 days.
 
     **Do you mind updating us on the status?** Is there anything we can help with? If you plan to still work on it, just comment on this PR or push a commit. Thanks! 🤗
 
-    If there will be no activity for next week, this issue will be closed (we can always reopen a PR if you get back to this!).
+    If there will be no activity in the next week, this issue will be closed (we can always reopen a PR if you get back to this!).
     Alternatively, use [`remind` command](https://probot.github.io/apps/reminders/) if you wish to be reminded at some point in future.
   #unmarkComment: No need for unmark comment.
   closeComment: >
     Closing for now as promised, let us know if you need this to be reopened! 🤗
 
 issues:
-  daysUntilClose: 7
-  daysUntilStale: 30
+  daysUntilClose: 14
+  daysUntilStale: 60
   markComment: >
-    Hello 👋 Looks like there was no activity on this issue for last 30 days.
+    Hello 👋 Looks like there was no activity on this issue for the last two months.
 
     **Do you mind updating us on the status?** Is this still reproducible or needed? If yes, just comment on this PR or push a commit. Thanks! 🤗
 
-    If there will be no activity for next week, this issue will be closed (we can always reopen an issue if we need!).
+    If there will be no activity in the next two weeks, this issue will be closed (we can always reopen an issue if we need!).
     Alternatively, use [`remind` command](https://probot.github.io/apps/reminders/) if you wish to be reminded at some point in future.
   #unmarkComment: No need for unmark comment.
   closeComment: >

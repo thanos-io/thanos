@@ -1,6 +1,6 @@
 import React, { FC, useState, useEffect } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Alert, Button } from 'reactstrap';
+import { UncontrolledAlert, Button } from 'reactstrap';
 
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
@@ -150,18 +150,18 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         Use local time
       </Checkbox>
       {(delta > 30 || timeErr) && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
           {timeErr && `Unexpected response status when fetching server time: ${timeErr.message}`}
           {delta >= 30 &&
             `Error fetching server time: Detected ${delta} seconds time difference between your browser and the server. Thanos relies on accurate time and time drift might cause unexpected query results.`}
-        </Alert>
+        </UncontrolledAlert>
       )}
       {metricsErr && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
           Error fetching metrics list: Unexpected response status when fetching metric names: {metricsErr.message}
-        </Alert>
+        </UncontrolledAlert>
       )}
       <PanelListContent
         panels={decodePanelOptionsFromQueryString(window.location.search)}

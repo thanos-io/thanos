@@ -1,7 +1,7 @@
 import React from 'react';
 import { mount, ReactWrapper } from 'enzyme';
 import { FetchMock } from 'jest-fetch-mock/types';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import Blocks from './Blocks';
 import { SourceView } from './SourceView';
 import { sampleAPIResponse } from './__testdata__/testdata';
@@ -62,7 +62,7 @@ describe('Blocks', () => {
 
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
 
-      const alert = blocks.find(Alert);
+      const alert = blocks.find(UncontrolledAlert);
       expect(alert.prop('color')).toBe('warning');
       expect(alert.text()).toContain('No blocks found.');
     });
@@ -80,7 +80,7 @@ describe('Blocks', () => {
 
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
 
-      const alert = blocks.find(Alert);
+      const alert = blocks.find(UncontrolledAlert);
       expect(alert.prop('color')).toBe('danger');
       expect(alert.text()).toContain('Error fetching blocks');
     });
