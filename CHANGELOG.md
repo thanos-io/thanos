@@ -13,7 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#3181](https://github.com/thanos-io/thanos/pull/3181) Query Frontend: Add debug level logging for responses between 300-399
+- [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Add debug level logging for responses between 300-399
 - [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allow passing a `storeMatch[]` to Labels APIs. Also time range metadata based store filtering is supported on Labels APIs.
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Query Frontend: Add metric `thanos_memcached_getmulti_gate_queries_max`.
 - [#3146](https://github.com/thanos-io/thanos/pull/3146) Sidecar: Add `thanos_sidecar_prometheus_store_received_frames` histogram metric.
