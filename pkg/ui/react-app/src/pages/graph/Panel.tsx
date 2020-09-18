@@ -318,6 +318,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             <div className="store-filter-wrapper">
               <label className="store-filter-label">Store Filter:</label>
               <Select
+                defaultValue={options.storeMatches}
                 options={stores}
                 isMulti
                 getOptionLabel={(option: Store) => option.name}
