@@ -183,7 +183,7 @@ export const parseOption = (param: string): Partial<PanelOptions> => {
       return { usePartialResponse: decodedValue === '1' };
 
     case 'store_matches':
-      return { storeMatches: JSON.parse(decodedValue)};
+      return { storeMatches: JSON.parse(decodedValue) };
   }
   return {};
 };
@@ -204,7 +204,7 @@ export const toQueryString = ({ key, options }: PanelMeta) => {
     maxSourceResolution,
     useDeduplication,
     usePartialResponse,
-    storeMatches
+    storeMatches,
   } = options;
   const time = isPresent(endTime) ? formatTime(endTime) : false;
   const urlParams = [

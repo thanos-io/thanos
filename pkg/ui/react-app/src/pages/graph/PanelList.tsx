@@ -6,7 +6,7 @@ import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { StoreListProps } from '../../thanos/pages/stores/Stores';
-import { Store } from '../../thanos/pages/stores/store'
+import { Store } from '../../thanos/pages/stores/store';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -24,7 +24,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   metrics: string[];
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
-  stores: StoreListProps
+  stores: StoreListProps;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -129,7 +129,9 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
-  const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(`${pathPrefix}/api/v1/stores`);
+  const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
+    `${pathPrefix}/api/v1/stores`
+  );
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
