@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 
 import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
-import Select from 'react-select'
+import Select from 'react-select';
 
 import moment from 'moment-timezone';
 
@@ -12,7 +12,7 @@ import { GraphTabContent } from './GraphTabContent';
 import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
-import { Store } from '../../thanos/pages/stores/store'
+import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
@@ -147,7 +147,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // add storeMatches to query params
-    this.props.options.storeMatches.forEach((store: Store) => params.append('storeMatch[]', `{__address__="${store.name}"}`));
+    this.props.options.storeMatches.forEach((store: Store) => 
+      params.append('storeMatch[]', `{__address__="${store.name}"}`)
+    );
 
     let path: string;
     switch (this.props.options.type) {
@@ -313,19 +315,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <div className='store-filter-wrapper'>
-              <label className='store-filter-label'>
-                Store Filter: 
-              </label>
-              <Select 
+            <div className="store-filter-wrapper">
+              <label className="store-filter-label">Store Filter:</label>
+              <Select
                 options={stores}
                 isMulti
                 getOptionLabel={(option: Store) => option.name}
                 getOptionValue={(option: Store) => option.name}
                 closeMenuOnSelect={false}
-                styles={{ container: (provided, state) => (
-                  { ...provided, marginBottom: 20, zIndex: 3, width: '100%'}
-                )}}
+                styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
                 onChange={this.handleStoreMatchChange}
               />
             </div>

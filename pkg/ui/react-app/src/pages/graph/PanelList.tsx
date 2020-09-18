@@ -5,7 +5,7 @@ import { UncontrolledAlert, Button } from 'reactstrap';
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
-import { StoreListProps } from '../../thanos/pages/stores/Stores'
+import { StoreListProps } from '../../thanos/pages/stores/Stores';
 import { Store } from '../../thanos/pages/stores/store'
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
@@ -180,10 +180,10 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         </UncontrolledAlert>
       )}
       {storesErr && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
           Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
-        </Alert>
+        </UncontrolledAlert>
       )}
       <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
