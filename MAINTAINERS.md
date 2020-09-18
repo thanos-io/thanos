@@ -8,11 +8,12 @@
 | Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)    | Red Hat           |
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
 | Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
+| Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@prmsrswt](https://github.com/prmsrswt)    | Atlan             |
 | Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
-We are from different parts of Europe: Germany, Italy, Lithuania, Poland and UK.
+We are from different parts of Europe: Germany, Italy, Lithuania, Poland, and UK and India.
 We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
