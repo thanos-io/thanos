@@ -25,7 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3136](https://github.com/thanos-io/thanos/pull/3136) Sidecar: Add metric `thanos_sidecar_reloader_config_apply_operations_total` and rename metric `thanos_sidecar_reloader_config_apply_errors_total` to `thanos_sidecar_reloader_config_apply_operations_failed_total`.
-- [#3154](https://github.com/thanos-io/thanos/pull/3154) Query: Add metric `thanos_query_gate_queries_max`. Remove metric `thanos_query_concurrent_selects_gate_queries_in_flight`.
+- [#3154](https://github.com/thanos-io/thanos/pull/3154) Querier: Add metric `thanos_query_gate_queries_max`. Remove metric `thanos_query_concurrent_selects_gate_queries_in_flight`.
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Store: Rename metric `thanos_bucket_store_queries_concurrent_max` to `thanos_bucket_store_series_gate_queries_max`.
 
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
