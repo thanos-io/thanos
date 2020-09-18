@@ -11,6 +11,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: Added support for Memacahce cache. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
+
 ### Added
 
 - [#3184](https://github.com/thanos-io/thanos/pull/3184) Compact: Fix web.prefix-header to use &wc.prefixHeaderName

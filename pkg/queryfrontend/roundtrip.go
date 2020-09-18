@@ -9,6 +9,7 @@ import (
 
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/cortexproject/cortex/pkg/util/validation"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -22,13 +23,12 @@ const (
 	labelQueryRange = "query_range"
 )
 
-func NewTripperWare(
-	limits queryrange.Limits,
-	cacheConfig *queryrange.ResultsCacheConfig,
-	codec queryrange.Codec,
-	cacheExtractor queryrange.Extractor,
-	splitQueryInterval time.Duration,
-	maxRetries int,
+// NewTripperware returns a Tripperware configured with middlewares to
+// limit, align, split,cache requests and retry.
+// Not using the cortex one as it uses  query parallelisations based on
+// storage sharding configuration and query ASTs.
+func NewTripperware(
+	config Config,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
@@ -40,6 +40,11 @@ func NewTripperWare(
 	queriesCount.WithLabelValues(labelQuery)
 	queriesCount.WithLabelValues(labelQueryRange)
 
+	limits, err := validation.NewOverrides(*config.CortexLimits, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "initialize limits")
+	}
+
 	metrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 
@@ -50,10 +55,12 @@ func NewTripperWare(
 		queryrange.StepAlignMiddleware,
 	)
 
-	if splitQueryInterval != 0 {
+	codec := NewThanosCodec(config.PartialResponseStrategy)
+
+	if config.SplitQueriesByInterval != 0 {
 		// TODO(yeya24): make interval dynamic in next pr.
 		queryIntervalFn := func(_ queryrange.Request) time.Duration {
-			return splitQueryInterval
+			return config.SplitQueriesByInterval
 		}
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
@@ -62,19 +69,14 @@ func NewTripperWare(
 		)
 	}
 
-	if cacheConfig != nil {
-		// constSplitter will panic when splitQueryInterval is 0.
-		if splitQueryInterval == 0 {
-			return nil, errors.New("cannot create results cache middleware when split interval is 0")
-		}
-
+	if config.CortexResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			*cacheConfig,
-			newThanosCacheKeyGenerator(splitQueryInterval),
+			*config.CortexResultsCacheConfig,
+			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
 			limits,
 			codec,
-			cacheExtractor,
+			queryrange.PrometheusResponseExtractor{},
 			nil,
 			shouldCache,
 			reg,
@@ -90,11 +92,11 @@ func NewTripperWare(
 		)
 	}
 
-	if maxRetries > 0 {
+	if config.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", metrics),
-			queryrange.NewRetryMiddleware(logger, maxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 

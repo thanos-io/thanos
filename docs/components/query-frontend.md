@@ -29,7 +29,7 @@ For more information please check out [initial design proposal](https://thanos.i
 ### Splitting
 
 Query Frontend splits a long query into multiple short queries based on the configured `--query-range.split-interval` flag. The default value of `--query-range.split-interval`
-is `24h`. Set it to `0` disables query splitting, but please note that caching is also disabled in this case.
+is `24h`. When caching is enabled it should be greater than `0`.
 
 There are some benefits from query splitting:
 
@@ -44,9 +44,11 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 ### Caching
 
 Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
-Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
+Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers.
+Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
+Currently, in-memory cache (fifo cache) and memcached are supported.
 
-Currently, only in-memory cache (fifo cache) is supported. An example config:
+#### In-memory
 
 [embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
 ```yaml
@@ -57,9 +59,27 @@ config:
   validity: 0s
 ```
 
+#### Memcached
+
+[embedmd]:# (../flags/config_response_cache_memcached.txt yaml)
+```yaml
+type: MEMCACHED
+config:
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_item_size: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
+  expiration: 0s
+```
+
 ### Slow Query Log
 
-Query Frontend supports `--query-frontend.log_queries_longer_than` flag to log queries running longer some duration.
+Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
 
 ## Naming
 
@@ -89,9 +109,14 @@ Flags:
                               priority). Content of YAML file with tracing
                               configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --http-address="0.0.0.0:10902"
+                              Listen host:port for HTTP endpoints.
+      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
+                              Server.
       --query-range.split-interval=24h
                               Split queries by an interval and execute in
-                              parallel, 0 disables it.
+                              parallel, it should be greater than 0 when
+                              response-cache-config is configured.
       --query-range.max-retries-per-request=5
                               Maximum number of retries for a single request;
                               beyond this, the downstream error is returned.
@@ -100,7 +125,7 @@ Flags:
                               the query-frontend, 0 disables it.
       --query-range.max-query-parallelism=14
                               Maximum number of queries will be scheduled in
-                              parallel by the frontend.
+                              parallel by the Frontend.
       --query-range.response-cache-max-freshness=1m
                               Most recent allowed cacheable result, to prevent
                               caching very recent results that might still be in
@@ -117,15 +142,11 @@ Flags:
                               'query-range.response-cache-config-file' flag
                               (lower priority). Content of YAML file that
                               contains response cache configuration.
-      --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
       --query-frontend.downstream-url="http://localhost:9090"
                               URL of downstream Prometheus Query compatible API.
       --query-frontend.compress-responses
                               Compress HTTP responses.
-      --query-frontend.log_queries_longer_than=0
+      --query-frontend.log-queries-longer-than=0
                               Log queries that are slower than the specified
                               duration. Set to 0 to disable. Set to < 0 to
                               enable on all queries.

@@ -458,6 +458,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 	}))
 }
 
+//nolint:unparam
 func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
 	t.Helper()
 
