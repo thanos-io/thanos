@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"strings"
 )
 
 const (
@@ -103,17 +104,15 @@ func NewTripperware(
 	return func(next http.RoundTripper) http.RoundTripper {
 		queryRangeTripper := queryrange.NewRoundTripper(next, codec, queryRangeMiddleware...)
 		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
-			switch r.URL.Path {
-			case "/api/v1/query":
+			if strings.HasSuffix(r.URL.Path, "/api/v1/query") {
 				if r.Method == http.MethodGet || r.Method == http.MethodPost {
 					queriesCount.WithLabelValues(labelQuery).Inc()
 				}
-			case "/api/v1/query_range":
+			} else if strings.HasSuffix(r.URL.Path, "/api/v1/query_range") {
 				if r.Method == http.MethodGet || r.Method == http.MethodPost {
 					queriesCount.WithLabelValues(labelQueryRange).Inc()
 					return queryRangeTripper.RoundTrip(r)
 				}
-			default:
 			}
 			return next.RoundTrip(r)
 		})
