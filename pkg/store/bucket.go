@@ -1068,7 +1068,7 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 }
 
 // LabelNames implements the storepb.StoreServer interface.
-func (s *BucketStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -1077,7 +1077,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReque
 	var sets [][]string
 
 	for _, b := range s.blocks {
-		if b.meta.MinTime > r.End || b.meta.MaxTime < r.Start {
+		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
 		indexr := b.indexReader(gctx)
@@ -1116,7 +1116,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var sets [][]string
 
 	for _, b := range s.blocks {
-		if b.meta.MinTime > req.End || b.meta.MaxTime < req.Start {
+		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
 		indexr := b.indexReader(gctx)
@@ -1414,6 +1414,13 @@ func (b *bucketBlock) matchRelabelLabels(matchers []*labels.Matcher) bool {
 		}
 	}
 	return true
+}
+
+// overlapsClosedInterval returns true if the block overlaps [mint, maxt).
+func (b *bucketBlock) overlapsClosedInterval(mint, maxt int64) bool {
+	// The block itself is a half-open interval
+	// [b.meta.MinTime, b.meta.MaxTime).
+	return b.meta.MinTime <= maxt && mint < b.meta.MaxTime
 }
 
 // Close waits for all pending readers to finish and then closes all underlying resources.
