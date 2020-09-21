@@ -160,13 +160,10 @@ docs: $(EMBEDMD) build
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) $(LICHE) build
+check-docs: $(EMBEDMD) build
 	@echo ">> checking docs generation"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@echo ">> checking links (DISABLED for now)"
-	# TODO(bwplotka): Fix it!
-	#@time $(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
-	#@time $(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checking GitHub as we are often rate-limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'run make docs and commit changes')
 

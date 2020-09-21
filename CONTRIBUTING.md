@@ -2,7 +2,7 @@
 
 This document explain the process of contributing to the Thanos project.
 
-First of all please follow the [CODE_OF_CONDUCT](https://github.com/thanos-io/thanos/blob/master/CODE_OF_CONDUCT.md) in all your interactions with the project.
+First of all please follow the [CODE_OF_CONDUCT](/CODE_OF_CONDUCT.md) in all your interactions with the project.
 
 ## Thanos Philosophy
 
