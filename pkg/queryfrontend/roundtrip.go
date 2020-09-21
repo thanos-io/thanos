@@ -6,7 +6,8 @@ package queryfrontend
 import (
 	"net/http"
 	"time"
-
+	"strings"
+	
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/cortexproject/cortex/pkg/util/validation"
@@ -15,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"strings"
 )
 
 const (
