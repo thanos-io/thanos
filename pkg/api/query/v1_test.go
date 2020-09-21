@@ -824,16 +824,14 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Series that does not exist should return an empty array.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`foobar`},
 			},
 			response: []labels.Labels{},
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o"}`},
 			},
@@ -842,8 +840,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
 			},
@@ -852,8 +849,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
 			},
@@ -863,8 +859,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end before series starts.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-2"},
@@ -874,8 +869,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end after series ends.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"100000"},
@@ -885,8 +879,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start before series starts, end after series ends.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-1"},
@@ -898,8 +891,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end within series.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"1"},
@@ -911,8 +903,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start within series, end after.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"1"},
@@ -924,8 +915,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start before series, end within series.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-1"},
@@ -937,13 +927,11 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Missing match[] query params in series requests.
 		{
-			endpoint:
-			api.series,
-			errType: baseAPI.ErrorBadData,
+			endpoint: api.series,
+			errType:  baseAPI.ErrorBadData,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"dedup":   []string{"sdfsf-series"},
@@ -951,8 +939,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			errType: baseAPI.ErrorBadData,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 			},
@@ -962,8 +949,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			method: http.MethodPost,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o"}`},
 			},
@@ -973,8 +959,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			method: http.MethodPost,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
 			},
@@ -984,8 +969,7 @@ func TestMetadataEndpoints(t *testing.T) {
 			method: http.MethodPost,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
 			},
@@ -996,8 +980,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end before series starts.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-2"},
@@ -1007,8 +990,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end after series ends.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"100000"},
@@ -1018,8 +1000,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start before series starts, end after series ends.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-1"},
@@ -1032,8 +1013,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start and end within series.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"1"},
@@ -1046,8 +1026,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start within series, end after.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"1"},
@@ -1060,8 +1039,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Start before series, end within series.
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"start":   []string{"-1"},
@@ -1074,14 +1052,12 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		// Missing match[] query params in series requests.
 		{
-			endpoint:
-			api.series,
-			errType: baseAPI.ErrorBadData,
-			method:  http.MethodPost,
+			endpoint: api.series,
+			errType:  baseAPI.ErrorBadData,
+			method:   http.MethodPost,
 		},
 		{
-			endpoint:
-			api.series,
+			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
 				"dedup":   []string{"sdfsf-series"},
