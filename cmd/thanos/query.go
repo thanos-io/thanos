@@ -421,6 +421,9 @@ func runQuery(
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
 			})
+			router.Get(webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, webRoutePrefix+"/graph", http.StatusFound)
+			})
 			router = router.WithPrefix(webRoutePrefix)
 		}
 
