@@ -147,7 +147,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // add storeMatches to query params
-    this.props.options.storeMatches.forEach((store: Store) =>
+    this.props.options.storeMatches?.forEach((store: Store) =>
       params.append('storeMatch[]', `{__address__="${store.name}"}`)
     );
 
@@ -269,7 +269,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
-    this.setOptions({ storeMatches: selectedStores });
+    this.setOptions({ storeMatches: selectedStores || [] });
   };
 
   render() {
