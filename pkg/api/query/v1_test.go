@@ -115,7 +115,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string) bool {
 	})
 }
 
-func TestEndpoints(t *testing.T) {
+func TestQueryEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
 		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
@@ -566,258 +566,6 @@ func TestEndpoints(t *testing.T) {
 			},
 			errType: baseAPI.ErrorBadData,
 		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Series that does not exist should return an empty array.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`foobar`},
-			},
-			response: []labels.Labels{},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-		},
-		// Start and end before series starts.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-2"},
-				"end":     []string{"-1"},
-			},
-			response: []labels.Labels{},
-		},
-		// Start and end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"100000"},
-				"end":     []string{"100001"},
-			},
-			response: []labels.Labels{},
-		},
-		// Start before series starts, end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"100000"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Start and end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Start within series, end after.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100000"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Start before series, end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"1"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-		},
-		// Missing match[] query params in series requests.
-		{
-			endpoint: api.series,
-			errType:  baseAPI.ErrorBadData,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"dedup":   []string{"sdfsf-series"},
-			},
-			errType: baseAPI.ErrorBadData,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		// Start and end before series starts.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-2"},
-				"end":     []string{"-1"},
-			},
-			response: []labels.Labels{},
-		},
-		// Start and end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"100000"},
-				"end":     []string{"100001"},
-			},
-			response: []labels.Labels{},
-		},
-		// Start before series starts, end after series ends.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"100000"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		// Start and end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		// Start within series, end after.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"1"},
-				"end":     []string{"100000"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		// Start before series, end within series.
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"start":   []string{"-1"},
-				"end":     []string{"1"},
-			},
-			response: []labels.Labels{
-				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
-			},
-			method: http.MethodPost,
-		},
-		// Missing match[] query params in series requests.
-		{
-			endpoint: api.series,
-			errType:  baseAPI.ErrorBadData,
-			method:   http.MethodPost,
-		},
-		{
-			endpoint: api.series,
-			query: url.Values{
-				"match[]": []string{`test_metric2`},
-				"dedup":   []string{"sdfsf-series"},
-			},
-			errType: baseAPI.ErrorBadData,
-			method:  http.MethodPost,
-		},
 	}
 
 	for i, test := range tests {
@@ -827,7 +575,7 @@ func TestEndpoints(t *testing.T) {
 	}
 }
 
-func TestLabelEndpoints(t *testing.T) {
+func TestMetadataEndpoints(t *testing.T) {
 	var old = []labels.Labels{
 		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
@@ -932,8 +680,8 @@ func TestLabelEndpoints(t *testing.T) {
 			MaxSamples: 10000,
 			Timeout:    timeout,
 		}),
-		gate:                      gate.New(nil, 4),
-		defaultLabelLookbackDelta: apiLookbackDelta,
+		gate:                     gate.New(nil, 4),
+		defaultMetadataTimeRange: apiLookbackDelta,
 	}
 
 	var tests = []endpointTestCase{
@@ -1047,10 +795,304 @@ func TestLabelEndpoints(t *testing.T) {
 			},
 			errType: baseAPI.ErrorBadData,
 		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{},
+		},
+		{
+			endpoint: apiWithLabelLookback.series,
+			query: url.Values{
+				"match[]": []string{`test_metric_replica1`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+			},
+		},
+		// Series that does not exist should return an empty array.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`foobar`},
+			},
+			response: []labels.Labels{},
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+		},
+		// Start and end before series starts.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-2"},
+				"end":     []string{"-1"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start and end after series ends.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"100000"},
+				"end":     []string{"100001"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start before series starts, end after series ends.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		// Start and end within series.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		// Start within series, end after.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		// Start before series, end within series.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"1"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		// Missing match[] query params in series requests.
+		{
+			endpoint:
+			api.series,
+			errType: baseAPI.ErrorBadData,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"dedup":   []string{"sdfsf-series"},
+			},
+			errType: baseAPI.ErrorBadData,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end before series starts.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-2"},
+				"end":     []string{"-1"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start and end after series ends.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"100000"},
+				"end":     []string{"100001"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start before series starts, end after series ends.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end within series.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start within series, end after.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start before series, end within series.
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"1"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Missing match[] query params in series requests.
+		{
+			endpoint:
+			api.series,
+			errType: baseAPI.ErrorBadData,
+			method:  http.MethodPost,
+		},
+		{
+			endpoint:
+			api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"dedup":   []string{"sdfsf-series"},
+			},
+			errType: baseAPI.ErrorBadData,
+			method:  http.MethodPost,
+		},
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode())); !ok {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode()))); !ok {
 			return
 		}
 	}

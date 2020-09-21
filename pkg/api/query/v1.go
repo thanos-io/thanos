@@ -75,7 +75,7 @@ type QueryAPI struct {
 	storeSet      *query.StoreSet
 
 	defaultInstantQueryMaxSourceResolution time.Duration
-	defaultLabelLookbackDelta              time.Duration
+	defaultMetadataTimeRange               time.Duration
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -91,7 +91,7 @@ func NewQueryAPI(
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
-	defaultLabelLookbackDelta time.Duration,
+	defaultMetadataTimeRange time.Duration,
 	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
@@ -108,7 +108,7 @@ func NewQueryAPI(
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
-		defaultLabelLookbackDelta:              defaultLabelLookbackDelta,
+		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 	}
 }
 
@@ -422,7 +422,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
 	}
 
-	start, end, err := parseLabelTimeRange(r, qapi.defaultLabelLookbackDelta)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -467,16 +467,8 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
-	start, err := parseTimeParam(r, "start", minTime)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	end, err := parseTimeParam(r, "end", maxTime)
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -535,7 +527,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 }
 
 func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError) {
-	start, end, err := parseLabelTimeRange(r, qapi.defaultLabelLookbackDelta)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -605,33 +597,35 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 }
 
 var (
-	minTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	maxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
+	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
+	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
 )
 
-func parseLabelTimeRange(r *http.Request, defaultLabelLookbackDelta time.Duration) (time.Time, time.Time, error) {
+func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Duration) (time.Time, time.Time, error) {
 	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
-	var defaultStart, defaultEnd time.Time
-	if defaultLabelLookbackDelta == 0 {
-		defaultStart = minTime
-		defaultEnd = maxTime
+	var defaultStartTime, defaultEndTime time.Time
+	if defaultMetadataTimeRange == 0 {
+		defaultStartTime = infMinTime
+		defaultEndTime = infMaxTime
 	} else {
 		now := time.Now()
-		defaultStart = now.Add(-defaultLabelLookbackDelta)
-		defaultEnd = now
+		defaultStartTime = now.Add(-defaultMetadataTimeRange)
+		defaultEndTime = now
 	}
 
-	start, err := parseTimeParam(r, "start", defaultStart)
+	start, err := parseTimeParam(r, "start", defaultStartTime)
 	if err != nil {
 		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
-	end, err := parseTimeParam(r, "end", defaultEnd)
+	end, err := parseTimeParam(r, "end", defaultEndTime)
 	if err != nil {
 		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
-		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return time.Time{}, time.Time{}, &api.ApiError{
+			Typ: api.ErrorBadData,
+			Err: errors.New("end timestamp must not be before start time"),
+		}
 	}
 
 	return start, end, nil
