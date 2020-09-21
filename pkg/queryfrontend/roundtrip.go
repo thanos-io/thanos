@@ -5,9 +5,9 @@ package queryfrontend
 
 import (
 	"net/http"
-	"time"
 	"strings"
-	
+	"time"
+
 	"github.com/cortexproject/cortex/pkg/querier/frontend"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/cortexproject/cortex/pkg/util/validation"
