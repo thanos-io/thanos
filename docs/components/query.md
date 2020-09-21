@@ -389,6 +389,12 @@ Flags:
                                  able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+      --query.metadata.default-time-range=0s
+                                 The default metadata time range duration for
+                                 retrieving labels through Labels and Series API
+                                 when the range parameters are not specified.
+                                 The zero value means range covers the time
+                                 since the beginning.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

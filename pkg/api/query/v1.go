@@ -70,10 +70,12 @@ type QueryAPI struct {
 	enableAutodownsampling     bool
 	enableQueryPartialResponse bool
 	enableRulePartialResponse  bool
-	replicaLabels              []string
 
-	storeSet                               *query.StoreSet
+	replicaLabels []string
+	storeSet      *query.StoreSet
+
 	defaultInstantQueryMaxSourceResolution time.Duration
+	defaultMetadataTimeRange               time.Duration
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -89,6 +91,7 @@ func NewQueryAPI(
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
+	defaultMetadataTimeRange time.Duration,
 	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
@@ -105,6 +108,7 @@ func NewQueryAPI(
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
+		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 	}
 }
 
@@ -418,16 +422,8 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
 	}
 
-	start, err := parseTimeParam(r, "start", minTime)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	end, err := parseTimeParam(r, "end", maxTime)
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -462,11 +458,6 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	return vals, warnings, nil
 }
 
-var (
-	minTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	maxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
-)
-
 func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiError) {
 	if err := r.ParseForm(); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
@@ -476,16 +467,8 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
-	start, err := parseTimeParam(r, "start", minTime)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	end, err := parseTimeParam(r, "end", maxTime)
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -543,57 +526,9 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	return metrics, set.Warnings(), nil
 }
 
-func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (time.Time, error) {
-	val := r.FormValue(paramName)
-	if val == "" {
-		return defaultValue, nil
-	}
-	result, err := parseTime(val)
-	if err != nil {
-		return time.Time{}, errors.Wrapf(err, "Invalid time value for '%s'", paramName)
-	}
-	return result, nil
-}
-
-func parseTime(s string) (time.Time, error) {
-	if t, err := strconv.ParseFloat(s, 64); err == nil {
-		s, ns := math.Modf(t)
-		ns = math.Round(ns*1000) / 1000
-		return time.Unix(int64(s), int64(ns*float64(time.Second))), nil
-	}
-	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t, nil
-	}
-	return time.Time{}, errors.Errorf("cannot parse %q to a valid timestamp", s)
-}
-
-func parseDuration(s string) (time.Duration, error) {
-	if d, err := strconv.ParseFloat(s, 64); err == nil {
-		ts := d * float64(time.Second)
-		if ts > float64(math.MaxInt64) || ts < float64(math.MinInt64) {
-			return 0, errors.Errorf("cannot parse %q to a valid duration. It overflows int64", s)
-		}
-		return time.Duration(ts), nil
-	}
-	if d, err := model.ParseDuration(s); err == nil {
-		return time.Duration(d), nil
-	}
-	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
-}
-
 func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError) {
-	ctx := r.Context()
-
-	start, err := parseTimeParam(r, "start", minTime)
+	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	end, err := parseTimeParam(r, "end", maxTime)
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-	}
-	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -607,7 +542,8 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).
+		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
@@ -658,4 +594,77 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		}
 		return groups, warnings, nil
 	}
+}
+
+var (
+	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
+	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
+)
+
+func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Duration) (time.Time, time.Time, error) {
+	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
+	var defaultStartTime, defaultEndTime time.Time
+	if defaultMetadataTimeRange == 0 {
+		defaultStartTime = infMinTime
+		defaultEndTime = infMaxTime
+	} else {
+		now := time.Now()
+		defaultStartTime = now.Add(-defaultMetadataTimeRange)
+		defaultEndTime = now
+	}
+
+	start, err := parseTimeParam(r, "start", defaultStartTime)
+	if err != nil {
+		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	end, err := parseTimeParam(r, "end", defaultEndTime)
+	if err != nil {
+		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	if end.Before(start) {
+		return time.Time{}, time.Time{}, &api.ApiError{
+			Typ: api.ErrorBadData,
+			Err: errors.New("end timestamp must not be before start time"),
+		}
+	}
+
+	return start, end, nil
+}
+
+func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (time.Time, error) {
+	val := r.FormValue(paramName)
+	if val == "" {
+		return defaultValue, nil
+	}
+	result, err := parseTime(val)
+	if err != nil {
+		return time.Time{}, errors.Wrapf(err, "Invalid time value for '%s'", paramName)
+	}
+	return result, nil
+}
+
+func parseTime(s string) (time.Time, error) {
+	if t, err := strconv.ParseFloat(s, 64); err == nil {
+		s, ns := math.Modf(t)
+		ns = math.Round(ns*1000) / 1000
+		return time.Unix(int64(s), int64(ns*float64(time.Second))), nil
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	return time.Time{}, errors.Errorf("cannot parse %q to a valid timestamp", s)
+}
+
+func parseDuration(s string) (time.Duration, error) {
+	if d, err := strconv.ParseFloat(s, 64); err == nil {
+		ts := d * float64(time.Second)
+		if ts > float64(math.MaxInt64) || ts < float64(math.MinInt64) {
+			return 0, errors.Errorf("cannot parse %q to a valid duration. It overflows int64", s)
+		}
+		return time.Duration(ts), nil
+	}
+	if d, err := model.ParseDuration(s); err == nil {
+		return time.Duration(d), nil
+	}
+	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
 }
