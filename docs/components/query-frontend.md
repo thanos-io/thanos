@@ -58,6 +58,14 @@ config:
   max_size_items: 0
   validity: 0s
 ```
+`max_size: ` Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.
+
+**_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
+
+If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
+For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
+
+Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-query-frontend-deployment.yaml#L50-L54)
 
 #### Memcached
 
