@@ -1399,7 +1399,15 @@ func TestStoreMatches(t *testing.T) {
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 			},
-			ok: true,
+			ok: false,
+		},
+		{
+			s: &testClient{labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "a", Value: "b"}}}}},
+			ms: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+			},
+			maxt: 1,
+			ok:   true,
 		},
 		{
 			s:    &testClient{minTime: 100, maxTime: 200},
@@ -1416,13 +1424,13 @@ func TestStoreMatches(t *testing.T) {
 		{
 			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 50,
-			maxt: 99,
+			maxt: 100,
 			ok:   false,
 		},
 		{
 			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 50,
-			maxt: 100,
+			maxt: 101,
 			ok:   true,
 		},
 		{
@@ -1430,28 +1438,32 @@ func TestStoreMatches(t *testing.T) {
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
-			ok: true,
+			maxt: 1,
+			ok:   true,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "a", Value: "b"}}}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
 			},
-			ok: false,
+			maxt: 1,
+			ok:   false,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "a", Value: "b"}}}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "b|c"},
 			},
-			ok: true,
+			maxt: 1,
+			ok:   true,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "a", Value: "b"}}}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
 			},
-			ok: true,
+			maxt: 1,
+			ok:   true,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{
@@ -1462,7 +1474,8 @@ func TestStoreMatches(t *testing.T) {
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "e"},
 			},
-			ok: false,
+			maxt: 1,
+			ok:   false,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{
@@ -1473,7 +1486,8 @@ func TestStoreMatches(t *testing.T) {
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
 			},
-			ok: true,
+			maxt: 1,
+			ok:   true,
 		},
 		{
 			s: &testClient{labelSets: []storepb.LabelSet{
@@ -1484,7 +1498,8 @@ func TestStoreMatches(t *testing.T) {
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
 			},
-			ok: true,
+			maxt: 1,
+			ok:   true,
 		},
 	}
 

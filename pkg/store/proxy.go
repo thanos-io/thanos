@@ -511,7 +511,7 @@ func (s *streamSeriesSet) Err() error {
 // matchers.
 func storeMatches(s Client, mint, maxt int64, storeMatcher [][]storepb.LabelMatcher, matchers ...storepb.LabelMatcher) (bool, error) {
 	storeMinTime, storeMaxTime := s.TimeRange()
-	if mint > storeMaxTime || maxt < storeMinTime {
+	if mint > storeMaxTime || maxt <= storeMinTime {
 		return false, nil
 	}
 	match, err := storeMatchMetadata(s, storeMatcher)
