@@ -36,6 +36,7 @@ import (
 type queryFrontendConfig struct {
 	http httpConfig
 	queryfrontend.Config
+	orgIdHeaders         []string
 }
 
 func registerQueryFrontend(app *extkingpin.App) {
@@ -114,6 +115,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexFrontendConfig.LogQueriesLongerThan)
+
+	cmd.Flag("query-frontend.org-id-header", "Request header names used to set the org id field in the slow query log (repeated flag). "+
+		"If multiple headers match the request, the first matching arg specified will take precedence. "+
+		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
@@ -199,6 +204,7 @@ func runQueryFrontend(
 
 		instr := func(f http.HandlerFunc) http.HandlerFunc {
 			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				orgId := extractOrgId(cfg, r)
 				name := "query-frontend"
 				api.SetCORS(w)
 				ins.NewHandler(
@@ -213,7 +219,7 @@ func runQueryFrontend(
 						),
 					),
 					// Cortex frontend middlewares require orgID.
-				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
+				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
 			})
 			return hf
 		}
@@ -234,4 +240,17 @@ func runQueryFrontend(
 	level.Info(logger).Log("msg", "starting query frontend")
 	statusProber.Ready()
 	return nil
+}
+
+func extractOrgId(
+	conf *queryFrontendConfig,
+	r *http.Request,
+) string {
+	for _, header := range conf.orgIdHeaders {
+		headerVal := r.Header.Get(header)
+		if headerVal != "" {
+			return headerVal
+		}
+	}
+	return "anonymous"
 }
