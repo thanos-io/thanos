@@ -92,6 +92,41 @@ type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
 	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	// Allow upstream callers to inject a round tripper
+	Transport http.RoundTripper `yaml:"-"`
+}
+
+// DefaultTransport - this default transport is based on the Minio
+// DefaultTransport up until the following commit:
+// https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
+// The values have since diverged.
+func DefaultTransport(config Config) *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// A custom ResponseHeaderTimeout was introduced
+		// to cover cases where the tcp connection works but
+		// the server never answers. Defaults to 2 minutes.
+		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
+		// Set this value so that the underlying transport round-tripper
+		// doesn't try to auto decode the body of objects with
+		// content-encoding set to `gzip`.
+		//
+		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
+		DisableCompression: true,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
+	}
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -157,36 +192,20 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		}
 	}
 
-	client, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:  credentials.NewChainCredentials(chain),
-		Secure: !config.Insecure,
-		Region: config.Region,
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+	// Check if a roundtripper has been set in the config
+	// otherwise build the default transport.
+	var rt http.RoundTripper
+	if config.HTTPConfig.Transport != nil {
+		rt = config.HTTPConfig.Transport
+	} else {
+		rt = DefaultTransport(config)
+	}
 
-			MaxIdleConns:          100,
-			MaxIdleConnsPerHost:   100,
-			IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			// The ResponseHeaderTimeout here is the only change
-			// from the default minio transport, it was introduced
-			// to cover cases where the tcp connection works but
-			// the server never answers. Defaults to 2 minutes.
-			ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-			// Set this value so that the underlying transport round-tripper
-			// doesn't try to auto decode the body of objects with
-			// content-encoding set to `gzip`.
-			//
-			// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-			DisableCompression: true,
-			TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-		},
+	client, err := minio.New(config.Endpoint, &minio.Options{
+		Creds:     credentials.NewChainCredentials(chain),
+		Secure:    !config.Insecure,
+		Region:    config.Region,
+		Transport: rt,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
