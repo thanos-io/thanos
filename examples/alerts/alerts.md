@@ -324,12 +324,12 @@ rules:
     severity: critical
 - alert: ThanosSidecarUnhealthy
   annotations:
-    description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} is unhealthy
-      for {{ $value }} seconds.
+    description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for more
+      than {{ $value }} seconds.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
     summary: Thanos Sidecar is unhealthy.
   expr: |
-    time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, instance) >= 600
+    time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"})) by (job,pod) >= 240
   labels:
     severity: critical
 ```
