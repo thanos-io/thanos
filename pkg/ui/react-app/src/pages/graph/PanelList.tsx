@@ -11,7 +11,6 @@ import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQuer
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { withStatusIndicator } from '../../components/withStatusIndicator';
-import { debug } from 'console';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
 
@@ -47,6 +46,8 @@ export const PanelListContent: FC<PanelListProps> = ({
       storeList.push(...stores[type]);
     }
     setStoreData(storeList);
+    // Clear selected stores for each panel
+    panels.forEach((panel: PanelMeta) => panel.options.storeMatches = []);
     !panels.length && addPanel();
     window.onpopstate = () => {
       const panels = decodePanelOptionsFromQueryString(window.location.search);
