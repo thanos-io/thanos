@@ -52,7 +52,7 @@ type CacheProviderConfig struct {
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.
-func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*queryrange.ResultsCacheConfig, error) {
+func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Config, error) {
 	cacheConfig := &CacheProviderConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
@@ -70,14 +70,12 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*queryrange.Resu
 			return nil, err
 		}
 
-		return &queryrange.ResultsCacheConfig{
-			CacheConfig: cortexcache.Config{
-				EnableFifoCache: true,
-				Fifocache: cortexcache.FifoCacheConfig{
-					MaxSizeBytes: config.MaxSize,
-					MaxSizeItems: config.MaxSizeItems,
-					Validity:     config.Validity,
-				},
+		return &cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: config.MaxSize,
+				MaxSizeItems: config.MaxSizeItems,
+				Validity:     config.Validity,
 			},
 		}, nil
 	case string(MEMCACHED):
@@ -90,23 +88,21 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*queryrange.Resu
 			level.Warn(logger).Log("message", "MaxItemSize is not yet supported by the memcached client")
 		}
 
-		return &queryrange.ResultsCacheConfig{
-			CacheConfig: cortexcache.Config{
-				Memcache: cortexcache.MemcachedConfig{
-					Expiration:  config.Expiration,
-					Parallelism: config.Memcached.MaxGetMultiConcurrency,
-					BatchSize:   config.Memcached.MaxGetMultiBatchSize,
-				},
-				MemcacheClient: cortexcache.MemcachedClientConfig{
-					Timeout:        config.Memcached.Timeout,
-					MaxIdleConns:   config.Memcached.MaxIdleConnections,
-					Addresses:      strings.Join(config.Memcached.Addresses, ","),
-					UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
-				},
-				Background: cortexcache.BackgroundConfig{
-					WriteBackBuffer:     config.Memcached.MaxAsyncBufferSize,
-					WriteBackGoroutines: config.Memcached.MaxAsyncConcurrency,
-				},
+		return &cortexcache.Config{
+			Memcache: cortexcache.MemcachedConfig{
+				Expiration:  config.Expiration,
+				Parallelism: config.Memcached.MaxGetMultiConcurrency,
+				BatchSize:   config.Memcached.MaxGetMultiBatchSize,
+			},
+			MemcacheClient: cortexcache.MemcachedClientConfig{
+				Timeout:        config.Memcached.Timeout,
+				MaxIdleConns:   config.Memcached.MaxIdleConnections,
+				Addresses:      strings.Join(config.Memcached.Addresses, ","),
+				UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
+			},
+			Background: cortexcache.BackgroundConfig{
+				WriteBackBuffer:     config.Memcached.MaxAsyncBufferSize,
+				WriteBackGoroutines: config.Memcached.MaxAsyncConcurrency,
 			},
 		}, nil
 	default:
@@ -125,6 +121,7 @@ type Config struct {
 	CortexResultsCacheConfig *queryrange.ResultsCacheConfig
 
 	CachePathOrContent     extflag.PathOrContent
+	CacheCompression       string
 	RequestLoggingDecision string
 
 	SplitQueriesByInterval time.Duration
@@ -137,7 +134,7 @@ func (cfg *Config) Validate() error {
 		if cfg.SplitQueriesByInterval <= 0 {
 			return errors.New("split queries interval should be greater then 0")
 		}
-		if err := cfg.CortexResultsCacheConfig.CacheConfig.Validate(); err != nil {
+		if err := cfg.CortexResultsCacheConfig.Validate(); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config")
 		}
 	}

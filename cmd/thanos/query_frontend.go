@@ -70,6 +70,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
+	cmd.Flag("query-range.compression", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
+		Default("").StringVar(&cfg.CacheCompression)
+
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
 		Default("http://localhost:9090").StringVar(&cfg.CortexFrontendConfig.DownstreamURL)
 
@@ -107,14 +110,17 @@ func runQueryFrontend(
 			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
 			cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration = 24 * time.Hour
 		}
-		cfg.CortexResultsCacheConfig = cacheConfig
+		cfg.CortexResultsCacheConfig = &queryrange.ResultsCacheConfig{
+			Compression: cfg.CacheCompression,
+			CacheConfig: *cacheConfig,
+		}
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontend.New(*cfg.CortexFrontendConfig, logger, reg)
+	fe, err := cortexfrontend.New(*cfg.CortexFrontendConfig, nil, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
