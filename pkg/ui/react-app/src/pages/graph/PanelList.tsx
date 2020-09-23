@@ -11,6 +11,7 @@ import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQuer
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { withStatusIndicator } from '../../components/withStatusIndicator';
+import { debug } from 'console';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
 
@@ -55,7 +56,7 @@ export const PanelListContent: FC<PanelListProps> = ({
     };
     // We want useEffect to act only as componentDidMount, but react still complains about the empty dependencies list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stores]);
 
   const handleExecuteQuery = (query: string) => {
     const isSimpleMetric = metrics.indexOf(query) !== -1;
@@ -127,6 +128,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
+  const [debugMode, setDebugMode] = useState(false);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
@@ -167,6 +169,14 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       >
         Use local time
       </Checkbox>
+      <Checkbox
+        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+        id="debug-mode-checkbox"
+        defaultChecked={debugMode}
+        onChange={({ target }) => setDebugMode(target.checked)}
+      >
+        Debug mode
+      </Checkbox>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
@@ -192,7 +202,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
-        stores={storesRes.data}
+        stores={debugMode? storesRes.data : {}}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading}
       />

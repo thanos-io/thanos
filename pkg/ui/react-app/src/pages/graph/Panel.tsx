@@ -313,7 +313,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </Checkbox>
           </Col>
         </Row>
-        <Row>
+        {stores.length > 0 ? (<Row>
           <Col>
             <div className="store-filter-wrapper">
               <label className="store-filter-label">Store Filter:</label>
@@ -329,7 +329,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               />
             </div>
           </Col>
-        </Row>
+        </Row>) : ""}
         <Row>
           <Col>
             <Nav tabs>
