@@ -44,8 +44,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
 		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
-		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
-		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
+		LastEvaluation:            g.GetLastEvaluation().UTC(),
+		EvaluationDurationSeconds: g.GetEvaluationTime().Seconds(),
 	}
 
 	for _, r := range g.Rules() {
