@@ -38,6 +38,7 @@ const (
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
+	Prefix string      `yaml:"prefix"`
 }
 
 // NewBucket initializes and returns new object storage clients.
@@ -59,7 +60,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	case string(GCS):
 		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
 	case string(S3):
-		bucket, err = s3.NewBucket(logger, config, component)
+		bucket, err = s3.NewBucket(logger, config, bucketConf.Prefix, component)
 	case string(AZURE):
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):

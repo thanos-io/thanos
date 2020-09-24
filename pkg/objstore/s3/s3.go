@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -102,6 +103,7 @@ type Bucket struct {
 	sse             encrypt.ServerSide
 	putUserMetadata map[string]string
 	partSize        uint64
+	objectPrefix    string
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -115,17 +117,17 @@ func parseConfig(conf []byte) (Config, error) {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, prefix string, component string) (*Bucket, error) {
 	config, err := parseConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBucketWithConfig(logger, config, component)
+	return NewBucketWithConfig(logger, config, prefix, component)
 }
 
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
-func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
+func NewBucketWithConfig(logger log.Logger, config Config, prefix string, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 
 	if err := validate(config); err != nil {
@@ -227,6 +229,15 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		client.TraceOn(logWriter)
 	}
 
+	// Ensure the object prefix always ends with a proper delimeter
+	prefix = strings.TrimSuffix(prefix, DirDelim) + DirDelim
+	// Check if the prefix exists in the bucket
+	statContext, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	_, err = client.StatObject(statContext, config.Bucket, prefix, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, errors.New("can't get objectInfo for the provided prefix")
+	}
+	cancel()
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
@@ -234,6 +245,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
 		partSize:        config.PartSize,
+		objectPrefix:    prefix,
 	}
 	return bkt, nil
 }
@@ -279,7 +291,7 @@ func ValidateForTests(conf Config) error {
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
-// object name including the prefix of the inspected directory.
+// object name including the prefix of the inspected directory, excluding the objectPrefix.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
@@ -288,24 +300,25 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	opts := minio.ListObjectsOptions{
-		Prefix:    dir,
+		Prefix:    path.Join(b.objectPrefix, dir),
 		Recursive: false,
 	}
 
 	for object := range b.client.ListObjects(ctx, b.name, opts) {
+		key := strings.TrimPrefix(object.Key, b.objectPrefix)
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
 		}
 		// This sometimes happens with empty buckets.
-		if object.Key == "" {
+		if key == "" {
 			continue
 		}
 		// The s3 client can also return the directory itself in the ListObjects call above.
-		if object.Key == dir {
+		if key == dir {
 			continue
 		}
-		if err := f(object.Key); err != nil {
+		if err := f(key); err != nil {
 			return err
 		}
 	}
@@ -343,16 +356,19 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	name = path.Join(b.objectPrefix, name)
 	return b.getRange(ctx, name, 0, -1)
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	name = path.Join(b.objectPrefix, name)
 	return b.getRange(ctx, name, off, length)
 }
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	name = path.Join(b.objectPrefix, name)
 	_, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -367,6 +383,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+	name = path.Join(b.objectPrefix, name)
 	size, err := objstore.TryToGetSize(r)
 	if err != nil {
 		level.Warn(b.logger).Log("msg", "could not guess file size for multipart upload; upload might be not optimized", "name", name, "err", err)
@@ -398,6 +415,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	name = path.Join(b.objectPrefix, name)
 	objInfo, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
@@ -411,6 +429,7 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
+	name = path.Join(b.objectPrefix, name)
 	return b.client.RemoveObject(ctx, b.name, name, minio.RemoveObjectOptions{})
 }
 
@@ -461,7 +480,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), bc, "/", "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}
