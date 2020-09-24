@@ -313,23 +313,25 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </Checkbox>
           </Col>
         </Row>
-        {stores.length > 0 ? (<Row>
-          <Col>
-            <div className="store-filter-wrapper">
-              <label className="store-filter-label">Store Filter:</label>
-              <Select
-                defaultValue={options.storeMatches}
-                options={stores}
-                isMulti
-                getOptionLabel={(option: Store) => option.name}
-                getOptionValue={(option: Store) => option.name}
-                closeMenuOnSelect={false}
-                styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
-                onChange={this.handleStoreMatchChange}
-              />
-            </div>
-          </Col>
-        </Row>) : ""}
+        {stores?.length > 0 && (
+          <Row>
+            <Col>
+              <div className="store-filter-wrapper">
+                <label className="store-filter-label">Store Filter:</label>
+                <Select
+                  defaultValue={options.storeMatches}
+                  options={stores}
+                  isMulti
+                  getOptionLabel={(option: Store) => option.name}
+                  getOptionValue={(option: Store) => option.name}
+                  closeMenuOnSelect={false}
+                  styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
+                  onChange={this.handleStoreMatchChange}
+                />
+              </div>
+            </Col>
+          </Row>
+        )}
         <Row>
           <Col>
             <Nav tabs>
