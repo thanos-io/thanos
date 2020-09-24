@@ -107,7 +107,6 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 1em;
   box-sizing: border-box;
   border-left: solid 3px teal;
 }
@@ -115,10 +114,10 @@
 .row {
   width: 100%;
   position: relative;
-  --block-height: 2em;
+  --block-height: 1.2em;
   height: var(--block-height);
   box-sizing: content-box;
-  margin: 0.2em 0;
+  margin: 0.1em 0;
   overflow-x: hidden;
 }
 
