@@ -40,13 +40,13 @@ export const PanelListContent: FC<PanelListProps> = ({
   const [storeData, setStoreData] = useState([] as Store[]);
 
   useEffect(() => {
-    // convert stores data to a unified stores array
+    // Convert stores data to a unified stores array.
     let storeList: Store[] = [];
     for (let type in stores) {
       storeList.push(...stores[type]);
     }
     setStoreData(storeList);
-    // Clear selected stores for each panel
+    // Clear selected stores for each panel.
     panels.forEach((panel: PanelMeta) => panel.options.storeMatches = []);
     !panels.length && addPanel();
     window.onpopstate = () => {
@@ -176,7 +176,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         defaultChecked={debugMode}
         onChange={({ target }) => setDebugMode(target.checked)}
       >
-        Debug mode
+        Enable Store Filtering
       </Checkbox>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">

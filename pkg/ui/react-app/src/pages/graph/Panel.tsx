@@ -146,7 +146,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       partial_response: this.props.options.usePartialResponse.toString(),
     });
 
-    // add storeMatches to query params
+    // Add storeMatches to query params.
     this.props.options.storeMatches?.forEach((store: Store) =>
       params.append('storeMatch[]', `{__address__="${store.name}"}`)
     );
