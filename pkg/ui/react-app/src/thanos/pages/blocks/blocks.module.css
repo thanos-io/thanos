@@ -114,7 +114,7 @@
 .row {
   width: 100%;
   position: relative;
-  --block-height: 1.2em; /* !Changin this to see whether the block's height gets reduced or something else */
+  --block-height: 1.2em;
   height: var(--block-height);
   box-sizing: content-box;
   margin: 0.1em 0;
