@@ -47,7 +47,7 @@ export const PanelListContent: FC<PanelListProps> = ({
     }
     setStoreData(storeList);
     // Clear selected stores for each panel.
-    panels.forEach((panel: PanelMeta) => panel.options.storeMatches = []);
+    panels.forEach((panel: PanelMeta) => (panel.options.storeMatches = []));
     !panels.length && addPanel();
     window.onpopstate = () => {
       const panels = decodePanelOptionsFromQueryString(window.location.search);
@@ -203,7 +203,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
-        stores={debugMode? storesRes.data : {}}
+        stores={debugMode ? storesRes.data : {}}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading}
       />
