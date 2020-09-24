@@ -70,7 +70,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
-	cmd.Flag("query-range.compression", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
+	cmd.Flag("cache-compression-type", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
 		Default("").StringVar(&cfg.CacheCompression)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
