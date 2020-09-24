@@ -542,7 +542,7 @@ func runRule(
 
 	// Start gRPC server.
 	{
-		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
+		tsdbStore := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
@@ -550,7 +550,9 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store, ruleMgr,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
+			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),

@@ -13,6 +13,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -21,6 +22,12 @@ import (
 type Proxy struct {
 	logger log.Logger
 	rules  func() []rulespb.RulesClient
+}
+
+func RegisterRulesServer(rulesSrv rulespb.RulesServer) func(*grpc.Server) {
+	return func(s *grpc.Server) {
+		rulespb.RegisterRulesServer(s, rulesSrv)
+	}
 }
 
 // NewProxy returns new rules.Proxy.
