@@ -216,10 +216,10 @@ func TestStoreSet_Update(t *testing.T) {
 
 		lset := st.LabelSets()
 		testutil.Equals(t, 2, len(lset))
-		testutil.Equals(t, "addr", lset[0].Labels[0].Name)
-		testutil.Equals(t, addr, lset[0].Labels[0].Value)
-		testutil.Equals(t, "a", lset[1].Labels[0].Name)
-		testutil.Equals(t, "b", lset[1].Labels[0].Value)
+		testutil.Equals(t, "addr", lset[0][0].Name)
+		testutil.Equals(t, addr, lset[0][0].Value)
+		testutil.Equals(t, "a", lset[1][0].Name)
+		testutil.Equals(t, "b", lset[1][0].Value)
 	}
 
 	// Check stats.
@@ -251,10 +251,10 @@ func TestStoreSet_Update(t *testing.T) {
 
 	lset := st.LabelSets()
 	testutil.Equals(t, 2, len(lset))
-	testutil.Equals(t, "addr", lset[0].Labels[0].Name)
-	testutil.Equals(t, addr, lset[0].Labels[0].Value)
-	testutil.Equals(t, "a", lset[1].Labels[0].Name)
-	testutil.Equals(t, "b", lset[1].Labels[0].Value)
+	testutil.Equals(t, "addr", lset[0][0].Name)
+	testutil.Equals(t, addr, lset[0][0].Value)
+	testutil.Equals(t, "a", lset[1][0].Name)
+	testutil.Equals(t, "b", lset[1][0].Value)
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
 	// New big batch of storeAPIs.

@@ -91,7 +91,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: storepb.LabelSet{Labels: []storepb.Label{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -99,7 +99,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: storepb.LabelSet{Labels: []storepb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 				}),
@@ -113,7 +113,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: storepb.LabelSet{Labels: []storepb.Label{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -121,7 +121,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: storepb.LabelSet{Labels: []storepb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 				}),

@@ -38,7 +38,6 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -371,20 +370,6 @@ func (s *promMetadata) Labels() labels.Labels {
 	defer s.mtx.Unlock()
 
 	return s.labels
-}
-
-func (s *promMetadata) LabelsPB() []storepb.Label {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	lset := make([]storepb.Label, 0, len(s.labels))
-	for _, l := range s.labels {
-		lset = append(lset, storepb.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
-	return lset
 }
 
 func (s *promMetadata) Timestamps() (mint int64, maxt int64) {

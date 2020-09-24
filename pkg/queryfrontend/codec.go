@@ -15,12 +15,12 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
-	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 const (
@@ -150,11 +150,7 @@ func (c codec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.R
 	}
 
 	if len(thanosReq.StoreMatchers) > 0 {
-		storeMatchers, err := matchersToStringSlice(thanosReq.StoreMatchers)
-		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid request format")
-		}
-		params[queryv1.StoreMatcherParam] = storeMatchers
+		params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 	}
 
 	u := &url.URL{
@@ -228,18 +224,14 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 	return defaultEnablePartialResponse, nil
 }
 
-func parseStoreMatchersParam(ss []string) ([][]storepb.LabelMatcher, error) {
-	storeMatchers := make([][]storepb.LabelMatcher, 0, len(ss))
+func parseStoreMatchersParam(ss []string) ([][]*labels.Matcher, error) {
+	storeMatchers := make([][]*labels.Matcher, 0, len(ss))
 	for _, s := range ss {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.StoreMatcherParam)
 		}
-		stm, err := storepb.TranslatePromMatchers(matchers...)
-		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, queryv1.StoreMatcherParam)
-		}
-		storeMatchers = append(storeMatchers, stm)
+		storeMatchers = append(storeMatchers, matchers)
 	}
 	return storeMatchers, nil
 }
@@ -254,16 +246,10 @@ func encodeDurationMillis(d int64) string {
 }
 
 // matchersToStringSlice converts storeMatchers to string slice.
-func matchersToStringSlice(storeMatchers [][]storepb.LabelMatcher) ([]string, error) {
+func matchersToStringSlice(storeMatchers [][]*labels.Matcher) []string {
 	res := make([]string, 0, len(storeMatchers))
 	for _, storeMatcher := range storeMatchers {
-		matcher, err := promclient.MatchersToString(storeMatcher)
-		if err != nil {
-			return nil, err
-		}
-
-		res = append(res, matcher)
+		res = append(res, storepb.PromMatchersToString(storeMatcher...))
 	}
-
-	return res, nil
+	return res
 }

@@ -789,7 +789,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs:       []ulid.ULID{},
-			expectedAdvLabels: []storepb.LabelSet(nil),
+			expectedAdvLabels: []storepb.LabelSet{},
 		},
 	} {
 		t.Run(sc.name, func(t *testing.T) {

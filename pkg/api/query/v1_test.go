@@ -40,14 +40,15 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/compact"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -1263,11 +1264,11 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	}
 }
 
-func TestParseStoreMatchersParam(t *testing.T) {
+func TestParseStoreDebugMatchersParam(t *testing.T) {
 	for i, tc := range []struct {
 		storeMatchers string
 		fail          bool
-		result        [][]storepb.LabelMatcher
+		result        [][]*labels.Matcher
 	}{
 		{
 			storeMatchers: "123",
@@ -1276,19 +1277,19 @@ func TestParseStoreMatchersParam(t *testing.T) {
 		{
 			storeMatchers: "foo",
 			fail:          false,
-			result:        [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "foo"}}},
+			result:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__name__", "foo")}},
 		},
 		{
 			storeMatchers: `{__address__="localhost:10905"}`,
 			fail:          false,
-			result:        [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10905"}}},
+			result:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10905")}},
 		},
 		{
 			storeMatchers: `{__address__="localhost:10905", cluster="test"}`,
 			fail:          false,
-			result: [][]storepb.LabelMatcher{{
-				storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__address__", Value: "localhost:10905"},
-				storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "cluster", Value: "test"},
+			result: [][]*labels.Matcher{{
+				labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10905"),
+				labels.MustNewMatcher(labels.MatchEqual, "cluster", "test"),
 			}},
 		},
 	} {
@@ -1300,7 +1301,7 @@ func TestParseStoreMatchersParam(t *testing.T) {
 			v.Set(StoreMatcherParam, tc.storeMatchers)
 			r := &http.Request{PostForm: v}
 
-			storeMatchers, err := api.parseStoreMatchersParam(r)
+			storeMatchers, err := api.parseStoreDebugMatchersParam(r)
 			if !tc.fail {
 				testutil.Equals(t, tc.result, storeMatchers)
 				testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
@@ -1320,7 +1321,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up)",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label"}}},
+			Labels:                    storepb.LabelSet{Labels: []storepb.Label{{Name: "some", Value: "label"}}},
 			LastError:                 "err1",
 		}),
 		rulespb.NewRecordingRule(&rulespb.RecordingRule{
@@ -1329,7 +1330,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up1)",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label2"}}},
+			Labels:                    storepb.LabelSet{Labels: []storepb.Label{{Name: "some", Value: "label2"}}},
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "3",
@@ -1338,12 +1339,12 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label3"}}},
-			Annotations:               rulespb.PromLabels{Labels: []storepb.Label{{Name: "ann", Value: "a1"}}},
+			Labels:                    storepb.LabelSet{Labels: []storepb.Label{{Name: "some", Value: "label3"}}},
+			Annotations:               storepb.LabelSet{Labels: []storepb.Label{{Name: "ann", Value: "a1"}}},
 			Alerts: []*rulespb.AlertInstance{
 				{
-					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "1"}}},
-					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "2"}}},
+					Labels:      storepb.LabelSet{Labels: []storepb.Label{{Name: "inside", Value: "1"}}},
+					Annotations: storepb.LabelSet{Labels: []storepb.Label{{Name: "insideann", Value: "2"}}},
 					State:       rulespb.AlertState_FIRING,
 					ActiveAt:    &twoHAgo,
 					Value:       "1",
@@ -1351,8 +1352,8 @@ func TestRulesHandler(t *testing.T) {
 					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 				},
 				{
-					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "3"}}},
-					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "4"}}},
+					Labels:      storepb.LabelSet{Labels: []storepb.Label{{Name: "inside", Value: "3"}}},
+					Annotations: storepb.LabelSet{Labels: []storepb.Label{{Name: "insideann", Value: "4"}}},
 					State:       rulespb.AlertState_PENDING,
 					ActiveAt:    nil,
 					Value:       "2",
@@ -1369,7 +1370,7 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			DurationSeconds:           102,
 			Query:                     "sum(up3) == 3",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label4"}}},
+			Labels:                    storepb.LabelSet{Labels: []storepb.Label{{Name: "some", Value: "label4"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}
@@ -1430,7 +1431,7 @@ func TestRulesHandler(t *testing.T) {
 		testpromcompatibility.RecordingRule{
 			Name:           all[0].GetRecording().Name,
 			Query:          all[0].GetRecording().Query,
-			Labels:         storepb.LabelsToPromLabels(all[0].GetRecording().Labels.Labels),
+			Labels:         labelpb.LabelsToPromLabels(all[0].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[0].GetRecording().Health),
 			LastError:      all[0].GetRecording().LastError,
 			LastEvaluation: all[0].GetRecording().LastEvaluation,
@@ -1440,7 +1441,7 @@ func TestRulesHandler(t *testing.T) {
 		testpromcompatibility.RecordingRule{
 			Name:           all[1].GetRecording().Name,
 			Query:          all[1].GetRecording().Query,
-			Labels:         storepb.LabelsToPromLabels(all[1].GetRecording().Labels.Labels),
+			Labels:         labelpb.LabelsToPromLabels(all[1].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[1].GetRecording().Health),
 			LastError:      all[1].GetRecording().LastError,
 			LastEvaluation: all[1].GetRecording().LastEvaluation,
@@ -1451,25 +1452,25 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[2].GetAlert().State.String()),
 			Name:           all[2].GetAlert().Name,
 			Query:          all[2].GetAlert().Query,
-			Labels:         storepb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
+			Labels:         labelpb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[2].GetAlert().LastError,
 			LastEvaluation: all[2].GetAlert().LastEvaluation,
 			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[2].GetAlert().DurationSeconds,
-			Annotations:    storepb.LabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
+			Annotations:    labelpb.LabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
 			Alerts: []*testpromcompatibility.Alert{
 				{
-					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
-					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
+					Labels:                  labelpb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
+					Annotations:             labelpb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[0].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[0].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
 				},
 				{
-					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
-					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
+					Labels:                  labelpb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
+					Annotations:             labelpb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[1].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[1].Value,
@@ -1482,7 +1483,7 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[3].GetAlert().State.String()),
 			Name:           all[3].GetAlert().Name,
 			Query:          all[3].GetAlert().Query,
-			Labels:         storepb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),
+			Labels:         labelpb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[3].GetAlert().LastError,
 			LastEvaluation: all[3].GetAlert().LastEvaluation,

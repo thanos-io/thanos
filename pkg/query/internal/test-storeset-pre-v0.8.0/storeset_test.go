@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -195,19 +196,16 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	testutil.Assert(t, len(storeSet.stores) == 2, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 5, len(storeSet.stores)))
 
 	// Sort result to be able to compare.
-	var existingStoreLabels [][][]storepb.Label
+	var existingStoreLabels [][]labels.Labels
 	for _, store := range storeSet.stores {
-		lset := [][]storepb.Label{}
-		for _, ls := range store.LabelSets() {
-			lset = append(lset, ls.Labels)
-		}
+		lset := append([]labels.Labels{}, store.LabelSets()...)
 		existingStoreLabels = append(existingStoreLabels, lset)
 	}
 	sort.Slice(existingStoreLabels, func(i, j int) bool {
 		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])
 	})
 
-	testutil.Equals(t, [][][]storepb.Label{
+	testutil.Equals(t, [][]labels.Labels{
 		{
 			{
 				{Name: "l1", Value: "v2"},

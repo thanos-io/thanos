@@ -98,7 +98,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:   []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+					lset:   labels.FromStrings("a", "1", "region", "eu-west"),
 					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
@@ -114,7 +114,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:   []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+					lset:   labels.FromStrings("a", "1", "region", "eu-west"),
 					chunks: [][]sample{{{1, 1}, {2, 2}}},
 				},
 			},
@@ -164,7 +164,7 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+					lset: labels.FromStrings("a", "1", "region", "eu-west"),
 				},
 			},
 		},

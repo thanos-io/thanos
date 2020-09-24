@@ -172,7 +172,7 @@ func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []
 	return replicaLabels, nil
 }
 
-func (qapi *QueryAPI) parseStoreMatchersParam(r *http.Request) (storeMatchers [][]storepb.LabelMatcher, _ *api.ApiError) {
+func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatchers [][]*labels.Matcher, _ *api.ApiError) {
 	if err := r.ParseForm(); err != nil {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
@@ -182,11 +182,7 @@ func (qapi *QueryAPI) parseStoreMatchersParam(r *http.Request) (storeMatchers []
 		if err != nil {
 			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-		stm, err := storepb.TranslatePromMatchers(matchers...)
-		if err != nil {
-			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "convert store matchers")}
-		}
-		storeMatchers = append(storeMatchers, stm)
+		storeMatchers = append(storeMatchers, matchers)
 	}
 
 	return storeMatchers, nil
@@ -254,7 +250,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
-	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -273,7 +269,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
+	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -358,7 +354,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -379,7 +375,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer span.Finish()
 
 	qry, err := qapi.queryEngine.NewRangeQuery(
-		qapi.queryableCreate(enableDedup, replicaLabels, storeMatchers, maxSourceResolution, enablePartialResponse, false),
+		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false),
 		r.FormValue("query"),
 		start,
 		end,
@@ -432,12 +428,12 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr
 	}
 
-	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -491,7 +487,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr
 	}
 
-	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -501,7 +497,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeMatchers, math.MaxInt64, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -537,12 +533,12 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	storeMatchers, apiErr := qapi.parseStoreMatchersParam(r)
+	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeMatchers, 0, enablePartialResponse, false).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}

@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 // Prometheus implements rulespb.Rules gRPC that allows to fetch rules from Prometheus HTTP api/v1/rules endpoint.
@@ -54,16 +54,8 @@ func (p *Prometheus) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer)
 
 func enrichRulesWithExtLabels(groups []*rulespb.RuleGroup, extLset labels.Labels) {
 	for _, g := range groups {
-		for i, r := range g.Rules {
-			if a := r.GetAlert(); a != nil {
-				a.Labels.Labels = storepb.ExtendLabels(a.Labels.Labels, extLset)
-				g.Rules[i] = rulespb.NewAlertingRule(a)
-				continue
-			}
-			if ru := r.GetRecording(); ru != nil {
-				ru.Labels.Labels = storepb.ExtendLabels(ru.Labels.Labels, extLset)
-				g.Rules[i] = rulespb.NewRecordingRule(ru)
-			}
+		for _, r := range g.Rules {
+			r.SetLabels(labelpb.ExtendLabels(r.GetLabels(), extLset))
 		}
 	}
 }
