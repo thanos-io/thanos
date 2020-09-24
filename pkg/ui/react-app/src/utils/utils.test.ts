@@ -134,6 +134,26 @@ describe('Utils', () => {
   });
 
   describe('URL Params', () => {
+    const stores: any = [
+      {
+        name: 'thanos_sidecar_one:10901',
+        lastCheck: '2020-09-20T11:35:18.250713478Z',
+        lastError: null,
+        labelSets: [
+          {
+            labels: [
+              {
+                name: 'monitor',
+                value: 'prometheus_one',
+              },
+            ],
+          },
+        ],
+        minTime: 1600598100000,
+        maxTime: 9223372036854776000,
+      },
+    ];
+
     const panels: any = [
       {
         key: '0',
@@ -147,6 +167,7 @@ describe('Utils', () => {
           useDeduplication: true,
           usePartialResponse: false,
           type: PanelType.Graph,
+          storeMatches: [],
         },
       },
       {
@@ -161,11 +182,12 @@ describe('Utils', () => {
           useDeduplication: false,
           usePartialResponse: true,
           type: PanelType.Table,
+          storeMatches: stores,
         },
       },
     ];
     const query =
-      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h&g1.max_source_resolution=auto&g1.deduplicate=0&g1.partial_response=1';
+      '?g0.expr=rate(node_cpu_seconds_total%7Bmode%3D%22system%22%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2019-10-25%2023%3A37%3A00&g0.moment_input=2019-10-25%2023%3A37%3A00&g1.expr=node_filesystem_avail_bytes&g1.tab=1&g1.stacked=0&g1.range_input=1h&g1.max_source_resolution=auto&g1.deduplicate=0&g1.partial_response=1&g1.store_matches=%5B%7B%22name%22%3A%22thanos_sidecar_one%3A10901%22%2C%22lastCheck%22%3A%222020-09-20T11%3A35%3A18.250713478Z%22%2C%22lastError%22%3Anull%2C%22labelSets%22%3A%5B%7B%22labels%22%3A%5B%7B%22name%22%3A%22monitor%22%2C%22value%22%3A%22prometheus_one%22%7D%5D%7D%5D%2C%22minTime%22%3A1600598100000%2C%22maxTime%22%3A9223372036854776000%7D%5D';
 
     describe('decodePanelOptionsFromQueryString', () => {
       it('returns [] when query is empty', () => {
@@ -203,6 +225,13 @@ describe('Utils', () => {
       });
       it('should parse partial_response', () => {
         expect(parseOption('partial_response=1')).toEqual({ usePartialResponse: true });
+      });
+      it('it should parse store_matches', () => {
+        expect(
+          parseOption(
+            'store_matches=%5B%7B%22name%22%3A%22thanos_sidecar_one%3A10901%22%2C%22lastCheck%22%3A%222020-09-20T11%3A35%3A18.250713478Z%22%2C%22lastError%22%3Anull%2C%22labelSets%22%3A%5B%7B%22labels%22%3A%5B%7B%22name%22%3A%22monitor%22%2C%22value%22%3A%22prometheus_one%22%7D%5D%7D%5D%2C%22minTime%22%3A1600598100000%2C%22maxTime%22%3A9223372036854776000%7D%5D'
+          )
+        ).toEqual({ storeMatches: stores });
       });
 
       describe('step_input', () => {
@@ -249,10 +278,11 @@ describe('Utils', () => {
               maxSourceResolution: 'raw',
               useDeduplication: true,
               usePartialResponse: false,
+              storeMatches: [],
             },
           })
         ).toEqual(
-          'g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0y&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.step_input=1'
+          'g0.expr=foo&g0.tab=0&g0.stacked=1&g0.range_input=0y&g0.max_source_resolution=raw&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=%5B%5D&g0.step_input=1'
         );
       });
     });
