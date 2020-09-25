@@ -30,6 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Querier: Add metric `thanos_query_gate_queries_max`. Remove metric `thanos_query_concurrent_selects_gate_queries_in_flight`.
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Store: Rename metric `thanos_bucket_store_queries_concurrent_max` to `thanos_bucket_store_series_gate_queries_max`.
 - [#3179](https://github.com/thanos-io/thanos/pull/3179) Store: context.Canceled will not increase `thanos_objstore_bucket_operation_failures_total`.
+- [#3231](https://github.com/thanos-io/thanos/pull/3231) Receive: fix remote-write error in case one of `--receive.replication-factor=2` replicas is down.
 
 ## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
 

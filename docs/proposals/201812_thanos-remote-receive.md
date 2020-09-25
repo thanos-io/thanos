@@ -169,11 +169,13 @@ The intention is that the load balancer can distribute requests randomly to all 
 
 ### Replication
 
-The Thanos receiver supports replication of received time-series to other receivers in the same hashring. The replication factor is controlled by setting a flag on the receivers and indicates the maximum number of copies of any time-series that should be stored in the hashring. If any time-series in a write request received by a Thanos receiver is not successfully written to at least `(REPLICATION_FACTOR + 1)/2` nodes, the receiver responds with an error. For example, to attempt to store 3 copies of every time-series and ensure that every time-series is successfully written to at least 2 Thanos receivers in the target hashring, all receivers should be configured with the following flag:
+The Thanos receiver supports replication of received time-series to other receivers in the same hashring. The replication factor is controlled by setting a flag on the receivers and indicates the maximum number of copies of any time-series that should be stored in the hashring. If any time-series in a write request received by a Thanos receiver is not successfully written to at least `int(REPLICATION_FACTOR/2) + 1` nodes, the receiver responds with an error. For example, to attempt to store 3 copies of every time-series and ensure that every time-series is successfully written to at least 2 Thanos receivers in the target hashring, all receivers should be configured with the following flag:
 
 ```
 --receive.replication-factor=3
 ```
+
+Note that `REPLICATION_FACTOR=2` is a special case. To make it possible to achieve "cheap HA" with only 2 replicas - there is no error returned for remote-write if only single copy is successfully written. But you should also remember that any 2 node clusters are subject to split brain situation in case of connectivity lost between them. Monitor for `grpc_server_handled_total{grpc_code="OK",grpc_method="RemoteWrite"}` or better use 3 replicas if you need reliability.
 
 Thanos receivers identify the replica number of a write request via a 0-indexed uint64 contained in an HTTP header. The header name can be configured via a flag:
 
@@ -181,7 +183,7 @@ Thanos receivers identify the replica number of a write request via a 0-indexed 
 --receive.replica-header=THANOS-REPLICA
 ```
 
-If the header is present in a request, the receiver will look for the replica-th node of the hashring that should handle the request. If it is the receiver itself, then the request is stored locally, else it is forwarded to the correct endpoint. If the replica number of the request exceeds the configured replication factor or the total number of nodes in the target hashring, the receiver responds with an error. If the header is not present in a request, then the receiver will replicate the request to `REPLCIATION_FACTOR` nodes, setting the replica header on each request to ensure it is not replicated further.
+If the header is present in a request, the receiver will look for the replica-th node of the hashring that should handle the request. If it is the receiver itself, then the request is stored locally, else it is forwarded to the correct endpoint. If the replica number of the request exceeds the configured replication factor or the total number of nodes in the target hashring, the receiver responds with an error. If the header is not present in a request, then the receiver will replicate the request to `REPLICATION_FACTOR` nodes, setting the replica header on each request to ensure it is not replicated further.
 
 Note that replicating write requests may require additional compaction and deduplication of object storage as well as significantly increase infrastructure cost.
 
