@@ -150,6 +150,9 @@ Flags:
                               'query-range.response-cache-config-file' flag
                               (lower priority). Content of YAML file that
                               contains response cache configuration.
+      --cache-compression-type=""
+                              Use compression in results cache. Supported values
+                              are: 'snappy' and ” (disable compression).
       --query-frontend.downstream-url="http://localhost:9090"
                               URL of downstream Prometheus Query compatible API.
       --query-frontend.compress-responses
