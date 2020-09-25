@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -75,6 +76,12 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 	})
 
 	return &m
+}
+
+func RegisterStoreServer(storeSrv storepb.StoreServer) func(*grpc.Server) {
+	return func(s *grpc.Server) {
+		storepb.RegisterStoreServer(s, storeSrv)
+	}
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.

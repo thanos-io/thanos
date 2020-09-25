@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -37,6 +38,12 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	externalLabels   labels.Labels
 	maxBytesPerFrame int
+}
+
+func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
+	return func(s *grpc.Server) {
+		storepb.RegisterWriteableStoreServer(s, storeSrv)
+	}
 }
 
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.

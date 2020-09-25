@@ -6,11 +6,15 @@ package grpc
 import (
 	"crypto/tls"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 const UnixSocket = "/tmp/test.sock"
 
 type options struct {
+	registerServerFuncs []registerServerFunc
+
 	gracePeriod time.Duration
 	listen      string
 	network     string
@@ -27,6 +31,16 @@ type optionFunc func(*options)
 
 func (f optionFunc) apply(o *options) {
 	f(o)
+}
+
+type registerServerFunc func(s *grpc.Server)
+
+// WithGRPCServer calls the passed gRPC registration functions on the created
+// grpc.Server.
+func WithServer(f registerServerFunc) Option {
+	return optionFunc(func(o *options) {
+		o.registerServerFuncs = append(o.registerServerFuncs, f)
+	})
 }
 
 // WithGracePeriod sets shutdown grace period for gRPC server.
