@@ -13,7 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#3234](https://github.com/thanos-io/thanos/pull/3234) UI: Fix assets not loading when `--web.external-header` is used.
+- [#3234](https://github.com/thanos-io/thanos/pull/3234) UI: Fix assets not loading when `--web.prefix-header` is used.
 
 ### Added
 
