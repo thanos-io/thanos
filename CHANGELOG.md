@@ -11,10 +11,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: Added support for Memacahce cache. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
+### Fixed
+
+- [#3234](https://github.com/thanos-io/thanos/pull/3234) UI: Fix assets not loading when `--web.prefix-header` is used.
 
 ### Added
 
+- [#3032](https://github.com/thanos-io/thanos/pull/3032) Query Frontend: Added support for Memacahce cache. Replaced underscores with hyphens in `log_queries_longer_than - > log-queries-longer-than`.
 - [#3166](https://github.com/thanos-io/thanos/pull/3166) UIs: Added UI for passing a `storeMatch[]` parameter to queries.
 - [#3184](https://github.com/thanos-io/thanos/pull/3184) Compact: Fix web.prefix-header to use &wc.prefixHeaderName
 - [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Add debug level logging for responses between 300-399
