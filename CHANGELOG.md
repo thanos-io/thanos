@@ -42,6 +42,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3146](https://github.com/thanos-io/thanos/pull/3146) Sidecar: Add `thanos_sidecar_prometheus_store_received_frames` histogram metric.
 - [#3147](https://github.com/thanos-io/thanos/pull/3147) Querier: Add `query.metadata.default-time-range` flag to specify the default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.
 - [#3207](https://github.com/thanos-io/thanos/pull/3207) Query Frontend: Add `cache-compression-type` flag to use compression in the query frontend cache.
+- [#3089](https://github.com/thanos-io/thanos/pull/3089) Store: Add `store.grpc.series-sample-size-limit` flag to specify the maximum size of samples returned via a single Series call. The zero value means no limit.
 
 ### Changed
 

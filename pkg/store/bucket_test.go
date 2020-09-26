@@ -28,6 +28,7 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
@@ -563,7 +564,7 @@ func TestBucketStore_Info(t *testing.T) {
 
 	defer testutil.Ok(t, os.RemoveAll(dir))
 
-	bucketStore, err := NewBucketStore(
+	bucketStore, err := New(
 		nil,
 		nil,
 		nil,
@@ -572,7 +573,6 @@ func TestBucketStore_Info(t *testing.T) {
 		noopCache{},
 		nil,
 		2e5,
-		NewChunksLimiterFactory(0),
 		false,
 		20,
 		allowAllFilterConf,
@@ -580,6 +580,7 @@ func TestBucketStore_Info(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
+		WithChunksLimit(NewChunksLimiterFactory(0)),
 	)
 	testutil.Ok(t, err)
 
@@ -591,6 +592,49 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
 	testutil.Equals(t, []labelpb.ZLabelSet(nil), resp.LabelSets)
 	testutil.Equals(t, []labelpb.ZLabel(nil), resp.Labels)
+}
+
+func TestSeries_ErrorInvalidLimiter(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	store, err := New(
+		nil,
+		nil,
+		nil,
+		nil,
+		dir,
+		noopCache{},
+		nil,
+		2e5,
+		false,
+		20,
+		allowAllFilterConf,
+		true,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		WithChunksLimit(NewChunksLimiterFactory(0)),
+	)
+	testutil.Ok(t, err)
+	store.chunksLimiterFactory = func(failedCounter prometheus.Counter) ChunksLimiter {
+		return nil
+	}
+
+	req := &storepb.SeriesRequest{
+		MinTime: math.MinInt64,
+		MaxTime: math.MaxInt64,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+		},
+	}
+	srv := newStoreSeriesServer(ctx)
+
+	err = store.Series(req, srv)
+
+	testutil.NotOk(t, err)
+	testutil.Equals(t, true, regexp.MustCompile("failed to share counter from").MatchString(err.Error()))
 }
 
 type recorder struct {
@@ -812,7 +856,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			}, nil)
 			testutil.Ok(t, err)
 
-			bucketStore, err := NewBucketStore(
+			bucketStore, err := New(
 				logger,
 				nil,
 				objstore.WithNoopInstr(rec),
@@ -821,7 +865,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				noopCache{},
 				nil,
 				0,
-				NewChunksLimiterFactory(0),
 				false,
 				20,
 				allowAllFilterConf,
@@ -829,6 +872,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
+				WithChunksLimit(NewChunksLimiterFactory(0)),
 			)
 			testutil.Ok(t, err)
 
@@ -1248,8 +1292,9 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{blocks}},
 		},
-		queryGate:            noopGate{},
-		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		queryGate:                noopGate{},
+		chunksLimiterFactory:     NewChunksLimiterFactory(0),
+		chunksSizeLimiterFactory: NewChunksLimiterFactory(0),
 	}
 
 	for _, block := range blocks {
@@ -1454,8 +1499,9 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			b1.meta.ULID: b1,
 			b2.meta.ULID: b2,
 		},
-		queryGate:            noopGate{},
-		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		queryGate:                noopGate{},
+		chunksLimiterFactory:     NewChunksLimiterFactory(0),
+		chunksSizeLimiterFactory: NewChunksLimiterFactory(0),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1565,7 +1611,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
-	store, err := NewBucketStore(
+	store, err := New(
 		logger,
 		nil,
 		instrBkt,
@@ -1574,7 +1620,6 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		indexCache,
 		nil,
 		1000000,
-		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		false,
 		10,
 		nil,
@@ -1582,6 +1627,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		WithChunksLimit(NewChunksLimiterFactory(10000/MaxSamplesPerChunk)),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1674,7 +1720,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
-	store, err := NewBucketStore(
+	store, err := New(
 		logger,
 		nil,
 		instrBkt,
@@ -1683,7 +1729,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		indexCache,
 		nil,
 		1000000,
-		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		false,
 		10,
 		nil,
@@ -1691,6 +1736,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		WithChunksLimit(NewChunksLimiterFactory(10000/MaxSamplesPerChunk)),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1777,7 +1823,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(t, err)
 
-	store, err := NewBucketStore(
+	store, err := New(
 		logger,
 		nil,
 		instrBkt,
@@ -1786,7 +1832,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		indexCache,
 		nil,
 		1000000,
-		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		false,
 		10,
 		nil,
@@ -1794,6 +1839,8 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		WithChunksLimit(NewChunksLimiterFactory(10000/MaxSamplesPerChunk)),
+		WithChunksSizeLimit(NewChunksLimiterFactory(0)),
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, store.SyncBlocks(context.Background()))

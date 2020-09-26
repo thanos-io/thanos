@@ -68,6 +68,10 @@ func registerStore(app *extkingpin.App) {
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
 
+	maxSampleSize := cmd.Flag("store.grpc.series-sample-size-limit",
+		"Maximum size of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		Default("0").Uint()
+
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
 
 	objStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
@@ -133,6 +137,7 @@ func registerStore(app *extkingpin.App) {
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
+			uint64(*maxSampleSize),
 			*maxConcurrent,
 			component.Store,
 			debugLogging,
@@ -169,7 +174,7 @@ func runStore(
 	grpcGracePeriod time.Duration,
 	grpcCert, grpcKey, grpcClientCA, httpBindAddr string,
 	httpGracePeriod time.Duration,
-	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount uint64,
+	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount, maxSampleSize uint64,
 	maxConcurrency int,
 	component component.Component,
 	verbose bool,
@@ -287,7 +292,12 @@ func runStore(
 
 	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), maxConcurrency)
 
-	bs, err := store.NewBucketStore(
+	bucketStoreOpts := []store.BucketStoreOption{
+		store.WithChunksLimit(store.NewChunksLimiterFactory(maxSampleCount / store.MaxSamplesPerChunk)), // The samples limit is an approximation based on the max number of samples per chunk.
+		store.WithChunksSizeLimit(store.NewChunksLimiterFactory(maxSampleSize)),
+	}
+
+	bs, err := store.New(
 		logger,
 		reg,
 		bkt,
@@ -296,7 +306,6 @@ func runStore(
 		indexCache,
 		queriesGate,
 		chunkPoolSizeBytes,
-		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
@@ -304,6 +313,7 @@ func runStore(
 		enablePostingsCompression,
 		postingOffsetsInMemSampling,
 		false,
+		bucketStoreOpts...,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

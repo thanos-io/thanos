@@ -64,6 +64,9 @@ const (
 	maxChunkSize       = 16000
 	maxSeriesSize      = 64 * 1024
 
+	noChunksLimit     = 0
+	noChunksSizeLimit = 0
+
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
 	// Now with newer Store Gateway advertising all the external labels it has access to, there was simple case where
@@ -270,7 +273,9 @@ type BucketStore struct {
 
 	// chunksLimiterFactory creates a new limiter used to limit the number of chunks fetched by each Series() call.
 	chunksLimiterFactory ChunksLimiterFactory
-	partitioner          partitioner
+	// chunksSizeLimiterFactory creates a new limiter used to limit the size of chunks fetched by each Series() call.
+	chunksSizeLimiterFactory ChunksLimiterFactory
+	partitioner              partitioner
 
 	filterConfig             *FilterConfig
 	advLabelSets             []labelpb.ZLabelSet
@@ -284,6 +289,41 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+}
+
+type bucketStoreOptions struct {
+	chunksLimitFactory     ChunksLimiterFactory
+	chunksSizeLimitFactory ChunksLimiterFactory
+}
+
+// BucketStoreOption overrides options of the bucket store.
+type BucketStoreOption interface {
+	apply(*bucketStoreOptions)
+}
+
+type bucketStoreOptionFunc func(*bucketStoreOptions)
+
+func (f bucketStoreOptionFunc) apply(o *bucketStoreOptions) {
+	f(o)
+}
+
+// WithChunksLimit sets chunks limit for the bucket store.
+func WithChunksLimit(f ChunksLimiterFactory) BucketStoreOption {
+	return bucketStoreOptionFunc(func(lo *bucketStoreOptions) {
+		lo.chunksLimitFactory = f
+	})
+}
+
+// WithChunksSizeLimit sets chunks size limit for the bucket store.
+func WithChunksSizeLimit(f ChunksLimiterFactory) BucketStoreOption {
+	return bucketStoreOptionFunc(func(lo *bucketStoreOptions) {
+		lo.chunksSizeLimitFactory = f
+	})
+}
+
+var defaultBucketStoreOptions = bucketStoreOptions{
+	chunksLimitFactory:     NewChunksLimiterFactory(noChunksLimit),
+	chunksSizeLimitFactory: NewChunksLimiterFactory(noChunksSizeLimit),
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -306,6 +346,49 @@ func NewBucketStore(
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 ) (*BucketStore, error) {
+	bucketStoreOpts := []BucketStoreOption{
+		WithChunksLimit(chunksLimiterFactory),
+		WithChunksSizeLimit(NewChunksLimiterFactory(noChunksSizeLimit)),
+	}
+	return New(logger,
+		reg,
+		bkt,
+		fetcher,
+		dir,
+		indexCache,
+		queryGate,
+		maxChunkPoolBytes,
+		debugLogging,
+		blockSyncConcurrency,
+		filterConfig,
+		enableCompatibilityLabel,
+		enablePostingsCompression,
+		postingOffsetsInMemSampling,
+		enableSeriesResponseHints,
+		bucketStoreOpts...,
+	)
+}
+
+// New creates a new bucket backed store that implements the store API against
+// an object store bucket. It is optimized to work against high latency backends.
+func New(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	bkt objstore.InstrumentedBucketReader,
+	fetcher block.MetadataFetcher,
+	dir string,
+	indexCache storecache.IndexCache,
+	queryGate gate.Gate,
+	maxChunkPoolBytes uint64,
+	debugLogging bool,
+	blockSyncConcurrency int,
+	filterConfig *FilterConfig,
+	enableCompatibilityLabel bool,
+	enablePostingsCompression bool,
+	postingOffsetsInMemSampling int,
+	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
+	opt ...BucketStoreOption,
+) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -313,6 +396,11 @@ func NewBucketStore(
 	chunkPool, err := pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, maxChunkPoolBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
+	}
+
+	opts := defaultBucketStoreOptions
+	for _, o := range opt {
+		o.apply(&opts)
 	}
 
 	s := &BucketStore{
@@ -328,7 +416,8 @@ func NewBucketStore(
 		blockSyncConcurrency:        blockSyncConcurrency,
 		filterConfig:                filterConfig,
 		queryGate:                   queryGate,
-		chunksLimiterFactory:        chunksLimiterFactory,
+		chunksLimiterFactory:        opts.chunksLimitFactory,
+		chunksSizeLimiterFactory:    opts.chunksSizeLimitFactory,
 		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		enablePostingsCompression:   enablePostingsCompression,
@@ -679,6 +768,7 @@ func blockSeries(
 	matchers []*labels.Matcher,
 	req *storepb.SeriesRequest,
 	chunksLimiter ChunksLimiter,
+	chunksSizeLimiter ChunksLimiter,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -772,6 +862,10 @@ func blockSeries(
 	// Preload all chunks that were marked in the previous stage.
 	if err := chunkr.preload(); err != nil {
 		return nil, nil, errors.Wrap(err, "preload chunks")
+	}
+
+	if err := chunksSizeLimiter.Reserve(uint64(chunkr.stats.chunksFetchedSizeSum)); err != nil {
+		return nil, nil, errors.Wrap(err, "exceeded chunks size limit")
 	}
 
 	// Transform all chunks into the response format.
@@ -894,15 +988,21 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		ctx              = srv.Context()
-		stats            = &queryStats{}
-		res              []storepb.SeriesSet
-		mtx              sync.Mutex
-		g, gctx          = errgroup.WithContext(ctx)
-		resHints         = &hintspb.SeriesResponseHints{}
-		reqBlockMatchers []*labels.Matcher
-		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped)
+		ctx               = srv.Context()
+		stats             = &queryStats{}
+		res               []storepb.SeriesSet
+		mtx               sync.Mutex
+		g, gctx           = errgroup.WithContext(ctx)
+		resHints          = &hintspb.SeriesResponseHints{}
+		reqBlockMatchers  []*labels.Matcher
+		chunksLimiter     = s.chunksLimiterFactory(s.metrics.queriesDropped)
+		chunksSizeLimiter = s.chunksSizeLimiterFactory(s.metrics.queriesDropped)
 	)
+
+	chunksSizeLimiter, err = chunksSizeLimiter.NewWithFailedCounterFrom(chunksLimiter)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
@@ -957,6 +1057,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					chunksLimiter,
+					chunksSizeLimiter,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

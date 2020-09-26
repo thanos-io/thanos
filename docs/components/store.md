@@ -101,6 +101,10 @@ Flags:
                                  samples each chunk can contain), so the actual
                                  number of samples might be lower, even though
                                  the maximum could be hit.
+      --store.grpc.series-sample-size-limit=0
+                                 Maximum size of samples returned via a single
+                                 Series call. The Series call fails if this
+                                 limit is exceeded. 0 means no limit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --objstore.config-file=<file-path>

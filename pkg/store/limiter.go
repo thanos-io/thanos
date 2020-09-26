@@ -12,10 +12,12 @@ import (
 )
 
 type ChunksLimiter interface {
-	// Reserve num chunks out of the total number of chunks enforced by the limiter.
-	// Returns an error if the limit has been exceeded. This function must be
-	// goroutine safe.
+	// Reserve num chunks or bytes out of the total number of chunks or bytes enforced by the limiter.
+	// Returns an error if the limit has been exceeded. This function must be goroutine safe.
 	Reserve(num uint64) error
+
+	// NewWithFailedCounterFrom creates a new chunks limiter from existing with failed counter from the argument.
+	NewWithFailedCounterFrom(l ChunksLimiter) (ChunksLimiter, error)
 }
 
 // ChunksLimiterFactory is used to create a new ChunksLimiter. The factory is useful for
@@ -29,12 +31,12 @@ type Limiter struct {
 
 	// Counter metric which we will increase if limit is exceeded.
 	failedCounter prometheus.Counter
-	failedOnce    sync.Once
+	failedOnce    *sync.Once
 }
 
 // NewLimiter returns a new limiter with a specified limit. 0 disables the limit.
 func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
-	return &Limiter{limit: limit, failedCounter: ctr}
+	return &Limiter{limit: limit, failedCounter: ctr, failedOnce: &sync.Once{}}
 }
 
 // Reserve implements ChunksLimiter.
@@ -49,6 +51,21 @@ func (l *Limiter) Reserve(num uint64) error {
 		return errors.Errorf("limit %v violated (got %v)", l.limit, reserved)
 	}
 	return nil
+}
+
+// NewWithFailedCounterFrom creates a new limiter with failed counter from the argument.
+func (l *Limiter) NewWithFailedCounterFrom(l2 ChunksLimiter) (ChunksLimiter, error) {
+	from, ok := l2.(*Limiter)
+	if !ok || from == nil {
+		return &Limiter{}, errors.Errorf("failed to share counter from %#v", l2)
+	}
+
+	return &Limiter{
+		limit:         l.limit,
+		reserved:      l.reserved,
+		failedCounter: from.failedCounter,
+		failedOnce:    from.failedOnce,
+	}, nil
 }
 
 // NewChunksLimiterFactory makes a new ChunksLimiterFactory with a static limit.
