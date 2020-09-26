@@ -52,7 +52,7 @@ We would look to add a new component to the Thanos system `thanos config` that w
 The `thanos config` will have a configuration endpoint that each `thanos sidecar` will call into to get their own scrape_config jobs along with their targets. Once the sidecar has its jobs it will be able to update targets / scrape_config for the Prometheus instance it is running alongside. This update will primarily be based on `file_sd_config` and will be allowed to add or remove targets without changing Prometheus itself.
 
 The config component will keep track of what sidecar's are in the cluster via the existing gossip mechanism and will therefore have a central view of targets to Prometheus instances.
-When we scale up our scrape pool and a new scrape instance comes online the `thanos sidecar` join the gossip cluster and therefoe `thanos config` will know that it can start assigning configuration to this new node.
+When we scale up our scrape pool and a new scrape instance comes online the `thanos sidecar` join the gossip cluster and therefore `thanos config` will know that it can start assigning configuration to this new node.
 In a scale down scenario we can first remove all targets from a given scraper effectively draining that instance of work and kick off the process of uploading the WAL to storage (not in scope of this design). During the time that the Prometheus instance has no targets we would still want to be able to query the instance for data that has not yet been uploaded.
 
 We believe that a central point for configuration and management is better in this scenario as it gives us more flexibility in the future to add bin packing / consistent hashing. It would also be an ideal place for deciding on "hot shard" issues, the config component would be able to see the utilization of each node and decide based on that where to schedule work. Having a centralised approach would also help with debugging, testing and maintaining the code when issues arise.
@@ -91,7 +91,7 @@ We believe that a central point for configuration and management is better in th
 ### Example Use Case
 
 Currently we have the use case whereby a customer can deploy a game into our environment and we may need to dramatically increase the number of targets being scraped.
-In doing so we may need to scale the number of instances of Prometheus in our scrape pool; we would want to ensure that it has minimal impact to the existing collection of metrics and ensure we do not over oad any scrapers by the resharding of targets.
+In doing so we may need to scale the number of instances of Prometheus in our scrape pool; we would want to ensure that it has minimal impact to the existing collection of metrics and ensure we do not over load any scrapers by the resharding of targets.
 This deployment may only last for a number of hours (whilst other may last days, weeks, or months) and then will be removed. Therefore removing the targets and scaling down the number of Prometheus instances in the pool.
 It is also worth mentioning in this specific use case that although the Prometheus and Thanos components are deployed within a Kubernetes cluster the targets they are scraping do not have to be within the cluster where the monitoring components live or running within Kubernetes at all.
 
@@ -141,7 +141,7 @@ The alternatives below might be a good starting point for users that do not need
 
 ### Prometheus & Hashmod
 
-An alternative to this is to use the existing [hashmod](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) functionality within Prometheus to enable [horizontal scaling](https://www.robustperception.io/scaling-and-federating-prometheus/), in this scenario a user would supply their entire configuaration to every Prometheus node and use hashing to scale out.
+An alternative to this is to use the existing [hashmod](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) functionality within Prometheus to enable [horizontal scaling](https://www.robustperception.io/scaling-and-federating-prometheus/), in this scenario a user would supply their entire configuration to every Prometheus node and use hashing to scale out.
 The main downside of this is that as a Prometheus instance is added or removed from the cluster the targets will be moved to a new scrape instance. This is bad if you are wanting to keep tenants to a minimal number of Prometheus instances.
 
 ### Prometheus & Consistent Hashing
