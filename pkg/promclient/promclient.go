@@ -122,6 +122,36 @@ func (c *Client) get2xx(ctx context.Context, u *url.URL) (_ []byte, _ int, err e
 	return body, resp.StatusCode, nil
 }
 
+//First attempt to add ability to send POST requests [issue #2577]
+// Doubt on which piece of code required to handle parameter/flag that
+// will give the option to choose between GET and POST
+func (c *Client) post2xx(ctx context.Context, u *url.URL, skipHead bool) (_ []byte, _ int, err error) {
+	req, err := http.NewRequest(
+		http.MethodPost,
+		u.String(),
+		strings.NewReader(url.Values{"skip_head": []string{strconv.FormatBool(skipHead)}}.Encode()),
+	)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "create POST request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, 0, errors.Wrapf(err, "perform POST request against %s", u.String())
+	}
+	defer runutil.ExhaustCloseWithErrCapture(&err, resp.Body, "%s: close body", req.URL.String())
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, errors.Wrap(err, "read body")
+	}
+	if resp.StatusCode/100 != 2 {
+		return nil, resp.StatusCode, errors.Errorf("expected 2xx response, got %d. Body: %v", resp.StatusCode, string(body))
+	}
+	return body, resp.StatusCode, nil
+}
+
 // IsWALDirAccessible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
 func IsWALDirAccessible(dir string) error {
