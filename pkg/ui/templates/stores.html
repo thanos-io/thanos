@@ -39,7 +39,7 @@
                 {{range $labelSets := $store.LabelSets}}
                 <tr>
                     <td>
-                    {{range $label := $labelSets.Labels}}
+                    {{range $label := $labelSets}}
                         <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
                     {{end}}
                     </td>
