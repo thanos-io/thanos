@@ -24,14 +24,16 @@ export interface SourceViewProps {
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
+  blocksCount: { [key: string]: number };
 }
 
-export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock }) => {
+export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock, blocksCount }) => {
   return (
     <>
       <div className={styles.source}>
         <div className={styles.title} title={title}>
           <span>{title}</span>
+          <span>(blocks count: {blocksCount[title]})</span>
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map(k => (

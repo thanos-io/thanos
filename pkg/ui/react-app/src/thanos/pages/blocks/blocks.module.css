@@ -103,6 +103,13 @@
   box-sizing: border-box;
 }
 
+.stats {
+  justify-content: space-evenly;
+  display: flex;
+  flex-flow: row nowrap;
+  margin-bottom: 1em;
+}
+
 .rowsContainer {
   display: flex;
   flex-direction: column;
