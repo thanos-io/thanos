@@ -222,3 +222,35 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	id, err := ulid.Parse(filepath.Base(path))
 	return id, err == nil
 }
+
+// Size represents the size of a block.
+type Size struct {
+	IndexSize int64 `json:"indexSize"`
+	ChunkSize int64 `json:"chunkSize"`
+}
+
+// GetSize Returns the size of a block.
+func GetSize(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (Size, error) {
+	var chunkSize int64
+	indexAttr, err := bkt.Attributes(ctx, path.Join(id.String(), "index"))
+	if err != nil {
+		return Size{}, errors.Wrapf(err, "get index attributes %s", id.String())
+	}
+
+	err = bkt.Iter(ctx, path.Join(id.String(), "chunks"), func(chunkName string) error {
+		chunkAttr, err := bkt.Attributes(ctx, chunkName)
+		if err != nil {
+			return err
+		}
+
+		chunkSize += chunkAttr.Size
+		return nil
+	})
+
+	if err != nil {
+		return Size{}, errors.Wrapf(err, "get chunk attributes %s", id.String())
+
+	}
+
+	return Size{IndexSize: indexAttr.Size, ChunkSize: chunkSize}, nil
+}
