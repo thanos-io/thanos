@@ -116,7 +116,7 @@ Output:
 By default, on empty relabel-config, all external labels are assumed.
 Intuitively blocks without any external labels will be ignored.
 
-All blocks should compose as set of lables to advertise. The input should be based from original meta files. NOT from relabelling.
+All blocks should compose as set of labels to advertise. The input should be based from original meta files. NOT from relabelling.
 The reasoning is covered in [`Next Steps`](#Future-Work) section
 
 Example usages would be:
@@ -142,7 +142,7 @@ Example usages would be:
 
 * Add/import relabel config into Thanos, add relevant logic.
 * Hook it for selecting blocks on Store Gateway
-    * Advertise original lables of "approved" blocs on resulted external labels.
+    * Advertise original labels of "approved" blocs on resulted external labels.
 * Hook it for selecting blocks on Compactor.
     * Add documentation about following concern: Care must be taken with changing selection for compactor to unsure only single compactor ever running over each Source's blocks.
 
