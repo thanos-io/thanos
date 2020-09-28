@@ -229,8 +229,8 @@ type Size struct {
 	ChunkSize int64 `json:"chunkSize"`
 }
 
-// GetSize Returns the size of a block.
-func GetSize(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (Size, error) {
+// GetSize Returns the size of a block in bytes.
+func GetSize(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Size, error) {
 	var chunkSize int64
 	indexAttr, err := bkt.Attributes(ctx, path.Join(id.String(), "index"))
 	if err != nil {
@@ -249,7 +249,6 @@ func GetSize(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id uli
 
 	if err != nil {
 		return Size{}, errors.Wrapf(err, "get chunk attributes %s", id.String())
-
 	}
 
 	return Size{IndexSize: indexAttr.Size, ChunkSize: chunkSize}, nil

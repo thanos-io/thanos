@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -653,6 +654,19 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
+// Checks size of block index as per check method.
+func checkBlockIndexSize(ctx context.Context, bkt objstore.Bucket, id ulid.ULID, check func(int64) bool) (int64, bool, error) {
+	size, err := block.GetSize(ctx, bkt, id)
+	if err != nil {
+		return 0, false, errors.Wrapf(err, "get block size %s", id.String())
+	}
+
+	if !check(size.IndexSize) {
+		return size.IndexSize, false, nil
+	}
+	return size.IndexSize, true, nil
+}
+
 func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (shouldRerun bool, compID ulid.ULID, err error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
@@ -669,26 +683,57 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		overlappingBlocks = true
 	}
 
+	// Checks if size(bytes) is > 64 GiB.
+	sizeCheck := func(size int64) bool {
+		if size > int64(8.59*math.Pow(10, 9)) {
+			return false
+		}
+		return true
+	}
+
+	// Represents block index size of a block(block directory)
+	var blockIndexSize map[string]int64
+
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.
 	// So we first dump all our memory block metas into the directory.
 	for _, meta := range cg.blocks {
-		bdir := filepath.Join(dir, meta.ULID.String())
-		if err := os.MkdirAll(bdir, 0777); err != nil {
-			return false, ulid.ULID{}, errors.Wrap(err, "create planning block dir")
+		// Check blocksize. If greater than `x` don't compact it.
+		size, sizeok, err := checkBlockIndexSize(ctx, cg.bkt, meta.ULID, sizeCheck)
+		if err != nil {
+			return false, ulid.ULID{}, errors.Wrap(err, "Checking block index size")
 		}
-		if err := metadata.Write(cg.logger, bdir, meta); err != nil {
-			return false, ulid.ULID{}, errors.Wrap(err, "write planning meta file")
+
+		bdir := filepath.Join(dir, meta.ULID.String())
+		blockIndexSize[bdir] = size
+
+		// If sizeokay ie; block index size is < 64 Gib, continue creating new dir with its meta.json
+		// else skip that block
+		if sizeok {
+			if err := os.MkdirAll(bdir, 0777); err != nil {
+				return false, ulid.ULID{}, errors.Wrap(err, "create planning block dir")
+			}
+			if err := metadata.Write(cg.logger, bdir, meta); err != nil {
+				return false, ulid.ULID{}, errors.Wrap(err, "write planning meta file")
+			}
 		}
 	}
 
 	// Plan against the written meta.json files.
-	plan, err := comp.Plan(dir)
+	compactable, err := comp.Plan(dir)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
-	if len(plan) == 0 {
+	if len(compactable) == 0 {
 		// Nothing to do.
 		return false, ulid.ULID{}, nil
+	}
+
+	// Creating a plan for compaction. Filters out block whose size is > 64 GiB.
+	var plan []string
+	for _, bdir := range compactable {
+		if sizeCheck(blockIndexSize[bdir]) {
+			plan = append(plan, bdir)
+		}
 	}
 
 	level.Info(cg.logger).Log("msg", "compaction available and planned; downloading blocks", "plan", fmt.Sprintf("%v", plan))
