@@ -3,11 +3,11 @@ import { Container } from 'reactstrap';
 import { Router, Redirect, globalHistory } from '@reach/router';
 import { QueryParamProvider } from 'use-query-params';
 
-import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList, NotFound } from './pages';
+import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList } from './pages';
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
 import Navigation from './thanos/Navbar';
-import { Stores, ErrorBoundary, Blocks } from './thanos/pages';
+import { Stores, ErrorBoundary, Blocks, NotFound } from './thanos/pages';
 
 import './App.css';
 
