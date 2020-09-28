@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Bucket Replicate dashboard',
   },
   grafanaDashboards+:: {
-    'bucket_replicate.json':
+    'bucket-replicate.json':
       g.dashboard(thanos.bucket_replicate.title)
       .addRow(
         g.row('Bucket Replicate Runs')
