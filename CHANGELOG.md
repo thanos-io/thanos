@@ -11,6 +11,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.16.0](https://github.com/thanos-io/thanos/releases) - Release in progress
+
 ### Fixed
 
 - [#3234](https://github.com/thanos-io/thanos/pull/3234) UI: Fix assets not loading when `--web.prefix-header` is used.
