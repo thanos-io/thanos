@@ -47,7 +47,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     'max-time': withDefault(NumberParam, gridMaxTime),
   });
 
-  const setViewTime = (times: [number, number]): void => {
+  const setViewTime = (times: number[]): void => {
     setQuery({
       'min-time': times[0],
       'max-time': times[1],
