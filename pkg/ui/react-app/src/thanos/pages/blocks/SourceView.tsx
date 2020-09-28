@@ -12,7 +12,7 @@ export const BlocksRow: FC<{
   return (
     <div className={styles.row}>
       {blocks.map<JSX.Element>(b => (
-        <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
+        <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.meta.ulid} />
       ))}
     </div>
   );

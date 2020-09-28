@@ -1,4 +1,4 @@
-export interface Block {
+export interface Meta {
   compaction: {
     level: number;
     sources: string[];
@@ -24,6 +24,14 @@ export interface Block {
   };
   ulid: string;
   version: number;
+}
+
+export interface Block {
+  meta: Meta;
+  size: {
+    indexSize: number;
+    chunkSize: number;
+  }
 }
 
 export interface LabelSet {

@@ -391,8 +391,12 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		if err != nil {
 			return err
 		}
-		fetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			bucketUI.Set(blocks, err)
+		fetcher.UpdateOnChange(func(metas []metadata.Meta, err error) {
+			bucketUI.Set(metas, err)
+			blocks, blkerr := getBlockMetaAndSize(metas, bkt)
+			if blkerr != nil {
+				api.SetGlobal(blocks, blkerr)
+			}
 			api.SetGlobal(blocks, err)
 		})
 
@@ -429,6 +433,24 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		return nil
 	})
+}
+
+func getBlockMetaAndSize(metas []metadata.Meta, bkt objstore.Bucket) ([]v1.BlockInfo, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	blocks := make([]v1.BlockInfo, len(metas))
+
+	for i, meta := range metas {
+		size, err := block.GetSize(ctx, bkt, meta.ULID)
+		if err != nil {
+			return []v1.BlockInfo{}, err
+		}
+
+		blocks[i] = v1.BlockInfo{Meta: meta, Size: size}
+	}
+
+	return blocks, nil
 }
 
 // Provide a list of resolution, can not use Enum directly, since string does not implement int64 function.

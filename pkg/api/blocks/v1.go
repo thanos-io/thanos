@@ -11,6 +11,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/thanos/pkg/api"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -24,11 +25,16 @@ type BlocksAPI struct {
 	loadedBlocksInfo *BlocksInfo
 }
 
+type BlockInfo struct {
+	Meta metadata.Meta `json:"meta"`
+	Size block.Size    `json:"size"`
+}
+
 type BlocksInfo struct {
-	Label       string          `json:"label"`
-	Blocks      []metadata.Meta `json:"blocks"`
-	RefreshedAt time.Time       `json:"refreshedAt"`
-	Err         error           `json:"err"`
+	Label       string      `json:"label"`
+	Blocks      []BlockInfo `json:"blocks"`
+	RefreshedAt time.Time   `json:"refreshedAt"`
+	Err         error       `json:"err"`
 }
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
@@ -37,11 +43,11 @@ func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *
 		baseAPI: api.NewBaseAPI(logger, flagsMap),
 		logger:  logger,
 		globalBlocksInfo: &BlocksInfo{
-			Blocks: []metadata.Meta{},
+			Blocks: []BlockInfo{},
 			Label:  label,
 		},
 		loadedBlocksInfo: &BlocksInfo{
-			Blocks: []metadata.Meta{},
+			Blocks: []BlockInfo{},
 			Label:  label,
 		},
 	}
@@ -63,7 +69,7 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 	return bapi.globalBlocksInfo, nil, nil
 }
 
-func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
+func (b *BlocksInfo) set(blocks []BlockInfo, err error) {
 	if err != nil {
 		// Last view is maintained.
 		b.RefreshedAt = time.Now()
@@ -77,11 +83,11 @@ func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {
 }
 
 // SetGlobal updates the global blocks' metadata in the API.
-func (bapi *BlocksAPI) SetGlobal(blocks []metadata.Meta, err error) {
+func (bapi *BlocksAPI) SetGlobal(blocks []BlockInfo, err error) {
 	bapi.globalBlocksInfo.set(blocks, err)
 }
 
 // SetLoaded updates the local blocks' metadata in the API.
-func (bapi *BlocksAPI) SetLoaded(blocks []metadata.Meta, err error) {
+func (bapi *BlocksAPI) SetLoaded(blocks []BlockInfo, err error) {
 	bapi.loadedBlocksInfo.set(blocks, err)
 }

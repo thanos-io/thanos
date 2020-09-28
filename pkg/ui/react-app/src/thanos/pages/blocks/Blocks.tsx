@@ -27,14 +27,14 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const blockPools = useMemo(() => sortBlocks(blocks, label), [blocks, label]);
   const [gridMinTime, gridMaxTime] = useMemo(() => {
     if (!err && blocks.length > 0) {
-      let gridMinTime = blocks[0].minTime;
-      let gridMaxTime = blocks[0].maxTime;
-      blocks.forEach(block => {
-        if (block.minTime < gridMinTime) {
-          gridMinTime = block.minTime;
+      let gridMinTime = blocks[0].meta.minTime;
+      let gridMaxTime = blocks[0].meta.maxTime;
+      blocks.forEach(({ meta }) => {
+        if (meta.minTime < gridMinTime) {
+          gridMinTime = meta.minTime;
         }
-        if (block.maxTime > gridMaxTime) {
-          gridMaxTime = block.maxTime;
+        if (meta.maxTime > gridMaxTime) {
+          gridMaxTime = meta.maxTime;
         }
       });
       return [gridMinTime, gridMaxTime];

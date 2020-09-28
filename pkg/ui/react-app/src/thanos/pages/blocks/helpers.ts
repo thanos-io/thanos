@@ -12,12 +12,12 @@ const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
   const pool: BlocksPool = {};
 
   blocks
-    .sort((a, b) => a.thanos.downsample.resolution - b.thanos.downsample.resolution)
+    .sort((a, b) => a.meta.thanos.downsample.resolution - b.meta.thanos.downsample.resolution)
     .forEach(b => {
-      if (!pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`])
-        pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`] = [];
+      if (!pool[`${b.meta.compaction.level}-${b.meta.thanos.downsample.resolution}`])
+        pool[`${b.meta.compaction.level}-${b.meta.thanos.downsample.resolution}`] = [];
 
-      pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`].push(b);
+      pool[`${b.meta.compaction.level}-${b.meta.thanos.downsample.resolution}`].push(b);
     });
 
   return pool;
@@ -28,18 +28,18 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
   const pool: BlocksPool = {};
 
   blocks
-    .sort((a, b) => a.compaction.level - b.compaction.level)
+    .sort((a, b) => a.meta.compaction.level - b.meta.compaction.level)
     .forEach(b => {
-      const title = (function(): string {
-        const key = label !== '' && b.thanos.labels[label];
+      const title = (function (): string {
+        const key = label !== '' && b.meta.thanos.labels[label];
 
         if (key) {
           return key;
         } else {
-          let t = titles[stringify(b.thanos.labels)];
+          let t = titles[stringify(b.meta.thanos.labels)];
           if (t === undefined) {
             t = String(Object.keys(titles).length + 1);
-            titles[stringify(b.thanos.labels)] = t;
+            titles[stringify(b.meta.thanos.labels)] = t;
           }
           return t;
         }
@@ -53,4 +53,21 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
     sortedPool[k] = sortBlocksInRows(pool[k]);
   });
   return sortedPool;
+};
+export const formatSize = (size: number): string => {
+  if (size < 1024) {
+    return `${size.toFixed(2)} B`;
+  }
+  size = size / 1024;
+  if (size < 1024) {
+    return `${size.toFixed(2)} KiB`;
+  }
+
+  size = size / 1024;
+  if (size < 1024) {
+    return `${size.toFixed(2)} MiB`;
+  }
+
+  size = size / 1024;
+  return `${size.toFixed(2)} GiB`;
 };

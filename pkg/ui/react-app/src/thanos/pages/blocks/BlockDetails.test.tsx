@@ -22,61 +22,61 @@ describe('BlockDetails', () => {
   it('renders a heading with block ulid', () => {
     const title = blockDetails.find({ 'data-testid': 'ulid' });
     expect(title).toHaveLength(1);
-    expect(title.text()).toEqual(sampleBlock.ulid);
+    expect(title.text()).toEqual(sampleBlock.meta.ulid);
   });
 
   it('renders start time of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'start-time' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(formatTime(sampleBlock.minTime));
+    expect(div.find('span').text()).toBe(formatTime(sampleBlock.meta.minTime));
   });
 
   it('renders end time of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'end-time' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(formatTime(sampleBlock.maxTime));
+    expect(div.find('span').text()).toBe(formatTime(sampleBlock.meta.maxTime));
   });
 
   it('renders duration of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'duration' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(moment.duration(sampleBlock.maxTime - sampleBlock.minTime, 'ms').humanize());
+    expect(div.find('span').text()).toBe(moment.duration(sampleBlock.meta.maxTime - sampleBlock.meta.minTime, 'ms').humanize());
   });
 
   it('renders total number of series in the block', () => {
     const div = blockDetails.find({ 'data-testid': 'series' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.stats.numSeries.toString());
+    expect(div.find('span').text()).toBe(sampleBlock.meta.stats.numSeries.toString());
   });
 
   it('renders total number of samples in the block', () => {
     const div = blockDetails.find({ 'data-testid': 'samples' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.stats.numSamples.toString());
+    expect(div.find('span').text()).toBe(sampleBlock.meta.stats.numSamples.toString());
   });
 
   it('renders total number of chunks in the block', () => {
     const div = blockDetails.find({ 'data-testid': 'chunks' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.stats.numChunks.toString());
+    expect(div.find('span').text()).toBe(sampleBlock.meta.stats.numChunks.toString());
   });
 
   it('renders downsampling resolution of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'resolution' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.thanos.downsample.resolution.toString());
+    expect(div.find('span').text()).toBe(sampleBlock.meta.thanos.downsample.resolution.toString());
   });
 
   it('renders compaction level of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'level' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.compaction.level.toString());
+    expect(div.find('span').text()).toBe(sampleBlock.meta.compaction.level.toString());
   });
 
   it('renders source of the block', () => {
     const div = blockDetails.find({ 'data-testid': 'source' });
     expect(div).toHaveLength(1);
-    expect(div.find('span').text()).toBe(sampleBlock.thanos.source);
+    expect(div.find('span').text()).toBe(sampleBlock.meta.thanos.source);
   });
 
   it('renders a list of the labels', () => {
@@ -86,6 +86,6 @@ describe('BlockDetails', () => {
     expect(list).toHaveLength(1);
 
     const labels = list.find('li');
-    expect(labels).toHaveLength(Object.keys(sampleBlock.thanos.labels).length);
+    expect(labels).toHaveLength(Object.keys(sampleBlock.meta.thanos.labels).length);
   });
 });

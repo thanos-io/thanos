@@ -377,8 +377,12 @@ func runStore(
 		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
-		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			compactorView.Set(blocks, err)
+		metaFetcher.UpdateOnChange(func(metas []metadata.Meta, err error) {
+			compactorView.Set(metas, err)
+			blocks, blkerr := getBlockMetaAndSize(metas, bkt)
+			if blkerr != nil {
+				api.SetLoaded([]blocksAPI.BlockInfo{}, blkerr)
+			}
 			api.SetLoaded(blocks, err)
 		})
 		srv.Handle("/", r)

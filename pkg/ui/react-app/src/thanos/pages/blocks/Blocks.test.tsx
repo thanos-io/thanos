@@ -28,7 +28,7 @@ describe('Blocks', () => {
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
 
       const sourceViews = blocks.find(SourceView);
-      expect(sourceViews).toHaveLength(8);
+      expect(sourceViews).toHaveLength(2);
     });
 
     it('fetched data with different view', async () => {
@@ -39,7 +39,7 @@ describe('Blocks', () => {
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=loaded', { cache: 'no-store', credentials: 'same-origin' });
 
       const sourceViews = blocks.find(SourceView);
-      expect(sourceViews).toHaveLength(8);
+      expect(sourceViews).toHaveLength(2);
     });
   });
 
