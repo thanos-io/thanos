@@ -222,12 +222,12 @@ Flags:
                                  Log queries that are slower than the specified
                                  duration. Set to 0 to disable. Set to < 0 to
                                  enable on all queries.
-      --query-frontend.org-id-header="org-id-header-name"
+      --query-frontend.org-id-header=<http-header-name> ...
                               Request header names used to set the org id field
-                              in the slow query log (repeated flag).  If
-                              multiple headers match the request, the first
-                              matching arg specified will take precedence.  If
-                              no headers match 'anonymous' will be used
+                              in the slow query log (repeated flag). If multiple
+                              headers match the request, the first matching arg
+                              specified will take precedence. If no headers
+                              match 'anonymous' will be used.
       --log.request.decision=LogFinishCall
                                  Request Logging for logging the start and end
                                  of requests. LogFinishCall is enabled by
