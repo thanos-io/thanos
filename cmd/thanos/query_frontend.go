@@ -36,7 +36,7 @@ import (
 type queryFrontendConfig struct {
 	http httpConfig
 	queryfrontend.Config
-	orgIdHeaders         []string
+	orgIdHeaders []string
 }
 
 func registerQueryFrontend(app *extkingpin.App) {
