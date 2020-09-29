@@ -37,7 +37,7 @@ type ipLookupResolver interface {
 }
 
 type dnsSD struct {
-	resolver ipLookupResolver
+	resolver     ipLookupResolver
 	resolverType ResolverType
 }
 

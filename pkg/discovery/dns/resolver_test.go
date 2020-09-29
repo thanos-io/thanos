@@ -184,7 +184,7 @@ func TestDnsSD_Resolve(t *testing.T) {
 
 func testDnsSd(t *testing.T, tt DNSSDTest) {
 	ctx := context.TODO()
-	dnsSD := dnsSD{tt.resolver}
+	dnsSD := dnsSD{tt.resolver, MockdnsResolverType}
 
 	result, err := dnsSD.Resolve(ctx, tt.addr, tt.qtype)
 	if tt.expectedErr != nil {

@@ -37,6 +37,7 @@ type ResolverType string
 const (
 	GolangResolverType   ResolverType = "golang"
 	MiekgdnsResolverType ResolverType = "miekgdns"
+	MockdnsResolverType  ResolverType = "mockdns"
 )
 
 func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
