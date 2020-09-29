@@ -3,6 +3,7 @@
 title: Multi-Tenancy
 type: docs
 menu: operating
+slug: /multi-tenancy.md
 ---
 
 # Multi-Tenancy

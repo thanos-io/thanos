@@ -2,6 +2,7 @@
 title: Sharding
 type: docs
 menu: thanos
+slug: /sharding.md
 ---
 
 # Background

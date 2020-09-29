@@ -2,6 +2,7 @@
 title: Design
 type: docs
 menu: thanos
+slug: /design.md
 ---
 
 # Design

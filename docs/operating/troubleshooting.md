@@ -2,6 +2,7 @@
 title: Troubleshooting
 type: docs
 menu: operating
+slug: /troubleshooting.md
 ---
 
 # Troubleshooting; Common cases

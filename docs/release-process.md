@@ -2,6 +2,7 @@
 title: Release Process
 type: docs
 menu: thanos
+slug: /release-process.md
 ---
 
 # Release Process

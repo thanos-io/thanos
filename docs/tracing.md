@@ -2,6 +2,7 @@
 title: Tracing
 type: docs
 menu: thanos
+slug: /tracing.md
 ---
 
 # Tracing

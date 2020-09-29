@@ -3,6 +3,7 @@
 title: Governance
 type: docs
 menu: thanos
+slug: /governance.md
 ---
 
 # Governance
