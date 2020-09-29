@@ -2,6 +2,7 @@
 title: Integrations
 type: docs
 menu: thanos
+aliases: [/integrations.md/]
 ---
 
 # Integrations

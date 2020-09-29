@@ -2,6 +2,7 @@
 title: Service Discovery
 type: docs
 menu: thanos
+aliases: [/service-discovery.md/]
 ---
 
 # Service Discovery

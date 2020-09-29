@@ -2,6 +2,7 @@
 title: Object Storage
 type: docs
 menu: thanos
+aliases: [/storage.md/]
 ---
 
 # Object Storage

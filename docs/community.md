@@ -2,6 +2,7 @@
 title: Community
 type: docs
 menu: contributing
+aliases: [/community.md/]
 ---
 
 # General

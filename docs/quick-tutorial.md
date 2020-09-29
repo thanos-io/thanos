@@ -3,6 +3,7 @@ title: Quick Tutorial
 type: docs
 menu: thanos
 weight: 1
+aliases: [/quick-tutorial.md/]
 ---
 
 # Quick Tutorial

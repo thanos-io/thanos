@@ -2,6 +2,7 @@
 title: Design
 type: docs
 menu: thanos
+aliases: [/design.md/]
 ---
 
 # Design
