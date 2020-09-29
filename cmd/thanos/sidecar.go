@@ -400,7 +400,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
-	sc.objStore = *regCommonObjStoreFlags(cmd, "", false)
+	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
