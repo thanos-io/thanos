@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package main
+package extkingpin
 
 import (
 	"fmt"
@@ -9,18 +9,18 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func modelDuration(flags *kingpin.FlagClause) *model.Duration {
+func ModelDuration(flags *kingpin.FlagClause) *model.Duration {
 	value := new(model.Duration)
 	flags.SetValue(value)
 
 	return value
 }
 
-func regGRPCFlags(cmd extkingpin.FlagClause) (
+// RegisterGRPCFlags registers flags commonly used to configure gRPC servers with.
+func RegisterGRPCFlags(cmd FlagClause) (
 	grpcBindAddr *string,
 	grpcGracePeriod *model.Duration,
 	grpcTLSSrvCert *string,
@@ -29,7 +29,7 @@ func regGRPCFlags(cmd extkingpin.FlagClause) (
 ) {
 	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
-	grpcGracePeriod = modelDuration(cmd.Flag("grpc-grace-period", "Time to wait after an interrupt received for GRPC Server.").Default("2m")) // by default it's the same as query.timeout.
+	grpcGracePeriod = ModelDuration(cmd.Flag("grpc-grace-period", "Time to wait after an interrupt received for GRPC Server.").Default("2m")) // by default it's the same as query.timeout.
 
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
@@ -42,21 +42,24 @@ func regGRPCFlags(cmd extkingpin.FlagClause) (
 		grpcTLSSrvClientCA
 }
 
-func regHTTPFlags(cmd extkingpin.FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {
+// RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.
+func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {
 	httpBindAddr = cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
-	httpGracePeriod = modelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
+	httpGracePeriod = ModelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
 
 	return httpBindAddr, httpGracePeriod
 }
 
-func regCommonObjStoreFlags(cmd extkingpin.FlagClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
+// RegisterCommonObjStoreFlags register flags to specify object storage configuration.
+func RegisterCommonObjStoreFlags(cmd FlagClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
 	help := fmt.Sprintf("YAML file that contains object store%s configuration. See format details: https://thanos.io/tip/thanos/storage.md/#configuration ", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
 
 	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("objstore%s.config", suffix), help, required)
 }
 
-func regCommonTracingFlags(app extkingpin.FlagClause) *extflag.PathOrContent {
+// RegisterCommonTracingFlags registers flags to pass a tracing configuration to be used with OpenTracing.
+func RegisterCommonTracingFlags(app FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
 		"tracing.config",
@@ -65,7 +68,8 @@ func regCommonTracingFlags(app extkingpin.FlagClause) *extflag.PathOrContent {
 	)
 }
 
-func regSelectorRelabelFlags(cmd extkingpin.FlagClause) *extflag.PathOrContent {
+// RegisterSelectorRelabelFlags register flags to specify relabeling configuration selecting blocks to process.
+func RegisterSelectorRelabelFlags(cmd FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		cmd,
 		"selector.relabel-config",
