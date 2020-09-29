@@ -79,6 +79,12 @@ describe('BlockDetails', () => {
     expect(div.find('span').text()).toBe(sampleBlock.thanos.source);
   });
 
+  it('renders the download button', () => {
+    const div = blockDetails.find({ 'data-testid': 'download' });
+    expect(div).toHaveLength(1);
+    expect(div.find('a').text()).toBe('download data');
+  });
+
   it('renders a list of the labels', () => {
     const div = blockDetails.find({ 'data-testid': 'labels' });
     const list = div.find('ul');

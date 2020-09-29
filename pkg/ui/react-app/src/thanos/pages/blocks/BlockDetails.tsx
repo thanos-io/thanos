@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
+import { download } from './helpers';
 
 export interface BlockDetailsProps {
   block: Block | undefined;
@@ -53,7 +54,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           </div>
           <hr />
           <div data-testid="labels">
-            <b>Labels:</b>
+            <b>Labs:</b>
             <ul>
               {Object.entries(block.thanos.labels).map(([key, value]) => (
                 <li key={key}>
@@ -62,6 +63,11 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
                 </li>
               ))}
             </ul>
+          </div>
+          <div data-testid="download">
+            <a className={styles.downloadBtn} href={download(block)} download="meta.json">
+              download data
+            </a>
           </div>
         </>
       )}
