@@ -38,11 +38,12 @@ type ipLookupResolver interface {
 
 type dnsSD struct {
 	resolver ipLookupResolver
+	resolverType ResolverType
 }
 
 // NewResolver creates a resolver with given underlying resolver.
-func NewResolver(resolver ipLookupResolver) Resolver {
-	return &dnsSD{resolver: resolver}
+func NewResolver(resolver ipLookupResolver, resolverType ResolverType) Resolver {
+	return &dnsSD{resolver: resolver, resolverType: resolverType}
 }
 
 func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string, error) {
@@ -71,7 +72,10 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 		}
 		ips, err := s.resolver.LookupIPAddr(ctx, host)
 		if err != nil {
-			return nil, errors.Wrapf(err, "lookup IP addresses %q", host)
+			dnsErr, ok := err.(*net.DNSError)
+			if !(s.resolverType == GolangResolverType && ok && dnsErr.IsNotFound) {
+				return nil, errors.Wrapf(err, "lookup IP addresses %q", host)
+			}
 		}
 		for _, ip := range ips {
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
