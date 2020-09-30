@@ -28,6 +28,7 @@ var reactRouterPaths = []string{
 	"/blocks",
 	"/config",
 	"/flags",
+	"/configfiles",
 	"/global",
 	"/graph",
 	"/loaded",
