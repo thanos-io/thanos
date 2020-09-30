@@ -37,7 +37,6 @@ type ResolverType string
 const (
 	GolangResolverType   ResolverType = "golang"
 	MiekgdnsResolverType ResolverType = "miekgdns"
-	MockdnsResolverType  ResolverType = "mockdns"
 )
 
 func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
@@ -56,9 +55,9 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 
 // NewProvider returns a new empty provider with a given resolver type.
 // If empty resolver type is net.DefaultResolver.
-func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
+func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType, returnErrOnNotFound bool) *Provider {
 	p := &Provider{
-		resolver: NewResolver(resolverType.ToResolver(logger), resolverType),
+		resolver: NewResolver(resolverType.ToResolver(logger), logger, returnErrOnNotFound),
 		resolved: make(map[string][]string),
 		logger:   logger,
 		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{

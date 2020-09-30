@@ -219,6 +219,7 @@ func newMemcachedClient(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_memcached_", reg),
 		dns.GolangResolverType,
+		true,
 	)
 
 	c := &memcachedClient{

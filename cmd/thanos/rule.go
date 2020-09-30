@@ -338,6 +338,7 @@ func runRule(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
+		true,
 	)
 	var queryClients []*http_util.Client
 	for _, cfg := range queryCfg {
@@ -401,6 +402,7 @@ func runRule(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
 		dns.ResolverType(dnsSDResolver),
+		false,
 	)
 	var alertmgrs []*alert.Alertmanager
 	for _, cfg := range alertingCfg.Alertmanagers {

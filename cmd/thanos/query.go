@@ -265,6 +265,7 @@ func runQuery(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
+		true,
 	)
 
 	for _, store := range strictStores {
@@ -277,6 +278,7 @@ func runQuery(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_rule_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
+		true,
 	)
 
 	var (

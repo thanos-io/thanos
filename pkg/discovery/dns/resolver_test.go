@@ -9,6 +9,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-kit/kit/log"
+
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -184,7 +186,7 @@ func TestDnsSD_Resolve(t *testing.T) {
 
 func testDnsSd(t *testing.T, tt DNSSDTest) {
 	ctx := context.TODO()
-	dnsSD := dnsSD{tt.resolver, MockdnsResolverType}
+	dnsSD := dnsSD{tt.resolver, log.NewNopLogger(), false}
 
 	result, err := dnsSD.Resolve(ctx, tt.addr, tt.qtype)
 	if tt.expectedErr != nil {
