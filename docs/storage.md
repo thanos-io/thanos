@@ -96,6 +96,7 @@ config:
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
+prefix: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -244,6 +245,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 #### Using GOOGLE_APPLICATION_CREDENTIALS
@@ -328,6 +330,7 @@ config:
   container: ""
   endpoint: ""
   max_retries: 0
+prefix: ""
 ```
 
 ### OpenStack Swift
@@ -356,6 +359,7 @@ config:
   project_domain_name: ""
   region_name: ""
   container_name: ""
+prefix: ""
 ```
 
 ### Tencent COS
@@ -373,6 +377,7 @@ config:
   app_id: ""
   secret_key: ""
   secret_id: ""
+prefix: ""
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
@@ -390,6 +395,7 @@ config:
   bucket: ""
   access_key_id: ""
   access_key_secret: ""
+prefix: ""
 ```
 
 Use --objstore.config-file to reference to this configuration file.
@@ -409,6 +415,7 @@ This is mainly useful for testing and demos.
 type: FILESYSTEM
 config:
   directory: ""
+prefix: ""
 ```
 
 ## Prefix
