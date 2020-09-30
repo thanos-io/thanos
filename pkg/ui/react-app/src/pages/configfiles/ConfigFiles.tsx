@@ -22,7 +22,7 @@ const ConfigFilesContent: FC<ConfigFileProps> = ({ data = {} }) => {
           {Object.keys(data).map(key => (
             <tr key={key}>
               <th>{key}</th>
-              <td>{data[key]}</td>
+              <td className="config-file-cell">{data[key]}</td>
             </tr>
           ))}
         </tbody>
