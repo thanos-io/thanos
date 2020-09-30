@@ -184,7 +184,7 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	inmemory := objstore.NewInMemBucket()
 
 	lbls := []labels.Label{{Name: "test", Value: "test"}}
-	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, false)
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, false, false)
 
 	id := ulid.MustNew(1, nil)
 	blockDir := path.Join(dir, id.String())
