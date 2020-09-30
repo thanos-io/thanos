@@ -1330,12 +1330,20 @@ func newBucketBlock(
 	})
 	sort.Sort(b.relabelLabels)
 
-	// Get object handles for all chunk files.
-	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
-		b.chunkObjs = append(b.chunkObjs, n)
-		return nil
-	}); err != nil {
-		return nil, errors.Wrap(err, "list chunk files")
+	if len(meta.Thanos.SegmentFiles) > 0 {
+		b.chunkObjs = make([]string, 0, len(meta.Thanos.SegmentFiles))
+
+		for _, sf := range meta.Thanos.SegmentFiles {
+			b.chunkObjs = append(b.chunkObjs, path.Join(meta.ULID.String(), block.ChunksDirname, sf))
+		}
+	} else {
+		// Get object handles for all chunk files.
+		if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
+			b.chunkObjs = append(b.chunkObjs, n)
+			return nil
+		}); err != nil {
+			return nil, errors.Wrap(err, "list chunk files")
+		}
 	}
 	return b, nil
 }
@@ -1367,6 +1375,11 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
+
+	if seq < 0 || seq >= len(b.chunkObjs) {
+		return nil, errors.Errorf("unknown segment file for index %d", seq)
+	}
+
 	buf := bytes.NewBuffer(*c)
 
 	r, err := b.bkt.GetRange(ctx, b.chunkObjs[seq], off, length)
