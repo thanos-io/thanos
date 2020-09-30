@@ -41,8 +41,8 @@ export const PanelListContent: FC<PanelListProps> = ({
 
   useEffect(() => {
     // Convert stores data to a unified stores array.
-    let storeList: Store[] = [];
-    for (let type in stores) {
+    const storeList: Store[] = [];
+    for (const type in stores) {
       storeList.push(...stores[type]);
     }
     setStoreData(storeList);

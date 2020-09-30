@@ -7,3 +7,4 @@ configure({ adapter: new Adapter() });
 const customGlobal: GlobalWithFetchMock = global as GlobalWithFetchMock;
 customGlobal.fetch = require('jest-fetch-mock');
 customGlobal.fetchMock = customGlobal.fetch;
+// URL.createObjectURL = (val: string): string => {};
