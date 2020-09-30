@@ -441,7 +441,7 @@ type prefixedBucket struct {
 	prefix string
 }
 
-//NewPrefixedBucket returns a new prefixedBucket
+//NewPrefixedBucket returns a new prefixedBucket.
 func NewPrefixedBucket(bkt Bucket, prefix string) *prefixedBucket {
 	return &prefixedBucket{
 		bkt:    bkt,
