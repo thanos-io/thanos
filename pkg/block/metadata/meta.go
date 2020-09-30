@@ -61,6 +61,7 @@ type Thanos struct {
 	Source SourceType `json:"source"`
 
 	// List of segment files (in chunks directory), in sorted order.
+	// Not used if nil/empty.
 	SegmentFiles []string `json:"segment_files,omitempty"`
 }
 
