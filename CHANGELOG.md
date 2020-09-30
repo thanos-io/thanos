@@ -912,3 +912,4 @@ Initial version to have a stable reference before [gossip protocol removal](/doc
 - Bucket commands.
 - Downsampling support for UI.
 - Grafana dashboards for Thanos components.
+- [#3259](https://github.com/thanos-io/thanos/pull/3259) Thanos BlockViewer.
