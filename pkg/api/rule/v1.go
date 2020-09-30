@@ -40,7 +40,7 @@ func NewRuleAPI(
 	flagsMap map[string]string,
 ) *RuleAPI {
 	return &RuleAPI{
-		baseAPI:    api.NewBaseAPI(logger, flagsMap),
+		baseAPI:    api.NewBaseAPI(logger, flagsMap, make(map[string]string)),
 		logger:     logger,
 		ruleGroups: ruleGroups,
 		alerts:     activeAlerts,

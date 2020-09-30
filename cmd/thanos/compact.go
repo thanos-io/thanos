@@ -218,7 +218,7 @@ func runCompact(
 		"/loaded",
 		component,
 	)
-	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap, make(map[string]string))
 	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
