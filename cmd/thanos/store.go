@@ -374,7 +374,7 @@ func runStore(
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
-		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
+		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap, make(map[string]string))
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
