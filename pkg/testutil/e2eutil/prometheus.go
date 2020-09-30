@@ -32,7 +32,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -476,10 +475,9 @@ func createBlock(
 
 	blockDir := filepath.Join(dir, id.String())
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
-		Labels:       extLset.Map(),
-		Downsample:   metadata.ThanosDownsample{Resolution: resolution},
-		Source:       metadata.TestSource,
-		SegmentFiles: block.GetSegmentFiles(blockDir),
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: resolution},
+		Source:     metadata.TestSource,
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}
