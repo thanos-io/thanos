@@ -13,6 +13,9 @@ import { ThemeContext, themeName, themeSetting } from './contexts/ThemeContext';
 import { Theme, themeLocalStorageKey } from './Theme';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
+import './App.css';
+import ConfigFiles from './pages/configfiles/ConfigFiles';
+
 const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
   rule: '/alerts',
@@ -52,6 +55,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
               <PanelList path="/graph" pathPrefix={pathPrefix} />
               <Alerts path="/alerts" pathPrefix={pathPrefix} />
               <Config path="/config" pathPrefix={pathPrefix} />
+              <ConfigFiles path='/configfiles' pathPrefix={pathPrefix} />
               <Flags path="/flags" pathPrefix={pathPrefix} />
               <Rules path="/rules" pathPrefix={pathPrefix} />
               <ServiceDiscovery path="/service-discovery" pathPrefix={pathPrefix} />
