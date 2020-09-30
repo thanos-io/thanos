@@ -40,9 +40,10 @@ func NewRuleAPI(
 	activeAlerts alertsRetriever,
 	disableCORS bool,
 	flagsMap map[string]string,
+	configFilesMap map[string]string,
 ) *RuleAPI {
 	return &RuleAPI{
-		baseAPI:     api.NewBaseAPI(logger, disableCORS, flagsMap),
+		baseAPI:     api.NewBaseAPI(logger, disableCORS, flagsMap, configFilesMap),
 		logger:      logger,
 		ruleGroups:  ruleGroups,
 		alerts:      activeAlerts,

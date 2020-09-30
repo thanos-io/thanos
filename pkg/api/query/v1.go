@@ -128,7 +128,7 @@ func NewQueryAPI(
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
-		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
+		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap, make(map[string]string)),
 		logger:          logger,
 		queryEngine:     qe,
 		queryableCreate: c,
