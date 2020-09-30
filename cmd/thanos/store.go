@@ -271,6 +271,14 @@ func runStore(
 		return errors.Wrap(err, "get content of index cache configuration")
 	}
 
+	// Add config files content to config files map.
+	configFilesMap := map[string]string{
+		"Object Store Configuration":     string(confContentYaml),
+		"Index Cache Configuration":      string(indexCacheContentYaml),
+		"Caching Bucket Configuration":   string(cachingBucketConfigYaml),
+		"Selector Relabel Configuration": string(relabelContentYaml),
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -412,7 +420,7 @@ func runStore(
 
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-		api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap)
+		api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, configFilesMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
