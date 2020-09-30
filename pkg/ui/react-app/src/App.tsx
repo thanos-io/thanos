@@ -41,7 +41,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
             <Alerts path="/alerts" pathPrefix={pathPrefix} />
             <Config path="/config" pathPrefix={pathPrefix} />
             <Flags path="/flags" pathPrefix={pathPrefix} />
-            <ConfigFiles path='/configfiles' pathPrefix={pathPrefix} />
+            <ConfigFiles path="/configfiles" pathPrefix={pathPrefix} />
             <Rules path="/rules" pathPrefix={pathPrefix} />
             <ServiceDiscovery path="/service-discovery" pathPrefix={pathPrefix} />
             <Status path="/status" pathPrefix={pathPrefix} />
