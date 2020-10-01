@@ -215,7 +215,7 @@ func newMemcachedClient(
 	config MemcachedClientConfig,
 	reg prometheus.Registerer,
 ) (*memcachedClient, error) {
-	dnsProvider := dns.NewProvider(
+	dnsProvider := dns.NewProviderWithReturnOnErrorIfNotFound(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_memcached_", reg),
 		dns.GolangResolverType,

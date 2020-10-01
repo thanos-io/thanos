@@ -334,7 +334,7 @@ func runRule(
 		}
 	}
 
-	queryProvider := dns.NewProvider(
+	queryProvider := dns.NewProviderWithReturnOnErrorIfNotFound(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
@@ -398,7 +398,7 @@ func runRule(
 		level.Warn(logger).Log("msg", "no alertmanager configured")
 	}
 
-	amProvider := dns.NewProvider(
+	amProvider := dns.NewProviderWithReturnOnErrorIfNotFound(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
 		dns.ResolverType(dnsSDResolver),

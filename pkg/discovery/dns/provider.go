@@ -53,9 +53,36 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 	return r
 }
 
+// Deprecated. Use NewProviderWithReturnOnErrorIfNotFound instead.
+//
 // NewProvider returns a new empty provider with a given resolver type.
 // If empty resolver type is net.DefaultResolver.
-func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType, returnErrOnNotFound bool) *Provider {
+// TODO(OGKevin): Refactor code to use new method and eventually rename NewProviderWithReturnOnErrorIfNotFound back to NewProvider.
+func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
+	p := &Provider{
+		resolver: NewResolver(resolverType.ToResolver(logger), logger, true),
+		resolved: make(map[string][]string),
+		logger:   logger,
+		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
+			Name: "dns_provider_results",
+			Help: "The number of resolved endpoints for each configured address",
+		}, []string{"addr"}),
+		resolverLookupsCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "dns_lookups_total",
+			Help: "The number of DNS lookups resolutions attempts",
+		}),
+		resolverFailuresCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "dns_failures_total",
+			Help: "The number of DNS lookup failures",
+		}),
+	}
+
+	return p
+}
+
+// NewProviderWithReturnOnErrorIfNotFound returns a new empty provider with a given resolver type.
+// If empty resolver type is net.DefaultResolver.
+func NewProviderWithReturnOnErrorIfNotFound(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType, returnErrOnNotFound bool) *Provider {
 	p := &Provider{
 		resolver: NewResolver(resolverType.ToResolver(logger), logger, returnErrOnNotFound),
 		resolved: make(map[string][]string),

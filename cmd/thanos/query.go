@@ -261,7 +261,7 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	dnsStoreProvider := dns.NewProvider(
+	dnsStoreProvider := dns.NewProviderWithReturnOnErrorIfNotFound(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
@@ -274,7 +274,7 @@ func runQuery(
 		}
 	}
 
-	dnsRuleProvider := dns.NewProvider(
+	dnsRuleProvider := dns.NewProviderWithReturnOnErrorIfNotFound(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_rule_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
