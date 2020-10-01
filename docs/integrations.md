@@ -23,7 +23,7 @@ Below you can find some public integrations with other systems through StoreAPI:
 Geras exposes the Thanos Storage  API, thus other Thanos components can query OpenTSDB via Geras, providing a unified
 query interface over OpenTSDB and Prometheus.
 
-Although OpenTSDB is able to aggregte the data, it's not supported by Geras at the moment.
+Although OpenTSDB is able to aggregate the data, it's not supported by Geras at the moment.
 
 ### StoreAPI as Prometheus Remote Read
 
