@@ -60,8 +60,7 @@ type Thanos struct {
 	// Source is a real upload source of the block.
 	Source SourceType `json:"source"`
 
-	// List of segment files (in chunks directory), in sorted order.
-	// Not used if nil/empty.
+	// List of segment files (in chunks directory), in sorted order. Optional.
 	SegmentFiles []string `json:"segment_files,omitempty"`
 }
 

@@ -223,7 +223,7 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	return id, err == nil
 }
 
-// Returns list of segment files for given block. Paths are relative to the chunks directory.
+// GetSegmentFiles returns list of segment files for given block. Paths are relative to the chunks directory.
 // In case of errors, nil is returned.
 func GetSegmentFiles(blockDir string) []string {
 	chunksDir := filepath.Join(blockDir, ChunksDirname)

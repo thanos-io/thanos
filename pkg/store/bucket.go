@@ -1330,20 +1330,22 @@ func newBucketBlock(
 	})
 	sort.Sort(b.relabelLabels)
 
+	// Get object handles for all chunk files (segment files) from meta.json, if available.
 	if len(meta.Thanos.SegmentFiles) > 0 {
 		b.chunkObjs = make([]string, 0, len(meta.Thanos.SegmentFiles))
 
 		for _, sf := range meta.Thanos.SegmentFiles {
 			b.chunkObjs = append(b.chunkObjs, path.Join(meta.ULID.String(), block.ChunksDirname, sf))
 		}
-	} else {
-		// Get object handles for all chunk files.
-		if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
-			b.chunkObjs = append(b.chunkObjs, n)
-			return nil
-		}); err != nil {
-			return nil, errors.Wrap(err, "list chunk files")
-		}
+		return b, nil
+	}
+
+	// Get object handles for all chunk files from storage.
+	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
+		b.chunkObjs = append(b.chunkObjs, n)
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "list chunk files")
 	}
 	return b, nil
 }
