@@ -6,6 +6,8 @@ package query
 import (
 	"math"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -189,7 +191,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
-		return newBoundedSeriesIterator(sit, s.mint, s.maxt)
+		return newBoundedSeriesIterator(newInterpolatedSeriesIterator(sit), s.mint, s.maxt)
 	}
 
 	if len(s.aggrs) != 2 {
@@ -212,7 +214,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 	default:
 		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 	}
-	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
+	return newBoundedSeriesIterator(newInterpolatedSeriesIterator(sit), s.mint, s.maxt)
 }
 
 func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
@@ -346,6 +348,93 @@ func (it *chunkSeriesIterator) Next() bool {
 
 func (it *chunkSeriesIterator) Err() error {
 	return it.chunks[it.i].Err()
+}
+
+// interpolatedSeriesIterator wraps series iterator, injecting spoofed
+// values every interval milliseconds, but no more than spoofLimit
+// consecutive times.
+// This is due to #2608, we have to fool PromQL into believing
+// our data is recorded with relatively small intervals (say, 1 minute).
+// iterator must guarantee to contain at least one data point.
+type interpolatedSeriesIterator struct {
+	iterator   chunkenc.Iterator
+	interval   int64
+	spoofLimit int
+
+	// Real, interpolated and next real timestamp.
+	tReal int64
+	t     int64
+	tNext int64
+
+	v      float64
+	nSpoof int
+
+	once sync.Once
+}
+
+var (
+	// TODO: these values should be dynamic depending on existing block resolution.
+	spoofInterval    = time.Minute.Milliseconds()
+	spoofConsecutive = 59
+)
+
+func newInterpolatedSeriesIterator(iterator chunkenc.Iterator) chunkenc.Iterator {
+	return &interpolatedSeriesIterator{iterator: iterator, interval: spoofInterval, spoofLimit: spoofConsecutive}
+}
+
+func (it *interpolatedSeriesIterator) Seek(t int64) (ok bool) {
+	for {
+		if it.t >= t {
+			return true
+		}
+		if !it.Next() {
+			return false
+		}
+	}
+}
+
+func (it *interpolatedSeriesIterator) At() (t int64, v float64) {
+	return it.t, it.v
+}
+
+func (it *interpolatedSeriesIterator) Next() bool {
+	it.once.Do(func() {
+		// It is caller's responsibility to ensure iterator
+		// has at least one data point.
+		_ = it.iterator.Next()
+		it.t, it.v = it.iterator.At()
+		it.tReal = it.t
+
+		if ok := it.iterator.Next(); ok {
+			it.tNext, _ = it.iterator.At()
+		}
+	})
+	if it.nSpoof == 0 {
+		it.nSpoof++
+		return true
+	}
+	if it.tNext == 0 {
+		return false
+	}
+	it.t += it.interval
+	if it.t < it.tNext && it.nSpoof <= it.spoofLimit {
+		it.nSpoof++
+		return true
+	}
+	it.t, it.v = it.iterator.At()
+	it.tReal = it.t
+	it.nSpoof = 0
+	ok := it.iterator.Next()
+	if ok {
+		it.tNext, _ = it.iterator.At()
+	} else {
+		it.tNext = 0
+	}
+	return true
+}
+
+func (it *interpolatedSeriesIterator) Err() error {
+	return it.iterator.Err()
 }
 
 type dedupSeriesSet struct {
