@@ -4,18 +4,24 @@
 package shipper
 
 import (
+	"context"
 	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"testing"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -166,4 +172,47 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 
 	_, err = shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
+}
+
+func TestShipperAddsSegmentFiles(t *testing.T) {
+	dir, err := ioutil.TempDir("", "shipper-test")
+	testutil.Ok(t, err)
+	defer func() {
+		testutil.Ok(t, os.RemoveAll(dir))
+	}()
+
+	inmemory := objstore.NewInMemBucket()
+
+	lbls := []labels.Label{{Name: "test", Value: "test"}}
+	s := New(nil, nil, dir, inmemory, func() labels.Labels { return lbls }, metadata.TestSource, false, false)
+
+	id := ulid.MustNew(1, nil)
+	blockDir := path.Join(dir, id.String())
+	chunksDir := path.Join(blockDir, block.ChunksDirname)
+	testutil.Ok(t, os.MkdirAll(chunksDir, os.ModePerm))
+
+	// Prepare minimal "block" for shipper (meta.json, index, one segment file).
+	testutil.Ok(t, metadata.Write(log.NewNopLogger(), path.Join(dir, id.String()), &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id,
+			MaxTime: 2000,
+			MinTime: 1000,
+			Version: 1,
+			Stats: tsdb.BlockStats{
+				NumSamples: 1000, // Not really, but shipper needs nonzero value.
+			},
+		},
+	}))
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(blockDir, "index"), []byte("index file"), 0666))
+	segmentFile := "00001"
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(chunksDir, segmentFile), []byte("hello world"), 0666))
+
+	uploaded, err := s.Sync(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, uploaded)
+
+	meta, err := block.DownloadMeta(context.Background(), log.NewNopLogger(), inmemory, id)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, []string{segmentFile}, meta.Thanos.SegmentFiles)
 }

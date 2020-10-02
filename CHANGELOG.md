@@ -11,9 +11,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-### Fixed
 
-## [#3257](https://github.com/thanos-io/thanos/pull/3257) Ruler: Prevent Ruler from crashing when using default DNS to lookup hosts that results in "No such hosts" errors.
+### Fixed
+- [#3261](https://github.com/thanos-io/thanos/pull/3261) Thanos Store: Use segment files specified in meta.json file, if present. If not present, Store does the LIST operation as before.
+- [#3257](https://github.com/thanos-io/thanos/pull/3257) Ruler: Prevent Ruler from crashing when using default DNS to lookup hosts that results in "No such hosts" errors.
 
 ## [v0.16.0](https://github.com/thanos-io/thanos/releases) - Release in progress
 

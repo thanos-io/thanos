@@ -27,6 +27,7 @@ staticDir: "static"
 permalinks:
   # Generate those for every file.
   tip: "/:sections/:filename.md"
+  v0.16: "/:sections/:filename.md"
 
 params:
   SlackInvite: "https://slack.cncf.io"
