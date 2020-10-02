@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -94,6 +95,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	reg.MustRegister(met)
 
 	grpc_health.RegisterHealthServer(s, probe.HealthServer())
+	reflection.Register(s)
 
 	return &Server{
 		logger: logger,
