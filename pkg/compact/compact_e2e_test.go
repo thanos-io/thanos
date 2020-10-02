@@ -368,6 +368,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			// Check thanos meta.
 			testutil.Assert(t, labels.Equal(extLabels, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
+			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
 		}
 		{
 			meta, ok := others[defaultGroupKey(124, extLabels2)]
@@ -383,6 +384,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			// Check thanos meta.
 			testutil.Assert(t, labels.Equal(extLabels2, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
+			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
 		}
 	})
 }
