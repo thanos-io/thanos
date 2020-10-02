@@ -2,7 +2,6 @@
 title: Sharding
 type: docs
 menu: thanos
-aliases: [/sharding.md/]
 ---
 
 # Background

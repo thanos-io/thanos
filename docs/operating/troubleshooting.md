@@ -2,7 +2,6 @@
 title: Troubleshooting
 type: docs
 menu: operating
-aliases: [/troubleshooting.md/]
 ---
 
 # Troubleshooting; Common cases

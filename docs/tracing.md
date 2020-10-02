@@ -2,7 +2,6 @@
 title: Tracing
 type: docs
 menu: thanos
-aliases: [/tracing.md/]
 ---
 
 # Tracing

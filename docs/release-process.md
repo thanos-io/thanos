@@ -2,7 +2,6 @@
 title: Release Process
 type: docs
 menu: thanos
-aliases: [/release-process.md/]
 ---
 
 # Release Process

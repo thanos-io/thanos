@@ -2,7 +2,6 @@
 title: Binary index-header
 type: docs
 menu: operating
-aliases: [/binary-index-header.md/]
 ---
 
 # Binary index-header

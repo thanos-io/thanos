@@ -3,7 +3,6 @@
 title: Multi-Tenancy
 type: docs
 menu: operating
-aliases: [/multi-tenancy.md/]
 ---
 
 # Multi-Tenancy
