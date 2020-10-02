@@ -78,11 +78,10 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 		}
 		ips, err := s.resolver.LookupIPAddr(ctx, host)
 		if err != nil {
-			dnsErr, ok := err.(*net.DNSError)
 			// https://github.com/thanos-io/thanos/issues/3186
-			// Default DNS resolver can make thanos components crash if DSN resolutions results in EAI_NONAME.
+			// Default DNS resolver can make thanos components crash if DNS resolutions results in EAI_NONAME.
 			// the flag returnErrOnNotFound can be used to prevent such crash.
-			if !(!s.returnErrOnNotFound && ok && dnsErr.IsNotFound) {
+			if dnsErr, ok := err.(*net.DNSError); !ok || !dnsErr.IsNotFound || s.returnErrOnNotFound {
 				return nil, errors.Wrapf(err, "lookup IP addresses %q", host)
 			}
 			level.Error(s.logger).Log("msg", "failed to lookup IP addresses", "host", host, "err", err)

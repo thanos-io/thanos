@@ -59,25 +59,7 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 // If empty resolver type is net.DefaultResolver.
 // TODO(OGKevin): Refactor code to use new method and eventually rename NewProviderWithReturnOnErrorIfNotFound back to NewProvider.
 func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
-	p := &Provider{
-		resolver: NewResolver(resolverType.ToResolver(logger), logger, true),
-		resolved: make(map[string][]string),
-		logger:   logger,
-		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
-			Name: "dns_provider_results",
-			Help: "The number of resolved endpoints for each configured address",
-		}, []string{"addr"}),
-		resolverLookupsCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "dns_lookups_total",
-			Help: "The number of DNS lookups resolutions attempts",
-		}),
-		resolverFailuresCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "dns_failures_total",
-			Help: "The number of DNS lookup failures",
-		}),
-	}
-
-	return p
+	return NewProviderWithReturnOnErrorIfNotFound(logger, reg, resolverType, true)
 }
 
 // NewProviderWithReturnOnErrorIfNotFound returns a new empty provider with a given resolver type.
