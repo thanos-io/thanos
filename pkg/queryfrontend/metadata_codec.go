@@ -47,7 +47,9 @@ func (c metadataCodec) MergeResponse(responses ...queryrange.Response) (queryran
 
 		for _, res := range responses {
 			for _, value := range res.(*ThanosLabelsResponse).Data {
-				set[value] = struct{}{}
+				if _, ok := set[value]; !ok {
+					set[value] = struct{}{}
+				}
 			}
 		}
 		labels := make([]string, 0, len(set))
@@ -69,7 +71,8 @@ func (c metadataCodec) MergeResponse(responses ...queryrange.Response) (queryran
 
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
-			Data:   metadataResponses[0].Data,
+			// TODO: fix this
+			Data: metadataResponses[0].Data,
 		}, nil
 	default:
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid response format")
