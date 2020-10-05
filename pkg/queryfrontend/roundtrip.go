@@ -44,24 +44,14 @@ func NewTripperware(
 	queryRangeCodec := NewThanosQueryRangeCodec(config.PartialResponseStrategy)
 	metadataCodec := NewThanosMetadataCodec(config.PartialResponseStrategy)
 
-	//if config.SplitQueriesByInterval != 0 {
-	//	// TODO(yeya24): make interval dynamic in next pr.
-	//	queryIntervalFn := func(_ queryrange.Request) time.Duration {
-	//		return config.SplitQueriesByInterval
-	//	}
-	//	splitIntervalMiddleware = queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg)
-	//}
-	//
-	//if config.MaxRetries > 0 {
-	//	retryMiddleware = queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg))
-	//}
-
-	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, queryRangeCodec, prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
+	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, queryRangeCodec,
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataTripperware, err := newMetadataTripperware(config, limits, metadataCodec, prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "metadata"}, reg), logger)
+	metadataTripperware, err := newMetadataTripperware(config, limits, metadataCodec,
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "metadata"}, reg), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +196,6 @@ func newMetadataTripperware(
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
-	// metadata query don't have the limits middleware.
 	metadataMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
 

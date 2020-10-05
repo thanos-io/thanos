@@ -460,7 +460,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
-	if len(r.Form["match[]"]) == 0 {
+	if len(r.Form[MatcherParam]) == 0 {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
@@ -470,7 +470,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	}
 
 	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form["match[]"] {
+	for _, s := range r.Form[MatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
