@@ -381,8 +381,8 @@ Flags:
                                  times of the slowest scrape interval. If unset
                                  it will use the promql default of 5m.
       --query.dynamic-lookback-delta
-                                 Allow for larger lookback duration for
-                                 queries based on resolution.
+                                 Allow for larger lookback duration for queries
+                                 based on resolution.
       --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.

@@ -321,7 +321,7 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-		subqueryIntervalFunc = func(rangeMillis int64) int64 {
+		subqueryIntervalFunc = func(int64) int64 {
 			return defaultEvaluationInterval.Milliseconds()
 		}
 		totalEngines int
