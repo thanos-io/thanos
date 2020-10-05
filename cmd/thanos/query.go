@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("20").Int()
 
 	lookbackDelta := cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").Duration()
+	dynamicLookbackDelta := cmd.Flag("query.dynamic-lookback-delta", "Allow for larger lookback duration for queries based on resolution.").Default("false").Bool()
 
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
@@ -181,6 +183,7 @@ func registerQuery(app *extkingpin.App) {
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
 			*lookbackDelta,
+			*dynamicLookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
@@ -230,6 +233,7 @@ func runQuery(
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
 	lookbackDelta time.Duration,
+	dynamicLookbackDelta bool,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
@@ -317,20 +321,30 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-		engine = promql.NewEngine(
-			promql.EngineOpts{
-				Logger: logger,
-				Reg:    reg,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
-				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
-					return defaultEvaluationInterval.Milliseconds()
+		subqueryIntervalFunc = func(rangeMillis int64) int64 {
+			return defaultEvaluationInterval.Milliseconds()
+		}
+		totalEngines int
+		newEngine    = func(ld time.Duration) *promql.Engine {
+			var r prometheus.Registerer = reg
+			if dynamicLookbackDelta {
+				r = extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(totalEngines)}, reg)
+				totalEngines++
+			}
+			return promql.NewEngine(
+				promql.EngineOpts{
+					Logger: logger,
+					Reg:    r,
+					// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+					MaxSamples:               math.MaxInt32,
+					Timeout:                  queryTimeout,
+					NoStepSubqueryIntervalFn: subqueryIntervalFunc,
+					LookbackDelta:            ld,
 				},
-				LookbackDelta: lookbackDelta,
-			},
-		)
+			)
+		}
 	)
+
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -440,7 +454,7 @@ func runQuery(
 		api := v1.NewQueryAPI(
 			logger,
 			stores,
-			engine,
+			engineFunc(newEngine, lookbackDelta, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -535,4 +549,37 @@ func firstDuplicate(ss []string) string {
 	}
 
 	return ""
+}
+
+func engineFunc(newEngine func(time.Duration) *promql.Engine, lookbackDelta time.Duration, dynamicLookbackDelta bool) func(int64) *promql.Engine {
+	deltas := []int64{0}
+	if dynamicLookbackDelta {
+		deltas = []int64{0, 5 * time.Minute.Milliseconds(), 1 * time.Hour.Milliseconds()}
+	}
+	var (
+		engines       = make([]*promql.Engine, len(deltas))
+		defaultEngine = newEngine(lookbackDelta)
+		ld            = lookbackDelta.Milliseconds()
+	)
+	engines[0] = defaultEngine
+	for i, d := range deltas[1:] {
+		if ld < d {
+			// Convert delta from milliseconds to time.Duration (nanoseconds).
+			engines[i+1] = newEngine(time.Duration(d * 1_000_000))
+		} else {
+			engines[i+1] = defaultEngine
+		}
+	}
+	return func(maxSourceResolutionMillis int64) *promql.Engine {
+		for i := len(deltas) - 1; i >= 1; i-- {
+			left := deltas[i-1]
+			if deltas[i-1] < ld {
+				left = ld
+			}
+			if left < maxSourceResolutionMillis {
+				return engines[i]
+			}
+		}
+		return engines[0]
+	}
 }

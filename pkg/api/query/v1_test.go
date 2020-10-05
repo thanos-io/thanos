@@ -167,17 +167,20 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	qe := promql.NewEngine(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	})
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
 		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
-		queryEngine: promql.NewEngine(promql.EngineOpts{
-			Logger:     nil,
-			Reg:        nil,
-			MaxSamples: 10000,
-			Timeout:    timeout,
-		}),
+		queryEngine: func(int64) *promql.Engine {
+			return qe
+		},
 		gate: gate.New(nil, 4),
 	}
 
@@ -657,17 +660,20 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
+	qe := promql.NewEngine(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 10000,
+		Timeout:    timeout,
+	})
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
 		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
-		queryEngine: promql.NewEngine(promql.EngineOpts{
-			Logger:     nil,
-			Reg:        nil,
-			MaxSamples: 10000,
-			Timeout:    timeout,
-		}),
+		queryEngine: func(int64) *promql.Engine {
+			return qe
+		},
 		gate: gate.New(nil, 4),
 	}
 	apiWithLabelLookback := &QueryAPI{
@@ -675,12 +681,9 @@ func TestMetadataEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
-		queryEngine: promql.NewEngine(promql.EngineOpts{
-			Logger:     nil,
-			Reg:        nil,
-			MaxSamples: 10000,
-			Timeout:    timeout,
-		}),
+		queryEngine: func(int64) *promql.Engine {
+			return qe
+		},
 		gate:                     gate.New(nil, 4),
 		defaultMetadataTimeRange: apiLookbackDelta,
 	}
