@@ -41,28 +41,27 @@ func NewTripperware(
 		return nil, errors.Wrap(err, "initialize limits")
 	}
 
-	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
-	codec := NewThanosCodec(config.PartialResponseStrategy)
+	queryRangeCodec := NewThanosQueryRangeCodec(config.PartialResponseStrategy)
+	metadataCodec := NewThanosMetadataCodec(config.PartialResponseStrategy)
 
-	var retryMiddleware, splitIntervalMiddleware queryrange.Middleware
-	if config.SplitQueriesByInterval != 0 {
-		// TODO(yeya24): make interval dynamic in next pr.
-		queryIntervalFn := func(_ queryrange.Request) time.Duration {
-			return config.SplitQueriesByInterval
-		}
-		splitIntervalMiddleware = queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg)
-	}
+	//if config.SplitQueriesByInterval != 0 {
+	//	// TODO(yeya24): make interval dynamic in next pr.
+	//	queryIntervalFn := func(_ queryrange.Request) time.Duration {
+	//		return config.SplitQueriesByInterval
+	//	}
+	//	splitIntervalMiddleware = queryrange.SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg)
+	//}
+	//
+	//if config.MaxRetries > 0 {
+	//	retryMiddleware = queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg))
+	//}
 
-	if config.MaxRetries > 0 {
-		retryMiddleware = queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg))
-	}
-
-	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, codec, instrumentMetrics, splitIntervalMiddleware, retryMiddleware, reg, logger)
+	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, queryRangeCodec, prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataTripperware, err := newMetadataTripperware(config, limits, codec, instrumentMetrics, splitIntervalMiddleware, retryMiddleware, reg, logger)
+	metadataTripperware, err := newMetadataTripperware(config, limits, metadataCodec, prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "metadata"}, reg), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +121,8 @@ func getOperation(r *http.Request) string {
 			return rangeQueryOp
 		case strings.HasSuffix(r.URL.Path, "/api/v1/labels"):
 			return labelNamesOp
+		case strings.HasSuffix(r.URL.Path, "/values") && strings.Contains(r.URL.Path, "/api/v1/label"):
+			return labelValuesOp
 		case strings.HasSuffix(r.URL.Path, "/api/v1/series"):
 			return seriesOp
 		}
@@ -133,14 +134,12 @@ func getOperation(r *http.Request) string {
 func newQueryRangeTripperware(
 	config Config,
 	limits queryrange.Limits,
-	codec *codec,
-	instrumentMetrics *queryrange.InstrumentMiddlewareMetrics,
-	splitIntervalMiddleware queryrange.Middleware,
-	retryMiddleware queryrange.Middleware,
+	codec *queryRangeCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
+	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	// step align middleware.
 	queryRangeMiddleware = append(
@@ -149,13 +148,17 @@ func newQueryRangeTripperware(
 		queryrange.StepAlignMiddleware,
 	)
 
-	//if config.SplitQueriesByInterval != 0 {
-	//	queryRangeMiddleware = append(
-	//		queryRangeMiddleware,
-	//		queryrange.InstrumentMiddleware("split_by_interval", instrumentMetrics),
-	//		splitIntervalMiddleware,
-	//	)
-	//}
+	queryIntervalFn := func(_ queryrange.Request) time.Duration {
+		return config.SplitQueriesByInterval
+	}
+
+	if config.SplitQueriesByInterval != 0 {
+		queryRangeMiddleware = append(
+			queryRangeMiddleware,
+			queryrange.InstrumentMiddleware("split_by_interval", instrumentMetrics),
+			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
+		)
+	}
 
 	if config.CortexResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
@@ -180,11 +183,11 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	if retryMiddleware != nil {
+	if config.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", instrumentMetrics),
-			retryMiddleware,
+			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 
@@ -199,50 +202,29 @@ func newQueryRangeTripperware(
 func newMetadataTripperware(
 	config Config,
 	limits queryrange.Limits,
-	codec *codec,
-	instrumentMetrics *queryrange.InstrumentMiddlewareMetrics,
-	splitIntervalMiddleware queryrange.Middleware,
-	retryMiddleware queryrange.Middleware,
+	codec *metadataCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
 	// metadata query don't have the limits middleware.
-	metadataMiddleware := []queryrange.Middleware{}
+	metadataMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
+	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
+
+	queryIntervalFn := func(_ queryrange.Request) time.Duration {
+		return config.SplitQueriesByInterval
+	}
 
 	metadataMiddleware = append(
 		metadataMiddleware,
 		queryrange.InstrumentMiddleware("split_interval", instrumentMetrics),
-		splitIntervalMiddleware,
+		SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 	)
 
-	//if config.CortexResultsCacheConfig != nil {
-	//	queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
-	//		logger,
-	//		*config.CortexResultsCacheConfig,
-	//		newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
-	//		limits,
-	//		codec,
-	//		queryrange.PrometheusResponseExtractor{},
-	//		nil,
-	//		shouldCache,
-	//		reg,
-	//	)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "create results cache middleware")
-	//	}
-	//
-	//	metadataMiddleware = append(
-	//		metadataMiddleware,
-	//		queryrange.InstrumentMiddleware("results_cache", instrumentMetrics),
-	//		queryCacheMiddleware,
-	//	)
-	//}
-
-	if retryMiddleware != nil {
+	if config.MaxRetries > 0 {
 		metadataMiddleware = append(
 			metadataMiddleware,
 			queryrange.InstrumentMiddleware("retry", instrumentMetrics),
-			retryMiddleware,
+			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 	return func(next http.RoundTripper) http.RoundTripper {

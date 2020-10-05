@@ -55,6 +55,7 @@ const (
 	PartialResponseParam     = "partial_response"
 	MaxSourceResolutionParam = "max_source_resolution"
 	ReplicaLabelsParam       = "replicaLabels[]"
+	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
 )
 
