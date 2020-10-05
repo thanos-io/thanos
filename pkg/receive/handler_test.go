@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +24,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -920,4 +924,52 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func BenchmarkHandlerReceiveHTTP(b *testing.B) {
+	b.ReportAllocs()
+
+	benchmarkHandlerReceiveHTTP_Deserialize(testutil.NewTB(b))
+}
+
+func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
+	biggy := &prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Samples: []prompb.Sample{
+					{
+						Value:     1,
+						Timestamp: 1,
+					},
+					{
+						Value:     2,
+						Timestamp: 2,
+					},
+					{
+						Value:     3,
+						Timestamp: 3,
+					},
+				},
+			},
+		},
+	}
+
+	lbl := &strings.Builder{}
+	lbl.Grow(1024 * 1024 * 1024 * 1) // 1 MB. We can't have bigger due to snappy encoding limits.
+	for i := 0; i < lbl.Cap()/10; i++ {
+		_, _ = lbl.WriteString("abcdefghij")
+	}
+	biggy.Timeseries[0].Labels = []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
+	body, err := proto.Marshal(biggy)
+	testutil.Ok(b, err)
+
+	compressed := snappy.Encode(nil, body)
+
+	b.ResetTimer()
+	for i := 0; i < b.N(); i++ {
+		handlers, _ := newHandlerHashring([]*fakeAppendable{{appender: newFakeAppender(nil, nil, nil, nil)}}, 1)
+		r := httptest.NewRecorder()
+		handlers[0].receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+		testutil.Equals(b, http.StatusOK, r.Code)
+	}
 }

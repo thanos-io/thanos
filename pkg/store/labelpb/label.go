@@ -17,8 +17,28 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
+// noescape hides a pointer from escape analysis.  noescape is
+// the identity function but escape analysis doesn't think the
+// output depends on the input. noescape is inlined and currently
+// compiles down to zero instructions.
+// USE CAREFULLY!
+// This was copied from the runtime; see issues 23382 and 7921.
+//go:nosplit
+//go:nocheckptr
+func noescape(p unsafe.Pointer) unsafe.Pointer {
+	x := uintptr(p)
+	return unsafe.Pointer(x ^ 0)
+}
+
+//// This hack works around a failing of Go's escape analysis
+//// that was causing b to escape and be heap allocated.
+//// See issue 23382.
+//// TODO: once issue 7921 is fixed, this should be reverted to
+//// just "b.addr = b".
+//b.addr = (*Builder)(noescape(unsafe.Pointer(b)))
+
 func noAllocString(buf []byte) string {
-	return *((*string)(unsafe.Pointer(&buf)))
+	return *(*string)(unsafe.Pointer(&buf))
 }
 
 // LabelsFromPromLabels converts Prometheus labels to slice of storepb.Label in type unsafe manner.
@@ -42,7 +62,7 @@ func LabelSetsToPromLabelSets(lss ...LabelSet) []labels.Labels {
 	return res
 }
 
-// Label is a labels.Label that can be marshaled to/from protobuf reusing the same
+// Label is a labels.Label that can be unmarshalled from protobuf reusing the same
 // memory address for string bytes.
 type Label labels.Label
 
@@ -83,6 +103,8 @@ func (m *Label) MarshalToSizedBuffer(data []byte) (int, error) {
 	return len(data) - i, nil
 }
 
+// Unmarshal unmarshalls gRPC protobuf into Label struct. Label string is directly using bytes passed in `data`.
+// NOTE: This exists in internal Google protobuf implementation, but not in open source one: https://news.ycombinator.com/item?id=23588882
 func (m *Label) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
