@@ -88,11 +88,6 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			level.Warn(logger).Log("message", "MaxItemSize is not yet supported by the memcached client")
 		}
 
-		if config.Expiration == 0 {
-			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
-			config.Expiration = 24 * time.Hour
-		}
-
 		return &cortexcache.Config{
 			Memcache: cortexcache.MemcachedConfig{
 				Expiration:  config.Expiration,

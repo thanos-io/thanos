@@ -106,7 +106,10 @@ func runQueryFrontend(
 		if err != nil {
 			return errors.Wrap(err, "initializing the query frontend config")
 		}
-
+		if cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration == 0 {
+			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
+			cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration = 24 * time.Hour
+		}
 		cfg.CortexResultsCacheConfig = &queryrange.ResultsCacheConfig{
 			Compression: cfg.CacheCompression,
 			CacheConfig: *cacheConfig,
