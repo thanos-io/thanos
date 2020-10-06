@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package queryfrontend
 
 import (
@@ -251,7 +254,7 @@ func (c metadataCodec) parseLabelsRequest(r *http.Request, op string) (queryrang
 
 	result.Path = r.URL.Path
 
-	if op == seriesOp {
+	if op == labelValuesOp {
 		parts := strings.Split(r.URL.Path, "/")
 		if len(parts) > 1 {
 			result.Label = parts[len(parts)-2]
