@@ -175,7 +175,7 @@ func (c metadataCodec) DecodeResponse(ctx context.Context, r *http.Response, req
 
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Error(err)
+		log.Error(err) //nolint:errcheck
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
 	}
 

@@ -51,11 +51,8 @@ func NewTripperware(
 		return nil, err
 	}
 
-	metadataTripperware, err := newMetadataTripperware(config, limits, metadataCodec,
+	metadataTripperware := newMetadataTripperware(config, limits, metadataCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "metadata"}, reg), logger)
-	if err != nil {
-		return nil, err
-	}
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), metadataTripperware(next), reg)
@@ -116,7 +113,7 @@ func getOperation(r *http.Request) string {
 			return seriesOp
 		default:
 			matched, err := regexp.MatchString("/api/v1/label/.+/values$", r.URL.Path)
-			if err == nil && matched == true {
+			if err == nil && matched {
 				return labelValuesOp
 			}
 		}
@@ -199,7 +196,7 @@ func newMetadataTripperware(
 	codec *metadataCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
-) (frontend.Tripperware, error) {
+) frontend.Tripperware {
 	metadataMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
@@ -225,7 +222,7 @@ func newMetadataTripperware(
 		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
-	}, nil
+	}
 }
 
 // Don't go to response cache if StoreMatchers are set.
