@@ -484,10 +484,11 @@ func (pbkt *prefixedBucket) Close() error {
 	return pbkt.bkt.Close()
 }
 
-func (pbkt *prefixedBucket) Iter(ctx context.Context, dir string, f func(string) error) (err error) {
+func (pbkt *prefixedBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
 	pdir := filepath.Join(pbkt.prefix, dir)
-	err = pbkt.bkt.Iter(ctx, pdir, f)
-	return
+	return pbkt.bkt.Iter(ctx, pdir, func(s string) error {
+		return f(strings.Join(strings.Split(s, pbkt.prefix)[1:], "/"))
+	})
 }
 
 func (pbkt *prefixedBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
