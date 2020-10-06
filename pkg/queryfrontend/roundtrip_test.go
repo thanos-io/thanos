@@ -69,7 +69,7 @@ func (r *fakeRoundTripper) RoundTrip(h *http.Request) (*http.Response, error) {
 
 // TestRoundTripRetryMiddleware tests the retry middleware.
 func TestRoundTripRetryMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+	testRequest := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
@@ -86,19 +86,8 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		{
 			name:       "not query range, retry won't be triggered 1.",
 			maxRetries: 100,
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
-			expected: 1,
-		},
-		{
-			name:       "not query range, retry won't be triggered 2.",
-			maxRetries: 100,
-			req: &ThanosRequest{
-				Path:  "/api/v1/labels",
 				Start: 0,
 				End:   2 * hour,
 				Step:  10 * seconds,
@@ -144,7 +133,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := NewThanosCodec(true).EncodeRequest(ctx, tc.req)
+			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -158,14 +147,14 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 
 // TestRoundTripSplitIntervalMiddleware tests the split interval middleware.
 func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+	testRequest := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
 
-	codec := NewThanosCodec(true)
+	codec := NewThanosQueryRangeCodec(true)
 
 	for _, tc := range []struct {
 		name          string
@@ -175,19 +164,8 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	}{
 		{
 			name: "non query range request won't be split 1",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
-			splitInterval: time.Hour,
-			expected:      1,
-		},
-		{
-			name: "non query range request won't be split 2",
-			req: &ThanosRequest{
-				Path:  "/api/v1/labels",
 				Start: 0,
 				End:   2 * hour,
 				Step:  10 * seconds,
@@ -245,13 +223,12 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 
 			testutil.Equals(t, tc.expected, *res)
 		})
-
 	}
 }
 
 // TestRoundTripCacheMiddleware tests the cache middleware.
 func TestRoundTripCacheMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+	testRequest := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -260,7 +237,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Non query range request, won't be cached.
-	testRequestInstant := &ThanosRequest{
+	testRequestInstant := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query",
 		Start: 0,
 		End:   2 * hour,
@@ -269,7 +246,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// but still in the same downsampling level, so it will be cached in this case.
-	testRequestSameLevelDownsampling := &ThanosRequest{
+	testRequestSameLevelDownsampling := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -279,7 +256,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// and downsampling level so it won't be cached in this case.
-	testRequestHigherLevelDownsampling := &ThanosRequest{
+	testRequestHigherLevelDownsampling := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -288,7 +265,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Same query params as testRequest, but with storeMatchers
-	testRequestWithStoreMatchers := &ThanosRequest{
+	testRequestWithStoreMatchers := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -339,7 +316,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 5},
 		{
 			name: "request but will be partitioned",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
 				Start: timestamp.FromTime(now.Add(-time.Hour)),
 				End:   timestamp.FromTime(now.Add(time.Hour)),
@@ -349,7 +326,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		},
 		{
 			name: "same query as the previous one",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
 				Start: timestamp.FromTime(now.Add(-time.Hour)),
 				End:   timestamp.FromTime(now.Add(time.Hour)),
@@ -362,7 +339,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := NewThanosCodec(true).EncodeRequest(ctx, tc.req)
+			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)

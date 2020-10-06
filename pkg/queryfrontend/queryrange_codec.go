@@ -52,7 +52,7 @@ func NewThanosQueryRangeCodec(partialResponse bool) *queryRangeCodec {
 
 func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
 	var (
-		result ThanosRequest
+		result ThanosQueryRangeRequest
 		err    error
 	)
 	result.Start, err = cortexutil.ParseTime(r.FormValue("start"))
@@ -127,7 +127,7 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request) (quer
 }
 
 func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
-	thanosReq, ok := r.(*ThanosRequest)
+	thanosReq, ok := r.(*ThanosQueryRangeRequest)
 	if !ok {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid request format")
 	}

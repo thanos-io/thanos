@@ -142,6 +142,12 @@ Flags:
                               Enable partial response for queries if no
                               partial_response param is specified.
                               --no-query-range.partial-response for disabling.
+      --query-range.metadata.default-time-range=0s
+                              The default metadata time range duration for
+                              retrieving labels through Labels and Series API
+                              when the range parameters are not specified. The
+                              zero value means range covers the time since the
+                              beginning.
       --query-range.response-cache-config-file=<file-path>
                               Path to YAML file that contains response cache
                               configuration.

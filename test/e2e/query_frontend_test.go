@@ -146,7 +146,7 @@ func TestQueryFrontend(t *testing.T) {
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
 		// Query is only 2h so it won't be split.
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(1),
@@ -185,7 +185,7 @@ func TestQueryFrontend(t *testing.T) {
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
 		// Query is only 2h so it won't be split.
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_frontend_split_queries_total"))
 
 		// One more request is needed in order to satisfy the req range.
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -224,7 +224,7 @@ func TestQueryFrontend(t *testing.T) {
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
 
 		// Query is 25h so it will be split to 2 requests.
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "cortex_frontend_split_queries_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(4), "thanos_frontend_split_queries_total"))
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(4),
@@ -322,7 +322,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits"))
 
 	// Query is only 2h so it won't be split.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
 
 	// Run the same range query again, the result can be retrieved from cache directly.
 	rangeQuery(
@@ -347,7 +347,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	// Query is only 2h so it won't be split.
 	// If it was split this would be increase by more then 1.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_frontend_split_queries_total"))
 
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits"))

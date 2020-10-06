@@ -5,6 +5,7 @@ package queryfrontend
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -42,7 +43,7 @@ func NewTripperware(
 	}
 
 	queryRangeCodec := NewThanosQueryRangeCodec(config.PartialResponseStrategy)
-	metadataCodec := NewThanosMetadataCodec(config.PartialResponseStrategy)
+	metadataCodec := NewThanosMetadataCodec(config.PartialResponseStrategy, config.DefaultMetadataTimeRange)
 
 	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, queryRangeCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
@@ -111,10 +112,13 @@ func getOperation(r *http.Request) string {
 			return rangeQueryOp
 		case strings.HasSuffix(r.URL.Path, "/api/v1/labels"):
 			return labelNamesOp
-		case strings.HasSuffix(r.URL.Path, "/values") && strings.Contains(r.URL.Path, "/api/v1/label"):
-			return labelValuesOp
 		case strings.HasSuffix(r.URL.Path, "/api/v1/series"):
 			return seriesOp
+		default:
+			matched, err := regexp.MatchString("/api/v1/label/.+/values$", r.URL.Path)
+			if err == nil && matched == true {
+				return labelValuesOp
+			}
 		}
 	}
 
@@ -129,12 +133,12 @@ func newQueryRangeTripperware(
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
-	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
+	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	// step align middleware.
 	queryRangeMiddleware = append(
 		queryRangeMiddleware,
-		queryrange.InstrumentMiddleware("step_align", instrumentMetrics),
+		queryrange.InstrumentMiddleware("step_align", m),
 		queryrange.StepAlignMiddleware,
 	)
 
@@ -145,7 +149,7 @@ func newQueryRangeTripperware(
 	if config.SplitQueriesByInterval != 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("split_by_interval", instrumentMetrics),
+			queryrange.InstrumentMiddleware("split_by_interval", m),
 			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 		)
 	}
@@ -168,7 +172,7 @@ func newQueryRangeTripperware(
 
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("results_cache", instrumentMetrics),
+			queryrange.InstrumentMiddleware("results_cache", m),
 			queryCacheMiddleware,
 		)
 	}
@@ -176,7 +180,7 @@ func newQueryRangeTripperware(
 	if config.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("retry", instrumentMetrics),
+			queryrange.InstrumentMiddleware("retry", m),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
@@ -197,7 +201,7 @@ func newMetadataTripperware(
 	logger log.Logger,
 ) (frontend.Tripperware, error) {
 	metadataMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
-	instrumentMetrics := queryrange.NewInstrumentMiddlewareMetrics(reg)
+	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	queryIntervalFn := func(_ queryrange.Request) time.Duration {
 		return config.SplitQueriesByInterval
@@ -205,14 +209,14 @@ func newMetadataTripperware(
 
 	metadataMiddleware = append(
 		metadataMiddleware,
-		queryrange.InstrumentMiddleware("split_interval", instrumentMetrics),
+		queryrange.InstrumentMiddleware("split_interval", m),
 		SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 	)
 
 	if config.MaxRetries > 0 {
 		metadataMiddleware = append(
 			metadataMiddleware,
-			queryrange.InstrumentMiddleware("retry", instrumentMetrics),
+			queryrange.InstrumentMiddleware("retry", m),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
@@ -226,8 +230,8 @@ func newMetadataTripperware(
 
 // Don't go to response cache if StoreMatchers are set.
 func shouldCache(r queryrange.Request) bool {
-	if thanosReq, ok := r.(*ThanosRequest); ok {
-		if len(thanosReq.StoreMatchers) > 0 {
+	if thanosReq, ok := r.(ThanosRequest); ok {
+		if len(thanosReq.GetStoreMatchers()) > 0 {
 			return false
 		}
 	}

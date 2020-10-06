@@ -8,31 +8,43 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/prometheus/prometheus/pkg/timestamp"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/cortexproject/cortex/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/pkg/errors"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 )
 
+var (
+	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
+	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
+)
+
 type metadataCodec struct {
 	queryrange.Codec
-	partialResponse bool
+	partialResponse          bool
+	defaultMetadataTimeRange time.Duration
 }
 
-func NewThanosMetadataCodec(partialResponse bool) *metadataCodec {
+func NewThanosMetadataCodec(partialResponse bool, defaultMetadataTimeRange time.Duration) *metadataCodec {
 	return &metadataCodec{
-		Codec:           queryrange.PrometheusCodec,
-		partialResponse: partialResponse,
+		Codec:                    queryrange.PrometheusCodec,
+		partialResponse:          partialResponse,
+		defaultMetadataTimeRange: defaultMetadataTimeRange,
 	}
 }
 
@@ -228,18 +240,9 @@ func (c metadataCodec) parseLabelsRequest(r *http.Request, op string) (queryrang
 		result ThanosLabelsRequest
 		err    error
 	)
-	result.Start, err = cortexutil.ParseTime(r.FormValue("start"))
+	result.Start, result.End, err = parseMetadataTimeRange(r, c.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, err
-	}
-
-	result.End, err = cortexutil.ParseTime(r.FormValue("end"))
-	if err != nil {
-		return nil, err
-	}
-
-	if result.End < result.Start {
-		return nil, errEndBeforeStart
 	}
 
 	result.PartialResponse, err = parsePartialResponseParam(r.FormValue(queryv1.PartialResponseParam), c.partialResponse)
@@ -276,18 +279,9 @@ func (c metadataCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, 
 		result ThanosSeriesRequest
 		err    error
 	)
-	result.Start, err = cortexutil.ParseTime(r.FormValue("start"))
+	result.Start, result.End, err = parseMetadataTimeRange(r, c.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, err
-	}
-
-	result.End, err = cortexutil.ParseTime(r.FormValue("end"))
-	if err != nil {
-		return nil, err
-	}
-
-	if result.End < result.Start {
-		return nil, errEndBeforeStart
 	}
 
 	result.Matchers, err = parseMatchersParam(r.Form[queryv1.MatcherParam])
@@ -324,4 +318,43 @@ func (c metadataCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, 
 	}
 
 	return &result, nil
+}
+
+func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Duration) (int64, int64, error) {
+	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
+	var defaultStartTime, defaultEndTime time.Time
+	if defaultMetadataTimeRange == 0 {
+		defaultStartTime = infMinTime
+		defaultEndTime = infMaxTime
+	} else {
+		now := time.Now()
+		defaultStartTime = now.Add(-defaultMetadataTimeRange)
+		defaultEndTime = now
+	}
+
+	start, err := parseTimeParam(r, "start", defaultStartTime)
+	if err != nil {
+		return 0, 0, err
+	}
+	end, err := parseTimeParam(r, "end", defaultEndTime)
+	if err != nil {
+		return 0, 0, err
+	}
+	if end < start {
+		return 0, 0, errEndBeforeStart
+	}
+
+	return start, end, nil
+}
+
+func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (int64, error) {
+	val := r.FormValue(paramName)
+	if val == "" {
+		return timestamp.FromTime(defaultValue), nil
+	}
+	result, err := cortexutil.ParseTime(val)
+	if err != nil {
+		return 0, errors.Wrapf(err, "Invalid time value for '%s'", paramName)
+	}
+	return result, nil
 }

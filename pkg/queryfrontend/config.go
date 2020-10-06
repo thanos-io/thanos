@@ -114,7 +114,8 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 type Config struct {
 	// PartialResponseStrategy is the default strategy used
 	// when parsing thanos query request.
-	PartialResponseStrategy bool
+	PartialResponseStrategy  bool
+	DefaultMetadataTimeRange time.Duration
 
 	CortexFrontendConfig     *cortexfrontend.Config
 	CortexLimits             *cortexvalidation.Limits

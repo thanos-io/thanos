@@ -13,7 +13,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 )
 
-type ThanosRequest struct {
+type ThanosRequest interface {
+	GetStoreMatchers() [][]*labels.Matcher
+}
+
+type ThanosQueryRangeRequest struct {
 	Path                string
 	Start               int64
 	End                 int64
@@ -30,31 +34,23 @@ type ThanosRequest struct {
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.
-func (r *ThanosRequest) GetStart() int64 {
-	return r.Start
-}
+func (r *ThanosQueryRangeRequest) GetStart() int64 { return r.Start }
 
 // GetEnd returns the end timestamp of the request in milliseconds.
-func (r *ThanosRequest) GetEnd() int64 {
-	return r.End
-}
+func (r *ThanosQueryRangeRequest) GetEnd() int64 { return r.End }
 
 // GetStep returns the step of the request in milliseconds.
-func (r *ThanosRequest) GetStep() int64 {
-	return r.Step
-}
+func (r *ThanosQueryRangeRequest) GetStep() int64 { return r.Step }
 
 // GetQuery returns the query of the request.
-func (r *ThanosRequest) GetQuery() string {
-	return r.Query
-}
+func (r *ThanosQueryRangeRequest) GetQuery() string { return r.Query }
 
-func (r *ThanosRequest) GetCachingOptions() queryrange.CachingOptions {
+func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions {
 	return r.CachingOptions
 }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosQueryRangeRequest) WithStartEnd(start int64, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
@@ -62,14 +58,14 @@ func (r *ThanosRequest) WithStartEnd(start int64, end int64) queryrange.Request 
 }
 
 // WithQuery clone the current request with a different query.
-func (r *ThanosRequest) WithQuery(query string) queryrange.Request {
+func (r *ThanosQueryRangeRequest) WithQuery(query string) queryrange.Request {
 	q := *r
 	q.Query = query
 	return &q
 }
 
 // LogToSpan writes information about this request to an OpenTracing span.
-func (r *ThanosRequest) LogToSpan(sp opentracing.Span) {
+func (r *ThanosQueryRangeRequest) LogToSpan(sp opentracing.Span) {
 	fields := []otlog.Field{
 		otlog.String("query", r.GetQuery()),
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
@@ -88,15 +84,17 @@ func (r *ThanosRequest) LogToSpan(sp opentracing.Span) {
 
 // Reset implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
-func (r *ThanosRequest) Reset() {}
+func (r *ThanosQueryRangeRequest) Reset() {}
 
 // String implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
-func (r *ThanosRequest) String() string { return "" }
+func (r *ThanosQueryRangeRequest) String() string { return "" }
 
 // ProtoMessage implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
-func (r *ThanosRequest) ProtoMessage() {}
+func (r *ThanosQueryRangeRequest) ProtoMessage() {}
+
+func (r *ThanosQueryRangeRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
 
 type ThanosLabelsRequest struct {
 	Start           int64
@@ -109,28 +107,18 @@ type ThanosLabelsRequest struct {
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.
-func (r *ThanosLabelsRequest) GetStart() int64 {
-	return r.Start
-}
+func (r *ThanosLabelsRequest) GetStart() int64 { return r.Start }
 
 // GetEnd returns the end timestamp of the request in milliseconds.
-func (r *ThanosLabelsRequest) GetEnd() int64 {
-	return r.End
-}
+func (r *ThanosLabelsRequest) GetEnd() int64 { return r.End }
 
 // GetStep returns the step of the request in milliseconds.
-func (r *ThanosLabelsRequest) GetStep() int64 {
-	return 0
-}
+func (r *ThanosLabelsRequest) GetStep() int64 { return 0 }
 
 // GetQuery returns the query of the request.
-func (r *ThanosLabelsRequest) GetQuery() string {
-	return ""
-}
+func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 
-func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions {
-	return r.CachingOptions
-}
+func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
 func (r *ThanosLabelsRequest) WithStartEnd(start int64, end int64) queryrange.Request {
@@ -154,6 +142,9 @@ func (r *ThanosLabelsRequest) LogToSpan(sp opentracing.Span) {
 		otlog.Bool("partial_response", r.PartialResponse),
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
+	if r.Label != "" {
+		otlog.Object("label", r.Label)
+	}
 
 	sp.LogFields(fields...)
 }
@@ -170,6 +161,8 @@ func (r *ThanosLabelsRequest) String() string { return "" }
 // which is not used in thanos.
 func (r *ThanosLabelsRequest) ProtoMessage() {}
 
+func (r *ThanosLabelsRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
+
 type ThanosSeriesRequest struct {
 	Path            string
 	Start           int64
@@ -183,28 +176,18 @@ type ThanosSeriesRequest struct {
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.
-func (r *ThanosSeriesRequest) GetStart() int64 {
-	return r.Start
-}
+func (r *ThanosSeriesRequest) GetStart() int64 { return r.Start }
 
 // GetEnd returns the end timestamp of the request in milliseconds.
-func (r *ThanosSeriesRequest) GetEnd() int64 {
-	return r.End
-}
+func (r *ThanosSeriesRequest) GetEnd() int64 { return r.End }
 
 // GetStep returns the step of the request in milliseconds.
-func (r *ThanosSeriesRequest) GetStep() int64 {
-	return 0
-}
+func (r *ThanosSeriesRequest) GetStep() int64 { return 0 }
 
 // GetQuery returns the query of the request.
-func (r *ThanosSeriesRequest) GetQuery() string {
-	return ""
-}
+func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 
-func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions {
-	return r.CachingOptions
-}
+func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
 func (r *ThanosSeriesRequest) WithStartEnd(start int64, end int64) queryrange.Request {
@@ -225,7 +208,10 @@ func (r *ThanosSeriesRequest) LogToSpan(sp opentracing.Span) {
 	fields := []otlog.Field{
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
 		otlog.String("end", timestamp.Time(r.GetEnd()).String()),
+		otlog.Bool("dedup", r.Dedup),
 		otlog.Bool("partial_response", r.PartialResponse),
+		otlog.Object("replicaLabels", r.ReplicaLabels),
+		otlog.Object("matchers", r.Matchers),
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
 
@@ -243,3 +229,5 @@ func (r *ThanosSeriesRequest) String() string { return "" }
 // ProtoMessage implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
 func (r *ThanosSeriesRequest) ProtoMessage() {}
+
+func (r *ThanosSeriesRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
