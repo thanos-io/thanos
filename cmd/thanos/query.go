@@ -25,13 +25,13 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
-	"github.com/thanos-io/thanos/pkg/extkingpin"
-
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
@@ -552,9 +552,9 @@ func firstDuplicate(ss []string) string {
 }
 
 func engineFunc(newEngine func(time.Duration) *promql.Engine, lookbackDelta time.Duration, dynamicLookbackDelta bool) func(int64) *promql.Engine {
-	deltas := []int64{0}
+	deltas := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
-		deltas = []int64{0, 5 * time.Minute.Milliseconds(), 1 * time.Hour.Milliseconds()}
+		deltas = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
 	}
 	var (
 		engines       = make([]*promql.Engine, len(deltas))
