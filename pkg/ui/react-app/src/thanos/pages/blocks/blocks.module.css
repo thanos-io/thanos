@@ -139,22 +139,6 @@
   box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.3) inset;
 }
 
-.downloadBtn {
-  font: bold 14px;
-  text-decoration: none;
-  background-color: #EEEEEE;
-  color: #000;
-  padding: 2px 6px 2px 6px;
-  border-top: 1px solid #CCCCCC;
-  border-right: 1px solid #333333;
-  border-bottom: 1px solid #333333;
-  border-left: 1px solid #CCCCCC;
-}
-
-.downloadBtn:hover, .downloadBtn:visited {
-  color: #000;
-  text-decoration: none;
-}
 /*
 * block colors
 * https://coolors.co/9b5de5-f15bb5-fee440-00bbf9-00f5d4

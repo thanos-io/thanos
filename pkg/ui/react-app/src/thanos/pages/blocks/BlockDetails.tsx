@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
+import { Button } from 'reactstrap';
 import { download } from './helpers';
 
 export interface BlockDetailsProps {
@@ -54,7 +55,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           </div>
           <hr />
           <div data-testid="labels">
-            <b>Labs:</b>
+            <b>Labels:</b>
             <ul>
               {Object.entries(block.thanos.labels).map(([key, value]) => (
                 <li key={key}>
@@ -65,8 +66,10 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
             </ul>
           </div>
           <div data-testid="download">
-            <a className={styles.downloadBtn} href={download(block)} download="meta.json">
-              download data
+            <a href={download(block)} download="meta.json">
+              <Button>
+                download data
+              </Button>
             </a>
           </div>
         </>
