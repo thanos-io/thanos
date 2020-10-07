@@ -485,7 +485,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").StringVar(&cc.dataDir)
 
-	cc.objStore = *regCommonObjStoreFlags(cmd, "", false)
+	cc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&cc.consistencyDelay)
@@ -529,7 +529,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
 
-	cc.selectorRelabelConf = *regSelectorRelabelFlags(cmd)
+	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
 	cc.webConf.registerFlag(cmd)
 

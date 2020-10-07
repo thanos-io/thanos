@@ -12,6 +12,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 - [#3259](https://github.com/thanos-io/thanos/pull/3259) Thanos BlockViewer: Added a button in the blockviewer that allows users to download the metadata of a block
 
+- [#3261](https://github.com/thanos-io/thanos/pull/3261) Thanos Store: Use segment files specified in meta.json file, if present. If not present, Store does the LIST operation as before.
+
+## [v0.16.0](https://github.com/thanos-io/thanos/releases) - Release in progress
+
 ### Fixed
 
 - [#3234](https://github.com/thanos-io/thanos/pull/3234) UI: Fix assets not loading when `--web.prefix-header` is used.

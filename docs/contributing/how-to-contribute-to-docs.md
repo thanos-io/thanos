@@ -21,7 +21,7 @@ in GitHub as markdown just fine:
 ```md
 
 ---
-title: <titke>
+title: <title>
 type: ...
 weight: <weight>
 menu: <where to link files in>  # This also is referred in permalinks.
