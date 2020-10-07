@@ -28,34 +28,40 @@ const (
 	seriesOp       = "series"
 )
 
-// NewTripperware returns a Tripperware configured with middlewares to
-// limit, align, split,cache requests and retry.
-// Not using the cortex one as it uses  query parallelisations based on
-// storage sharding configuration and query ASTs.
-func NewTripperware(
-	config Config,
-	reg prometheus.Registerer,
-	logger log.Logger,
-) (frontend.Tripperware, error) {
-	limits, err := validation.NewOverrides(*config.CortexLimits, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "initialize limits")
+// NewTripperware returns a Tripperware which sends requests to different sub tripperwares based on the query type.
+func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger) (frontend.Tripperware, error) {
+	var (
+		queryRangeLimits, labelsLimits queryrange.Limits
+		err                            error
+	)
+	if config.QueryRangeConfig.Limits != nil {
+		queryRangeLimits, err = validation.NewOverrides(*config.QueryRangeConfig.Limits, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "initialize query range limits")
+		}
 	}
 
-	queryRangeCodec := NewThanosQueryRangeCodec(config.PartialResponseStrategy)
-	metadataCodec := NewThanosMetadataCodec(config.PartialResponseStrategy, config.DefaultMetadataTimeRange)
+	if config.LabelsConfig.Limits != nil {
+		labelsLimits, err = validation.NewOverrides(*config.LabelsConfig.Limits, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "initialize labels limits")
+		}
+	}
 
-	queryRangeTripperware, err := newQueryRangeTripperware(config, limits, queryRangeCodec,
+	queryRangeCodec := NewThanosQueryRangeCodec(config.QueryRangeConfig.PartialResponseStrategy)
+	labelsCodec := NewThanosLabelsCodec(config.LabelsConfig.PartialResponseStrategy, config.DefaultMetadataTimeRange)
+
+	queryRangeTripperware, err := newQueryRangeTripperware(config.QueryRangeConfig, queryRangeLimits, queryRangeCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
 	if err != nil {
 		return nil, err
 	}
 
-	metadataTripperware := newMetadataTripperware(config, limits, metadataCodec,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "metadata"}, reg), logger)
+	labelsTripperware := newLabelsTripperware(config.LabelsConfig, labelsLimits, labelsCodec,
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "labels"}, reg), logger)
 
 	return func(next http.RoundTripper) http.RoundTripper {
-		return newRoundTripper(next, queryRangeTripperware(next), metadataTripperware(next), reg)
+		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), reg)
 	}, nil
 }
 
@@ -122,8 +128,10 @@ func getOperation(r *http.Request) string {
 	return ""
 }
 
+// newQueryRangeTripperware returns a Tripperware for range queries configured with middlewares of
+// limit, step align, split by interval, cache requests and retry.
 func newQueryRangeTripperware(
-	config Config,
+	config QueryRangeConfig,
 	limits queryrange.Limits,
 	codec *queryRangeCodec,
 	reg prometheus.Registerer,
@@ -151,10 +159,10 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	if config.CortexResultsCacheConfig != nil {
+	if config.ResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
-			*config.CortexResultsCacheConfig,
+			*config.ResultsCacheConfig,
 			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
 			limits,
 			codec,
@@ -190,14 +198,16 @@ func newQueryRangeTripperware(
 	}, nil
 }
 
-func newMetadataTripperware(
-	config Config,
+// newLabelsTripperware returns a Tripperware for labels and series requests
+// configured with middlewares of split by interval and retry.
+func newLabelsTripperware(
+	config LabelsConfig,
 	limits queryrange.Limits,
-	codec *metadataCodec,
+	codec *labelsCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) frontend.Tripperware {
-	metadataMiddleware := []queryrange.Middleware{queryrange.LimitsMiddleware(limits)}
+	metadataMiddleware := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	queryIntervalFn := func(_ queryrange.Request) time.Duration {

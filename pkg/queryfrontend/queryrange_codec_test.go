@@ -18,7 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestCodec_DecodeRequest(t *testing.T) {
+func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		url             string
@@ -183,7 +183,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 	}
 }
 
-func TestCodec_EncodeRequest(t *testing.T) {
+func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		expectedError error

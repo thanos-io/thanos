@@ -16,14 +16,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/timestamp"
-
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/cortexproject/cortex/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -34,21 +32,23 @@ var (
 	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
 )
 
-type metadataCodec struct {
+// labelsCodec is used to encode/decode Thanos labels and series requests and responses.
+type labelsCodec struct {
 	queryrange.Codec
 	partialResponse          bool
 	defaultMetadataTimeRange time.Duration
 }
 
-func NewThanosMetadataCodec(partialResponse bool, defaultMetadataTimeRange time.Duration) *metadataCodec {
-	return &metadataCodec{
+// NewThanosLabelsCodec initializes a labelsCodec.
+func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Duration) *labelsCodec {
+	return &labelsCodec{
 		Codec:                    queryrange.PrometheusCodec,
 		partialResponse:          partialResponse,
 		defaultMetadataTimeRange: defaultMetadataTimeRange,
 	}
 }
 
-func (c metadataCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
+func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		return &ThanosLabelsResponse{
 			Status: queryrange.StatusSuccess,
@@ -78,23 +78,23 @@ func (c metadataCodec) MergeResponse(responses ...queryrange.Response) (queryran
 			Data:   labels,
 		}, nil
 	case *ThanosSeriesResponse:
-		metadataResponses := make([]*ThanosSeriesResponse, 0, len(responses))
+		seriesResponses := make([]*ThanosSeriesResponse, 0, len(responses))
 
 		for _, res := range responses {
-			metadataResponses = append(metadataResponses, res.(*ThanosSeriesResponse))
+			seriesResponses = append(seriesResponses, res.(*ThanosSeriesResponse))
 		}
 
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
 			// TODO: fix this
-			Data: metadataResponses[0].Data,
+			Data: seriesResponses[0].Data,
 		}, nil
 	default:
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid response format")
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format")
 	}
 }
 
-func (c metadataCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
+func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 	}
@@ -116,7 +116,7 @@ func (c metadataCodec) DecodeRequest(_ context.Context, r *http.Request) (queryr
 	return req, nil
 }
 
-func (c metadataCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
+func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
 	var u *url.URL
 	switch thanosReq := r.(type) {
 	case *ThanosLabelsRequest:
@@ -165,7 +165,7 @@ func (c metadataCodec) EncodeRequest(ctx context.Context, r queryrange.Request) 
 	return req.WithContext(ctx), nil
 }
 
-func (c metadataCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
+func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
 		body, _ := ioutil.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
@@ -195,11 +195,11 @@ func (c metadataCodec) DecodeResponse(ctx context.Context, r *http.Response, req
 		}
 		return &resp, nil
 	default:
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid response format")
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid request type")
 	}
 }
 
-func (c metadataCodec) EncodeResponse(ctx context.Context, res queryrange.Response) (*http.Response, error) {
+func (c labelsCodec) EncodeResponse(ctx context.Context, res queryrange.Response) (*http.Response, error) {
 	sp, _ := opentracing.StartSpanFromContext(ctx, "APIResponse.ToHTTPResponse")
 	defer sp.Finish()
 
@@ -221,7 +221,7 @@ func (c metadataCodec) EncodeResponse(ctx context.Context, res queryrange.Respon
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error encoding response: %v", err)
 		}
 	default:
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid response format")
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format")
 	}
 
 	sp.LogFields(otlog.Int("bytes", len(b)))
@@ -235,7 +235,7 @@ func (c metadataCodec) EncodeResponse(ctx context.Context, res queryrange.Respon
 	return &resp, nil
 }
 
-func (c metadataCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.Request, error) {
+func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.Request, error) {
 	var (
 		result ThanosLabelsRequest
 		err    error
@@ -274,7 +274,7 @@ func (c metadataCodec) parseLabelsRequest(r *http.Request, op string) (queryrang
 	return &result, nil
 }
 
-func (c metadataCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, error) {
+func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, error) {
 	var (
 		result ThanosSeriesRequest
 		err    error
@@ -354,7 +354,7 @@ func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (
 	}
 	result, err := cortexutil.ParseTime(val)
 	if err != nil {
-		return 0, errors.Wrapf(err, "Invalid time value for '%s'", paramName)
+		return 0, err
 	}
 	return result, nil
 }

@@ -38,11 +38,13 @@ var (
 	errCannotParse    = "cannot parse parameter %s"
 )
 
+// queryRangeCodec is used to encode/decode Thanos query range requests and responses.
 type queryRangeCodec struct {
 	queryrange.Codec
 	partialResponse bool
 }
 
+// NewThanosQueryRangeCodec initializes a queryRangeCodec.
 func NewThanosQueryRangeCodec(partialResponse bool) *queryRangeCodec {
 	return &queryRangeCodec{
 		Codec:           queryrange.PrometheusCodec,

@@ -120,9 +120,11 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
-					SplitQueriesByInterval: day,
-					MaxRetries:             tc.maxRetries,
-					CortexLimits:           defaultLimits,
+					QueryRangeConfig: QueryRangeConfig{
+						MaxRetries:             tc.maxRetries,
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: day,
+					},
 				}, nil, log.NewNopLogger(),
 			)
 			testutil.Ok(t, err)
@@ -202,8 +204,10 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
-					SplitQueriesByInterval: tc.splitInterval,
-					CortexLimits:           defaultLimits,
+					QueryRangeConfig: QueryRangeConfig{
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: tc.splitInterval,
+					},
 				}, nil, log.NewNopLogger(),
 			)
 			testutil.Ok(t, err)
@@ -288,9 +292,11 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	now := time.Now()
 	tpw, err := NewTripperware(
 		Config{
-			SplitQueriesByInterval:   day,
-			CortexResultsCacheConfig: cacheConf,
-			CortexLimits:             defaultLimits,
+			QueryRangeConfig: QueryRangeConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
