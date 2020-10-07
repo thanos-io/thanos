@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package queryfrontend
 
 import (
@@ -197,6 +200,12 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 }
 
 func TestLabelsCodec_EncodeRequest(t *testing.T) {
+	const (
+		start     = "start"
+		end       = "end"
+		startTime = "123"
+		endTime   = "456"
+	)
 	for _, tc := range []struct {
 		name          string
 		expectedError error
@@ -217,8 +226,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels names request",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/labels"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/labels"
 			},
 		},
@@ -226,8 +235,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels values request",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/label/__name__/values"
 			},
 		},
@@ -235,8 +244,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels values request, partial response set to true",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values", PartialResponse: true},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(startTime) == startTime &&
+					r.URL.Query().Get(endTime) == endTime &&
 					r.URL.Path == "/api/v1/label/__name__/values" &&
 					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
 			},
@@ -245,8 +254,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos series request with empty matchers",
 			req:  &ThanosSeriesRequest{Start: 123000, End: 456000, Path: "/api/v1/series"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -259,8 +268,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "cluster", "test")}},
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Query().Get(queryv1.MatcherParam) == `{cluster="test"}` &&
 					r.URL.Path == "/api/v1/series"
 			},
@@ -274,8 +283,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Dedup: true,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(endTime) == endTime &&
 					r.URL.Query().Get(queryv1.DedupParam) == "true" &&
 					r.URL.Path == "/api/v1/series"
 			},
@@ -320,13 +329,13 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 			name:          "prometheus request, invalid for labelsCodec",
 			req:           &queryrange.PrometheusRequest{},
 			res:           http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer([]byte("foo")))},
-			expectedError: httpgrpc.Errorf(http.StatusBadRequest, "invalid request type"),
+			expectedError: httpgrpc.Errorf(http.StatusInternalServerError, "invalid request type"),
 		},
 		{
 			name:          "thanos query range request, invalid for labelsCodec",
 			req:           &ThanosQueryRangeRequest{},
 			res:           http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer([]byte("foo")))},
-			expectedError: httpgrpc.Errorf(http.StatusBadRequest, "invalid request type"),
+			expectedError: httpgrpc.Errorf(http.StatusInternalServerError, "invalid request type"),
 		},
 		{
 			name:             "thanos labels request",

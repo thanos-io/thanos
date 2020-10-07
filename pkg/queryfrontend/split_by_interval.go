@@ -1,6 +1,9 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
+// This is a modified copy from
+// https://github.com/cortexproject/cortex/blob/master/pkg/querier/queryrange/split_by_interval.go.
+
 package queryfrontend
 
 import (
