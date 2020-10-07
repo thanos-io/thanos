@@ -1012,10 +1012,10 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout)
 	b.ResetTimer()
 	// 500 requests per N.
-	for i := 0; i < b.N()*500; i++ {
+	for i := 0; i < b.N()*5000; i++ {
 		if i == 1 {
 			runtime.GC()
-			dumpMemProfile(b, "single_req2.out")
+			dumpMemProfile(b, "single_req4.out")
 		}
 		r := httptest.NewRecorder()
 		handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
@@ -1024,7 +1024,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		time.Sleep(1 * time.Millisecond)
 		if i == 499 {
 			runtime.GC()
-			dumpMemProfile(b, "multi2.out")
+			dumpMemProfile(b, "multi4.out")
 		}
 	}
 }
