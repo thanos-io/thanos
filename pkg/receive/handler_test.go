@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -1008,23 +1009,23 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		return err
 	}))
 
-	// 15 GB per ops.
+	// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout)
 	b.ResetTimer()
 	// 500 requests per N.
 	for i := 0; i < b.N()*500; i++ {
-		//if i == 1 {
-		//	runtime.GC()
-		//	dumpMemProfile(b, "single_req.out")
-		//}
+		if i == 1 {
+			runtime.GC()
+			dumpMemProfile(b, "single_req2.out")
+		}
 		r := httptest.NewRecorder()
 		handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
 		testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 		time.Sleep(1 * time.Millisecond)
-		//if i == 499 {
-		//	runtime.GC()
-		//	dumpMemProfile(b, "multi.out")
-		//}
+		if i == 499 {
+			runtime.GC()
+			dumpMemProfile(b, "multi2.out")
+		}
 	}
 }
 
