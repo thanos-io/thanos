@@ -11,6 +11,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -932,6 +936,10 @@ func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 	benchmarkHandlerReceiveHTTP_Deserialize(testutil.NewTB(b))
 }
 
+func TestHandlerReceiveHTTP(t *testing.T) {
+	benchmarkHandlerReceiveHTTP_Deserialize(testutil.NewTB(t))
+}
+
 func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
 	biggy := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -955,7 +963,7 @@ func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
 	}
 
 	lbl := &strings.Builder{}
-	lbl.Grow(1024 * 1024 * 1024 * 1) // 1 MB. We can't have bigger due to snappy encoding limits.
+	lbl.Grow(1024 * 1024 * 10) // 10 MB, 0.5MB compressed.
 	for i := 0; i < lbl.Cap()/10; i++ {
 		_, _ = lbl.WriteString("abcdefghij")
 	}
@@ -965,11 +973,34 @@ func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
 
 	compressed := snappy.Encode(nil, body)
 
+	handlers, _ := newHandlerHashring([]*fakeAppendable{{appender: newFakeAppender(nil, nil, nil, nil)}}, 1)
+
+	// 53 MB per ops.
 	b.ResetTimer()
-	for i := 0; i < b.N(); i++ {
-		handlers, _ := newHandlerHashring([]*fakeAppendable{{appender: newFakeAppender(nil, nil, nil, nil)}}, 1)
+	// 100 requests per N.
+	for i := 0; i < b.N()*500; i++ {
+		if i == 1 {
+			runtime.GC()
+			dumpMemProfile(b, "single_req.out")
+		}
 		r := httptest.NewRecorder()
 		handlers[0].receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
 		testutil.Equals(b, http.StatusOK, r.Code)
+
+		if i == 499 {
+			runtime.GC()
+			dumpMemProfile(b, "multi.out")
+		}
 	}
+}
+
+func dumpMemProfile(t testing.TB, n string) {
+	f, err := os.OpenFile(filepath.Join("../../_dev/dumps", n), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+	testutil.Ok(t, err)
+	defer func() {
+		testutil.Ok(t, f.Sync())
+		testutil.Ok(t, f.Close())
+	}()
+
+	testutil.Ok(t, pprof.WriteHeapProfile(f))
 }
