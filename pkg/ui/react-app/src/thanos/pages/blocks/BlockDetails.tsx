@@ -67,9 +67,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           </div>
           <div data-testid="download">
             <a href={download(block)} download="meta.json">
-              <Button>
-                download data
-              </Button>
+              <Button>download data</Button>
             </a>
           </div>
         </>
