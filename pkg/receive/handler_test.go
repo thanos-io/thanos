@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -943,11 +944,7 @@ func TestHandlerReceiveHTTP(t *testing.T) {
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
-func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := ioutil.TempDir("", "test_receive")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
-
+func createBiggySerializedWriteReq(t testing.TB, sizeBytes int, word string) []byte {
 	biggy := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
@@ -962,17 +959,23 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}
 
 	lbl := &strings.Builder{}
-	lbl.Grow(1024 * 1024 * 10) // 10 MB, 0.5MB compressed.
-	for i := 0; i < lbl.Cap()/10; i++ {
-		_, _ = lbl.WriteString("abcdefghij")
+	lbl.Grow(sizeBytes)
+	for i := 0; i < lbl.Cap()/len(word); i++ {
+		_, _ = lbl.WriteString(word)
 	}
-	biggy.Timeseries[0].Labels = []labelpb.Label{
-		{Name: "__name__", Value: lbl.String()},
-	}
+	biggy.Timeseries[0].Labels = []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 	body, err := proto.Marshal(biggy)
-	testutil.Ok(b, err)
+	testutil.Ok(t, err)
 
-	compressed := snappy.Encode(nil, body)
+	return snappy.Encode(nil, body)
+}
+func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
+	dir, err := ioutil.TempDir("", "test_receive")
+	testutil.Ok(b, err)
+	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+
+	// 10 MB, 0.5MB compressed.
+	compressed := createBiggySerializedWriteReq(b, 1024*1024*10, "abcdefghij")
 
 	handlers, _ := newHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]
@@ -1011,20 +1014,30 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 	// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout)
 	b.ResetTimer()
-	// 500 requests per N.
-	for i := 0; i < b.N()*5000; i++ {
+
+	n := b.N() * 500
+	for i := 0; i < n; i++ {
 		if i == 1 {
 			runtime.GC()
-			dumpMemProfile(b, "single_req4.out")
+			dumpMemProfile(b, "single_req5.out")
 		}
 		r := httptest.NewRecorder()
 		handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
 		testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 		time.Sleep(1 * time.Millisecond)
-		if i == 499 {
+		if i == n-1 {
 			runtime.GC()
-			dumpMemProfile(b, "multi4.out")
+			dumpMemProfile(b, "multi5.out")
+
+			// Clear series, and see if resources are released.
+			db := m.tenants["foo"].readyStorage().Get()
+			fmt.Println(db.Head().NumSeries())
+			testutil.Ok(b, db.Head().Truncate(timestamp.FromTime(time.Now())))
+			fmt.Println(db.Head().NumSeries())
+
+			runtime.GC()
+			dumpMemProfile(b, "multi_postdelete5.out")
 		}
 	}
 }
