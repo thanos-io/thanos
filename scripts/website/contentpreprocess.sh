@@ -67,6 +67,7 @@ mkdir -p ${OUTPUT_CONTENT_DIR}/thanos/
 mv ${OUTPUT_CONTENT_DIR}/*.md ${OUTPUT_CONTENT_DIR}/thanos/
 mv ${OUTPUT_CONTENT_DIR}/thanos/CONTRIBUTING.md ${OUTPUT_CONTENT_DIR}/contributing/CONTRIBUTING.md
 mv ${OUTPUT_CONTENT_DIR}/thanos/CODE_OF_CONDUCT.md ${OUTPUT_CONTENT_DIR}/contributing/CODE_OF_CONDUCT.md
+# This is needed only for v0.13-0.16 versions.
 mv ${OUTPUT_CONTENT_DIR}/thanos/community.md ${OUTPUT_CONTENT_DIR}/contributing/community.md
 
 # Create an _index.md in Thanos dir.
