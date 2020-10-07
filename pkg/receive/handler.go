@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -278,6 +279,8 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	return nil
 }
 
+var tmp int
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
@@ -314,6 +317,13 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(tenant) == 0 {
 		tenant = h.options.DefaultTenantID
 	}
+	if len(tenant) == 0 {
+		http.Error(w, "no tenant ID supplied", http.StatusBadRequest)
+		return
+	}
+
+	// YOLO
+	wreq.Timeseries[0].Samples[0].Timestamp = timestamp.FromTime(time.Now())
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	switch err {

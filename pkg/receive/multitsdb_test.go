@@ -47,6 +47,7 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
 
+		// TODO: Ensure to not create new tenant accidently.
 		app, err := m.TenantAppendable("foo")
 		testutil.Ok(t, err)
 

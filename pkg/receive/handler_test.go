@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -25,9 +24,12 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
@@ -933,14 +935,18 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 	b.ReportAllocs()
 
-	benchmarkHandlerReceiveHTTP_Deserialize(testutil.NewTB(b))
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b))
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
-	benchmarkHandlerReceiveHTTP_Deserialize(testutil.NewTB(t))
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
-func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
+func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
+	dir, err := ioutil.TempDir("", "test_receive")
+	testutil.Ok(b, err)
+	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+
 	biggy := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
@@ -948,14 +954,6 @@ func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
 					{
 						Value:     1,
 						Timestamp: 1,
-					},
-					{
-						Value:     2,
-						Timestamp: 2,
-					},
-					{
-						Value:     3,
-						Timestamp: 3,
 					},
 				},
 			},
@@ -967,30 +965,66 @@ func benchmarkHandlerReceiveHTTP_Deserialize(b testutil.TB) {
 	for i := 0; i < lbl.Cap()/10; i++ {
 		_, _ = lbl.WriteString("abcdefghij")
 	}
-	biggy.Timeseries[0].Labels = []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
+	biggy.Timeseries[0].Labels = []labelpb.Label{
+		{Name: "__name__", Value: lbl.String()},
+	}
 	body, err := proto.Marshal(biggy)
 	testutil.Ok(b, err)
 
 	compressed := snappy.Encode(nil, body)
 
-	handlers, _ := newHandlerHashring([]*fakeAppendable{{appender: newFakeAppender(nil, nil, nil, nil)}}, 1)
+	handlers, _ := newHandlerHashring([]*fakeAppendable{nil}, 1)
+	handler := handlers[0]
 
-	// 53 MB per ops.
+	logger := log.NewNopLogger()
+	m := NewMultiTSDB(
+		dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
+			NoLockfile:        true,
+		},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+	)
+	defer func() { testutil.Ok(b, m.Close()) }()
+	handler.writer = NewWriter(logger, m)
+	handler.options.DefaultTenantID = "foo"
+
+	testutil.Ok(b, m.Flush())
+	testutil.Ok(b, m.Open())
+
+	// It takes time to create new tenant, wait for it.
+	app, err := m.TenantAppendable("foo")
+	testutil.Ok(b, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		_, err = app.Appender(ctx)
+		return err
+	}))
+
+	// 15 GB per ops.
 	b.ResetTimer()
-	// 100 requests per N.
+	// 500 requests per N.
 	for i := 0; i < b.N()*500; i++ {
-		if i == 1 {
-			runtime.GC()
-			dumpMemProfile(b, "single_req.out")
-		}
+		//if i == 1 {
+		//	runtime.GC()
+		//	dumpMemProfile(b, "single_req.out")
+		//}
 		r := httptest.NewRecorder()
-		handlers[0].receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
-		testutil.Equals(b, http.StatusOK, r.Code)
+		handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+		testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
-		if i == 499 {
-			runtime.GC()
-			dumpMemProfile(b, "multi.out")
-		}
+		time.Sleep(1 * time.Millisecond)
+		//if i == 499 {
+		//	runtime.GC()
+		//	dumpMemProfile(b, "multi.out")
+		//}
 	}
 }
 
