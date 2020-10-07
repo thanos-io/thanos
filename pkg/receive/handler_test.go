@@ -970,6 +970,7 @@ func TestHandlerReceiveHTTP(t *testing.T) {
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
+// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout).
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir, err := ioutil.TempDir("", "test_receive")
 	testutil.Ok(b, err)
@@ -1026,8 +1027,8 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		}))
 	}
 
-	// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout)
 	b.Run("OK", func(b testutil.TB) {
+		b.Skip("skip")
 		handler.options.DefaultTenantID = "foo-ok"
 		n := b.N()
 		for i := 0; i < n; i++ {
