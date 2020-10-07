@@ -32,7 +32,7 @@ the main channel Prometheus Team is using currently.
 * [x] You are welcome to join Twitter, start following others and gather your own followers! Who knows maybe you will get addicted? (: Feel free to post any
 related content around Thanos while mentioning `@ThanosMetrics`.
 * [x] Ask maintainers to set up some weekly 2:1 meeting (highly recommended).
-* [x] Read our [contributing guides](https://thanos-io/tip/contributing/contributing.md/)
+* [x] Read our [contributing guides](https://thanos.io/tip/contributing/contributing.md/)
 * [x] Read carefully your main GitHub issue and start thinking about it, but don't stress out! It's better to start slowly with a smaller task to get things going. 🚀
 
 ### Suggestions
