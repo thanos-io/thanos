@@ -1038,7 +1038,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			//}
 
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(compressed)), Body: ioutil.NopCloser(bytes.NewReader(compressed))})
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			time.Sleep(1 * time.Millisecond)
@@ -1072,7 +1072,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			//	dumpMemProfile(b, "single_err_req1.out")
 			//}
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(compressed)), Body: ioutil.NopCloser(bytes.NewReader(compressed))})
 			testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
 			time.Sleep(1 * time.Millisecond)
 
