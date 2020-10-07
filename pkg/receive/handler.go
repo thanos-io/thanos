@@ -323,8 +323,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// YOLO
-	wreq.Timeseries[0].Samples[0].Timestamp = timestamp.FromTime(time.Now())
+	if tenant == "foo-ok" {
+		n := timestamp.FromTime(time.Now())
+		wreq.Timeseries[0].Samples[0].Timestamp = n - 1
+		wreq.Timeseries[0].Samples[1].Timestamp = n
+	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	switch err {

@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -27,7 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -934,16 +932,6 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb
 	return f.h.RemoteWrite(ctx, in)
 }
 
-func BenchmarkHandlerReceiveHTTP(b *testing.B) {
-	b.ReportAllocs()
-
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b))
-}
-
-func TestHandlerReceiveHTTP(t *testing.T) {
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
-}
-
 func createBiggySerializedWriteReq(t testing.TB, sizeBytes int, word string) []byte {
 	biggy := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -952,6 +940,10 @@ func createBiggySerializedWriteReq(t testing.TB, sizeBytes int, word string) []b
 					{
 						Value:     1,
 						Timestamp: 1,
+					},
+					{
+						Value:     2,
+						Timestamp: 2,
 					},
 				},
 			},
@@ -969,6 +961,15 @@ func createBiggySerializedWriteReq(t testing.TB, sizeBytes int, word string) []b
 
 	return snappy.Encode(nil, body)
 }
+
+func BenchmarkHandlerReceiveHTTP(b *testing.B) {
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTBWithAlloc(b))
+}
+
+func TestHandlerReceiveHTTP(t *testing.T) {
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
+}
+
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir, err := ioutil.TempDir("", "test_receive")
 	testutil.Ok(b, err)
@@ -995,51 +996,92 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
 	handler.writer = NewWriter(logger, m)
-	handler.options.DefaultTenantID = "foo"
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
 
 	// It takes time to create new tenant, wait for it.
-	app, err := m.TenantAppendable("foo")
-	testutil.Ok(b, err)
+	{
+		app, err := m.TenantAppendable("foo-ok")
+		testutil.Ok(b, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-		_, err = app.Appender(ctx)
-		return err
-	}))
+		testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+			_, err = app.Appender(ctx)
+			return err
+		}))
+	}
+	{
+		app, err := m.TenantAppendable("foo-conflicting")
+		testutil.Ok(b, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+			_, err = app.Appender(ctx)
+			return err
+		}))
+	}
 
 	// 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout)
-	b.ResetTimer()
+	b.Run("OK", func(b testutil.TB) {
+		handler.options.DefaultTenantID = "foo-ok"
+		n := b.N()
+		for i := 0; i < n; i++ {
+			//if i == 1 {
+			//	runtime.GC()
+			//	dumpMemProfile(b, "single_req5.out")
+			//}
 
-	n := b.N() * 500
-	for i := 0; i < n; i++ {
-		if i == 1 {
-			runtime.GC()
-			dumpMemProfile(b, "single_req5.out")
+			r := httptest.NewRecorder()
+			handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+
+			time.Sleep(1 * time.Millisecond)
+			//if i == n-1 {
+			//	runtime.GC()
+			//	dumpMemProfile(b, "multi5.out")
+			//
+			//	// Clear series, and see if resources are released.
+			//	db := m.tenants[handler.options.DefaultTenantID].readyStorage().Get()
+			//	fmt.Println(db.Head().NumSeries())
+			//	testutil.Ok(b, db.Head().Truncate(timestamp.FromTime(time.Now())))
+			//	fmt.Println(db.Head().NumSeries())
+			//
+			//	runtime.GC()
+			//	dumpMemProfile(b, "multi_postdelete5.out")
+			//}
 		}
-		r := httptest.NewRecorder()
-		handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
-		testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+	})
 
-		time.Sleep(1 * time.Millisecond)
-		if i == n-1 {
-			runtime.GC()
-			dumpMemProfile(b, "multi5.out")
+	// First request should be fine, since we don't change timestamp, rest is wrong.
+	handler.options.DefaultTenantID = "foo-conflicting"
+	r := httptest.NewRecorder()
+	handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+	testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
-			// Clear series, and see if resources are released.
-			db := m.tenants["foo"].readyStorage().Get()
-			fmt.Println(db.Head().NumSeries())
-			testutil.Ok(b, db.Head().Truncate(timestamp.FromTime(time.Now())))
-			fmt.Println(db.Head().NumSeries())
+	b.Run("conflict errors", func(b testutil.TB) {
+		n := b.N()
+		for i := 0; i < n; i++ {
+			//if i == 1 {
+			//	runtime.GC()
+			//	dumpMemProfile(b, "single_err_req1.out")
+			//}
+			r := httptest.NewRecorder()
+			handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
+			time.Sleep(1 * time.Millisecond)
 
-			runtime.GC()
-			dumpMemProfile(b, "multi_postdelete5.out")
+			//if i == n-1 {
+			//	runtime.GC()
+			//	dumpMemProfile(b, "multi_err1.out")
+			//}
 		}
-	}
+	})
+
 }
 
 func dumpMemProfile(t testing.TB, n string) {
