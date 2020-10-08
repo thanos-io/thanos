@@ -140,7 +140,7 @@ Not specifying these variables will result in auth errors against GCS, AWS, Azur
 1. If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
 1. You may merge the Pull Request once you have the sign-off of at least one developer with write access, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
-1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-prs`](https://slack.cncf.io/) channel on our slack for a review!
+1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 
 ### Dependency management
 
