@@ -459,6 +459,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 	}))
 }
 
+//nolint:unparam
 func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
 	t.Helper()
 

@@ -305,7 +305,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{storepb.LabelMatcher_EQ, "__name__", "up"}},
+			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
@@ -332,7 +332,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{storepb.LabelMatcher_EQ, "__name__", "up"}},
+			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
 			timestamp.FromTime(now.Add(-24*time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {

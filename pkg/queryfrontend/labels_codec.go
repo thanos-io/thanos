@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
 
