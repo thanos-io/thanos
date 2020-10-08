@@ -557,17 +557,17 @@ func engineFunc(newEngine func(time.Duration) *promql.Engine, lookbackDelta time
 		deltas = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
 	}
 	var (
-		engines       = make([]*promql.Engine, len(deltas))
-		defaultEngine = newEngine(lookbackDelta)
-		ld            = lookbackDelta.Milliseconds()
+		engines   = make([]*promql.Engine, len(deltas))
+		rawEngine = newEngine(lookbackDelta)
+		ld        = lookbackDelta.Milliseconds()
 	)
-	engines[0] = defaultEngine
+	engines[0] = rawEngine
 	for i, d := range deltas[1:] {
 		if ld < d {
 			// Convert delta from milliseconds to time.Duration (nanoseconds).
 			engines[i+1] = newEngine(time.Duration(d * 1_000_000))
 		} else {
-			engines[i+1] = defaultEngine
+			engines[i+1] = rawEngine
 		}
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
