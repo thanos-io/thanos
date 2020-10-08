@@ -8,6 +8,8 @@
     prefix: 'Thanos / ',
     tags: error 'must provide dashboard tags',
     namespaceQuery: error 'must provide a query for namespace variable for dashboard template',
+    showMultiCluster: false,
+    clusterLabel: 'cluster',
   },
 
   // Automatically add a uid to each dashboard based on the base64 encoding

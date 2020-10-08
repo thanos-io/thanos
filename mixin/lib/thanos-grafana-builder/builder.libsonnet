@@ -22,7 +22,7 @@ local template = grafana.template;
     ],
   },
 
-  template(name, metricName, selector='', includeAll=false, allValues='')::
+  template(name, metricName, selector='', includeAll=false, allValues='', hide='')::
     local t = if includeAll then
       template.new(
         name,
@@ -33,7 +33,8 @@ local template = grafana.template;
         sort=2,
         current='all',
         allValues=allValues,
-        includeAll=true
+        includeAll=true,
+        hide=hide,
       )
     else
       template.new(
@@ -43,6 +44,7 @@ local template = grafana.template;
         label=name,
         refresh=1,
         sort=2,
+        hide=hide,
       );
 
     {
