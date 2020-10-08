@@ -244,8 +244,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels values request, partial response set to true",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values", PartialResponse: true},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(startTime) == startTime &&
-					r.URL.Query().Get(endTime) == endTime &&
+				return r.URL.Query().Get(start) == startTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/label/__name__/values" &&
 					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
 			},
@@ -284,7 +284,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			},
 			checkFunc: func(r *http.Request) bool {
 				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(endTime) == endTime &&
+					r.URL.Query().Get(end) == endTime &&
 					r.URL.Query().Get(queryv1.DedupParam) == "true" &&
 					r.URL.Path == "/api/v1/series"
 			},

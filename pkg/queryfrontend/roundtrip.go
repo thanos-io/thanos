@@ -207,28 +207,30 @@ func newLabelsTripperware(
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) frontend.Tripperware {
-	metadataMiddleware := []queryrange.Middleware{}
+	labelsMiddleware := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	queryIntervalFn := func(_ queryrange.Request) time.Duration {
 		return config.SplitQueriesByInterval
 	}
 
-	metadataMiddleware = append(
-		metadataMiddleware,
-		queryrange.InstrumentMiddleware("split_interval", m),
-		SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
-	)
+	if config.SplitQueriesByInterval != 0 {
+		labelsMiddleware = append(
+			labelsMiddleware,
+			queryrange.InstrumentMiddleware("split_interval", m),
+			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
+		)
+	}
 
 	if config.MaxRetries > 0 {
-		metadataMiddleware = append(
-			metadataMiddleware,
+		labelsMiddleware = append(
+			labelsMiddleware,
 			queryrange.InstrumentMiddleware("retry", m),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
 	return func(next http.RoundTripper) http.RoundTripper {
-		rt := queryrange.NewRoundTripper(next, codec, metadataMiddleware...)
+		rt := queryrange.NewRoundTripper(next, codec, labelsMiddleware...)
 		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
