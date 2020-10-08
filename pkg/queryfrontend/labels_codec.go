@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -56,6 +57,10 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 		}, nil
 	}
 
+	if len(responses) == 1 {
+		return responses[0], nil
+	}
+
 	switch responses[0].(type) {
 	case *ThanosLabelsResponse:
 		set := make(map[string]struct{})
@@ -67,27 +72,39 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 				}
 			}
 		}
-		labels := make([]string, 0, len(set))
+		lbls := make([]string, 0, len(set))
 		for label := range set {
-			labels = append(labels, label)
+			lbls = append(lbls, label)
 		}
 
-		sort.Strings(labels)
+		sort.Strings(lbls)
 		return &ThanosLabelsResponse{
 			Status: queryrange.StatusSuccess,
-			Data:   labels,
+			Data:   lbls,
 		}, nil
 	case *ThanosSeriesResponse:
-		seriesResponses := make([]*ThanosSeriesResponse, 0, len(responses))
+		seriesData := make([]labels.Labels, 0)
 
+		// seriesString is used in soring so we don't have to calculate the string of label sets again.
+		seriesString := make([]string, 0)
+		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
-			seriesResponses = append(seriesResponses, res.(*ThanosSeriesResponse))
+			for _, series := range res.(*ThanosSeriesResponse).Data {
+				s := series.String()
+				if _, ok := uniqueSeries[s]; !ok {
+					seriesData = append(seriesData, series)
+					seriesString = append(seriesString, s)
+					uniqueSeries[s] = struct{}{}
+				}
+			}
 		}
 
+		sort.Slice(seriesData, func(i, j int) bool {
+			return seriesString[i] < seriesString[j]
+		})
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
-			// TODO: fix this
-			Data: seriesResponses[0].Data,
+			Data:   seriesData,
 		}, nil
 	default:
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format")

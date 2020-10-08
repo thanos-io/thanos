@@ -143,8 +143,8 @@ type QueryRangeConfig struct {
 type LabelsConfig struct {
 	// PartialResponseStrategy is the default strategy used
 	// when parsing thanos query request.
-	PartialResponseStrategy  bool
-	DefaultMetadataTimeRange time.Duration
+	PartialResponseStrategy bool
+	DefaultTimeRange        time.Duration
 
 	ResultsCacheConfig *queryrange.ResultsCacheConfig
 	CachePathOrContent extflag.PathOrContent
@@ -165,6 +165,11 @@ func (cfg *Config) Validate() error {
 			return errors.Wrap(err, "invalid ResultsCache config")
 		}
 	}
+
+	if cfg.LabelsConfig.DefaultTimeRange == 0 {
+		return errors.New("labels.default-time-range cannot be set to 0")
+	}
+
 	if len(cfg.CortexFrontendConfig.DownstreamURL) == 0 {
 		return errors.New("downstream URL should be configured")
 	}

@@ -84,8 +84,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("labels.partial-response", "Enable partial response for labels requests if no partial_response param is specified. --no-labels.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.LabelsConfig.PartialResponseStrategy)
 
-	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. "+
-		"The zero value means range covers the time since the beginning.").Default("0s").DurationVar(&cfg.DefaultMetadataTimeRange)
+	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
+		Default("24h").DurationVar(&cfg.DefaultTimeRange)
 
 	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
