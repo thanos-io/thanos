@@ -85,25 +85,9 @@ config:
   expiration: 0s
 ```
 
-`addresses` Addresses specifies the list of memcached addresses. The addresses get resolved with the DNS provider.
-
-`timeout` Timeout specifies the socket read/write timeout.
-
-`max_idle_connections` MaxIdleConnections specifies the maximum number of idle connections that will be maintained per address. For better performances, this should be set to a number higher than your peak parallel requests.
-
-`max_async_concurrency` MaxAsyncConcurrency specifies the maximum number of SetAsync goroutines.
-
-`max_async_buffer_size` MaxAsyncBufferSize specifies the queue buffer size for SetAsync operations.
-
-`max_get_multi_concurrency` MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations. If set to 0, concurrency is unlimited.
-
-`max_item_size` MaxItemSize specifies the maximum size of an item stored in memcached. Items bigger than MaxItemSize are skipped. If set to 0, no maximum size is enforced.
-
-`max_get_multi_batch_size` MaxGetMultiBatchSize specifies the maximum number of keys a single underlying GetMulti() should run. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency parallelism. If set to 0, the max batch size is unlimited.
-
-`dns_provider_update_interval` DNSProviderUpdateInterval specifies the DNS discovery update interval.
-
 `expiration` Expiration specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
+
+Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
 
 
 ### Slow Query Log
