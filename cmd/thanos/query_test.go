@@ -12,7 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestEngineFunc(t *testing.T) {
+func TestEngineFactory(t *testing.T) {
 	var (
 		engineRaw = promql.NewEngine(promql.EngineOpts{})
 		engine5m  = promql.NewEngine(promql.EngineOpts{LookbackDelta: 5 * time.Minute})
