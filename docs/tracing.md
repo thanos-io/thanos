@@ -104,7 +104,7 @@ config:
 
 ### Lightstep
 
-Client for [Ligthstep](https://lightstep.com).
+Client for [Lightstep](https://lightstep.com).
 
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
