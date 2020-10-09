@@ -40,6 +40,6 @@
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
-    namespaceQuery: 'thanos_build_info',
+    namespaceQuery: 'thanos_status',
   },
 }
