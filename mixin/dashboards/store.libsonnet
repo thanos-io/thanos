@@ -45,16 +45,16 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
           g.queryPanel(
-            'sum(rate(thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, operation)',
-            '{{job}} {{operation}}'
+            'sum(rate(thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}[$interval])) by (operation)',
+            '{{operation}}'
           ) +
           g.stack
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of executed operations against the bucket.') +
           g.queryPanel(
-            'sum by (job, operation) (rate(thanos_objstore_bucket_operation_failures_total{namespace="$namespace",job=~"$job"}[$interval])) / sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}[$interval]))',
-            '{{job}} {{operation}}'
+            'sum by (operation) (rate(thanos_objstore_bucket_operation_failures_total{namespace="$namespace",job=~"$job"}[$interval])) / sum by (operation) (rate(thanos_objstore_bucket_operations_total{namespace="$namespace",job=~"$job"}[$interval]))',
+            '{{operation}}'
           ) +
           { yaxes: g.yaxes({ format: 'percentunit' }) } +
           g.stack,
@@ -84,7 +84,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Block Drop Rate', 'Shows rate of block drops.') +
           g.queryPanel(
-            'sum(rate(thanos_bucket_store_block_drops_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, operation)',
+            'sum(rate(thanos_bucket_store_block_drops_total{namespace="$namespace",job=~"$job"}[$interval])) by (operation)',
             'block drops {{job}}'
           ) +
           g.stack
@@ -102,32 +102,32 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Requests', 'Show rate of cache requests.') +
           g.queryPanel(
-            'sum(rate(thanos_store_index_cache_requests_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, item_type)',
-            '{{job}} {{item_type}}',
+            'sum(rate(thanos_store_index_cache_requests_total{namespace="$namespace",job=~"$job"}[$interval])) by (item_type)',
+            '{{item_type}}',
           ) +
           g.stack
         )
         .addPanel(
           g.panel('Hits', 'Shows ratio of errors compared to the total number of cache hits.') +
           g.queryPanel(
-            'sum(rate(thanos_store_index_cache_hits_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, item_type)',
-            '{{job}} {{item_type}}',
+            'sum(rate(thanos_store_index_cache_hits_total{namespace="$namespace",job=~"$job"}[$interval])) by (item_type)',
+            '{{item_type}}',
           ) +
           g.stack
         )
         .addPanel(
           g.panel('Added', 'Show rate of added items to cache.') +
           g.queryPanel(
-            'sum(rate(thanos_store_index_cache_items_added_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, item_type)',
-            '{{job}} {{item_type}}',
+            'sum(rate(thanos_store_index_cache_items_added_total{namespace="$namespace",job=~"$job"}[$interval])) by (item_type)',
+            '{{item_type}}',
           ) +
           g.stack
         )
         .addPanel(
           g.panel('Evicted', 'Show rate of evicted items from cache.') +
           g.queryPanel(
-            'sum(rate(thanos_store_index_cache_items_evicted_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, item_type)',
-            '{{job}} {{item_type}}',
+            'sum(rate(thanos_store_index_cache_items_evicted_total{namespace="$namespace",job=~"$job"}[$interval])) by (item_type)',
+            '{{item_type}}',
           ) +
           g.stack
         )
@@ -138,14 +138,14 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Chunk Size', 'Shows size of chunks that have sent to the bucket.') +
           g.queryPanel(
             [
-              'histogram_quantile(0.99, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (job, le))',
-              'sum(rate(thanos_bucket_store_sent_chunk_size_bytes_sum{namespace="$namespace",job=~"$job"}[$interval])) by (job) / sum(rate(thanos_bucket_store_sent_chunk_size_bytes_count{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
-              'histogram_quantile(0.99, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (job, le))',
+              'histogram_quantile(0.99, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (le))',
+              'histogram_quantile(0.90, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (le))',
+              'histogram_quantile(0.50, sum(rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{namespace="$namespace",job=~"$job"}[$interval])) by (le))',
             ],
             [
-              'P99',
-              'mean',
-              'P50',
+              'p99',
+              'p90',
+              'p50',
             ],
           ) +
           { yaxes: g.yaxes('bytes') }
@@ -158,12 +158,12 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.queryPanel(
             [
               'thanos_bucket_store_series_blocks_queried{namespace="$namespace",job=~"$job",quantile="0.99"}',
-              'sum(rate(thanos_bucket_store_series_blocks_queried_sum{namespace="$namespace",job=~"$job"}[$interval])) by (job) / sum(rate(thanos_bucket_store_series_blocks_queried_count{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+              'thanos_bucket_store_series_blocks_queried{namespace="$namespace",job=~"$job",quantile="0.90"}',
               'thanos_bucket_store_series_blocks_queried{namespace="$namespace",job=~"$job",quantile="0.50"}',
             ], [
-              'P99',
-              'mean {{job}}',
-              'P50',
+              'p99',
+              'p90',
+              'p50',
             ],
           )
         )
@@ -249,26 +249,26 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(0.99, sum(rate(%s_bucket{%s}[$interval])) by (job, operation, le)) * %s' % [metricName, selector, multiplier],
+        expr: 'histogram_quantile(0.99, sum(rate(%s_bucket{%s}[$interval])) by (operation, le)) * %s' % [metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P99 {{job}}',
+        legendFormat: 'p99',
         refId: 'A',
         step: 10,
       },
       {
-        expr: 'sum(rate(%s_sum{%s}[$interval])) by (job, operation) * %s / sum(rate(%s_count{%s}[$interval])) by (job, operation)' % [metricName, selector, multiplier, metricName, selector],
+        expr: 'histogram_quantile(0.90, sum(rate(%s_bucket{%s}[$interval])) by (operation, le)) * %s' % [metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'mean {{job}}',
-        refId: 'B',
+        legendFormat: 'p90',
+        refId: 'C',
         step: 10,
       },
       {
-        expr: 'histogram_quantile(0.50, sum(rate(%s_bucket{%s}[$interval])) by (job, operation, le)) * %s' % [metricName, selector, multiplier],
+        expr: 'histogram_quantile(0.50, sum(rate(%s_bucket{%s}[$interval])) by (operation, le)) * %s' % [metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P50 {{job}}',
+        legendFormat: 'p50',
         refId: 'C',
         step: 10,
       },
