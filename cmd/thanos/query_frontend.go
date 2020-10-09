@@ -84,8 +84,18 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Prometheus.").Default("/").String()
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
+		return runQueryFrontend(
+			g,
+			logger,
+			reg,
+			tracer,
+			cfg,
+			comp,
+			*webRoutePrefix,
+		)
 	})
 }
 
@@ -96,6 +106,7 @@ func runQueryFrontend(
 	tracer opentracing.Tracer,
 	cfg *queryFrontendConfig,
 	comp component.Component,
+	webRoutePrefix string,
 ) error {
 	cacheConfContentYaml, err := cfg.CachePathOrContent.Content()
 	if err != nil {
@@ -154,7 +165,7 @@ func runQueryFrontend(
 		)
 
 		instr := func(f http.HandlerFunc) http.HandlerFunc {
-			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			return func(w http.ResponseWriter, r *http.Request) {
 				name := "query-frontend"
 				ins.NewHandler(
 					name,
@@ -169,10 +180,11 @@ func runQueryFrontend(
 					),
 					// Cortex frontend middlewares require orgID.
 				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
-			})
-			return hf
+			}
 		}
-		srv.Handle("/", instr(fe.Handler().ServeHTTP))
+		srv.Handle(webRoutePrefix, instr(func(w http.ResponseWriter, r *http.Request) {
+			fe.Handler().ServeHTTP(w, r)
+		}))
 
 		g.Add(func() error {
 			statusProber.Healthy()
