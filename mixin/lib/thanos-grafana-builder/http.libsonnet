@@ -2,14 +2,14 @@
   httpQpsPanel(metricName, selector):: {
     seriesOverrides: [
       { alias: '/1../', color: '#EAB839' },
-      { alias: '/2../', color: '#7EB26D' },
-      { alias: '/3../', color: '#6ED0E0' },
-      { alias: '/4../', color: '#EF843C' },
-      { alias: '/5../', color: '#E24D42' },
+      { alias: '/2../', color: '#37872D' },
+      { alias: '/3../', color: '#E0B400' },
+      { alias: '/4../', color: '#1F60C4' },
+      { alias: '/5../', color: '#C4162A' },
     ],
     targets: [
       {
-        expr: 'sum by (handler, code) (rate(%s{%s}[$interval]))' % [metricName, selector],
+        expr: 'sum by (code) (rate(%s{%s}[$interval]))' % [metricName, selector],
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: '{{code}}',

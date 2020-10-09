@@ -44,30 +44,30 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.row('gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests from other queriers.') +
-          g.grpcQpsPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcRequestsPanel('grpc_client_handled_total', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests from other queriers.') +
-          g.grpcErrorsPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.grpcErrorsPanel('grpc_client_handled_total', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from other queriers, in quantiles.') +
-          g.grpcLatencyPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
+          g.latencyPanel('grpc_client_handling_seconds_bucket', 'namespace="$namespace",job=~"$job",grpc_type="unary"')
         )
       )
       .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from other queriers.') +
-          g.grpcQpsPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.grpcRequestsPanel('grpc_client_handled_total', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests from other queriers.') +
-          g.grpcErrorsPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.grpcErrorsPanel('grpc_client_handled_total', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from other queriers, in quantiles') +
-          g.grpcLatencyPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.latencyPanel('grpc_client_handling_seconds_bucket', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
       )
       .addRow(

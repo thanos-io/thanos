@@ -1,30 +1,28 @@
 {
-  grpcQpsPanel(type, selector):: {
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server',
-
+  grpcRequestsPanel(metric, selector):: {
     seriesOverrides: [
       { alias: '/Aborted/', color: '#EAB839' },
-      { alias: '/AlreadyExists/', color: '#7EB26D' },
-      { alias: '/FailedPrecondition/', color: '#6ED0E0' },
-      { alias: '/Unimplemented/', color: '#6ED0E0' },
-      { alias: '/InvalidArgument/', color: '#EF843C' },
-      { alias: '/NotFound/', color: '#EF843C' },
-      { alias: '/PermissionDenied/', color: '#EF843C' },
-      { alias: '/Unauthenticated/', color: '#EF843C' },
-      { alias: '/Canceled/', color: '#E24D42' },
-      { alias: '/DataLoss/', color: '#E24D42' },
-      { alias: '/DeadlineExceeded/', color: '#E24D42' },
-      { alias: '/Internal/', color: '#E24D42' },
-      { alias: '/OutOfRange/', color: '#E24D42' },
-      { alias: '/ResourceExhausted/', color: '#E24D42' },
-      { alias: '/Unavailable/', color: '#E24D42' },
-      { alias: '/Unknown/', color: '#E24D42' },
-      { alias: '/OK/', color: '#7EB26D' },
-      { alias: 'error', color: '#E24D42' },
+      { alias: '/AlreadyExists/', color: '#37872D' },
+      { alias: '/FailedPrecondition/', color: '#E0B400' },
+      { alias: '/Unimplemented/', color: '#E0B400' },
+      { alias: '/InvalidArgument/', color: '#1F60C4' },
+      { alias: '/NotFound/', color: '#1F60C4' },
+      { alias: '/PermissionDenied/', color: '#1F60C4' },
+      { alias: '/Unauthenticated/', color: '#1F60C4' },
+      { alias: '/Canceled/', color: '#C4162A' },
+      { alias: '/DataLoss/', color: '#C4162A' },
+      { alias: '/DeadlineExceeded/', color: '#C4162A' },
+      { alias: '/Internal/', color: '#C4162A' },
+      { alias: '/OutOfRange/', color: '#C4162A' },
+      { alias: '/ResourceExhausted/', color: '#C4162A' },
+      { alias: '/Unavailable/', color: '#C4162A' },
+      { alias: '/Unknown/', color: '#C4162A' },
+      { alias: '/OK/', color: '#37872D' },
+      { alias: 'error', color: '#C4162A' },
     ],
     targets: [
       {
-        expr: 'sum by (grpc_code) (rate(%s_handled_total{%s}[$interval]))' % [prefix, selector],
+        expr: 'sum by (grpc_code) (rate(%s{%s}[$interval]))' % [metric, selector],
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: '{{grpc_code}}',
@@ -34,22 +32,9 @@
     ],
   } + $.stack,
 
-  grpcErrorsPanel(type, selector)::
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
+  grpcErrorsPanel(metric, selector)::
     $.qpsErrTotalPanel(
-      '%s_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [prefix, selector],
-      '%s_started_total{%s}' % [prefix, selector],
+      '%s{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [metric, selector],
+      '%s{%s}' % [metric, selector],
     ),
-
-  grpcLatencyPanel(type, selector, multiplier='1')::
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
-    $.queryPanel(
-      [
-        'histogram_quantile(0.99, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
-        'histogram_quantile(0.90, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
-        'histogram_quantile(0.50, sum by (le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
-      ],
-      ['p99', 'p90', 'p50']
-    ) +
-    { yaxes: $.yaxes('s') },
 }

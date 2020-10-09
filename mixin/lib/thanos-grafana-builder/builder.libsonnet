@@ -77,12 +77,35 @@ local template = grafana.template;
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'p%d' % [100 * percentile],
+        logBase: 10,
+        min: null,
+        max: null,
         refId: 'A',
         step: 10,
       }
       for percentile in [0.5, 0.9, 0.99]
     ],
     yaxes: $.yaxes('s'),
+    seriesOverrides: [
+      {
+        alias: 'p99',
+        color: '#FA6400',
+        fill: 1,
+        fillGradient: 1,
+      },
+      {
+        alias: 'p90',
+        color: '#E0B400',
+        fill: 1,
+        fillGradient: 1,
+      },
+      {
+        alias: 'p50',
+        color: '#37872D',
+        fill: 10,
+        fillGradient: 0,
+      },
+    ],
   },
 
   qpsErrTotalPanel(selectorErr, selectorTotal):: {
