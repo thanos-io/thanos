@@ -14,18 +14,18 @@ import (
 
 func TestEngineFunc(t *testing.T) {
 	var (
-		engineDefault = promql.NewEngine(promql.EngineOpts{LookbackDelta: 123})
-		engine5m      = promql.NewEngine(promql.EngineOpts{LookbackDelta: 5 * time.Minute})
-		engine1h      = promql.NewEngine(promql.EngineOpts{LookbackDelta: 1 * time.Hour})
+		engineRaw = promql.NewEngine(promql.EngineOpts{})
+		engine5m  = promql.NewEngine(promql.EngineOpts{LookbackDelta: 5 * time.Minute})
+		engine1h  = promql.NewEngine(promql.EngineOpts{LookbackDelta: 1 * time.Hour})
 	)
-	fakeNewEngine := func(lookback time.Duration) *promql.Engine {
-		switch lookback {
+	mockNewEngine := func(opts promql.EngineOpts) *promql.Engine {
+		switch opts.LookbackDelta {
 		case 1 * time.Hour:
 			return engine1h
 		case 5 * time.Minute:
 			return engine5m
 		default:
-			return engineDefault
+			return engineRaw
 		}
 	}
 	type testCase struct {
@@ -45,17 +45,18 @@ func TestEngineFunc(t *testing.T) {
 				lookbackDelta:        0,
 				dynamicLookbackDelta: false,
 				tcs: []testCase{
-					{0, engineDefault},
-					{5 * minute, engineDefault},
-					{1 * hour, engineDefault},
+					{0, engineRaw},
+					{5 * minute, engineRaw},
+					{1 * hour, engineRaw},
 				},
 			},
 			{
+
 				lookbackDelta:        3 * time.Minute,
 				dynamicLookbackDelta: true,
 				tcs: []testCase{
-					{2 * minute, engineDefault},
-					{3 * minute, engineDefault},
+					{2 * minute, engineRaw},
+					{3 * minute, engineRaw},
 					{4 * minute, engine5m},
 					{5 * minute, engine5m},
 					{6 * minute, engine1h},
@@ -79,9 +80,9 @@ func TestEngineFunc(t *testing.T) {
 				lookbackDelta:        30 * time.Minute,
 				dynamicLookbackDelta: true,
 				tcs: []testCase{
-					{0, engineDefault},
-					{5 * minute, engineDefault},
-					{30 * minute, engineDefault},
+					{0, engineRaw},
+					{5 * minute, engineRaw},
+					{30 * minute, engineRaw},
 					{31 * minute, engine1h},
 					{59 * minute, engine1h},
 					{1 * hour, engine1h},
@@ -101,7 +102,7 @@ func TestEngineFunc(t *testing.T) {
 		}
 	)
 	for _, td := range tData {
-		e := engineFunc(fakeNewEngine, td.lookbackDelta, td.dynamicLookbackDelta)
+		e := engineFactory(mockNewEngine, promql.EngineOpts{LookbackDelta: td.lookbackDelta}, td.dynamicLookbackDelta)
 		for _, tc := range td.tcs {
 			got := e(tc.stepMillis)
 			testutil.Equals(t, tc.expect, got)

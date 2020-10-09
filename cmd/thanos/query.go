@@ -321,27 +321,16 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-		subqueryIntervalFunc = func(int64) int64 {
-			return defaultEvaluationInterval.Milliseconds()
-		}
-		totalEngines int
-		newEngine    = func(ld time.Duration) *promql.Engine {
-			var r prometheus.Registerer = reg
-			if dynamicLookbackDelta {
-				r = extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(totalEngines)}, reg)
-				totalEngines++
-			}
-			return promql.NewEngine(
-				promql.EngineOpts{
-					Logger: logger,
-					Reg:    r,
-					// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-					MaxSamples:               math.MaxInt32,
-					Timeout:                  queryTimeout,
-					NoStepSubqueryIntervalFn: subqueryIntervalFunc,
-					LookbackDelta:            ld,
-				},
-			)
+		engineOpts = promql.EngineOpts{
+			Logger: logger,
+			Reg:    reg,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return defaultEvaluationInterval.Milliseconds()
+			},
 		}
 	)
 
@@ -454,7 +443,7 @@ func runQuery(
 		api := v1.NewQueryAPI(
 			logger,
 			stores,
-			engineFunc(newEngine, lookbackDelta, dynamicLookbackDelta),
+			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -551,21 +540,54 @@ func firstDuplicate(ss []string) string {
 	return ""
 }
 
-func engineFunc(newEngine func(time.Duration) *promql.Engine, lookbackDelta time.Duration, dynamicLookbackDelta bool) func(int64) *promql.Engine {
+// engineFactory creates from 1 to 3 promql.Engines depending on
+// dynamicLookbackDelta and eo.LookbackDelta and returns a function
+// that returns appropriate engine for given maxSourceResolutionMillis.
+//
+// TODO: it seems like a good idea to tweak Prometheus itself
+// instead of creating several Engines here.
+func engineFactory(
+	newEngine func(promql.EngineOpts) *promql.Engine,
+	eo promql.EngineOpts,
+	dynamicLookbackDelta bool,
+) func(int64) *promql.Engine {
 	deltas := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
 		deltas = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
 	}
 	var (
-		engines   = make([]*promql.Engine, len(deltas))
-		rawEngine = newEngine(lookbackDelta)
-		ld        = lookbackDelta.Milliseconds()
+		engines      = make([]*promql.Engine, len(deltas))
+		ld           = eo.LookbackDelta.Milliseconds()
+		totalEngines int
 	)
+	wrapReg := func() prometheus.Registerer {
+		wr := extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(totalEngines)}, eo.Reg)
+		totalEngines++
+		return wr
+	}
+	rawEngine := newEngine(promql.EngineOpts{
+		Logger:                   eo.Logger,
+		Reg:                      wrapReg(),
+		MaxSamples:               eo.MaxSamples,
+		Timeout:                  eo.Timeout,
+		ActiveQueryTracker:       eo.ActiveQueryTracker,
+		LookbackDelta:            eo.LookbackDelta,
+		NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+	})
+
 	engines[0] = rawEngine
 	for i, d := range deltas[1:] {
 		if ld < d {
-			// Convert delta from milliseconds to time.Duration (nanoseconds).
-			engines[i+1] = newEngine(time.Duration(d * 1_000_000))
+			totalEngines++
+			engines[i+1] = newEngine(promql.EngineOpts{
+				Logger:                   eo.Logger,
+				Reg:                      wrapReg(),
+				MaxSamples:               eo.MaxSamples,
+				Timeout:                  eo.Timeout,
+				ActiveQueryTracker:       eo.ActiveQueryTracker,
+				LookbackDelta:            time.Duration(d) * time.Millisecond,
+				NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+			})
 		} else {
 			engines[i+1] = rawEngine
 		}
