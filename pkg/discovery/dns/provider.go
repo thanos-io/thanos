@@ -53,20 +53,12 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 	return r
 }
 
-// Deprecated. Use NewProviderWithReturnOnErrorIfNotFound instead.
-//
 // NewProvider returns a new empty provider with a given resolver type.
 // If empty resolver type is net.DefaultResolver.
 // TODO(OGKevin): Refactor code to use new method and eventually rename NewProviderWithReturnOnErrorIfNotFound back to NewProvider.
 func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
-	return NewProviderWithReturnOnErrorIfNotFound(logger, reg, resolverType, true)
-}
-
-// NewProviderWithReturnOnErrorIfNotFound returns a new empty provider with a given resolver type.
-// If empty resolver type is net.DefaultResolver.
-func NewProviderWithReturnOnErrorIfNotFound(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType, returnErrOnNotFound bool) *Provider {
 	p := &Provider{
-		resolver: NewResolver(resolverType.ToResolver(logger), logger, returnErrOnNotFound),
+		resolver: NewResolver(resolverType.ToResolver(logger), logger),
 		resolved: make(map[string][]string),
 		logger:   logger,
 		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{

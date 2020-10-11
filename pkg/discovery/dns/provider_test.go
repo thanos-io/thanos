@@ -22,7 +22,7 @@ func TestProvider(t *testing.T) {
 		"127.0.0.5:19095",
 	}
 
-	prv := NewProviderWithReturnOnErrorIfNotFound(log.NewNopLogger(), nil, "", true)
+	prv := NewProvider(log.NewNopLogger(), nil, "")
 	prv.resolver = &mockResolver{
 		res: map[string][]string{
 			"a": ips[:2],

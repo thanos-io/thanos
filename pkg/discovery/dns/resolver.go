@@ -42,14 +42,11 @@ type ipLookupResolver interface {
 type dnsSD struct {
 	resolver ipLookupResolver
 	logger   log.Logger
-	// https://github.com/thanos-io/thanos/issues/3186
-	// This flag is used to prevent components from crashing if hosts are not found.
-	returnErrOnNotFound bool
 }
 
 // NewResolver creates a resolver with given underlying resolver.
-func NewResolver(resolver ipLookupResolver, logger log.Logger, returnErrOnNotFound bool) Resolver {
-	return &dnsSD{resolver: resolver, logger: logger, returnErrOnNotFound: returnErrOnNotFound}
+func NewResolver(resolver ipLookupResolver, logger log.Logger) Resolver {
+	return &dnsSD{resolver: resolver, logger: logger}
 }
 
 func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string, error) {
@@ -78,13 +75,15 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 		}
 		ips, err := s.resolver.LookupIPAddr(ctx, host)
 		if err != nil {
-			// https://github.com/thanos-io/thanos/issues/3186
-			// Default DNS resolver can make thanos components crash if DNS resolutions results in EAI_NONAME.
-			// the flag returnErrOnNotFound can be used to prevent such crash.
-			if dnsErr, ok := err.(*net.DNSError); !ok || !dnsErr.IsNotFound || s.returnErrOnNotFound {
+			// We exclude error from std Golang resolver for the case of the domain (e.g `NXDOMAIN`) not being found by DNS
+			// server. Since `miekg` does not consider this as an error,  when the host cannot be found, empty slice will be
+			// returned.
+			if dnsErr, ok := err.(*net.DNSError); !ok || !dnsErr.IsNotFound {
 				return nil, errors.Wrapf(err, "lookup IP addresses %q", host)
 			}
-			level.Error(s.logger).Log("msg", "failed to lookup IP addresses", "host", host, "err", err)
+			if ips == nil {
+				level.Error(s.logger).Log("msg", "failed to lookup IP addresses", "host", host, "err", err)
+			}
 		}
 		for _, ip := range ips {
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
@@ -119,10 +118,8 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
 	}
 
-	// https://github.com/thanos-io/thanos/issues/3186
-	// This happens when miekg is used as resolver. When the host cannot be found, nothing is returned.
 	if res == nil && err == nil {
-		level.Warn(s.logger).Log("msg", "IP address lookup yielded no results nor errors", "host", host)
+		level.Warn(s.logger).Log("msg", "IP address lookup yielded no results. No host found or no addresses found", "host", host)
 	}
 
 	return res, nil
