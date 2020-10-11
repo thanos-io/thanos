@@ -55,7 +55,6 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 
 // NewProvider returns a new empty provider with a given resolver type.
 // If empty resolver type is net.DefaultResolver.
-// TODO(OGKevin): Refactor code to use new method and eventually rename NewProviderWithReturnOnErrorIfNotFound back to NewProvider.
 func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
 	p := &Provider{
 		resolver: NewResolver(resolverType.ToResolver(logger), logger),
