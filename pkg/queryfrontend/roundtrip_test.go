@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -565,7 +566,7 @@ func seriesResults(fail bool) (*int, http.Handler) {
 	var lock sync.Mutex
 	q := ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labels.Labels{{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}},
+		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
 
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -17,6 +17,7 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -314,7 +315,7 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 
 	seriesResponse := &ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labels.Labels{{{Name: "foo", Value: "bar"}}},
+		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
 	}
 	seriesData, err := json.Marshal(seriesResponse)
 	testutil.Ok(t, err)
