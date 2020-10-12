@@ -85,6 +85,11 @@ config:
   expiration: 0s
 ```
 
+`expiration` specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
+
+Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
+
+
 ### Slow Query Log
 
 Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
