@@ -66,7 +66,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 }
 
 type roundTripper struct {
-	next, queryRange, metadata http.RoundTripper
+	next, queryRange, labels http.RoundTripper
 
 	queriesCount *prometheus.CounterVec
 }
@@ -75,7 +75,7 @@ func newRoundTripper(next, queryRange, metadata http.RoundTripper, reg prometheu
 	r := roundTripper{
 		next:       next,
 		queryRange: queryRange,
-		metadata:   metadata,
+		labels:     metadata,
 		queriesCount: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_query_frontend_queries_total",
 			Help: "Total queries passing through query frontend",
@@ -99,7 +99,7 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return r.queryRange.RoundTrip(req)
 	case labelNamesOp, labelValuesOp, seriesOp:
 		r.queriesCount.WithLabelValues(op).Inc()
-		return r.metadata.RoundTrip(req)
+		return r.labels.RoundTrip(req)
 	default:
 	}
 

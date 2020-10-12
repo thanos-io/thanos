@@ -56,38 +56,45 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.http.registerFlag(cmd)
 
+	// Query range tripperware flags.
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
-	cmd.Flag("labels.split-interval", "Split labels requests by an interval and execute in parallel, it should be greater than 0 when labels.response-cache-config is configured.").
-		Default("24h").DurationVar(&cfg.LabelsConfig.SplitQueriesByInterval)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
-	cmd.Flag("labels.max-retries-per-request", "Maximum number of retries for a single label/series API request; beyond this, the downstream error is returned.").
-		Default("5").IntVar(&cfg.LabelsConfig.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
 		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLength)
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of query range requests will be scheduled in parallel by the Frontend.").
 		Default("14").IntVar(&cfg.QueryRangeConfig.Limits.MaxQueryParallelism)
-	cmd.Flag("labels.max-query-parallelism", "Maximum number of labels requests will be scheduled in parallel by the Frontend.").
-		Default("14").IntVar(&cfg.LabelsConfig.Limits.MaxQueryParallelism)
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result for query range requests, to prevent caching very recent results that might still be in flux.").
 		Default("1m").DurationVar(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness)
-	cmd.Flag("labels.response-cache-max-freshness", "Most recent allowed cacheable result for labels requests, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.LabelsConfig.Limits.MaxCacheFreshness)
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for query range requests if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.PartialResponseStrategy)
+
+	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
+
+	// Labels tripperware flags.
+	cmd.Flag("labels.split-interval", "Split labels requests by an interval and execute in parallel, it should be greater than 0 when labels.response-cache-config is configured.").
+		Default("24h").DurationVar(&cfg.LabelsConfig.SplitQueriesByInterval)
+
+	cmd.Flag("labels.max-retries-per-request", "Maximum number of retries for a single label/series API request; beyond this, the downstream error is returned.").
+		Default("5").IntVar(&cfg.LabelsConfig.MaxRetries)
+
+	cmd.Flag("labels.max-query-parallelism", "Maximum number of labels requests will be scheduled in parallel by the Frontend.").
+		Default("14").IntVar(&cfg.LabelsConfig.Limits.MaxQueryParallelism)
+
+	cmd.Flag("labels.response-cache-max-freshness", "Most recent allowed cacheable result for labels requests, to prevent caching very recent results that might still be in flux.").
+		Default("1m").DurationVar(&cfg.LabelsConfig.Limits.MaxCacheFreshness)
+
 	cmd.Flag("labels.partial-response", "Enable partial response for labels requests if no partial_response param is specified. --no-labels.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.LabelsConfig.PartialResponseStrategy)
 
 	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
 		Default("24h").DurationVar(&cfg.DefaultTimeRange)
-
-	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
 
 	cmd.Flag("cache-compression-type", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
 		Default("").StringVar(&cfg.CacheCompression)

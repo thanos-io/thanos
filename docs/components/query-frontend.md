@@ -126,48 +126,25 @@ Flags:
                                  execute in parallel, it should be greater than
                                  0 when query-range.response-cache-config is
                                  configured.
-      --labels.split-interval=24h
-                                 Split labels requests by an interval and
-                                 execute in parallel, it should be greater than
-                                 0 when labels.response-cache-config is
-                                 configured.
       --query-range.max-retries-per-request=5
                                  Maximum number of retries for a single query
                                  range request; beyond this, the downstream
                                  error is returned.
-      --labels.max-retries-per-request=5
-                                 Maximum number of retries for a single
-                                 label/series API request; beyond this, the
-                                 downstream error is returned.
       --query-range.max-query-length=0
                                  Limit the query time range (end - start time)
                                  in the query-frontend, 0 disables it.
       --query-range.max-query-parallelism=14
                                  Maximum number of query range requests will be
                                  scheduled in parallel by the Frontend.
-      --labels.max-query-parallelism=14
-                                 Maximum number of labels requests will be
-                                 scheduled in parallel by the Frontend.
       --query-range.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for query
                                  range requests, to prevent caching very recent
-                                 results that might still be in flux.
-      --labels.response-cache-max-freshness=1m
-                                 Most recent allowed cacheable result for labels
-                                 requests, to prevent caching very recent
                                  results that might still be in flux.
       --query-range.partial-response
                                  Enable partial response for query range
                                  requests if no partial_response param is
                                  specified. --no-query-range.partial-response
                                  for disabling.
-      --labels.partial-response  Enable partial response for labels requests if
-                                 no partial_response param is specified.
-                                 --no-labels.partial-response for disabling.
-      --labels.default-time-range=24h
-                                 The default metadata time range duration for
-                                 retrieving labels through Labels and Series API
-                                 when the range parameters are not specified.
       --query-range.response-cache-config-file=<file-path>
                                  Path to YAML file that contains response cache
                                  configuration.
@@ -176,6 +153,29 @@ Flags:
                                  'query-range.response-cache-config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains response cache configuration.
+      --labels.split-interval=24h
+                                 Split labels requests by an interval and
+                                 execute in parallel, it should be greater than
+                                 0 when labels.response-cache-config is
+                                 configured.
+      --labels.max-retries-per-request=5
+                                 Maximum number of retries for a single
+                                 label/series API request; beyond this, the
+                                 downstream error is returned.
+      --labels.max-query-parallelism=14
+                                 Maximum number of labels requests will be
+                                 scheduled in parallel by the Frontend.
+      --labels.response-cache-max-freshness=1m
+                                 Most recent allowed cacheable result for labels
+                                 requests, to prevent caching very recent
+                                 results that might still be in flux.
+      --labels.partial-response  Enable partial response for labels requests if
+                                 no partial_response param is specified.
+                                 --no-labels.partial-response for disabling.
+      --labels.default-time-range=24h
+                                 The default metadata time range duration for
+                                 retrieving labels through Labels and Series API
+                                 when the range parameters are not specified.
       --cache-compression-type=""
                                  Use compression in results cache. Supported
                                  values are: 'snappy' and ” (disable

@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 )
 
+// TODO(yeya24): add partial result when needed.
+// ThanosRequest is a common interface defined for specific thanos requests.
 type ThanosRequest interface {
 	GetStoreMatchers() [][]*labels.Matcher
 }
