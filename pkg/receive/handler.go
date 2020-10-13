@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -325,7 +326,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if tenant == "foo-ok" {
+	if strings.HasSuffix(tenant, "-ok") {
 		n := timestamp.FromTime(time.Now())
 		wreq.Timeseries[0].Samples[0].Timestamp = n - 1
 		wreq.Timeseries[0].Samples[1].Timestamp = n
