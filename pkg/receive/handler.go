@@ -417,9 +417,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		}
 	}()
 
-	logger := log.With(h.logger, "tenant", tenant)
+	// Avoid log.With extra allocations for rare log lines.
+	logTags := []interface{}{"tenant", tenant}
 	if id, ok := middleware.RequestIDFromContext(pctx); ok {
-		logger = log.With(logger, "request-id", id)
+		logTags = append(logTags, "request-id", id)
 	}
 
 	ec := make(chan error)
@@ -540,7 +541,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 							b.attempt++
 							dur := h.expBackoff.ForAttempt(b.attempt)
 							b.nextAllowed = time.Now().Add(dur)
-							level.Debug(h.logger).Log("msg", "target unavailable backing off", "for", dur)
+							level.Debug(h.logger).Log(append(logTags, "msg", "msg", "target unavailable backing off", "for", dur)...)
 						} else {
 							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
 						}
@@ -569,7 +570,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		go func() {
 			for err := range ec {
 				if err != nil {
-					level.Debug(logger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
+					level.Debug(h.logger).Log(append(logTags, "msg", "request failed, but not needed to achieve quorum", "err", err)...)
 				}
 			}
 		}()

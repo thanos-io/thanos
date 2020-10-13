@@ -9,7 +9,7 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/armon/go-metrics v0.3.3
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
-	github.com/cespare/xxhash v1.1.0
+	github.com/cespare/xxhash/v2 v2.1.2-0.20201007123935-e307e39619f5
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.3.1-0.20200923145333-8587ea61fe17
@@ -47,7 +47,7 @@ require (
 	github.com/prometheus/alertmanager v0.21.0
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.13.0
+	github.com/prometheus/common v0.14.0
 	github.com/prometheus/prometheus v1.8.2-0.20200819132913-cb830b0a9c78
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
@@ -77,7 +77,7 @@ replace (
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20200922180708-b0145884d381
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20201013080346-eb27ddd3f281
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	k8s.io/klog => k8s.io/klog v0.3.1

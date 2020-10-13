@@ -13,32 +13,17 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-// noescape hides a pointer from escape analysis.  noescape is
-// the identity function but escape analysis doesn't think the
-// output depends on the input. noescape is inlined and currently
-// compiles down to zero instructions.
-// USE CAREFULLY!
-// This was copied from the runtime; see issues 23382 and 7921.
-//go:nosplit
-//go:nocheckptr
-func noescape(p unsafe.Pointer) unsafe.Pointer {
-	x := uintptr(p)
-	return unsafe.Pointer(x ^ 0)
-}
-
-//// This hack works around a failing of Go's escape analysis
-//// that was causing b to escape and be heap allocated.
-//// See issue 23382.
-//// TODO: once issue 7921 is fixed, this should be reverted to
-//// just "b.addr = b".
-//b.addr = (*Builder)(noescape(unsafe.Pointer(b)))
-
 func noAllocString(buf []byte) string {
 	return *(*string)(unsafe.Pointer(&buf))
+}
+
+func noAllocBytes(buf string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&buf))
 }
 
 // LabelsFromPromLabels converts Prometheus labels to slice of storepb.Label in type unsafe manner.
@@ -436,4 +421,33 @@ func (m *LabelSet) MarshalJSON() ([]byte, error) {
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *LabelSet) PromLabels() labels.Labels {
 	return LabelsToPromLabels(m.Labels)
+}
+
+var sep = []byte{'\xff'}
+
+// HashWithPrefix returns a hash for the given prefix and labels.
+func HashWithPrefix(prefix string, lbls []Label) uint64 {
+	// Use xxhash.Sum64(b) for fast path as it's faster.
+	b := make([]byte, 0, 1024)
+	b = append(b, prefix...)
+
+	for i, v := range lbls {
+		if len(b)+len(v.Name)+len(v.Value)+2 >= cap(b) {
+			// If labels entry is 1KB+ allocate do not allocate whole entry.
+			h := xxhash.New()
+			_, _ = h.Write(b)
+			for _, v := range lbls[i:] {
+				_, _ = h.WriteString(v.Name)
+				_, _ = h.Write(sep)
+				_, _ = h.WriteString(v.Value)
+				_, _ = h.Write(sep)
+			}
+			return h.Sum64()
+		}
+		b = append(b, v.Name...)
+		b = append(b, sep[0])
+		b = append(b, v.Value...)
+		b = append(b, sep[0])
+	}
+	return xxhash.Sum64(b)
 }

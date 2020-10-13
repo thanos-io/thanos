@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -962,22 +963,31 @@ func createBiggySerializedWriteReq(t testing.TB, sizeBytes int, word string) []b
 	return snappy.Encode(nil, body)
 }
 
-func BenchmarkHandlerReceiveHTTP(b *testing.B) {
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTBWithAlloc(b))
+func BenchmarkHandlerReceiveHTTP_BigLabel(b *testing.B) {
+	// 10 MB, 0.5MB compressed.
+	req := createBiggySerializedWriteReq(b, 1024*1024*10, "abcdefghij")
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTBWithAlloc(b), req)
 }
 
-func TestHandlerReceiveHTTP(t *testing.T) {
-	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
+func TestHandlerReceiveHTTP_BigLabel(t *testing.T) {
+	// 10 MB, 0.5MB compressed.
+	req := createBiggySerializedWriteReq(t, 1024*1024*10, "abcdefghij")
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t), req)
 }
+
+//func BenchmarkHandlerReceiveHTTP_ManyLabels(b *testing.B) {
+//	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTBWithAlloc(b), req)
+//}
+//
+//func TestHandlerReceiveHTTP_ManyLabels(t *testing.T) {
+//	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t)), req)
+//}
 
 // 15 GB per 500 ops, (30MB 3x blowout) 20GB per 500 ops for non zero copy code, so 40 MB (4x blowout).
-func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
+func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB, writeRequest []byte) {
 	dir, err := ioutil.TempDir("", "test_receive")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
-
-	// 10 MB, 0.5MB compressed.
-	compressed := createBiggySerializedWriteReq(b, 1024*1024*10, "abcdefghij")
 
 	handlers, _ := newHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]
@@ -989,6 +999,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
 			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
 			NoLockfile:        true,
+			StripeSize:        1, // Disable stripe pre allocation so we can clear profiles.
 		},
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
@@ -1038,7 +1049,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			//}
 
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(compressed)), Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(writeRequest))})
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			time.Sleep(1 * time.Millisecond)
@@ -1047,7 +1058,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			//	dumpMemProfile(b, "multi5.out")
 			//
 			//	// Clear series, and see if resources are released.
-			//	db := m.tenants[handler.options.DefaultTenantID].readyStorage().Get()
+			//  db := m.tenants[handler.options.DefaultTenantID].readyStorage().Get()
 			//	fmt.Println(db.Head().NumSeries())
 			//	testutil.Ok(b, db.Head().Truncate(timestamp.FromTime(time.Now())))
 			//	fmt.Println(db.Head().NumSeries())
@@ -1061,25 +1072,25 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	// First request should be fine, since we don't change timestamp, rest is wrong.
 	handler.options.DefaultTenantID = "foo-conflicting"
 	r := httptest.NewRecorder()
-	handler.receiveHTTP(r, &http.Request{Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+	handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(writeRequest))})
 	testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 	b.Run("conflict errors", func(b testutil.TB) {
-		n := b.N()
+		n := b.N() * 500
 		for i := 0; i < n; i++ {
-			//if i == 1 {
-			//	runtime.GC()
-			//	dumpMemProfile(b, "single_err_req1.out")
-			//}
+			if i == 1 {
+				runtime.GC()
+				dumpMemProfile(b, "single_err_req2.out")
+			}
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(compressed)), Body: ioutil.NopCloser(bytes.NewReader(compressed))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(writeRequest))})
 			testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
 			time.Sleep(1 * time.Millisecond)
 
-			//if i == n-1 {
-			//	runtime.GC()
-			//	dumpMemProfile(b, "multi_err1.out")
-			//}
+			if i == n-1 {
+				runtime.GC()
+				dumpMemProfile(b, "multi_err2.out")
+			}
 		}
 	})
 
