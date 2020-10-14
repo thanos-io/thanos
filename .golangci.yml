@@ -53,6 +53,8 @@ linters-settings:
     exclude: ./.errcheck_excludes.txt
   misspell:
     locale: US
+  goconst:
+    min-occurrences: 5
 
 issues:
   exclude-rules:

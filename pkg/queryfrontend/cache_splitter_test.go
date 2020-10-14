@@ -30,7 +30,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		},
 		{
 			name: "non downsampling resolution specified",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Query: "up",
 				Start: 0,
 				Step:  60 * seconds,
@@ -39,7 +39,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		},
 		{
 			name: "10s step",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Query: "up",
 				Start: 0,
 				Step:  10 * seconds,
@@ -48,7 +48,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		},
 		{
 			name: "1m downsampling resolution",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Query:               "up",
 				Start:               0,
 				Step:                10 * seconds,
@@ -58,7 +58,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Query:               "up",
 				Start:               0,
 				Step:                10 * seconds,
@@ -68,7 +68,7 @@ func TestGenerateCacheKey(t *testing.T) {
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Query:               "up",
 				Start:               0,
 				Step:                10 * seconds,

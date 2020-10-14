@@ -29,7 +29,7 @@ func newThanosCacheKeyGenerator(interval time.Duration) thanosCacheKeyGenerator 
 // GenerateCacheKey generates a cache key based on the Request and interval.
 func (t thanosCacheKeyGenerator) GenerateCacheKey(_ string, r queryrange.Request) string {
 	currentInterval := r.GetStart() / t.interval.Milliseconds()
-	if tr, ok := r.(*ThanosRequest); ok {
+	if tr, ok := r.(*ThanosQueryRangeRequest); ok {
 		i := 0
 		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 		}

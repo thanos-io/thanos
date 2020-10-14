@@ -44,11 +44,11 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/prometheus/alertmanager v0.21.0
+	github.com/prometheus/alertmanager v0.21.1-0.20200911160112-1fdff6b3f939
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.13.0
-	github.com/prometheus/prometheus v1.8.2-0.20200819132913-cb830b0a9c78
+	github.com/prometheus/common v0.14.0
+	github.com/prometheus/prometheus v1.8.2-0.20200923143134-7e2db3d092f3
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible
 	github.com/weaveworks/common v0.0.0-20200914083218-61ffdd448099
