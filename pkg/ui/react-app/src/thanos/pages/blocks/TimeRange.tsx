@@ -11,7 +11,7 @@ interface TimeRangeProps {
   viewMaxTime: number;
   gridMinTime: number;
   gridMaxTime: number;
-  onChange: (times: [number, number]) => void;
+  onChange: (times: number[]) => void;
 }
 
 const NUM_MARKS = 10;
