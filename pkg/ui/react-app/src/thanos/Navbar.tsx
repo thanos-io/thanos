@@ -39,13 +39,45 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
   rule: [
     { name: 'Alerts', uri: '/new/alerts' },
     { name: 'Rules', uri: '/new/rules' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/new/status' },
+        { name: 'Command-Line Flags', uri: '/new/flags' },
+      ],
+    },
   ],
-  bucket: [{ name: 'Blocks', uri: '/new/blocks' }],
+  bucket: [
+    { name: 'Blocks', uri: '/new/blocks' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/new/status' },
+        { name: 'Command-Line Flags', uri: '/new/flags' },
+      ],
+    },
+  ],
   compact: [
     { name: 'Global Blocks', uri: '/new/blocks' },
     { name: 'Loaded Blocks', uri: '/new/loaded' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/new/status' },
+        { name: 'Command-Line Flags', uri: '/new/flags' },
+      ],
+    },
   ],
-  store: [{ name: 'Loaded Blocks', uri: '/new/loaded' }],
+  store: [
+    { name: 'Loaded Blocks', uri: '/new/loaded' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/new/status' },
+        { name: 'Command-Line Flags', uri: '/new/flags' },
+      ],
+    },
+  ],
 };
 
 const defaultClassicUIRoute: { [component: string]: string } = {
