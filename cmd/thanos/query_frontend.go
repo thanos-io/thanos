@@ -96,6 +96,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
 		Default("24h").DurationVar(&cfg.DefaultTimeRange)
 
+	cfg.LabelsConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "labels.response-cache-config", "YAML file that contains response cache configuration.", false)
+
 	cmd.Flag("cache-compression-type", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
 		Default("").StringVar(&cfg.CacheCompression)
 
@@ -133,6 +135,21 @@ func runQueryFrontend(
 			return errors.Wrap(err, "initializing the query range cache config")
 		}
 		cfg.QueryRangeConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
+			Compression: cfg.CacheCompression,
+			CacheConfig: *cacheConfig,
+		}
+	}
+
+	labelsCacheConfContentYaml, err := cfg.LabelsConfig.CachePathOrContent.Content()
+	if err != nil {
+		return err
+	}
+	if len(labelsCacheConfContentYaml) > 0 {
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "initializing the labels cache config")
+		}
+		cfg.LabelsConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
 			Compression: cfg.CacheCompression,
 			CacheConfig: *cacheConfig,
 		}

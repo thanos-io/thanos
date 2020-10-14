@@ -164,10 +164,19 @@ type LabelsConfig struct {
 func (cfg *Config) Validate() error {
 	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 {
-			return errors.New("split queries interval should be greater than 0")
+			return errors.New("split queries interval should be greater than 0 when caching is enabled")
 		}
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(); err != nil {
-			return errors.Wrap(err, "invalid ResultsCache config")
+			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
+		}
+	}
+
+	if cfg.LabelsConfig.ResultsCacheConfig != nil {
+		if cfg.LabelsConfig.SplitQueriesByInterval <= 0 {
+			return errors.New("split queries interval should be greater than 0  when caching is enabled")
+		}
+		if err := cfg.LabelsConfig.ResultsCacheConfig.Validate(); err != nil {
+			return errors.Wrap(err, "invalid ResultsCache config for labels tripperware")
 		}
 	}
 

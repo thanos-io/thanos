@@ -26,10 +26,11 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type ThanosLabelsResponse struct {
-	Status    string   `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
-	Data      []string `protobuf:"bytes,2,rep,name=Data,proto3" json:"data"`
-	ErrorType string   `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
-	Error     string   `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+	Status    string            `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
+	Data      []string          `protobuf:"bytes,2,rep,name=Data,proto3" json:"data"`
+	ErrorType string            `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
+	Error     string            `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+	Headers   []*ResponseHeader `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
 }
 
 func (m *ThanosLabelsResponse) Reset()         { *m = ThanosLabelsResponse{} }
@@ -66,11 +67,19 @@ func (m *ThanosLabelsResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_ThanosLabelsResponse proto.InternalMessageInfo
 
 type ThanosSeriesResponse struct {
+<<<<<<< HEAD
 	Status string `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
 	// TODO(bwplotka): Experiment with ZLabelSet here.
 	Data      []labelpb.LabelSet `protobuf:"bytes,2,rep,name=Data,proto3" json:"data"`
 	ErrorType string             `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
 	Error     string             `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+=======
+	Status    string                                                   `protobuf:"bytes,1,opt,name=Status,proto3" json:"status"`
+	Data      []github_com_thanos_io_thanos_pkg_store_labelpb.LabelSet `protobuf:"bytes,2,rep,name=Data,proto3,customtype=github.com/thanos-io/thanos/pkg/store/labelpb.LabelSet" json:"data"`
+	ErrorType string                                                   `protobuf:"bytes,3,opt,name=ErrorType,proto3" json:"errorType,omitempty"`
+	Error     string                                                   `protobuf:"bytes,4,opt,name=Error,proto3" json:"error,omitempty"`
+	Headers   []*ResponseHeader                                        `protobuf:"bytes,5,rep,name=Headers,proto3" json:"-"`
+>>>>>>> bab927f8... cache labels and series results
 }
 
 func (m *ThanosSeriesResponse) Reset()         { *m = ThanosSeriesResponse{} }
@@ -106,14 +115,54 @@ func (m *ThanosSeriesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ThanosSeriesResponse proto.InternalMessageInfo
 
+type ResponseHeader struct {
+	Name   string   `protobuf:"bytes,1,opt,name=Name,proto3" json:"-"`
+	Values []string `protobuf:"bytes,2,rep,name=Values,proto3" json:"-"`
+}
+
+func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
+func (m *ResponseHeader) String() string { return proto.CompactTextString(m) }
+func (*ResponseHeader) ProtoMessage()    {}
+func (*ResponseHeader) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b882fa7024d92f38, []int{2}
+}
+func (m *ResponseHeader) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ResponseHeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ResponseHeader.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ResponseHeader) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ResponseHeader.Merge(m, src)
+}
+func (m *ResponseHeader) XXX_Size() int {
+	return m.Size()
+}
+func (m *ResponseHeader) XXX_DiscardUnknown() {
+	xxx_messageInfo_ResponseHeader.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ResponseHeader proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*ThanosLabelsResponse)(nil), "queryfrontend.ThanosLabelsResponse")
 	proto.RegisterType((*ThanosSeriesResponse)(nil), "queryfrontend.ThanosSeriesResponse")
+	proto.RegisterType((*ResponseHeader)(nil), "queryfrontend.ResponseHeader")
 }
 
 func init() { proto.RegisterFile("queryfrontend/response.proto", fileDescriptor_b882fa7024d92f38) }
 
 var fileDescriptor_b882fa7024d92f38 = []byte{
+<<<<<<< HEAD
 	// 299 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x91, 0x31, 0x4e, 0xc3, 0x30,
 	0x14, 0x86, 0x63, 0x5a, 0x2a, 0x6a, 0x40, 0xa0, 0xb4, 0x12, 0xa1, 0xaa, 0x9c, 0xaa, 0x53, 0x91,
@@ -134,6 +183,35 @@ var fileDescriptor_b882fa7024d92f38 = []byte{
 	0x7f, 0x3f, 0x29, 0x18, 0x66, 0x1f, 0xcc, 0xca, 0x4a, 0x46, 0xf2, 0x92, 0x91, 0xf7, 0x92, 0x91,
 	0x97, 0x8a, 0x59, 0x79, 0xc5, 0xac, 0xb7, 0x8a, 0x59, 0x71, 0xc7, 0x2c, 0xed, 0xe6, 0x33, 0x00,
 	0x00, 0xff, 0xff, 0xd2, 0x7d, 0x34, 0xcb, 0x14, 0x02, 0x00, 0x00,
+=======
+	// 402 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x92, 0xc1, 0x8f, 0x93, 0x40,
+	0x14, 0xc6, 0x61, 0x4b, 0xd1, 0xce, 0x46, 0x4d, 0x66, 0x37, 0x91, 0xdd, 0x74, 0xa1, 0xe9, 0xa9,
+	0x26, 0x2e, 0x24, 0x35, 0x7a, 0xf4, 0x80, 0xda, 0x18, 0x63, 0x3c, 0xd0, 0xc6, 0xfb, 0x60, 0x9f,
+	0x94, 0x08, 0xcc, 0x38, 0x33, 0x1c, 0xf8, 0x2f, 0xfc, 0xb3, 0x7a, 0x6c, 0x3c, 0x19, 0x0f, 0x44,
+	0xdb, 0x1b, 0x7f, 0x82, 0x27, 0xd3, 0x61, 0x88, 0xe5, 0xe8, 0x71, 0x6f, 0xc3, 0xf7, 0xfd, 0xde,
+	0x4b, 0xbe, 0x8f, 0x87, 0xc6, 0x5f, 0x4b, 0xe0, 0xd5, 0x67, 0x4e, 0x0b, 0x09, 0xc5, 0x3a, 0xe0,
+	0x20, 0x18, 0x2d, 0x04, 0xf8, 0x8c, 0x53, 0x49, 0xf1, 0x83, 0x9e, 0x7b, 0x7d, 0x99, 0xd0, 0x84,
+	0x2a, 0x27, 0x38, 0xbe, 0x5a, 0xe8, 0xfa, 0x4a, 0x48, 0xca, 0x21, 0xc8, 0x48, 0x0c, 0x19, 0x8b,
+	0x03, 0x59, 0x31, 0x10, 0xad, 0x35, 0xfd, 0x63, 0xa2, 0xcb, 0xd5, 0x86, 0x14, 0x54, 0xbc, 0x3f,
+	0xba, 0x22, 0xd2, 0xeb, 0xf1, 0x14, 0xd9, 0x4b, 0x49, 0x64, 0x29, 0x1c, 0x73, 0x62, 0xce, 0x46,
+	0x21, 0x6a, 0x6a, 0xcf, 0x16, 0x4a, 0x89, 0xb4, 0x83, 0xc7, 0xc8, 0x7a, 0x4d, 0x24, 0x71, 0xce,
+	0x26, 0x83, 0xd9, 0x28, 0xbc, 0xdf, 0xd4, 0x9e, 0xb5, 0x26, 0x92, 0x44, 0x4a, 0xc5, 0xcf, 0xd1,
+	0xe8, 0x0d, 0xe7, 0x94, 0xaf, 0x2a, 0x06, 0xce, 0x40, 0x2d, 0x79, 0xdc, 0xd4, 0xde, 0x05, 0x74,
+	0xe2, 0x53, 0x9a, 0xa7, 0x12, 0x72, 0x26, 0xab, 0xe8, 0x1f, 0x89, 0x9f, 0xa0, 0xa1, 0xfa, 0x70,
+	0x2c, 0x35, 0x72, 0xd1, 0xd4, 0xde, 0x23, 0x35, 0x72, 0x82, 0xb7, 0x04, 0x7e, 0x89, 0xee, 0xbd,
+	0x05, 0xb2, 0x06, 0x2e, 0x9c, 0xe1, 0x64, 0x30, 0x3b, 0x9f, 0xdf, 0xf8, 0xbd, 0x3a, 0xfc, 0x2e,
+	0x4d, 0x4b, 0x85, 0xc3, 0xa6, 0xf6, 0xcc, 0xdb, 0xa8, 0x1b, 0x9a, 0x7e, 0x3f, 0xeb, 0xc2, 0x2f,
+	0x81, 0xa7, 0xf0, 0x7f, 0xe1, 0xe5, 0x49, 0xf8, 0xf3, 0xb9, 0xe3, 0x4b, 0xb5, 0xc8, 0x5f, 0x94,
+	0x59, 0xf6, 0x8a, 0xb2, 0x4a, 0xd5, 0xb9, 0x04, 0x19, 0x2e, 0xb6, 0xb5, 0x67, 0xfc, 0xac, 0xbd,
+	0x17, 0x49, 0x2a, 0x37, 0x65, 0xec, 0x7f, 0xa2, 0x79, 0xd0, 0xb2, 0xb7, 0x29, 0xd5, 0xaf, 0x80,
+	0x7d, 0x49, 0x82, 0xde, 0x4f, 0xf2, 0xbb, 0xf9, 0x3b, 0x57, 0xea, 0x3b, 0xf4, 0xb0, 0x4f, 0xe0,
+	0x2b, 0x64, 0x7d, 0x20, 0x39, 0xe8, 0x2e, 0x35, 0xaf, 0x24, 0x7c, 0x83, 0xec, 0x8f, 0x24, 0x2b,
+	0x41, 0xe8, 0x1b, 0xd2, 0xa6, 0x16, 0xc3, 0xf1, 0xf6, 0xb7, 0x6b, 0x6c, 0xf7, 0xae, 0xb9, 0xdb,
+	0xbb, 0xe6, 0xaf, 0xbd, 0x6b, 0x7e, 0x3b, 0xb8, 0xc6, 0xee, 0xe0, 0x1a, 0x3f, 0x0e, 0xae, 0x11,
+	0xdb, 0xea, 0x84, 0x9f, 0xfd, 0x0d, 0x00, 0x00, 0xff, 0xff, 0x35, 0x8d, 0xbc, 0x87, 0x22, 0x03,
+	0x00, 0x00,
+>>>>>>> bab927f8... cache labels and series results
 }
 
 func (m *ThanosLabelsResponse) Marshal() (dAtA []byte, err error) {
@@ -156,6 +234,20 @@ func (m *ThanosLabelsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Headers) > 0 {
+		for iNdEx := len(m.Headers) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Headers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintResponse(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
 	if len(m.Error) > 0 {
 		i -= len(m.Error)
 		copy(dAtA[i:], m.Error)
@@ -209,6 +301,20 @@ func (m *ThanosSeriesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Headers) > 0 {
+		for iNdEx := len(m.Headers) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Headers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintResponse(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
 	if len(m.Error) > 0 {
 		i -= len(m.Error)
 		copy(dAtA[i:], m.Error)
@@ -241,6 +347,45 @@ func (m *ThanosSeriesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.Status)
 		copy(dAtA[i:], m.Status)
 		i = encodeVarintResponse(dAtA, i, uint64(len(m.Status)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ResponseHeader) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ResponseHeader) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ResponseHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Values) > 0 {
+		for iNdEx := len(m.Values) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Values[iNdEx])
+			copy(dAtA[i:], m.Values[iNdEx])
+			i = encodeVarintResponse(dAtA, i, uint64(len(m.Values[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintResponse(dAtA, i, uint64(len(m.Name)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -282,6 +427,12 @@ func (m *ThanosLabelsResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovResponse(uint64(l))
 	}
+	if len(m.Headers) > 0 {
+		for _, e := range m.Headers {
+			l = e.Size()
+			n += 1 + l + sovResponse(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -308,6 +459,31 @@ func (m *ThanosSeriesResponse) Size() (n int) {
 	l = len(m.Error)
 	if l > 0 {
 		n += 1 + l + sovResponse(uint64(l))
+	}
+	if len(m.Headers) > 0 {
+		for _, e := range m.Headers {
+			l = e.Size()
+			n += 1 + l + sovResponse(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ResponseHeader) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovResponse(uint64(l))
+	}
+	if len(m.Values) > 0 {
+		for _, s := range m.Values {
+			l = len(s)
+			n += 1 + l + sovResponse(uint64(l))
+		}
 	}
 	return n
 }
@@ -474,6 +650,40 @@ func (m *ThanosLabelsResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Error = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Headers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Headers = append(m.Headers, &ResponseHeader{})
+			if err := m.Headers[len(m.Headers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -657,6 +867,157 @@ func (m *ThanosSeriesResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Error = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Headers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Headers = append(m.Headers, &ResponseHeader{})
+			if err := m.Headers[len(m.Headers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ResponseHeader) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ResponseHeader: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ResponseHeader: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Values", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Values = append(m.Values, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

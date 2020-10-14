@@ -373,8 +373,8 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	}
 }
 
-// TestRoundTripCacheMiddleware tests the cache middleware.
-func TestRoundTripCacheMiddleware(t *testing.T) {
+// TestRoundTripQueryRangeCacheMiddleware tests the cache middleware.
+func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 	testRequest := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
@@ -489,6 +489,192 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
 			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
+			testutil.Ok(t, err)
+
+			_, err = tpw(rt).RoundTrip(httpReq)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expected, *res)
+		})
+
+	}
+}
+
+// TestRoundTripLabelsCacheMiddleware tests the cache middleware for labels requests.
+func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
+	testRequest := &ThanosLabelsRequest{
+		Path:  "/api/v1/labels",
+		Start: 0,
+		End:   2 * hour,
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosLabelsRequest{
+		Path:          "/api/v1/labels",
+		Start:         0,
+		End:           2 * hour,
+		StoreMatchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	testLabelValuesRequestFoo := &ThanosLabelsRequest{
+		Path:  "/api/v1/label/foo/values",
+		Start: 0,
+		End:   2 * hour,
+		Label: "foo",
+	}
+
+	testLabelValuesRequestBar := &ThanosLabelsRequest{
+		Path:  "/api/v1/label/bar/values",
+		Start: 0,
+		End:   2 * hour,
+		Label: "bar",
+	}
+
+	cacheConf := &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: "1MiB",
+				MaxSizeItems: 1000,
+				Validity:     time.Hour,
+			},
+		},
+	}
+
+	now := time.Now()
+	tpw, err := NewTripperware(
+		Config{
+			LabelsConfig: LabelsConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
+		}, nil, log.NewNopLogger(),
+	)
+	testutil.Ok(t, err)
+
+	rt, err := newFakeRoundTripper()
+	testutil.Ok(t, err)
+	defer rt.Close()
+	res, handler := labelsResults(false)
+	rt.setHandler(handler)
+
+	for _, tc := range []struct {
+		name             string
+		req              queryrange.Request
+		handlerAndResult func() (*int, http.Handler)
+		expected         int
+	}{
+		{name: "first request", req: testRequest, expected: 1},
+		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 2},
+		{name: "label values request label name foo", req: testLabelValuesRequestFoo, expected: 3},
+		{name: "same label values query, use cache", req: testLabelValuesRequestFoo, expected: 3},
+		{name: "label values request different label", req: testLabelValuesRequestBar, expected: 4},
+		{
+			name: "request but will be partitioned",
+			req: &ThanosLabelsRequest{
+				Path:  "/api/v1/labels",
+				Start: timestamp.FromTime(now.Add(-time.Hour)),
+				End:   timestamp.FromTime(now.Add(time.Hour)),
+			},
+			expected: 5,
+		},
+		{
+			name: "same query as the previous one",
+			req: &ThanosLabelsRequest{
+				Path:  "/api/v1/labels",
+				Start: timestamp.FromTime(now.Add(-time.Hour)),
+				End:   timestamp.FromTime(now.Add(time.Hour)),
+			},
+			expected: 6,
+		},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
+			testutil.Ok(t, err)
+
+			_, err = tpw(rt).RoundTrip(httpReq)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expected, *res)
+		})
+
+	}
+}
+
+// TestRoundTripSeriesCacheMiddleware tests the cache middleware for series requests.
+func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
+	testRequest := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	// Different matchers set with the first request.
+	testRequest2 := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "baz")}},
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosLabelsRequest{
+		Path:          "/api/v1/series",
+		Start:         0,
+		End:           2 * hour,
+		StoreMatchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	cacheConf := &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: "1MiB",
+				MaxSizeItems: 1000,
+				Validity:     time.Hour,
+			},
+		},
+	}
+
+	tpw, err := NewTripperware(
+		Config{
+			LabelsConfig: LabelsConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
+		}, nil, log.NewNopLogger(),
+	)
+	testutil.Ok(t, err)
+
+	rt, err := newFakeRoundTripper()
+	testutil.Ok(t, err)
+	defer rt.Close()
+	res, handler := seriesResults(false)
+	rt.setHandler(handler)
+
+	for _, tc := range []struct {
+		name             string
+		req              queryrange.Request
+		handlerAndResult func() (*int, http.Handler)
+		expected         int
+	}{
+		{name: "first request", req: testRequest, expected: 1},
+		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
+		{name: "different series request, not use cache", req: testRequest2, expected: 2},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 3},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)

@@ -34,3 +34,8 @@ message ThanosSeriesResponse {
   string ErrorType              = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
   string Error                  = 4 [(gogoproto.jsontag) = "error,omitempty"];
 }
+
+message ResponseHeader {
+  string Name = 1 [(gogoproto.jsontag) = "-"];
+  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+}
