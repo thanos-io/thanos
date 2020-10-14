@@ -83,7 +83,7 @@ describe('BlockDetails', () => {
     const div = blockDetails.find({ 'data-testid': 'download' });
     window.URL.createObjectURL = jest.fn(() => 'details');
     expect(div).toHaveLength(1);
-    expect(div.find('a').text()).toBe('download data');
+    expect(div.find('a').text()).toBe('Download meta.json');
   });
 
   it('renders a list of the labels', () => {
