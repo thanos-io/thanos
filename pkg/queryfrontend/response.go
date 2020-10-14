@@ -30,7 +30,7 @@ func (ThanosResponseExtractor) ResponseWithoutHeaders(resp queryrange.Response) 
 }
 
 // headersToQueryRangeHeaders convert slice of ResponseHeader to Cortex queryrange.PrometheusResponseHeader in an
-//unsafe manner. It reuses the same memory.
+// unsafe manner. It reuses the same memory.
 func headersToQueryRangeHeaders(headers []*ResponseHeader) []*queryrange.PrometheusResponseHeader {
 	return *(*[]*queryrange.PrometheusResponseHeader)(unsafe.Pointer(&headers))
 }
