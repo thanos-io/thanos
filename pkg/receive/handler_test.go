@@ -13,8 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -1031,7 +1029,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	for i := range manySamples {
 		manySamples[i] = prompb.Sample{
 			Value:     math.MaxFloat64,
-			Timestamp: math.MinInt64, // Timestamp does not matter, it will be overriden.
+			Timestamp: math.MinInt64, // Timestamp does not matter, it will be overridden.
 		}
 	}
 
@@ -1048,7 +1046,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
-			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overriden.
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "typical labels under 1KB, 2MB of samples",
@@ -1070,7 +1068,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
-			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overriden.
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "bigger labels over 1KB, 2MB of samples",
@@ -1093,7 +1091,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					_, _ = lbl.WriteString(word)
 				}
 				return []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
-			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overriden.
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "extremely large label value 10MB, 2MB samples",
@@ -1132,28 +1130,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				n := b.N()
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
-					//if i == 1 {
-					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("single4_%v.out", tcase.name))
-					//}
-
 					r := httptest.NewRecorder()
 					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
-
-					//if i == n-1 {
-					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("multi4_%v.out", tcase.name))
-					//}
-					//	// Clear series, and see if resources are released.
-					//  db := m.tenants[handler.options.DefaultTenantID].readyStorage().Get()
-					//	fmt.Println(db.Head().NumSeries())
-					//	testutil.Ok(b, db.Head().Truncate(timestamp.FromTime(time.Now())))
-					//	fmt.Println(db.Head().NumSeries())
-					//
-					//	runtime.GC()
-					//	dumpMemProfile(b, "multi_postdelete5.out")
-					//}
 				}
 			})
 
@@ -1185,31 +1164,11 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				n := b.N()
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
-					//if i == 1 {
-					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("single_err_%v.out", tcase.name))
-					//}
 					r := httptest.NewRecorder()
 					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
-
-					//if i == n-1 {
-					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("multi_err_%v.out", tcase.name))
-					//}
 				}
 			})
 		})
 	}
-}
-
-func dumpMemProfile(t testing.TB, n string) {
-	f, err := os.OpenFile(filepath.Join("../../_dev/dumps", n), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, f.Sync())
-		testutil.Ok(t, f.Close())
-	}()
-
-	testutil.Ok(t, pprof.WriteHeapProfile(f))
 }

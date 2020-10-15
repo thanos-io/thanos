@@ -199,7 +199,7 @@ func (m *ZLabel) Unmarshal(data []byte) error {
 
 func (m *ZLabel) UnmarshalJSON(entry []byte) error {
 	f := Label(*m)
-	if err := json.Unmarshal(entry, f); err != nil {
+	if err := json.Unmarshal(entry, &f); err != nil {
 		return errors.Wrapf(err, "labels: label field unmarshal: %v", string(entry))
 	}
 	*m = ZLabel(f)
