@@ -16,7 +16,7 @@ describe('BlockDetails', () => {
       // do nothing
     },
   };
-
+  window.URL.createObjectURL = jest.fn();
   const blockDetails = mount(<BlockDetails {...defaultProps} />);
 
   it('renders a heading with block ulid', () => {
@@ -77,6 +77,13 @@ describe('BlockDetails', () => {
     const div = blockDetails.find({ 'data-testid': 'source' });
     expect(div).toHaveLength(1);
     expect(div.find('span').text()).toBe(sampleBlock.thanos.source);
+  });
+
+  it('renders the download button', () => {
+    const div = blockDetails.find({ 'data-testid': 'download' });
+    window.URL.createObjectURL = jest.fn(() => 'details');
+    expect(div).toHaveLength(1);
+    expect(div.find('a').text()).toBe('Download meta.json');
   });
 
   it('renders a list of the labels', () => {

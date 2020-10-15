@@ -26,7 +26,7 @@ all relevant information as template suggest.
 * If you have a quick question you might want to also ask on #thanos or #thanos-dev slack channel in the CNCF workspace.
 We are recommending, using GitHub issues for issues and feedback, because GitHub issues are track-able.
 
-If you encounter security vulnerability, please refer to [Reporting a Vulnerability process](SECURITY.md)
+If you encounter security vulnerability, please refer to [Reporting a Vulnerability process](/SECURITY.md)
 
 ## Adding New Features / Components
 
@@ -34,7 +34,7 @@ When contributing not obvious change to Thanos repository, please first
 discuss the change you wish to make via issue or slack, or any other
 method with the owners of this repository before making a change.
 
-Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](/docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
 ## General Naming
 
@@ -46,7 +46,7 @@ In the code and documentation prefer non-offensive terminology, for example:
 
 ## Components Naming
 
-Thanos is a distributed system composed with several services and CLI tools as listed [here](cmd/thanos).
+Thanos is a distributed system composed with several services and CLI tools as listed [here](/cmd/thanos).
 
 When we refer to them as technical reference we use verb form: `store`, `compact`, `rule`, `query`. This includes:
 
@@ -140,7 +140,7 @@ Not specifying these variables will result in auth errors against GCS, AWS, Azur
 1. If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
 1. You may merge the Pull Request once you have the sign-off of at least one developer with write access, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
-1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-prs`](https://slack.cncf.io/) channel on our slack for a review!
+1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 
 ### Dependency management
 

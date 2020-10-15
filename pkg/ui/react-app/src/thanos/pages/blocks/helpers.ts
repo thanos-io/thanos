@@ -54,3 +54,9 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
   });
   return sortedPool;
 };
+
+export const download = (blob: Block): string => {
+  const url = window.URL.createObjectURL(new Blob([JSON.stringify(blob, null, 2)], { type: 'application/json' }));
+
+  return url;
+};
