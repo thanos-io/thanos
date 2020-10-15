@@ -451,3 +451,13 @@ func HashWithPrefix(prefix string, lbls []Label) uint64 {
 	}
 	return xxhash.Sum64(b)
 }
+
+// DeepCopy copies labels and each label's string to separate bytes.
+func DeepCopy(lbls []Label) []Label {
+	ret := make([]Label, len(lbls))
+	for i := range lbls {
+		ret[i].Name = string(noAllocBytes(lbls[i].Name))
+		ret[i].Value = string(noAllocBytes(lbls[i].Value))
+	}
+	return ret
+}

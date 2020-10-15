@@ -62,13 +62,11 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var errs terrors.MultiError
 	for _, t := range wreq.Timeseries {
-		lset := labelpb.LabelsToPromLabels(t.Labels)
-
 		var ref uint64
 		// Append as many valid samples as possible, but keep track of the errors.
 		for i, s := range t.Samples {
 			if i == 0 {
-				ref, err = app.Add(lset, s.Timestamp, s.Value)
+				ref, err = app.Add(labelpb.LabelsToPromLabels(labelpb.DeepCopy(t.Labels)), s.Timestamp, s.Value)
 			} else {
 				err = app.AddFast(ref, s.Timestamp, s.Value)
 			}
@@ -78,13 +76,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 				continue
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample", &s)
+				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", labelpb.LabelsToPromLabels(t.Labels), "sample", &s)
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample", &s)
+				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", labelpb.LabelsToPromLabels(t.Labels), "sample", &s)
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
-				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", &s)
+				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", labelpb.LabelsToPromLabels(t.Labels), "sample", &s)
 			}
 		}
 	}
