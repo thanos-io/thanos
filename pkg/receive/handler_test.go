@@ -1073,25 +1073,26 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 	} {
 		b.Run(tcase.name, func(b testutil.TB) {
+			handler.options.DefaultTenantID = fmt.Sprintf("%v-ok", tcase.name)
+			handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: 1}
+
+			// It takes time to create new tenant, wait for it.
+			{
+				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
+				testutil.Ok(b, err)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+					_, err = app.Appender(ctx)
+					return err
+				}))
+			}
+
 			b.Run("OK", func(b testutil.TB) {
 				b.ReportAllocs()
 
-				handler.options.DefaultTenantID = fmt.Sprintf("%v-ok", tcase.name)
-				handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: 1}
-
-				// It takes time to create new tenant, wait for it.
-				{
-					app, err := m.TenantAppendable(handler.options.DefaultTenantID)
-					testutil.Ok(b, err)
-
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-
-					testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-						_, err = app.Appender(ctx)
-						return err
-					}))
-				}
 				n := b.N()
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
@@ -1119,30 +1120,31 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					//}
 				}
 			})
+
+			handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
+			handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: -1} // Timestamp can't go down
+			// which will cause conflict error.
+
+			// It takes time to create new tenant, wait for it.
+			{
+				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
+				testutil.Ok(b, err)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+					_, err = app.Appender(ctx)
+					return err
+				}))
+			}
+			// First request should be fine, since we don't change timestamp, rest is wrong.
+			r := httptest.NewRecorder()
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+
 			b.Run("conflict errors", func(b testutil.TB) {
 				b.ReportAllocs()
-
-				handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
-				handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: -1} // Timestamp can't go down
-				// which will cause conflict error.
-
-				// It takes time to create new tenant, wait for it.
-				{
-					app, err := m.TenantAppendable(handler.options.DefaultTenantID)
-					testutil.Ok(b, err)
-
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-
-					testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-						_, err = app.Appender(ctx)
-						return err
-					}))
-				}
-				// First request should be fine, since we don't change timestamp, rest is wrong.
-				r := httptest.NewRecorder()
-				handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
-				testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 				n := b.N()
 				b.ResetTimer()
