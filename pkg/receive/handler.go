@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,7 +27,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -324,12 +322,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(tenant) == 0 {
 		http.Error(w, "no tenant ID supplied", http.StatusBadRequest)
 		return
-	}
-
-	if strings.HasSuffix(tenant, "-ok") {
-		n := timestamp.FromTime(time.Now())
-		wreq.Timeseries[0].Samples[0].Timestamp = n - 1
-		wreq.Timeseries[0].Samples[1].Timestamp = n
 	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)

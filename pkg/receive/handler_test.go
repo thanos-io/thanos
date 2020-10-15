@@ -25,6 +25,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -941,10 +942,6 @@ func serialize(t testing.TB, lbls []labelpb.Label) []byte {
 						Value:     1,
 						Timestamp: 1,
 					},
-					{
-						Value:     2,
-						Timestamp: 2,
-					},
 				},
 			},
 		},
@@ -963,6 +960,46 @@ func TestHandlerReceiveHTTP(t *testing.T) {
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
 }
 
+type tsModifierTenantStorage struct {
+	TenantStorage
+
+	modifier int64
+}
+
+func (s *tsModifierTenantStorage) TenantAppendable(tenant string) (Appendable, error) {
+	a, err := s.TenantStorage.TenantAppendable(tenant)
+	return &tsModifierAppendable{Appendable: a, modifier: s.modifier}, err
+}
+
+type tsModifierAppendable struct {
+	Appendable
+
+	modifier int64
+}
+
+func (a *tsModifierAppendable) Appender(ctx context.Context) (storage.Appender, error) {
+	ret, err := a.Appendable.Appender(ctx)
+	return &tsModifierAppender{Appender: ret, modifier: a.modifier}, err
+}
+
+type tsModifierAppender struct {
+	storage.Appender
+
+	modifier int64
+}
+
+var cnt int64
+
+func (a *tsModifierAppender) Add(l labels.Labels, _ int64, v float64) (uint64, error) {
+	cnt += a.modifier
+	return a.Appender.Add(l, cnt, v)
+}
+
+func (a *tsModifierAppender) AddFast(ref uint64, _ int64, v float64) error {
+	cnt += a.modifier
+	return a.Appender.AddFast(ref, cnt, v)
+}
+
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir, err := ioutil.TempDir("", "test_receive")
 	testutil.Ok(b, err)
@@ -971,9 +1008,11 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	handlers, _ := newHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]
 
-	logger := log.NewLogfmtLogger(os.Stderr)
+	reg := prometheus.NewRegistry()
+
+	logger := log.NewNopLogger()
 	m := NewMultiTSDB(
-		dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		dir, logger, reg, &tsdb.Options{
 			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
 			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
 			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
@@ -1035,6 +1074,8 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ReportAllocs()
 
 				handler.options.DefaultTenantID = fmt.Sprintf("%v-ok", tcase.name)
+				handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: 1}
+
 				// It takes time to create new tenant, wait for it.
 				{
 					app, err := m.TenantAppendable(handler.options.DefaultTenantID)
@@ -1048,7 +1089,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 						return err
 					}))
 				}
-				n := b.N()
+				n := b.N() * 500
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					//if i == 1 {
@@ -1060,7 +1101,6 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
-					time.Sleep(1 * time.Millisecond)
 					//if i == n-1 {
 					//	runtime.GC()
 					//	dumpMemProfile(b,fmt.Sprintf("multi_%v.out", tcase.name))
@@ -1075,12 +1115,20 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					//	dumpMemProfile(b, "multi_postdelete5.out")
 					//}
 				}
+				testutil.Ok(b, promtest.GatherAndCompare(reg, bytes.NewBufferString(`
+# HELP prometheus_tsdb_head_samples_appended_total Total number of appended samples.
+# TYPE prometheus_tsdb_head_samples_appended_total counter
+prometheus_tsdb_head_samples_appended_total{tenant="typical labels under 1KB-ok"} 500
+`), "prometheus_tsdb_head_samples_appended_total"))
 			})
 
 			b.Run("conflict errors", func(b testutil.TB) {
 				b.ReportAllocs()
 
 				handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
+				handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: -1} // Timestamp can't go down
+				// which will cause conflict error.
+
 				// It takes time to create new tenant, wait for it.
 				{
 					app, err := m.TenantAppendable(handler.options.DefaultTenantID)
@@ -1109,7 +1157,6 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					r := httptest.NewRecorder()
 					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
-					time.Sleep(1 * time.Millisecond)
 
 					//if i == n-1 {
 					//	runtime.GC()
