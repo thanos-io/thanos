@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -150,7 +150,7 @@ func TestCountCause(t *testing.T) {
 	}
 }
 
-func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
+func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
 	cfg := []HashringConfig{
 		{
 			Hashring: "test",
@@ -176,7 +176,7 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Second,
+			ForwardTimeout:    10 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
@@ -486,7 +486,7 @@ func TestReceiveQuorum(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newTestHandlerHashring(tc.appendables, tc.replicationFactor)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -825,7 +825,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 		// to see all requests completing all the time, since we're using local
 		// network we are not expecting anything to go wrong with these.
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newTestHandlerHashring(tc.appendables, tc.replicationFactor)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -934,19 +934,22 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb
 }
 
 func serialize(t testing.TB, lbls []labelpb.Label) []byte {
+	// Create significant number of samples to see the weight of it on profiles.
 	r := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Samples: []prompb.Sample{
-					{
-						Value:     1,
-						Timestamp: 1,
-					},
-				},
+				Labels: lbls,
+				// Create 2MB of samples payload.
+				Samples: make([]prompb.Sample, 10e4),
 			},
 		},
 	}
-	r.Timeseries[0].Labels = lbls
+	for i := range r.Timeseries[0].Samples {
+		r.Timeseries[0].Samples[i] = prompb.Sample{
+			Value:     math.MaxFloat64,
+			Timestamp: math.MinInt64, // Timestamp does not matter, it will be overriden.
+		}
+	}
 	body, err := proto.Marshal(r)
 	testutil.Ok(t, err)
 	return snappy.Encode(nil, body)
@@ -1005,7 +1008,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 
-	handlers, _ := newHandlerHashring([]*fakeAppendable{nil}, 1)
+	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]
 
 	reg := prometheus.NewRegistry()
@@ -1089,7 +1092,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 						return err
 					}))
 				}
-				n := b.N() * 500
+				n := b.N()
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					//if i == 1 {
@@ -1115,13 +1118,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					//	dumpMemProfile(b, "multi_postdelete5.out")
 					//}
 				}
-				testutil.Ok(b, promtest.GatherAndCompare(reg, bytes.NewBufferString(`
-# HELP prometheus_tsdb_head_samples_appended_total Total number of appended samples.
-# TYPE prometheus_tsdb_head_samples_appended_total counter
-prometheus_tsdb_head_samples_appended_total{tenant="typical labels under 1KB-ok"} 500
-`), "prometheus_tsdb_head_samples_appended_total"))
 			})
-
 			b.Run("conflict errors", func(b testutil.TB) {
 				b.ReportAllocs()
 
@@ -1166,7 +1163,6 @@ prometheus_tsdb_head_samples_appended_total{tenant="typical labels under 1KB-ok"
 			})
 		})
 	}
-
 }
 
 func dumpMemProfile(t testing.TB, n string) {
