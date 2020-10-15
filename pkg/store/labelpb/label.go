@@ -90,7 +90,7 @@ func (m *Label) MarshalToSizedBuffer(data []byte) (int, error) {
 
 // Unmarshal unmarshalls gRPC protobuf into Label struct. Label string is directly using bytes passed in `data`.
 // NOTE: This exists in internal Google protobuf implementation, but not in open source one: https://news.ycombinator.com/item?id=23588882
-func (m *Label) Unmarshal(data []byte) error {
+func (m *Label) NoCopyUnmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
@@ -208,7 +208,7 @@ func (m *Label) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (m *Label) CopyUnmarshal(dAtA []byte) error {
+func (m *Label) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {

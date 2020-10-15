@@ -66,7 +66,8 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		// Append as many valid samples as possible, but keep track of the errors.
 		for i, s := range t.Samples {
 			if i == 0 {
-				ref, err = app.Add(labelpb.LabelsToPromLabels(labelpb.DeepCopy(t.Labels)), s.Timestamp, s.Value)
+				//labelpb.LabelsToPromLabels(labelpb.DeepCopy(t.Labels)
+				ref, err = app.Add(labelpb.LabelsToPromLabels(t.Labels), s.Timestamp, s.Value)
 			} else {
 				err = app.AddFast(ref, s.Timestamp, s.Value)
 			}
