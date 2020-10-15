@@ -1369,11 +1369,7 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	if _, err := buf.ReadFrom(r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	internalBuf := buf.Bytes()
-	if int64(len(internalBuf)) != length {
-		return nil, fmt.Errorf("can't read index for required length, required %d, actually %d", length, len(internalBuf))
-	}
-	return internalBuf, nil
+	return buf.Bytes(), nil
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
@@ -1400,10 +1396,6 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 		return nil, errors.Wrap(err, "read range")
 	}
 	internalBuf := buf.Bytes()
-	if int64(len(internalBuf)) != length {
-		b.chunkPool.Put(c)
-		return nil, fmt.Errorf("can't read chunk for required length, required %d, actually %d", length, len(internalBuf))
-	}
 	return &internalBuf, nil
 }
 
@@ -1908,6 +1900,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetc
 		return errors.Wrap(err, "read series range")
 	}
 
+	indexLength := len(b)
 	r.mtx.Lock()
 	r.stats.seriesFetchCount++
 	r.stats.seriesFetched += len(ids)
@@ -1916,7 +1909,11 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetc
 	r.mtx.Unlock()
 
 	for i, id := range ids {
-		c := b[id-start:]
+		seriesOffset := id - start
+		if int(seriesOffset) > indexLength {
+			return errors.Errorf("series offset out of range, off: %d, length: %d", seriesOffset, indexLength)
+		}
+		c := b[seriesOffset:]
 
 		l, n := binary.Uvarint(c)
 		if n < 1 {
@@ -2087,7 +2084,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	if err != nil {
 		return errors.Wrapf(err, "read range for %d", seq)
 	}
-
+	chunkLength := len(*b)
 	locked := true
 	r.mtx.Lock()
 
@@ -2104,8 +2101,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
-		cb := (*b)[o-start:]
-
+		chunkOffset := o - start
+		if int(chunkOffset) > chunkLength {
+			return errors.Errorf("chunk offset out of range, off: %d, length: %d", chunkOffset, chunkLength)
+		}
+		cb := (*b)[chunkOffset:]
 		l, n := binary.Uvarint(cb)
 		if n < 1 {
 			return errors.New("reading chunk length failed")
