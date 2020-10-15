@@ -1369,7 +1369,11 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	if _, err := buf.ReadFrom(r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return buf.Bytes(), nil
+	internalBuf := buf.Bytes()
+	if int64(len(internalBuf)) != length {
+		return nil, fmt.Errorf("can't read index for required length, required %d, actually %d", length, len(internalBuf))
+	}
+	return internalBuf, nil
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
@@ -1396,6 +1400,10 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 		return nil, errors.Wrap(err, "read range")
 	}
 	internalBuf := buf.Bytes()
+	if int64(len(internalBuf)) != length {
+		b.chunkPool.Put(c)
+		return nil, fmt.Errorf("can't read chunk for required length, required %d, actually %d", length, len(internalBuf))
+	}
 	return &internalBuf, nil
 }
 
