@@ -797,8 +797,7 @@ func blockSeriesWithoutChunks(
 		return nil, nil, errors.Wrap(err, "preload series")
 	}
 
-	// Transform all series into the response types and mark their relevant chunks
-	// for preloading.
+	// Transform all series into the response types.
 	var (
 		res  []seriesEntry
 		lset labels.Labels
