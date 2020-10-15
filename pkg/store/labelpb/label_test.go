@@ -22,10 +22,10 @@ var testLsetMap = map[string]string{
 }
 
 func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
-	testutil.Equals(t, labels.FromMap(testLsetMap), LabelsToPromLabels(LabelsFromPromLabels(labels.FromMap(testLsetMap))))
+	testutil.Equals(t, labels.FromMap(testLsetMap), ZLabelsToPromLabels(ZLabelsFromPromLabels(labels.FromMap(testLsetMap))))
 
 	lset := labels.FromMap(testLsetMap)
-	for i := range LabelsFromPromLabels(lset) {
+	for i := range ZLabelsFromPromLabels(lset) {
 		if lset[i].Name != "a" {
 			continue
 		}
@@ -39,14 +39,14 @@ func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
 	testutil.Equals(t, testLsetMap, m)
 }
 
-func TestLabelMarshall_Unmarshall(t *testing.T) {
-	l := LabelsFromPromLabels(labels.FromStrings("aaaaaaa", "bbbbb"))[0]
+func TestLabelMarshal_Unmarshal(t *testing.T) {
+	l := ZLabelsFromPromLabels(labels.FromStrings("aaaaaaa", "bbbbb"))[0]
 	b, err := (&l).Marshal()
 	testutil.Ok(t, err)
 
-	l2 := &Label{}
+	l2 := &ZLabel{}
 	testutil.Ok(t, l2.Unmarshal(b))
-	testutil.Equals(t, labels.FromStrings("aaaaaaa", "bbbbb"), LabelsToPromLabels([]Label{*l2}))
+	testutil.Equals(t, labels.FromStrings("aaaaaaa", "bbbbb"), ZLabelsToPromLabels([]ZLabel{*l2}))
 }
 
 func TestExtendLabels(t *testing.T) {
@@ -61,8 +61,8 @@ func TestExtendLabels(t *testing.T) {
 }
 
 var (
-	dest     Label
-	destCopy FullCopyLabel
+	zdest ZLabel
+	dest  Label
 )
 
 func BenchmarkLabelsMarshallUnmarshall(b *testing.B) {
@@ -72,23 +72,6 @@ func BenchmarkLabelsMarshallUnmarshall(b *testing.B) {
 	)
 
 	b.Run("copy", func(b *testing.B) {
-		b.ReportAllocs()
-		lbls := FullCopyLabelSet{Labels: make([]FullCopyLabel, 0, num)}
-		for i := 0; i < num; i++ {
-			lbls.Labels = append(lbls.Labels, FullCopyLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-		}
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			data, err := lbls.Marshal()
-			testutil.Ok(b, err)
-
-			destCopy = FullCopyLabel{}
-			testutil.Ok(b, (&destCopy).Unmarshal(data))
-		}
-	})
-
-	b.Run("zerocopy", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := LabelSet{Labels: make([]Label, 0, num)}
 		for i := 0; i < num; i++ {
@@ -104,16 +87,33 @@ func BenchmarkLabelsMarshallUnmarshall(b *testing.B) {
 			testutil.Ok(b, (&dest).Unmarshal(data))
 		}
 	})
+
+	b.Run("zerocopy", func(b *testing.B) {
+		b.ReportAllocs()
+		lbls := ZLabelSet{Labels: make([]ZLabel, 0, num)}
+		for i := 0; i < num; i++ {
+			lbls.Labels = append(lbls.Labels, ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
+		}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			data, err := lbls.Marshal()
+			testutil.Ok(b, err)
+
+			zdest = ZLabel{}
+			testutil.Ok(b, (&zdest).Unmarshal(data))
+		}
+	})
 }
 
 func TestHashWithPrefix(t *testing.T) {
-	lbls := []Label{
+	lbls := []ZLabel{
 		{Name: "foo", Value: "bar"},
 		{Name: "baz", Value: "qux"},
 	}
 	testutil.Equals(t, HashWithPrefix("a", lbls), HashWithPrefix("a", lbls))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []Label{lbls[0]}))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []Label{lbls[1], lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[1], lbls[0]}))
 	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("b", lbls))
 }
 
@@ -122,40 +122,40 @@ var benchmarkLabelsResult uint64
 func BenchmarkHasWithPrefix(b *testing.B) {
 	for _, tcase := range []struct {
 		name string
-		lbls []Label
+		lbls []ZLabel
 	}{
 		{
 			name: "typical labels under 1KB",
-			lbls: func() []Label {
-				lbls := make([]Label, 10)
+			lbls: func() []ZLabel {
+				lbls := make([]ZLabel, 10)
 				for i := 0; i < len(lbls); i++ {
-					// Label ~20B name, 50B value.
-					lbls[i] = Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					// ZLabel ~20B name, 50B value.
+					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "bigger labels over 1KB",
-			lbls: func() []Label {
-				lbls := make([]Label, 10)
+			lbls: func() []ZLabel {
+				lbls := make([]ZLabel, 10)
 				for i := 0; i < len(lbls); i++ {
-					//Label ~50B name, 50B value.
-					lbls[i] = Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					//ZLabel ~50B name, 50B value.
+					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "extremely large label value 10MB",
-			lbls: func() []Label {
+			lbls: func() []ZLabel {
 				lbl := &strings.Builder{}
 				lbl.Grow(1024 * 1024 * 10) // 10MB.
 				word := "abcdefghij"
 				for i := 0; i < lbl.Cap()/len(word); i++ {
 					_, _ = lbl.WriteString(word)
 				}
-				return []Label{{Name: "__name__", Value: lbl.String()}}
+				return []ZLabel{{Name: "__name__", Value: lbl.String()}}
 			}(),
 		},
 	} {

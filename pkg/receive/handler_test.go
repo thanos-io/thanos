@@ -1134,7 +1134,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				for i := 0; i < n; i++ {
 					//if i == 1 {
 					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("single2_%v.out", tcase.name))
+					//	dumpMemProfile(b, fmt.Sprintf("single4_%v.out", tcase.name))
 					//}
 
 					r := httptest.NewRecorder()
@@ -1143,7 +1143,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 					//if i == n-1 {
 					//	runtime.GC()
-					//	dumpMemProfile(b, fmt.Sprintf("multi2_%v.out", tcase.name))
+					//	dumpMemProfile(b, fmt.Sprintf("multi4_%v.out", tcase.name))
 					//}
 					//	// Clear series, and see if resources are released.
 					//  db := m.tenants[handler.options.DefaultTenantID].readyStorage().Get()

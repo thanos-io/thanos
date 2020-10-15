@@ -195,7 +195,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 		for s.Next() {
 			l, c := s.At()
 
-			testutil.Equals(t, labelpb.LabelsToPromLabels(resps[i].GetSeries().Labels), l)
+			testutil.Equals(t, labelpb.ZLabelsToPromLabels(resps[i].GetSeries().Labels), l)
 			testutil.Equals(t, resps[i].GetSeries().Chunks, c)
 
 			i++

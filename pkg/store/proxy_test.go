@@ -1383,7 +1383,7 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n %v", got)
 
 	for i, series := range got {
-		testutil.Equals(t, expected[i].lset, labelpb.LabelsToPromLabels(series.Labels))
+		testutil.Equals(t, expected[i].lset, labelpb.ZLabelsToPromLabels(series.Labels))
 		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks for series %v", series.Labels)
 
 		for k, chk := range series.Chunks {
@@ -1654,7 +1654,7 @@ func (c *StoreSeriesClient) Context() context.Context {
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	s.Labels = append(s.Labels, labelpb.LabelsFromPromLabels(lset)...)
+	s.Labels = append(s.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
