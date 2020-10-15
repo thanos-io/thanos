@@ -64,9 +64,15 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	for _, t := range wreq.Timeseries {
 		lset := labelpb.LabelsToPromLabels(t.Labels)
 
+		var ref uint64
 		// Append as many valid samples as possible, but keep track of the errors.
-		for _, s := range t.Samples {
-			_, err = app.Add(lset, s.Timestamp, s.Value)
+		for i, s := range t.Samples {
+			if i == 0 {
+				ref, err = app.Add(lset, s.Timestamp, s.Value)
+			} else {
+				err = app.AddFast(ref, s.Timestamp, s.Value)
+			}
+
 			switch err {
 			case nil:
 				continue
