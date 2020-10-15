@@ -107,13 +107,13 @@ func BenchmarkLabelsMarshallUnmarshall(b *testing.B) {
 }
 
 func TestHashWithPrefix(t *testing.T) {
-	lbls := []ZLabel{
+	lbls := []Label{
 		{Name: "foo", Value: "bar"},
 		{Name: "baz", Value: "qux"},
 	}
 	testutil.Equals(t, HashWithPrefix("a", lbls), HashWithPrefix("a", lbls))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[0]}))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[1], lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []Label{lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []Label{lbls[1], lbls[0]}))
 	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("b", lbls))
 }
 
@@ -122,40 +122,40 @@ var benchmarkLabelsResult uint64
 func BenchmarkHasWithPrefix(b *testing.B) {
 	for _, tcase := range []struct {
 		name string
-		lbls []ZLabel
+		lbls []Label
 	}{
 		{
 			name: "typical labels under 1KB",
-			lbls: func() []ZLabel {
-				lbls := make([]ZLabel, 10)
+			lbls: func() []Label {
+				lbls := make([]Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					// ZLabel ~20B name, 50B value.
-					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "bigger labels over 1KB",
-			lbls: func() []ZLabel {
-				lbls := make([]ZLabel, 10)
+			lbls: func() []Label {
+				lbls := make([]Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					//ZLabel ~50B name, 50B value.
-					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "extremely large label value 10MB",
-			lbls: func() []ZLabel {
+			lbls: func() []Label {
 				lbl := &strings.Builder{}
 				lbl.Grow(1024 * 1024 * 10) // 10MB.
 				word := "abcdefghij"
 				for i := 0; i < lbl.Cap()/len(word); i++ {
 					_, _ = lbl.WriteString(word)
 				}
-				return []ZLabel{{Name: "__name__", Value: lbl.String()}}
+				return []Label{{Name: "__name__", Value: lbl.String()}}
 			}(),
 		},
 	} {

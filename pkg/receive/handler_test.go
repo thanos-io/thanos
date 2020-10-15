@@ -200,7 +200,7 @@ func TestReceiveQuorum(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []storepb.Label{
+				Labels: []labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",
@@ -536,7 +536,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []storepb.Label{
+				Labels: []labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",

@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -41,7 +42,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	resp, err := tsdbStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
@@ -54,7 +55,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	resp, err = tsdbStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
 	testutil.Equals(t, int64(12), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
@@ -775,16 +776,16 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]storepb.Label, 0, len(s.Labels)+len(extLabels))
+			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+len(extLabels))
 			for _, l := range s.Labels {
-				lbls = append(lbls, storepb.Label{
+				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})
 				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
 			}
 			for _, l := range extLabels {
-				lbls = append(lbls, storepb.Label{
+				lbls = append(lbls, labelpb.ZLabel{
 					Name:  l.Name,
 					Value: l.Value,
 				})

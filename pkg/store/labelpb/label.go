@@ -26,31 +26,31 @@ func noAllocBytes(buf string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&buf))
 }
 
-// ZLabelsFromPromLabels converts Prometheus labels to slice of storepb.Label in type unsafe manner.
+// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed labels.Labels.
 func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
 	return *(*[]ZLabel)(unsafe.Pointer(&lset))
 }
 
-// ZLabelsToPromLabels convert slice of storepb.Label to Prometheus labels in type unsafe manner.
+// ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed []ZLabel.
 func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// LabelsFromPromLabels converts Prometheus labels to slice of storepb.Label in type unsafe manner.
+// LabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed labels.Labels.
 func LabelsFromPromLabels(lset labels.Labels) []Label {
 	return *(*[]Label)(unsafe.Pointer(&lset))
 }
 
-// LabelsToPromLabels convert slice of storepb.Label to Prometheus labels in type unsafe manner.
+// LabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed []Label.
 func LabelsToPromLabels(lset []Label) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// ZLabelSetsToPromLabelSets converts slice of storepb.LabelSet to slice of Prometheus labels.
+// ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.
 func ZLabelSetsToPromLabelSets(lss ...ZLabelSet) []labels.Labels {
 	res := make([]labels.Labels, 0, len(lss))
 	for _, ls := range lss {

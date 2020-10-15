@@ -6,13 +6,13 @@ package receive
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
-		Labels: []storepb.Label{
+		Labels: []labelpb.Label{
 			{
 				Name:  "foo",
 				Value: "bar",
