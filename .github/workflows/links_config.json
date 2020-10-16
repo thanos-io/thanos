@@ -1,0 +1,34 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^https://github.com"
+    },
+    {
+      "pattern": "^http://127.0.0.1"
+    },
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://couchdb.apache.org"
+    },
+    {
+      "pattern": "^https://cloud.tencent.com"
+    },
+    {
+      "pattern": "^https://alibabacloud.com"
+    },
+    {
+      "pattern": "^https://zoom.us"
+    },
+    {
+      "pattern": "^https://goreportcard.com"
+    }
+    ],
+	"replacementPatterns": [
+		{
+			"pattern": "^/",
+			"replacement": "file:///github/workspace/"
+		}
+	]
+}

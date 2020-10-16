@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import { APIResponse } from '../../hooks/useFetch';
-import { Alert, Table, Badge } from 'reactstrap';
+import { UncontrolledAlert, Table, Badge } from 'reactstrap';
 import { formatRelative, createExternalExpressionLink, humanizeDuration } from '../../utils';
 import { Rule } from '../../types/types';
 import { now } from 'moment';
@@ -112,7 +112,7 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                       <td>
                         <Badge color={getBadgeColor(r.health)}>{r.health.toUpperCase()}</Badge>
                       </td>
-                      <td>{r.lastError ? <Alert color="danger">{r.lastError}</Alert> : null}</td>
+                      <td>{r.lastError ? <UncontrolledAlert color="danger">{r.lastError}</UncontrolledAlert> : null}</td>
                       <td>{formatRelative(r.lastEvaluation, now())} ago</td>
                       <td>{humanizeDuration(parseFloat(r.evaluationTime) * 1000)}</td>
                     </tr>

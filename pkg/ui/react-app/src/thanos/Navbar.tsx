@@ -41,7 +41,11 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
     { name: 'Rules', uri: '/new/rules' },
   ],
   bucket: [{ name: 'Blocks', uri: '/new/blocks' }],
-  compact: [{ name: 'Blocks', uri: '/new/blocks' }],
+  compact: [
+    { name: 'Global Blocks', uri: '/new/blocks' },
+    { name: 'Loaded Blocks', uri: '/new/loaded' },
+  ],
+  store: [{ name: 'Loaded Blocks', uri: '/new/loaded' }],
 };
 
 const defaultClassicUIRoute: { [component: string]: string } = {
@@ -49,6 +53,7 @@ const defaultClassicUIRoute: { [component: string]: string } = {
   rule: '/alerts',
   bucket: '/',
   compact: '/loaded',
+  store: '/loaded',
 };
 
 interface NavigationProps {
@@ -79,13 +84,13 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
               );
 
             return (
-              <UncontrolledDropdown nav inNavbar>
+              <UncontrolledDropdown key={config.name} nav inNavbar>
                 <DropdownToggle nav caret>
                   {config.name}
                 </DropdownToggle>
                 <DropdownMenu>
                   {config.children.map(c => (
-                    <DropdownItem tag={Link} to={`${pathPrefix}${c.uri}`}>
+                    <DropdownItem key={c.uri} tag={Link} to={`${pathPrefix}${c.uri}`}>
                       {c.name}
                     </DropdownItem>
                   ))}

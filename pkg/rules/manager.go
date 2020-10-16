@@ -26,6 +26,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -44,8 +45,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
 		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
-		LastEvaluation:            g.GetEvaluationTimestamp().UTC(),
-		EvaluationDurationSeconds: g.GetEvaluationDuration().Seconds(),
+		LastEvaluation:            g.GetLastEvaluation().UTC(),
+		EvaluationDurationSeconds: g.GetEvaluationTime().Seconds(),
 	}
 
 	for _, r := range g.Rules() {
@@ -62,8 +63,8 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
 					DurationSeconds:           rule.HoldDuration().Seconds(),
-					Labels:                    rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
-					Annotations:               rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Annotations())},
+					Labels:                    labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Labels())},
+					Annotations:               labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Annotations())},
 					Alerts:                    ActiveAlertsToProto(g.PartialResponseStrategy, rule),
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
@@ -76,7 +77,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 				Result: &rulespb.Rule_Recording{Recording: &rulespb.RecordingRule{
 					Name:                      rule.Name(),
 					Query:                     rule.Query().String(),
-					Labels:                    rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(rule.Labels())},
+					Labels:                    labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Labels())},
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
@@ -97,8 +98,8 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 	for i, ruleAlert := range active {
 		ret[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
-			Labels:                  rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Labels)},
-			Annotations:             rulespb.PromLabels{Labels: storepb.PromLabelsToLabels(ruleAlert.Annotations)},
+			Labels:                  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Labels)},
+			Annotations:             labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
 			ActiveAt:                &ruleAlert.ActiveAt, //nolint:exportloopref
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
@@ -312,6 +313,12 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
 		ruleFiles       = map[string]string{}
 	)
+
+	// Initialize filesByStrategy for existing managers' strategies to make
+	// sure that managers are updated when they have no rules configured.
+	for strategy := range m.mgrs {
+		filesByStrategy[strategy] = make([]string, 0)
+	}
 
 	if err := os.RemoveAll(m.workDir); err != nil {
 		return errors.Wrapf(err, "remove %s", m.workDir)

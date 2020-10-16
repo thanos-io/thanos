@@ -214,9 +214,12 @@ func runCompact(
 	compactorView := ui.NewBucketUI(
 		logger,
 		conf.label,
-		path.Join(conf.webConf.externalPrefix, "/loaded"),
+		conf.webConf.externalPrefix,
 		conf.webConf.prefixHeaderName,
+		"/loaded",
+		component,
 	)
+	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
 	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
@@ -228,7 +231,10 @@ func runCompact(
 				duplicateBlocksFilter,
 			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
 		)
-		cf.UpdateOnChange(compactorView.Set)
+		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+			compactorView.Set(blocks, err)
+			api.SetLoaded(blocks, err)
+		})
 		sy, err = compact.NewSyncer(
 			logger,
 			reg,
@@ -418,12 +424,11 @@ func runCompact(
 		r := route.New()
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		compactorView.Register(r, ins)
+		compactorView.Register(r, true, ins)
 
-		global := ui.NewBucketUI(logger, conf.label, path.Join(conf.webConf.externalPrefix, "/global"), conf.webConf.prefixHeaderName)
-		global.Register(r, ins)
+		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)
+		global.Register(r, false, ins)
 
-		api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
 			return logging.NoLogCall
@@ -436,7 +441,7 @@ func runCompact(
 		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			global.Set(blocks, err)
-			api.Set(blocks, err)
+			api.SetGlobal(blocks, err)
 		})
 
 		srv.Handle("/", r)
@@ -523,7 +528,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").StringVar(&cc.dataDir)
 
-	cc.objStore = *regCommonObjStoreFlags(cmd, "", false)
+	cc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&cc.consistencyDelay)
@@ -569,7 +574,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
 
-	cc.selectorRelabelConf = *regSelectorRelabelFlags(cmd)
+	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
 	cc.webConf.registerFlag(cmd)
 

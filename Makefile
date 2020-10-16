@@ -124,7 +124,6 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
-
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 ifeq ($(OS)_$(ARCH), linux_x86_64)
@@ -161,13 +160,10 @@ docs: $(EMBEDMD) build
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) $(LICHE) build
+check-docs: $(EMBEDMD) build
 	@echo ">> checking docs generation"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@echo ">> checking links (DISABLED for now)"
-	# TODO(bwplotka): Fix it!
-	#@time $(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
-	#@time $(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checking GitHub as we are often rate-limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
@@ -238,10 +234,6 @@ install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 .PHONY: docker-ci
 docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
 docker-ci: install-deps
-	# Copy all to tmp local dir as this is required by docker.
-	@rm -rf $(BIN_DIR)
-	@mkdir -p $(BIN_DIR)
-	@cp -r $(GOBIN)/* $(BIN_DIR)
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
 	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"

@@ -90,27 +90,25 @@ type MemcachedClientConfig struct {
 	// set to a number higher than your peak parallel requests.
 	MaxIdleConnections int `yaml:"max_idle_connections"`
 
-	// MaxAsyncConcurrency specifies the maximum number of concurrent asynchronous
-	// operations can occur.
+	// MaxAsyncConcurrency specifies the maximum number of SetAsync goroutines.
 	MaxAsyncConcurrency int `yaml:"max_async_concurrency"`
 
-	// MaxAsyncBufferSize specifies the maximum number of enqueued asynchronous
-	// operations allowed.
+	// MaxAsyncBufferSize specifies the queue buffer size for SetAsync operations.
 	MaxAsyncBufferSize int `yaml:"max_async_buffer_size"`
 
-	// MaxGetMultiConcurrency specifies the maximum number of concurrent connections
-	// running GetMulti() operations. If set to 0, concurrency is unlimited.
+	// MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations.
+	// If set to 0, concurrency is unlimited.
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
 
-	// MaxItemSize specifies the maximum size of an item stored in memcached. Bigger
-	// items are skipped to be stored by the client. If set to 0, no maximum size is
-	// enforced.
+	// MaxItemSize specifies the maximum size of an item stored in memcached.
+	// Items bigger than MaxItemSize are skipped.
+	// If set to 0, no maximum size is enforced.
 	MaxItemSize model.Bytes `yaml:"max_item_size"`
 
 	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
 	// GetMulti() should run. If more keys are specified, internally keys are splitted
-	// into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency
-	// parallelism. If set to 0, the max batch size is unlimited.
+	// into multiple batches and fetched concurrently, honoring MaxGetMultiConcurrency parallelism.
+	// If set to 0, the max batch size is unlimited.
 	MaxGetMultiBatchSize int `yaml:"max_get_multi_batch_size"`
 
 	// DNSProviderUpdateInterval specifies the DNS discovery update interval.
@@ -231,8 +229,10 @@ func newMemcachedClient(
 		dnsProvider: dnsProvider,
 		asyncQueue:  make(chan func(), config.MaxAsyncBufferSize),
 		stop:        make(chan struct{}, 1),
-		getMultiGate: gate.NewKeeper(extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg)).
-			NewGate(config.MaxGetMultiConcurrency),
+		getMultiGate: gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
+			config.MaxGetMultiConcurrency,
+		),
 	}
 
 	c.clientInfo = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{

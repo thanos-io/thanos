@@ -22,12 +22,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -44,7 +43,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, rulesSrv rulespb.RulesServer, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -58,7 +57,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
 	)
 	panicsTotal := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_grpc_req_panics_recovered_total",
+		Name: "grpc_req_panics_recovered_total",
 		Help: "Total number of gRPC requests recovered from internal panic.",
 	})
 
@@ -87,19 +86,16 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 	s := grpc.NewServer(grpcOpts...)
 
-	if rulesSrv != nil {
-		rulespb.RegisterRulesServer(s, rulesSrv)
-		storepb.RegisterStoreServer(s, storeSrv)
-		level.Info(logger).Log("msg", "registering as gRPC StoreAPI and RulesAPI")
-	} else {
-		storepb.RegisterStoreServer(s, storeSrv)
-		level.Info(logger).Log("msg", "registering as gRPC StoreAPI")
+	// Register all configured servers.
+	for _, f := range options.registerServerFuncs {
+		f(s)
 	}
 
 	met.InitializeMetrics(s)
 	reg.MustRegister(met)
 
 	grpc_health.RegisterHealthServer(s, probe.HealthServer())
+	reflection.Register(s)
 
 	return &Server{
 		logger: logger,
@@ -151,17 +147,4 @@ func (s *Server) Shutdown(err error) {
 		cancel()
 	}
 	level.Info(s.logger).Log("msg", "internal server is shutdown gracefully", "err", err)
-}
-
-// ReadWriteStoreServer is a StoreServer and a WriteableStoreServer.
-type ReadWriteStoreServer interface {
-	storepb.StoreServer
-	storepb.WriteableStoreServer
-}
-
-// NewReadWrite creates a new server that can be written to.
-func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
-	s := New(logger, reg, tracer, comp, probe, storeSrv, nil, opts...)
-	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
-	return s
 }

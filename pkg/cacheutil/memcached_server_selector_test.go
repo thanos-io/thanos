@@ -217,7 +217,7 @@ func BenchmarkMemcachedJumpHashSelector_PickServer(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := selector.PickServer(string(i))
+		_, err := selector.PickServer(fmt.Sprint(i))
 		if err != nil {
 			b.Error(err)
 		}

@@ -338,3 +338,50 @@ func TestManager_Rules(t *testing.T) {
 	}()
 	testRulesAgainstExamples(t, filepath.Join(curr, "../../examples/alerts"), thanosRuleMgr)
 }
+
+func TestManagerUpdateWithNoRules(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
+groups:
+- name: "something1"
+  rules:
+  - alert: "some"
+    expr: "up"
+`), os.ModePerm))
+
+	thanosRuleMgr := NewManager(
+		context.Background(),
+		nil,
+		dir,
+		rules.ManagerOptions{
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
+		},
+		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
+			return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+				return nil, nil
+			}
+		},
+		nil,
+	)
+
+	// We need to run the underlying rule managers to update them more than
+	// once (otherwise there's a deadlock).
+	thanosRuleMgr.Run()
+	defer func() {
+		thanosRuleMgr.Stop()
+	}()
+
+	err = thanosRuleMgr.Update(1*time.Second, []string{
+		filepath.Join(dir, "no_strategy.yaml"),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, len(thanosRuleMgr.RuleGroups()))
+
+	err = thanosRuleMgr.Update(1*time.Second, []string{})
+	testutil.Ok(t, err)
+	testutil.Equals(t, 0, len(thanosRuleMgr.RuleGroups()))
+}

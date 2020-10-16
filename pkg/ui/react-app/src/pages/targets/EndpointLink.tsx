@@ -1,5 +1,5 @@
 import React, { FC } from 'react';
-import { Badge, Alert } from 'reactstrap';
+import { Badge, UncontrolledAlert } from 'reactstrap';
 
 export interface EndpointLinkProps {
   endpoint: string;
@@ -12,9 +12,9 @@ const EndpointLink: FC<EndpointLinkProps> = ({ endpoint, globalUrl }) => {
     url = new URL(endpoint);
   } catch (e) {
     return (
-      <Alert color="danger">
+      <UncontrolledAlert color="danger">
         <strong>Error:</strong> {e.message}
-      </Alert>
+      </UncontrolledAlert>
     );
   }
 

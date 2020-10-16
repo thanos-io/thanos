@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { mount, ReactWrapper } from 'enzyme';
 import { act } from 'react-dom/test-utils';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { sampleApiResponse } from './__testdata__/testdata';
 import ScrapePoolList from './ScrapePoolList';
 import ScrapePoolPanel from './ScrapePoolPanel';
@@ -75,7 +75,7 @@ describe('ScrapePoolList', () => {
       scrapePoolList.update();
 
       expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', { cache: 'no-store', credentials: 'same-origin' });
-      const alert = scrapePoolList.find(Alert);
+      const alert = scrapePoolList.find(UncontrolledAlert);
       expect(alert.prop('color')).toBe('danger');
       expect(alert.text()).toContain('Error fetching targets');
     });

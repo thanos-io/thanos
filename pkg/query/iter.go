@@ -26,7 +26,7 @@ type promSeriesSet struct {
 	aggrs      []storepb.Aggr
 	initiated  bool
 
-	currLset   []storepb.Label
+	currLset   labels.Labels
 	currChunks []storepb.AggrChunk
 
 	warns storage.Warnings
@@ -51,7 +51,7 @@ func (s *promSeriesSet) Next() bool {
 			break
 		}
 		nextLset, nextChunks := s.set.At()
-		if storepb.CompareLabels(s.currLset, nextLset) != 0 {
+		if labels.Compare(s.currLset, nextLset) != 0 {
 			break
 		}
 		s.currChunks = append(s.currChunks, nextChunks...)
@@ -128,8 +128,8 @@ func (storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
-	return s.series[s.i].Labels, s.series[s.i].Chunks
+func (s storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+	return s.series[s.i].PromLabels(), s.series[s.i].Chunks
 }
 
 // chunkSeries implements storage.Series for a series on storepb types.
@@ -141,9 +141,9 @@ type chunkSeries struct {
 }
 
 // newChunkSeries allows to iterate over samples for each sorted and non-overlapped chunks.
-func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
+func newChunkSeries(lset labels.Labels, chunks []storepb.AggrChunk, mint, maxt int64, aggrs []storepb.Aggr) *chunkSeries {
 	return &chunkSeries{
-		lset:   storepb.LabelsToPromLabels(lset),
+		lset:   lset,
 		chunks: chunks,
 		mint:   mint,
 		maxt:   maxt,
@@ -302,7 +302,7 @@ type chunkSeriesIterator struct {
 func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
-		return errSeriesIterator{}
+		return errSeriesIterator{err: errors.Errorf("store returned an empty result")}
 	}
 	return &chunkSeriesIterator{chunks: cs}
 }
@@ -503,7 +503,8 @@ func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
 // Replica 1 counter scrapes: 20    30    40    Nan      -     0     5
 // Replica 2 counter scrapes:    25    35    45     Nan     -     2
 //
-// Now for downsampling purposes we are accounting the resets so our replicas before going to dedup iterator looks like this:
+// Now for downsampling purposes we are accounting the resets(rewriting the samples value)
+// so our replicas before going to dedup iterator looks like this:
 //
 // Replica 1 counter total: 20    30    40   -      -     40     45
 // Replica 2 counter total:    25    35    45    -     -     47
@@ -648,7 +649,7 @@ func (it *dedupSeriesIterator) Seek(t int64) bool {
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for {
 		ts, _ := it.At()
-		if ts > 0 && ts >= t {
+		if ts >= t {
 			return true
 		}
 		if !it.Next() {

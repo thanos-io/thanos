@@ -35,7 +35,7 @@ To install:
 go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
 ```
 
-> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin/thanos@master`.
+> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin@master`.
 
 ## Use as a library
 
@@ -44,7 +44,7 @@ To use the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` inst
 $ mkdir thanos-mixin; cd thanos-mixin
 $ jb init  # Creates the initial/empty `jsonnetfile.json`
 # Install the thanos-mixin dependency
-$ jb install github.com/thanos-io/thanos/mixin/thanos@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
+$ jb install github.com/thanos-io/thanos/mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
 ```
 
 To update the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` update functionality:
@@ -54,7 +54,7 @@ $ jb update
 
 #### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](../../examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](/examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
 
 [embedmd]:# (config.libsonnet)
 ```libsonnet
@@ -152,7 +152,7 @@ You validate your structural correctness of your Prometheus [alerting rules](htt
 $ make example-rules-lint
 ```
 
-Check out [test.yaml](../../examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
+Check out [test.yaml](/examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
 
 You test alerts with:
 

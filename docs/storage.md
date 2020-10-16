@@ -308,7 +308,7 @@ kubectl exec -it -n <namespace> <prometheus with sidecar pod name> -c <sidecar c
 Then test that you can at least list objects in the bucket, eg:
 
 ```sh
-thanos bucket ls --objstore.config="${OBJSTORE_CONFIG}"
+thanos tools bucket ls --objstore.config="${OBJSTORE_CONFIG}"
 ```
 
 ### Azure

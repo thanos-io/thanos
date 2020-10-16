@@ -1,6 +1,6 @@
 import React, { FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import { useQueryParams, withDefault, NumberParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
@@ -47,14 +47,14 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     'max-time': withDefault(NumberParam, gridMaxTime),
   });
 
-  const setViewTime = (times: [number, number]): void => {
+  const setViewTime = (times: number[]): void => {
     setQuery({
       'min-time': times[0],
       'max-time': times[1],
     });
   };
 
-  if (err) return <Alert color="danger">{err.toString()}</Alert>;
+  if (err) return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
 
   return (
     <>
@@ -84,7 +84,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
         </div>
       ) : (
-        <Alert color="warning">No blocks found.</Alert>
+        <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
       )}
     </>
   );
@@ -92,8 +92,14 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
 
 const BlocksWithStatusIndicator = withStatusIndicator(BlocksContent);
 
-export const Blocks: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
-  const { response, error, isLoading } = useFetch<BlockListProps>(`${pathPrefix}/api/v1/blocks`);
+interface BlocksProps {
+  view?: string;
+}
+
+export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
+  const { response, error, isLoading } = useFetch<BlockListProps>(
+    `${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`
+  );
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
 

@@ -13,14 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -91,7 +90,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -99,7 +98,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
 				}),
@@ -113,7 +112,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -121,7 +120,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
 					Query: "absent(some_metric)",
-					Labels: rulespb.PromLabels{Labels: []storepb.Label{
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
 				}),

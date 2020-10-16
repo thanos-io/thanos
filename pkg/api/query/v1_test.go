@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -30,20 +32,23 @@ import (
 	"time"
 
 	"github.com/prometheus/common/route"
+	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/compact"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -54,7 +59,64 @@ func TestMain(m *testing.M) {
 	testutil.TolerantVerifyLeakMain(m)
 }
 
-func TestEndpoints(t *testing.T) {
+type endpointTestCase struct {
+	endpoint baseAPI.ApiFunc
+	params   map[string]string
+	query    url.Values
+	method   string
+	response interface{}
+	errType  baseAPI.ErrorType
+}
+
+func testEndpoint(t *testing.T, test endpointTestCase, name string) bool {
+	return t.Run(name, func(t *testing.T) {
+		// Build a context with the correct request params.
+		ctx := context.Background()
+		for p, v := range test.params {
+			ctx = route.WithParam(ctx, p, v)
+		}
+
+		reqURL := "http://example.com"
+		params := test.query.Encode()
+
+		var body io.Reader
+		if test.method == http.MethodPost {
+			body = strings.NewReader(params)
+		} else if test.method == "" {
+			test.method = "ANY"
+			reqURL += "?" + params
+		}
+
+		req, err := http.NewRequest(test.method, reqURL, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if body != nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+
+		resp, _, apiErr := test.endpoint(req.WithContext(ctx))
+		if apiErr != nil {
+			if test.errType == baseAPI.ErrorNone {
+				t.Fatalf("Unexpected error: %s", apiErr)
+			}
+			if test.errType != apiErr.Typ {
+				t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.Typ)
+			}
+			return
+		}
+		if test.errType != baseAPI.ErrorNone {
+			t.Fatalf("Expected error of type %q but got none", test.errType)
+		}
+
+		if !reflect.DeepEqual(resp, test.response) {
+			t.Fatalf("Response does not match, expected:\n%+v\ngot:\n%+v", test.response, resp)
+		}
+	})
+}
+
+func TestQueryEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
 		{
 			labels.Label{Name: "__name__", Value: "test_metric1"},
@@ -116,19 +178,12 @@ func TestEndpoints(t *testing.T) {
 			MaxSamples: 10000,
 			Timeout:    timeout,
 		}),
-		gate: gate.NewKeeper(nil).NewGate(4),
+		gate: gate.New(nil, 4),
 	}
 
 	start := time.Unix(0, 0)
 
-	var tests = []struct {
-		endpoint baseAPI.ApiFunc
-		params   map[string]string
-		query    url.Values
-		method   string
-		response interface{}
-		errType  baseAPI.ErrorType
-	}{
+	var tests = []endpointTestCase{
 		{
 			endpoint: api.query,
 			query: url.Values{
@@ -512,6 +567,125 @@ func TestEndpoints(t *testing.T) {
 			},
 			errType: baseAPI.ErrorBadData,
 		},
+	}
+
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode())); !ok {
+			return
+		}
+	}
+}
+
+func TestMetadataEndpoints(t *testing.T) {
+	var old = []labels.Labels{
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "bar"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric1"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric2"},
+			labels.Label{Name: "foo", Value: "boo"},
+		},
+	}
+
+	var recent = []labels.Labels{
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "bar"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "a"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica", Value: "b"},
+		},
+		{
+			labels.Label{Name: "__name__", Value: "test_metric_replica2"},
+			labels.Label{Name: "foo", Value: "boo"},
+			labels.Label{Name: "replica1", Value: "a"},
+		},
+	}
+
+	dir, err := ioutil.TempDir("", "prometheus-test")
+	testutil.Ok(t, err)
+
+	var (
+		mint int64 = 0
+		maxt int64 = 600_000
+	)
+	var metricSamples []*tsdb.MetricSample
+	for _, lbl := range old {
+		for i := int64(0); i < 10; i++ {
+			metricSamples = append(metricSamples, &tsdb.MetricSample{
+				TimestampMs: i * 60_000,
+				Value:       float64(i),
+				Labels:      lbl,
+			})
+		}
+	}
+
+	_, err = tsdb.CreateBlock(metricSamples, dir, mint, maxt, nil)
+	testutil.Ok(t, err)
+
+	opts := tsdb.DefaultOptions()
+	opts.RetentionDuration = math.MaxInt64
+	db, err := tsdb.Open(dir, nil, nil, opts)
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	var (
+		apiLookbackDelta = 2 * time.Hour
+		start            = time.Now().Add(-apiLookbackDelta).Unix() * 1000
+		app              = db.Appender(context.Background())
+	)
+	for _, lbl := range recent {
+		for i := int64(0); i < 10; i++ {
+			_, err := app.Add(lbl, start+(i*60_000), float64(i)) // ms
+			testutil.Ok(t, err)
+		}
+	}
+	testutil.Ok(t, app.Commit())
+
+	now := time.Now()
+	timeout := 100 * time.Second
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
+		queryEngine: promql.NewEngine(promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		}),
+		gate: gate.New(nil, 4),
+	}
+	apiWithLabelLookback := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
+		queryEngine: promql.NewEngine(promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		}),
+		gate:                     gate.New(nil, 4),
+		defaultMetadataTimeRange: apiLookbackDelta,
+	}
+
+	var tests = []endpointTestCase{
 		{
 			endpoint: api.labelValues,
 			params: map[string]string{
@@ -521,16 +695,97 @@ func TestEndpoints(t *testing.T) {
 				"test_metric1",
 				"test_metric2",
 				"test_metric_replica1",
+				"test_metric_replica2",
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.labelValues,
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{
+				"test_metric_replica1",
+				"test_metric_replica2",
 			},
 		},
 		{
 			endpoint: api.labelValues,
+			query: url.Values{
+				"start": []string{"1970-01-01T00:00:00Z"},
+				"end":   []string{"1970-01-01T00:09:00Z"},
+			},
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{
+				"test_metric1",
+				"test_metric2",
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.labelValues,
+			query: url.Values{
+				"start": []string{"1970-01-01T00:00:00Z"},
+				"end":   []string{"1970-01-01T00:09:00Z"},
+			},
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{
+				"test_metric1",
+				"test_metric2",
+			},
+		},
+		{
+			endpoint: api.labelNames,
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{
+				"__name__",
+				"foo",
+				"replica",
+				"replica1",
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.labelNames,
 			params: map[string]string{
 				"name": "foo",
 			},
 			response: []string{
-				"bar",
-				"boo",
+				"__name__",
+				"foo",
+				"replica",
+				"replica1",
+			},
+		},
+		{
+			endpoint: api.labelNames,
+			query: url.Values{
+				"start": []string{"1970-01-01T00:00:00Z"},
+				"end":   []string{"1970-01-01T00:09:00Z"},
+			},
+			params: map[string]string{
+				"name": "foo",
+			},
+			response: []string{
+				"__name__",
+				"foo",
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.labelNames,
+			query: url.Values{
+				"start": []string{"1970-01-01T00:00:00Z"},
+				"end":   []string{"1970-01-01T00:09:00Z"},
+			},
+			params: map[string]string{
+				"name": "foo",
+			},
+			response: []string{
+				"__name__",
+				"foo",
 			},
 		},
 		// Bad name parameter.
@@ -548,6 +803,24 @@ func TestEndpoints(t *testing.T) {
 			},
 			response: []labels.Labels{
 				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+		},
+		{
+			endpoint: apiWithLabelLookback.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{},
+		},
+		{
+			endpoint: apiWithLabelLookback.series,
+			query: url.Values{
+				"match[]": []string{`test_metric_replica1`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+				labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
 			},
 		},
 		// Series that does not exist should return an empty array.
@@ -795,55 +1068,10 @@ func TestEndpoints(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		if ok := t.Run(test.query.Encode(), func(t *testing.T) {
-			// Build a context with the correct request params.
-			ctx := context.Background()
-			for p, v := range test.params {
-				ctx = route.WithParam(ctx, p, v)
-			}
-
-			reqURL := "http://example.com"
-			params := test.query.Encode()
-
-			var body io.Reader
-			if test.method == http.MethodPost {
-				body = strings.NewReader(params)
-			} else if test.method == "" {
-				test.method = "ANY"
-				reqURL += "?" + params
-			}
-
-			req, err := http.NewRequest(test.method, reqURL, body)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if body != nil {
-				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			}
-
-			resp, _, apiErr := test.endpoint(req.WithContext(ctx))
-			if apiErr != nil {
-				if test.errType == baseAPI.ErrorNone {
-					t.Fatalf("Unexpected error: %s", apiErr)
-				}
-				if test.errType != apiErr.Typ {
-					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.Typ)
-				}
-				return
-			}
-			if test.errType != baseAPI.ErrorNone {
-				t.Fatalf("Expected error of type %q but got none", test.errType)
-			}
-
-			if !reflect.DeepEqual(resp, test.response) {
-				t.Fatalf("Response does not match, expected:\n%+v\ngot:\n%+v", test.response, resp)
-			}
-		}); !ok {
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode()))); !ok {
 			return
 		}
-
 	}
 }
 
@@ -956,40 +1184,6 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
-func BenchmarkQueryResultEncoding(b *testing.B) {
-	var mat promql.Matrix
-	for i := 0; i < 1000; i++ {
-		lset := labels.FromStrings(
-			"__name__", "my_test_metric_name",
-			"instance", fmt.Sprintf("abcdefghijklmnopqrstuvxyz-%d", i),
-			"job", "test-test",
-			"method", "ABCD",
-			"status", "199",
-			"namespace", "something",
-			"long-label", "34grnt83j0qxj309je9rgt9jf2jd-92jd-92jf9wrfjre",
-		)
-		var points []promql.Point
-		for j := 0; j < b.N/1000; j++ {
-			points = append(points, promql.Point{
-				T: int64(j * 10000),
-				V: rand.Float64(),
-			})
-		}
-		mat = append(mat, promql.Series{
-			Metric: lset,
-			Points: points,
-		})
-	}
-	input := &queryData{
-		ResultType: parser.ValueTypeMatrix,
-		Result:     mat,
-	}
-	b.ResetTimer()
-
-	_, err := json.Marshal(&input)
-	testutil.Ok(b, err)
-}
-
 func TestParseDownsamplingParamMillis(t *testing.T) {
 	var tests = []struct {
 		maxSourceResolutionParam string
@@ -1040,15 +1234,23 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 			result:                   int64((1 * time.Hour) / 6),
 			fail:                     true,
 		},
+		// maxSourceResolution param can be overwritten.
+		{
+			maxSourceResolutionParam: "1m",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64(time.Minute / (1000 * 1000)),
+			fail:                     false,
+		},
 	}
 
 	for i, test := range tests {
 		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
-			gate:                   gate.NewKeeper(nil).NewGate(4),
+			gate:                   gate.New(nil, 4),
 		}
 		v := url.Values{}
-		v.Set("max_source_resolution", test.maxSourceResolutionParam)
+		v.Set(MaxSourceResolutionParam, test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
 
 		// If no max_source_resolution is specified fit at least 5 samples between steps.
@@ -1062,14 +1264,52 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	}
 }
 
-type mockedRulesClient struct {
-	g   map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup
-	w   storage.Warnings
-	err error
-}
+func TestParseStoreDebugMatchersParam(t *testing.T) {
+	for i, tc := range []struct {
+		storeMatchers string
+		fail          bool
+		result        [][]*labels.Matcher
+	}{
+		{
+			storeMatchers: "123",
+			fail:          true,
+		},
+		{
+			storeMatchers: "foo",
+			fail:          false,
+			result:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__name__", "foo")}},
+		},
+		{
+			storeMatchers: `{__address__="localhost:10905"}`,
+			fail:          false,
+			result:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10905")}},
+		},
+		{
+			storeMatchers: `{__address__="localhost:10905", cluster="test"}`,
+			fail:          false,
+			result: [][]*labels.Matcher{{
+				labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10905"),
+				labels.MustNewMatcher(labels.MatchEqual, "cluster", "test"),
+			}},
+		},
+	} {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			api := QueryAPI{
+				gate: promgate.New(4),
+			}
+			v := url.Values{}
+			v.Set(StoreMatcherParam, tc.storeMatchers)
+			r := &http.Request{PostForm: v}
 
-func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
-	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
+			storeMatchers, err := api.parseStoreDebugMatchersParam(r)
+			if !tc.fail {
+				testutil.Equals(t, tc.result, storeMatchers)
+				testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
+			} else {
+				testutil.NotOk(t, err)
+			}
+		})
+	}
 }
 
 func TestRulesHandler(t *testing.T) {
@@ -1081,7 +1321,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up)",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label"}}},
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label"}}},
 			LastError:                 "err1",
 		}),
 		rulespb.NewRecordingRule(&rulespb.RecordingRule{
@@ -1090,7 +1330,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up1)",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label2"}}},
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label2"}}},
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "3",
@@ -1099,12 +1339,12 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label3"}}},
-			Annotations:               rulespb.PromLabels{Labels: []storepb.Label{{Name: "ann", Value: "a1"}}},
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label3"}}},
+			Annotations:               labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "ann", Value: "a1"}}},
 			Alerts: []*rulespb.AlertInstance{
 				{
-					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "1"}}},
-					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "2"}}},
+					Labels:      labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "1"}}},
+					Annotations: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "2"}}},
 					State:       rulespb.AlertState_FIRING,
 					ActiveAt:    &twoHAgo,
 					Value:       "1",
@@ -1112,8 +1352,8 @@ func TestRulesHandler(t *testing.T) {
 					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 				},
 				{
-					Labels:      rulespb.PromLabels{Labels: []storepb.Label{{Name: "inside", Value: "3"}}},
-					Annotations: rulespb.PromLabels{Labels: []storepb.Label{{Name: "insideann", Value: "4"}}},
+					Labels:      labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "3"}}},
+					Annotations: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "4"}}},
 					State:       rulespb.AlertState_PENDING,
 					ActiveAt:    nil,
 					Value:       "2",
@@ -1130,7 +1370,7 @@ func TestRulesHandler(t *testing.T) {
 			Health:                    "x",
 			DurationSeconds:           102,
 			Query:                     "sum(up3) == 3",
-			Labels:                    rulespb.PromLabels{Labels: []storepb.Label{{Name: "some", Value: "label4"}}},
+			Labels:                    labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label4"}}},
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}
@@ -1191,7 +1431,7 @@ func TestRulesHandler(t *testing.T) {
 		testpromcompatibility.RecordingRule{
 			Name:           all[0].GetRecording().Name,
 			Query:          all[0].GetRecording().Query,
-			Labels:         storepb.LabelsToPromLabels(all[0].GetRecording().Labels.Labels),
+			Labels:         labelpb.ZLabelsToPromLabels(all[0].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[0].GetRecording().Health),
 			LastError:      all[0].GetRecording().LastError,
 			LastEvaluation: all[0].GetRecording().LastEvaluation,
@@ -1201,7 +1441,7 @@ func TestRulesHandler(t *testing.T) {
 		testpromcompatibility.RecordingRule{
 			Name:           all[1].GetRecording().Name,
 			Query:          all[1].GetRecording().Query,
-			Labels:         storepb.LabelsToPromLabels(all[1].GetRecording().Labels.Labels),
+			Labels:         labelpb.ZLabelsToPromLabels(all[1].GetRecording().Labels.Labels),
 			Health:         rules.RuleHealth(all[1].GetRecording().Health),
 			LastError:      all[1].GetRecording().LastError,
 			LastEvaluation: all[1].GetRecording().LastEvaluation,
@@ -1212,25 +1452,25 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[2].GetAlert().State.String()),
 			Name:           all[2].GetAlert().Name,
 			Query:          all[2].GetAlert().Query,
-			Labels:         storepb.LabelsToPromLabels(all[2].GetAlert().Labels.Labels),
+			Labels:         labelpb.ZLabelsToPromLabels(all[2].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[2].GetAlert().LastError,
 			LastEvaluation: all[2].GetAlert().LastEvaluation,
 			EvaluationTime: all[2].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[2].GetAlert().DurationSeconds,
-			Annotations:    storepb.LabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
+			Annotations:    labelpb.ZLabelsToPromLabels(all[2].GetAlert().Annotations.Labels),
 			Alerts: []*testpromcompatibility.Alert{
 				{
-					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
-					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
+					Labels:                  labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[0].Labels.Labels),
+					Annotations:             labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[0].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[0].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[0].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[0].Value,
 					PartialResponseStrategy: all[2].GetAlert().Alerts[0].PartialResponseStrategy.String(),
 				},
 				{
-					Labels:                  storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
-					Annotations:             storepb.LabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
+					Labels:                  labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[1].Labels.Labels),
+					Annotations:             labelpb.ZLabelsToPromLabels(all[2].GetAlert().Alerts[1].Annotations.Labels),
 					State:                   strings.ToLower(all[2].GetAlert().Alerts[1].State.String()),
 					ActiveAt:                all[2].GetAlert().Alerts[1].ActiveAt,
 					Value:                   all[2].GetAlert().Alerts[1].Value,
@@ -1243,7 +1483,7 @@ func TestRulesHandler(t *testing.T) {
 			State:          strings.ToLower(all[3].GetAlert().State.String()),
 			Name:           all[3].GetAlert().Name,
 			Query:          all[3].GetAlert().Query,
-			Labels:         storepb.LabelsToPromLabels(all[3].GetAlert().Labels.Labels),
+			Labels:         labelpb.ZLabelsToPromLabels(all[3].GetAlert().Labels.Labels),
 			Health:         rules.RuleHealth(all[2].GetAlert().Health),
 			LastError:      all[3].GetAlert().LastError,
 			LastEvaluation: all[3].GetAlert().LastEvaluation,
@@ -1341,4 +1581,48 @@ func TestRulesHandler(t *testing.T) {
 			testutil.Equals(t, string(exp), string(got))
 		})
 	}
+}
+
+func BenchmarkQueryResultEncoding(b *testing.B) {
+	var mat promql.Matrix
+	for i := 0; i < 1000; i++ {
+		lset := labels.FromStrings(
+			"__name__", "my_test_metric_name",
+			"instance", fmt.Sprintf("abcdefghijklmnopqrstuvxyz-%d", i),
+			"job", "test-test",
+			"method", "ABCD",
+			"status", "199",
+			"namespace", "something",
+			"long-label", "34grnt83j0qxj309je9rgt9jf2jd-92jd-92jf9wrfjre",
+		)
+		var points []promql.Point
+		for j := 0; j < b.N/1000; j++ {
+			points = append(points, promql.Point{
+				T: int64(j * 10000),
+				V: rand.Float64(),
+			})
+		}
+		mat = append(mat, promql.Series{
+			Metric: lset,
+			Points: points,
+		})
+	}
+	input := &queryData{
+		ResultType: parser.ValueTypeMatrix,
+		Result:     mat,
+	}
+	b.ResetTimer()
+
+	_, err := json.Marshal(&input)
+	testutil.Ok(b, err)
+}
+
+type mockedRulesClient struct {
+	g   map[rulespb.RulesRequest_Type][]*rulespb.RuleGroup
+	w   storage.Warnings
+	err error
+}
+
+func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
+	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
 }

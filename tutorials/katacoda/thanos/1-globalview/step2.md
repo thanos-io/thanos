@@ -26,7 +26,7 @@ In this step we will focus on `thanos sidecar`:
 
 Sidecar as the name suggests should be deployed together with Prometheus. Sidecar has multiple features:
 
-* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/tip/integrations.md/#storeapi). StoreAPI
+* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/tip/thanos/integrations.md/#storeapi). StoreAPI
 is a generic gRPC API allowing Thanos components to fetch metrics from various systems and backends.
 * It is essentially in further long term storage options described in [next]() courses.
 * It is capable to watch for configuration and Prometheus rules (alerting or recording) and notify Prometheus for dynamic reloads:

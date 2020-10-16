@@ -1,13 +1,16 @@
 import React, { FC, useState, useEffect } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Alert, Button } from 'reactstrap';
+import { UncontrolledAlert, Button } from 'reactstrap';
 
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
+import { StoreListProps } from '../../thanos/pages/stores/Stores';
+import { Store } from '../../thanos/pages/stores/store';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { withStatusIndicator } from '../../components/withStatusIndicator';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
 
@@ -21,6 +24,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   metrics: string[];
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
+  stores: StoreListProps;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -28,12 +32,22 @@ export const PanelListContent: FC<PanelListProps> = ({
   useLocalTime,
   pathPrefix,
   queryHistoryEnabled,
+  stores = {},
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
   const [historyItems, setLocalStorageHistoryItems] = useLocalStorage<string[]>('history', []);
+  const [storeData, setStoreData] = useState([] as Store[]);
 
   useEffect(() => {
+    // Convert stores data to a unified stores array.
+    const storeList: Store[] = [];
+    for (const type in stores) {
+      storeList.push(...stores[type]);
+    }
+    setStoreData(storeList);
+    // Clear selected stores for each panel.
+    panels.forEach((panel: PanelMeta) => (panel.options.storeMatches = []));
     !panels.length && addPanel();
     window.onpopstate = () => {
       const panels = decodePanelOptionsFromQueryString(window.location.search);
@@ -43,7 +57,7 @@ export const PanelListContent: FC<PanelListProps> = ({
     };
     // We want useEffect to act only as componentDidMount, but react still complains about the empty dependencies list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stores]);
 
   const handleExecuteQuery = (query: string) => {
     const isSimpleMetric = metrics.indexOf(query) !== -1;
@@ -99,6 +113,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
+          stores={storeData}
         />
       ))}
       <Button className="mb-3" color="primary" onClick={addPanel}>
@@ -108,12 +123,18 @@ export const PanelListContent: FC<PanelListProps> = ({
   );
 };
 
+const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
+
 const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
+  const [debugMode, setDebugMode] = useState(false);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
+  const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
+    `${pathPrefix}/api/v1/stores`
+  );
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -149,26 +170,42 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       >
         Use local time
       </Checkbox>
+      <Checkbox
+        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+        id="debug-mode-checkbox"
+        defaultChecked={debugMode}
+        onChange={({ target }) => setDebugMode(target.checked)}
+      >
+        Enable Store Filtering
+      </Checkbox>
       {(delta > 30 || timeErr) && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
           {timeErr && `Unexpected response status when fetching server time: ${timeErr.message}`}
           {delta >= 30 &&
             `Error fetching server time: Detected ${delta} seconds time difference between your browser and the server. Thanos relies on accurate time and time drift might cause unexpected query results.`}
-        </Alert>
+        </UncontrolledAlert>
       )}
       {metricsErr && (
-        <Alert color="danger">
+        <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
           Error fetching metrics list: Unexpected response status when fetching metric names: {metricsErr.message}
-        </Alert>
+        </UncontrolledAlert>
       )}
-      <PanelListContent
+      {storesErr && (
+        <UncontrolledAlert color="danger">
+          <strong>Warning: </strong>
+          Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
+        </UncontrolledAlert>
+      )}
+      <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
         pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
+        stores={debugMode ? storesRes.data : {}}
         queryHistoryEnabled={enableQueryHistory}
+        isLoading={storesLoading}
       />
     </>
   );

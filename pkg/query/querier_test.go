@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -28,6 +30,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -292,6 +295,103 @@ func (s series) Iterator() chunkenc.Iterator {
 	return newMockedSeriesIterator(s.samples)
 }
 
+// TestQuerier_Select_AfterPromQL tests expected results with and without deduplication after passing all data to promql.
+// To test with real data:
+// Collect the expected results from Prometheus or Thanos through "/api/v1/query_range" and save to a file.
+// Collect raw data to be used for local storage:
+// 	scripts/insecure_grpcurl_series.sh querierGrpcIP:port '[{"name":"type","value":"current"},{"name":"_id","value":"xxx"}]' 1597823000000 1597824600000 > localStorage.json
+// 	Remove all white space from the file and put each series in a new line.
+// 	When collecting the raw data mint should be Prometheus query time minus the default look back delta(default is 5min or 300000ms)
+// 	For example if the Prometheus query mint is 1597823700000 the grpccurl query mint should be 1597823400000.
+//  This is because when promql displays data for a given range it looks back 5min before the requested time window.
+func TestQuerier_Select_AfterPromQL(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	for _, tcase := range []struct {
+		name               string
+		storeAPI           storepb.StoreServer
+		replicaLabels      []string // Replica label groups chunks by the label value and strips it from the final result.
+		hints              *storage.SelectHints
+		equivalentQuery    string
+		lookbackDelta      time.Duration
+		expected           []series
+		expectedAfterDedup series
+		expectedWarning    string
+	}{
+		{
+			// Regression test 1 against https://github.com/thanos-io/thanos/issues/2890.
+			name: "when switching replicas don't miss samples when set with a big enough lookback delta",
+			storeAPI: func() storepb.StoreServer {
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				testutil.Ok(t, err)
+				return s
+			}(),
+			equivalentQuery: `cluster_version{}`,
+			replicaLabels:   []string{"replica"},
+			hints: &storage.SelectHints{
+				Start: 1598471700000,
+				End:   1598472600000,
+				Step:  3000,
+			},
+			lookbackDelta:      15 * time.Minute,
+			expected:           jsonToSeries(t, "testdata/issue2890-expected.json"),
+			expectedAfterDedup: jsonToSeries(t, "testdata/issue2890-expected-dedup.json")[0],
+		},
+	} {
+
+		t.Run(tcase.name, func(t *testing.T) {
+			timeout := 5 * time.Minute
+			e := promql.NewEngine(promql.EngineOpts{
+				Logger:        logger,
+				Timeout:       timeout,
+				MaxSamples:    math.MaxInt64,
+				LookbackDelta: tcase.lookbackDelta,
+			})
+			for _, sc := range []struct {
+				dedup    bool
+				expected []series
+			}{
+				{dedup: false, expected: tcase.expected},
+				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
+			} {
+
+				resolution := time.Duration(tcase.hints.Step) * time.Millisecond
+				t.Run(fmt.Sprintf("dedup=%v, resolution=%v", sc.dedup, resolution.String()), func(t *testing.T) {
+					var actual []series
+					// Boostrap a local store and pass the data through promql.
+					{
+						g := gate.New(2)
+						mq := &mockedQueryable{
+							Creator: func(mint, maxt int64) storage.Querier {
+								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout)
+							},
+						}
+						t.Cleanup(func() {
+							testutil.Ok(t, mq.Close())
+						})
+						q, err := e.NewRangeQuery(mq, tcase.equivalentQuery, timestamp.Time(tcase.hints.Start), timestamp.Time(tcase.hints.End), resolution)
+						testutil.Ok(t, err)
+						t.Cleanup(q.Close)
+						res := q.Exec(context.Background())
+						testutil.Ok(t, res.Err)
+						actual = promqlResToSeries(res)
+						if tcase.expectedWarning != "" {
+							warns := res.Warnings
+							testutil.Assert(t, len(warns) == 1, "expected only single warnings")
+							testutil.Equals(t, tcase.expectedWarning, warns[0].Error())
+						}
+					}
+
+					testutil.Equals(t, sc.expected, actual, "promql result doesn't match the expected output")
+					if sc.dedup {
+						testutil.Assert(t, len(actual) == 1, "expected only single response, subqueries?")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestQuerier_Select(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
@@ -507,7 +607,7 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout)
+				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
@@ -524,7 +624,7 @@ func TestQuerier_Select(t *testing.T) {
 					// Integration test: Make sure the PromQL would select exactly the same.
 					t.Run("through PromQL with 100s step", func(t *testing.T) {
 						catcher := &querierResponseCatcher{t: t, Querier: q}
-						q, err := e.NewRangeQuery(&mockedQueryable{catcher}, tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
+						q, err := e.NewRangeQuery(&mockedQueryable{querier: catcher}, tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
 						testutil.Ok(t, err)
 						t.Cleanup(q.Close)
 
@@ -576,12 +676,93 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 	}
 }
 
-type mockedQueryable struct {
-	q storage.Querier
+func jsonToSeries(t *testing.T, filename string) []series {
+	file, err := ioutil.ReadFile(filename)
+	testutil.Ok(t, err)
+
+	data := Response{}
+	testutil.Ok(t, json.Unmarshal(file, &data), filename)
+
+	var ss []series
+	for _, ser := range data.Data.Results {
+		var lbls labels.Labels
+		for n, v := range ser.Metric {
+			lbls = append(lbls, labels.Label{
+				Name:  string(n),
+				Value: string(v),
+			})
+		}
+		// Label names need to be sorted.
+		sort.Sort(lbls)
+
+		var smpls []sample
+		for _, smp := range ser.Values {
+			smpls = append(smpls, sample{
+				t: int64(smp.Timestamp),
+				v: float64(smp.Value),
+			})
+		}
+
+		ss = append(ss, series{
+			lset:    lbls,
+			samples: smpls,
+		})
+	}
+
+	// Sort the series by their labels.
+	sort.Slice(ss, func(i, j int) bool {
+		return labels.Compare(ss[i].lset, ss[j].lset) <= 0
+	})
+
+	return ss
 }
 
-func (q *mockedQueryable) Querier(context.Context, int64, int64) (storage.Querier, error) {
-	return q.q, nil
+type Response struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string       `json:"resultType"`
+		Results    model.Matrix `json:"result"`
+	} `json:"data"`
+}
+
+func promqlResToSeries(res *promql.Result) []series {
+	matrix := res.Value.(promql.Matrix)
+	series := make([]series, len(matrix))
+
+	for i, ser := range matrix {
+		series[i].lset = ser.Metric
+		for _, point := range ser.Points {
+			series[i].samples = append(series[i].samples, sample{t: point.T, v: point.V})
+		}
+	}
+	return series
+}
+
+type mockedQueryable struct {
+	Creator func(int64, int64) storage.Querier
+	querier storage.Querier
+}
+
+// Querier creates a querier with the provided min and max time.
+// The promQL engine sets mint and it is calculated based on the default lookback delta.
+func (q *mockedQueryable) Querier(_ context.Context, mint int64, maxt int64) (storage.Querier, error) {
+	if q.Creator == nil {
+		return q.querier, nil
+	}
+	qq := q.Creator(mint, maxt)
+	q.querier = qq
+	return q.querier, nil
+}
+
+func (q *mockedQueryable) Close() error {
+	defer func() {
+		q.querier = nil
+	}()
+
+	if q.querier != nil {
+		return q.querier.Close()
+	}
+	return nil
 }
 
 type querierResponseCatcher struct {
@@ -673,7 +854,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, g, timeout)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, g, timeout)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -684,7 +865,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -713,7 +894,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -743,7 +924,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, nil, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, g, timeout)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, g, timeout)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -754,7 +935,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -778,7 +959,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(&mockedQueryable{q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(&mockedQueryable{querier: q}, `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -808,34 +989,34 @@ func TestSortReplicaLabel(t *testing.T) {
 		// 0 Single deduplication label.
 		{
 			input: []storepb.Series{
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 			},
 			exp: []storepb.Series{
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
 			},
 			dedupLabels: map[string]struct{}{"b": {}},
 		},
 		// 1 Multi deduplication labels.
 		{
 			input: []storepb.Series{
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 			},
 			exp: []storepb.Series{
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
 			},
 			dedupLabels: map[string]struct{}{"b": {}, "b1": {}},
 		},
@@ -1309,7 +1490,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 	var s storepb.Series
 
 	for _, l := range lset {
-		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
+		s.Labels = append(s.Labels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
 	}
 
 	for _, smpls := range smplChunks {

@@ -45,7 +45,7 @@ See [release process docs](release-process.md) for details.
 
 Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.14+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+If you want to build Thanos from source you would need a working installation of the Go 1.15+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 
@@ -141,19 +141,20 @@ Vanilla Prometheus might be totally enough for small setups.
 However, in case you want to play and run Thanos components
 on a single node, we recommend following the port layout:
 
-| Component | Interface               | Port  |
-| --------- | ----------------------- | ----- |
-| Sidecar   | gRPC                    | 10901 |
-| Sidecar   | HTTP                    | 10902 |
-| Query     | gRPC                    | 10903 |
-| Query     | HTTP                    | 10904 |
-| Store     | gRPC                    | 10905 |
-| Store     | HTTP                    | 10906 |
-| Receive   | gRPC (store API)        | 10907 |
-| Receive   | HTTP (remote write API) | 10908 |
-| Receive   | HTTP                    | 10909 |
-| Rule      | gRPC                    | 10910 |
-| Rule      | HTTP                    | 10911 |
-| Compact   | HTTP                    | 10912 |
+| Component      | Interface               | Port  |
+| -------------- | ----------------------- | ----- |
+| Sidecar        | gRPC                    | 10901 |
+| Sidecar        | HTTP                    | 10902 |
+| Query          | gRPC                    | 10903 |
+| Query          | HTTP                    | 10904 |
+| Store          | gRPC                    | 10905 |
+| Store          | HTTP                    | 10906 |
+| Receive        | gRPC (store API)        | 10907 |
+| Receive        | HTTP (remote write API) | 10908 |
+| Receive        | HTTP                    | 10909 |
+| Rule           | gRPC                    | 10910 |
+| Rule           | HTTP                    | 10911 |
+| Compact        | HTTP                    | 10912 |
+| Query Frontend | HTTP                    | 10913 |
 
 You can see example one-node setup [here](/scripts/quickstart.sh)

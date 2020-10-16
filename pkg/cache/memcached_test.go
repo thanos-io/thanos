@@ -88,20 +88,22 @@ func TestMemcachedIndexCache(t *testing.T) {
 	}
 }
 
+// mockedMemcachedClient is a mocked memcached client for testing.
 type mockedMemcachedClient struct {
-	cache             map[string][]byte
-	mockedGetMultiErr error
+	cache       map[string][]byte
+	getMultiErr error
 }
 
-func newMockedMemcachedClient(mockedGetMultiErr error) *mockedMemcachedClient {
+// newMockedMemcachedClient returns a mocked memcached client.
+func newMockedMemcachedClient(getMultiErr error) *mockedMemcachedClient {
 	return &mockedMemcachedClient{
-		cache:             map[string][]byte{},
-		mockedGetMultiErr: mockedGetMultiErr,
+		cache:       map[string][]byte{},
+		getMultiErr: getMultiErr,
 	}
 }
 
 func (c *mockedMemcachedClient) GetMulti(_ context.Context, keys []string) map[string][]byte {
-	if c.mockedGetMultiErr != nil {
+	if c.getMultiErr != nil {
 		return nil
 	}
 

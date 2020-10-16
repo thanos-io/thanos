@@ -1,7 +1,7 @@
 import React from 'react';
 import { mount, ReactWrapper } from 'enzyme';
 import { FetchMock } from 'jest-fetch-mock/types';
-import { Alert } from 'reactstrap';
+import { UncontrolledAlert } from 'reactstrap';
 import Stores from './Stores';
 import StorePoolPanel from './StorePoolPanel';
 import { sampleAPIResponse } from './__testdata__/testdata';
@@ -55,7 +55,7 @@ describe('Stores', () => {
 
       expect(mock).toHaveBeenCalledWith('/api/v1/stores', { cache: 'no-store', credentials: 'same-origin' });
 
-      const alert = stores.find(Alert);
+      const alert = stores.find(UncontrolledAlert);
       expect(alert.prop('color')).toBe('warning');
       expect(alert.text()).toContain('No stores registered');
     });
@@ -73,7 +73,7 @@ describe('Stores', () => {
 
       expect(mock).toHaveBeenCalledWith('/api/v1/stores', { cache: 'no-store', credentials: 'same-origin' });
 
-      const alert = stores.find(Alert);
+      const alert = stores.find(UncontrolledAlert);
       expect(alert.prop('color')).toBe('danger');
       expect(alert.text()).toContain('Error fetching stores');
     });

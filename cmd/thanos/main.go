@@ -71,7 +71,7 @@ func main() {
 		Default("info").Enum("error", "warn", "info", "debug")
 	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
-	tracingConfig := regCommonTracingFlags(app)
+	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
 
 	registerSidecar(app)
 	registerStore(app)

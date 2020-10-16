@@ -1,6 +1,13 @@
 # Available from https://hub.docker.com/r/circleci/golang/
-FROM circleci/golang:1.14.2-node
+FROM circleci/golang:1.15 AS builder
 
-ENV GOBIN=/home/circleci/.local/bin
+ENV GOBIN=/go/bin
+ENV BIN_DIR=/go/bin
 
-COPY --chown=circleci tmp/bin/* ${GOBIN}/
+WORKDIR opt
+COPY Makefile .
+COPY .bingo ./.bingo
+RUN make install-deps
+
+FROM circleci/golang:1.15-node
+COPY --from=builder --chown=circleci /go/bin /go/bin/

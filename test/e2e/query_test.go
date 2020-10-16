@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -440,6 +441,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 	}))
 }
 
+//nolint:unparam
 func labelValues(t *testing.T, ctx context.Context, addr, label string, start, end int64, check func(res []string) bool) {
 	t.Helper()
 
@@ -458,6 +460,25 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 	}))
 }
 
+func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
+		if err != nil {
+			return err
+		}
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
+}
+
+//nolint:unparam
 func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
 	t.Helper()
 

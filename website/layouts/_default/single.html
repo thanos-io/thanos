@@ -7,7 +7,7 @@
             <div class="DocSearch-content col-12 col-lg-9">
                 {{ partial "versioning/banner.html" . }}
                 {{ if or (eq .Params.toc true) (and (gt .WordCount 400) (ne .Params.toc false)) }}
-                <h1>Table of Content</h1>
+                <h1>Table of Contents</h1>
                 {{ .TableOfContents }}
                 {{ end }}
                 {{ $content := replace .Content "<table>" "<table class='table table-striped'>" }}
@@ -16,4 +16,5 @@
             </div>
         </div>
     </div>
+    {{ partial "searchConfig/docs.html" . }}
 {{ end }}

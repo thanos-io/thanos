@@ -141,6 +141,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			// The external labels must be attached to the meta file on upload.
 			meta.Thanos.Labels = extLset.Map()
+			meta.Thanos.SegmentFiles = []string{"0001", "0002"}
 
 			var buf bytes.Buffer
 			enc := json.NewEncoder(&buf)
@@ -293,6 +294,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 			// The external labels must be attached to the meta file on upload.
 			meta.Thanos.Labels = extLset.Map()
+			meta.Thanos.SegmentFiles = []string{"0001", "0002"}
 
 			var buf bytes.Buffer
 			enc := json.NewEncoder(&buf)

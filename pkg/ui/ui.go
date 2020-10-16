@@ -36,6 +36,7 @@ var (
 		"/version",
 		"/stores",
 		"/blocks",
+		"/loaded",
 	}
 )
 
@@ -157,7 +158,7 @@ func absolutePrefix(prefix string) func() string {
 		if prefix == "" {
 			return ""
 		}
-		return "/" + prefix
+		return path.Join("/", prefix)
 	}
 }
 

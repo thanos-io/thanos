@@ -24,6 +24,7 @@ import (
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"google.golang.org/grpc"
 
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -189,7 +190,7 @@ func TestReceiveQuorum(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []prompb.Label{
+				Labels: []labelpb.ZLabel{
 					{
 						Name:  "foo",
 						Value: "bar",
@@ -525,7 +526,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []prompb.Label{
+				Labels: []labelpb.ZLabel{
 					{
 						Name:  "foo",
 						Value: "bar",

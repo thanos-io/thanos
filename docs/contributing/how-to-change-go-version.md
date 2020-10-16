@@ -2,7 +2,6 @@
 title: Changing Golang version
 type: docs
 menu: contributing
-slug: /how-to-change-go-version.md
 ---
 
 Thanos build system is pinned to certain Golang version. This is to ensure that Golang version

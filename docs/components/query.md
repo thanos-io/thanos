@@ -299,12 +299,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -337,7 +337,7 @@ Flags:
                                  thanos UI to be served on a sub-path. Defaults
                                  to the value of --web.external-prefix. This
                                  option is analogous to --web.route-prefix of
-                                 Promethus.
+                                 Prometheus.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
                                  URLs in the UI query web interface. Actual
                                  endpoints are still served on / or the
@@ -367,6 +367,19 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.lookback-delta=QUERY.LOOKBACK-DELTA
+                                 The maximum lookback duration for retrieving
+                                 metrics during expression evaluations. PromQL
+                                 always evaluates the query for the certain
+                                 timestamp (query range timestamps are deduced
+                                 by step). Since scrape intervals might be
+                                 different, PromQL looks back for given amount
+                                 of time to get latest sample. If it exceeds the
+                                 maximum lookback delta it assumes series is
+                                 stale and returns none (a gap). This is why
+                                 lookback delta should be set to at least 2
+                                 times of the slowest scrape interval. If unset
+                                 it will use the promql default of 5m.
       --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.
@@ -376,6 +389,12 @@ Flags:
                                  able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+      --query.metadata.default-time-range=0s
+                                 The default metadata time range duration for
+                                 retrieving labels through Labels and Series API
+                                 when the range parameters are not specified.
+                                 The zero value means range covers the time
+                                 since the beginning.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

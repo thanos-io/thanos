@@ -9,16 +9,26 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/weaveworks/common/httpgrpc"
 
-	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
+)
+
+const (
+	// Name of the cache control header.
+	cacheControlHeader = "Cache-Control"
+
+	// Value that cacheControlHeader has if the response indicates that the results should not be cached.
+	noStoreValue = "no-store"
 )
 
 var (
@@ -28,21 +38,23 @@ var (
 	errCannotParse    = "cannot parse parameter %s"
 )
 
-type codec struct {
+// queryRangeCodec is used to encode/decode Thanos query range requests and responses.
+type queryRangeCodec struct {
 	queryrange.Codec
 	partialResponse bool
 }
 
-func NewThanosCodec(partialResponse bool) *codec {
-	return &codec{
+// NewThanosQueryRangeCodec initializes a queryRangeCodec.
+func NewThanosQueryRangeCodec(partialResponse bool) *queryRangeCodec {
+	return &queryRangeCodec{
 		Codec:           queryrange.PrometheusCodec,
 		partialResponse: partialResponse,
 	}
 }
 
-func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
+func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
 	var (
-		result ThanosRequest
+		result ThanosQueryRangeRequest
 		err    error
 	)
 	result.Start, err = cortexutil.ParseTime(r.FormValue("start"))
@@ -74,69 +86,73 @@ func (c codec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Req
 		return nil, errStepTooSmall
 	}
 
-	result.Dedup, err = parseEnableDedupParam(r.FormValue("dedup"))
+	result.Dedup, err = parseEnableDedupParam(r.FormValue(queryv1.DedupParam))
 	if err != nil {
 		return nil, err
 	}
 
-	if r.FormValue("max_source_resolution") == "auto" {
+	if r.FormValue(queryv1.MaxSourceResolutionParam) == "auto" {
 		result.AutoDownsampling = true
 		result.MaxSourceResolution = result.Step / 5
 	} else {
-		result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue("max_source_resolution"))
+		result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue(queryv1.MaxSourceResolutionParam))
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	result.PartialResponse, err = parsePartialResponseParam(r.FormValue("partial_response"), c.partialResponse)
+	result.PartialResponse, err = parsePartialResponseParam(r.FormValue(queryv1.PartialResponseParam), c.partialResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(r.Form["replicaLabels[]"]) > 0 {
-		result.ReplicaLabels = r.Form["replicaLabels[]"]
+	if len(r.Form[queryv1.ReplicaLabelsParam]) > 0 {
+		result.ReplicaLabels = r.Form[queryv1.ReplicaLabelsParam]
 	}
 
-	result.StoreMatchers, err = parseStoreMatchersParam(r.Form["storeMatch[]"])
+	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
 	if err != nil {
 		return nil, err
 	}
 
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
+
+	for _, value := range r.Header.Values(cacheControlHeader) {
+		if strings.Contains(value, noStoreValue) {
+			result.CachingOptions.Disabled = true
+			break
+		}
+	}
+
 	return &result, nil
 }
 
-func (c codec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
-	thanosReq, ok := r.(*ThanosRequest)
+func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
+	thanosReq, ok := r.(*ThanosQueryRangeRequest)
 	if !ok {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid request format")
 	}
 	params := url.Values{
-		"start":            []string{encodeTime(thanosReq.Start)},
-		"end":              []string{encodeTime(thanosReq.End)},
-		"step":             []string{encodeDurationMillis(thanosReq.Step)},
-		"query":            []string{thanosReq.Query},
-		"dedup":            []string{strconv.FormatBool(thanosReq.Dedup)},
-		"partial_response": []string{strconv.FormatBool(thanosReq.PartialResponse)},
-		"replicaLabels[]":  thanosReq.ReplicaLabels,
+		"start":                      []string{encodeTime(thanosReq.Start)},
+		"end":                        []string{encodeTime(thanosReq.End)},
+		"step":                       []string{encodeDurationMillis(thanosReq.Step)},
+		"query":                      []string{thanosReq.Query},
+		queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
+		queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
+		queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
 	}
 
 	if thanosReq.AutoDownsampling {
-		params["max_source_resolution"] = []string{"auto"}
+		params[queryv1.MaxSourceResolutionParam] = []string{"auto"}
 	} else if thanosReq.MaxSourceResolution != 0 {
 		// Add this param only if it is set. Set to 0 will impact
 		// auto-downsampling in the querier.
-		params["max_source_resolution"] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
+		params[queryv1.MaxSourceResolutionParam] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
 	}
 
 	if len(thanosReq.StoreMatchers) > 0 {
-		storeMatchers, err := matchersToStringSlice(thanosReq.StoreMatchers)
-		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, "invalid request format")
-		}
-		params["storeMatch[]"] = storeMatchers
+		params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 	}
 
 	u := &url.URL{
@@ -174,7 +190,7 @@ func parseEnableDedupParam(s string) (bool, error) {
 		var err error
 		enableDeduplication, err = strconv.ParseBool(s)
 		if err != nil {
-			return enableDeduplication, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, "dedup")
+			return enableDeduplication, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.DedupParam)
 		}
 	}
 
@@ -187,7 +203,7 @@ func parseDownsamplingParamMillis(s string) (int64, error) {
 		var err error
 		maxSourceResolution, err = parseDurationMillis(s)
 		if err != nil {
-			return maxSourceResolution, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, "max_source_resolution")
+			return maxSourceResolution, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.MaxSourceResolutionParam)
 		}
 	}
 
@@ -203,27 +219,23 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 		var err error
 		defaultEnablePartialResponse, err = strconv.ParseBool(s)
 		if err != nil {
-			return defaultEnablePartialResponse, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, "partial_response")
+			return defaultEnablePartialResponse, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.PartialResponseParam)
 		}
 	}
 
 	return defaultEnablePartialResponse, nil
 }
 
-func parseStoreMatchersParam(ss []string) ([][]storepb.LabelMatcher, error) {
-	storeMatchers := make([][]storepb.LabelMatcher, 0, len(ss))
+func parseMatchersParam(ss []string) ([][]*labels.Matcher, error) {
+	matchers := make([][]*labels.Matcher, 0, len(ss))
 	for _, s := range ss {
-		matchers, err := parser.ParseMetricSelector(s)
+		ms, err := parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, "storeMatch[]")
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.StoreMatcherParam)
 		}
-		stm, err := storepb.TranslatePromMatchers(matchers...)
-		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, "storeMatch[]")
-		}
-		storeMatchers = append(storeMatchers, stm)
+		matchers = append(matchers, ms)
 	}
-	return storeMatchers, nil
+	return matchers, nil
 }
 
 func encodeTime(t int64) string {
@@ -236,16 +248,10 @@ func encodeDurationMillis(d int64) string {
 }
 
 // matchersToStringSlice converts storeMatchers to string slice.
-func matchersToStringSlice(storeMatchers [][]storepb.LabelMatcher) ([]string, error) {
+func matchersToStringSlice(storeMatchers [][]*labels.Matcher) []string {
 	res := make([]string, 0, len(storeMatchers))
 	for _, storeMatcher := range storeMatchers {
-		matcher, err := promclient.MatchersToString(storeMatcher)
-		if err != nil {
-			return nil, err
-		}
-
-		res = append(res, matcher)
+		res = append(res, storepb.PromMatchersToString(storeMatcher...))
 	}
-
-	return res, nil
+	return res
 }

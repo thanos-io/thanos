@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 
-import { Alert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
+import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane } from 'reactstrap';
+import Select from 'react-select';
 
 import moment from 'moment-timezone';
 
@@ -11,6 +12,7 @@ import { GraphTabContent } from './GraphTabContent';
 import DataTable from './DataTable';
 import TimeInput from './TimeInput';
 import QueryStatsView, { QueryStats } from './QueryStatsView';
+import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 
@@ -23,6 +25,7 @@ interface PanelProps {
   metricNames: string[];
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
+  stores: Store[];
 }
 
 interface PanelState {
@@ -44,6 +47,7 @@ export interface PanelOptions {
   maxSourceResolution: string;
   useDeduplication: boolean;
   usePartialResponse: boolean;
+  storeMatches: Store[];
 }
 
 export enum PanelType {
@@ -61,6 +65,7 @@ export const PanelDefaultOptions: PanelOptions = {
   maxSourceResolution: '0s',
   useDeduplication: true,
   usePartialResponse: false,
+  storeMatches: [],
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -80,6 +85,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
+    this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps) {
@@ -91,6 +97,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       maxSourceResolution,
       useDeduplication,
       usePartialResponse,
+      // TODO: Add support for Store Matches
     } = this.props.options;
     if (
       prevOpts.endTime !== endTime ||
@@ -100,6 +107,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.maxSourceResolution !== maxSourceResolution ||
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse
+      // Check store matches
     ) {
       this.executeQuery();
     }
@@ -137,6 +145,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       dedup: this.props.options.useDeduplication.toString(),
       partial_response: this.props.options.usePartialResponse.toString(),
     });
+
+    // Add storeMatches to query params.
+    this.props.options.storeMatches?.forEach((store: Store) =>
+      params.append('storeMatch[]', `{__address__="${store.name}"}`)
+    );
 
     let path: string;
     switch (this.props.options.type) {
@@ -255,8 +268,12 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ usePartialResponse: event.target.checked });
   };
 
+  handleStoreMatchChange = (selectedStores: any): void => {
+    this.setOptions({ storeMatches: selectedStores || [] });
+  };
+
   render() {
-    const { pastQueries, metricNames, options, id } = this.props;
+    const { pastQueries, metricNames, options, id, stores } = this.props;
     return (
       <div className="panel">
         <Row>
@@ -274,7 +291,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           </Col>
         </Row>
         <Row>
-          <Col>{this.state.error && <Alert color="danger">{this.state.error}</Alert>}</Col>
+          <Col>{this.state.error && <UncontrolledAlert color="danger">{this.state.error}</UncontrolledAlert>}</Col>
         </Row>
         <Row>
           <Col>
@@ -296,6 +313,25 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </Checkbox>
           </Col>
         </Row>
+        {stores?.length > 0 && (
+          <Row>
+            <Col>
+              <div className="store-filter-wrapper">
+                <label className="store-filter-label">Store Filter:</label>
+                <Select
+                  defaultValue={options.storeMatches}
+                  options={stores}
+                  isMulti
+                  getOptionLabel={(option: Store) => option.name}
+                  getOptionValue={(option: Store) => option.name}
+                  closeMenuOnSelect={false}
+                  styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
+                  onChange={this.handleStoreMatchChange}
+                />
+              </div>
+            </Col>
+          </Row>
+        )}
         <Row>
           <Col>
             <Nav tabs>

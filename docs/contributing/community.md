@@ -4,11 +4,16 @@ type: docs
 menu: contributing
 ---
 
-# General
+# Community
 
-Thanos is an open source project and we value and welcome new contributors and members of the community. Here are ways to get in touch with the community:
+Thanos is an open source project from the very first commit. We always value and welcome new contributors and members of the community.
+Here are ways to get in touch with the community:
 
-## Thanos Community meeting
+### Social Media and Announcements
+
+Follow and interact with us on Twitter: [@ThanosMetrics](https://twitter.com/ThanosMetrics)
+
+### Thanos Community Meetings
 
 Thanos Community Meeting is a **public** and **recorded** monthly meeting every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
 
@@ -20,20 +25,30 @@ Everyone is welcome to join & add items to the agenda. The meeting happens in Zo
 * Agenda: [https://bit.ly/thanos-community-agenda](https://bit.ly/thanos-community-agenda)
 * Link to join zoom webinar: [https://zoom.us/j/96476403386](https://zoom.us/j/96476403386)
 
-If you have any suggestions, how we can run the meeting better, please let @povilasv know in CNCF slack.
+If you have any suggestions, how we can run the meeting better, please let `@povilasv` or `@metalmatze` know in the CNCF slack.
 
-## Slack
+### Slack
 
 * General channel: [#thanos](https://slack.cncf.io/)
-* Development related channel: [#thanos-dev](https://slack.cncf.io/)
-* Thanos PR discussion & review: [#thanos-prs](https://slack.cncf.io/)
+* Development related channel, PR discussions: [#thanos-dev](https://slack.cncf.io/)
 
-## Prometheus Community & Ecosystem Meeting
+### Prometheus Communication Channels
 
-The Prometheus & The Ecosystem community meeting is intended to provide a holistic overview of community activities, critical release information, and governance updates for Prometheus & the Ecosystem projects.
+Since we are active Prometheus contributors and, some of us, maintainers we are also available on [Prometheus IRC and email-list channels](https://prometheus.io/community/)
+
+### Prometheus Community & Ecosystem Meetings
+
+The Prometheus & The Ecosystem community meeting is intended to provide a holistic overview of community activities, critical release information,
+and governance updates for Prometheus & the Ecosystem projects.
 
 Thanos Maintainers regularly join and give announcements and updates.
 
 Meeting details: [https://bit.ly/prometheus-community-agenda](https://bit.ly/prometheus-community-agenda)
 
+### Mentorships
 
+We participate in periodic mentorship programs. Read more [here](https://thanos.io/tip/contributing/mentorship.md/).
+
+### Further Questions
+
+Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maintainers.md/)

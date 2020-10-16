@@ -6,12 +6,13 @@ package receive
 import (
 	"testing"
 
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 func TestHash(t *testing.T) {
 	ts := &prompb.TimeSeries{
-		Labels: []prompb.Label{
+		Labels: []labelpb.ZLabel{
 			{
 				Name:  "foo",
 				Value: "bar",
@@ -24,7 +25,7 @@ func TestHash(t *testing.T) {
 	}
 
 	ts2 := &prompb.TimeSeries{
-		Labels: []prompb.Label{ts.Labels[1], ts.Labels[0]},
+		Labels: []labelpb.ZLabel{ts.Labels[1], ts.Labels[0]},
 	}
 
 	if hash("", ts) != hash("", ts2) {
@@ -34,7 +35,7 @@ func TestHash(t *testing.T) {
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
-		Labels: []prompb.Label{
+		Labels: []labelpb.ZLabel{
 			{
 				Name:  "foo",
 				Value: "bar",

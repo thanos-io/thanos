@@ -11,32 +11,32 @@
             <ul class="list-inline mb-0">
                 <li class="list-inline-item my-3">
                     <a href="{{ "/tip/thanos/getting-started.md" | relURL }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-fw fa-book"></i> Getting Started
+                        <i class="fas fa-fw fa-book"></i>&nbsp;Getting Started
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="{{ "/tip/contributing/community.md" | relURL }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-fw fa-comments"></i> Community
+                        <i class="fas fa-fw fa-comments"></i>&nbsp;Community
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
-                        <i class="mr-1 fas fa-fw fa-download"></i> Download
+                        <i class="mr-1 fas fa-fw fa-download"></i>&nbsp;Download
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://quay.io/repository/{{ .Site.Params.QuayIoUser }}/{{ .Site.Params.QuayIoRepository }}" class="btn btn-outline-secondary">
-                        <i class="mr-1 fab fa-fw fa-docker"></i> Quay.io
+                        <i class="mr-1 fab fa-fw fa-docker"></i>&nbsp;Quay.io
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://hub.docker.com/r/{{ .Site.Params.DockerHubUser }}/{{ .Site.Params.DockerHubRepository }}" class="btn btn-outline-secondary">
-                        <i class="mr-1 fab fa-fw fa-docker"></i> DockerHub
+                        <i class="mr-1 fab fa-fw fa-docker"></i>&nbsp;DockerHub
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="btn btn-outline-secondary">
-                        <i class="mr-1 fab fa-fw fa-github"></i> Github
+                        <i class="mr-1 fab fa-fw fa-github"></i>&nbsp;GitHub
                     </a>
                 </li>
             </ul>
@@ -48,7 +48,7 @@
         <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-search fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Global Query View</h4>
-            <p>Scale your Prometheus setup by enabling querying your Prometheus metrics across multiple Prometheus server and clusters.</p>
+            <p>Scale your Prometheus setup by enabling querying of your Prometheus metrics across multiple Prometheus servers and clusters.</p>
         </div>
         <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-archive fa-5x db mb-3"></i>
@@ -58,7 +58,7 @@
         <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-plug fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Prometheus Compatible</h4>
-            <p>Use the same tools you love such as Grafana or others that supports Prometheus Query API.</p>
+            <p>Use the same tools you love, such as Grafana and others, that support the Prometheus Query API.</p>
         </div>
         <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-file-download fa-5x db mb-3"></i>
@@ -100,14 +100,14 @@
             <div class="col col-sm-1 col-md-6 offset-md-3 col-lg-4 offset-lg-4 text-center">
                 <img class="img-fluid" style="max-width: 60%" src="cloud-native-computing.svg" alt="CNCF"/>
             </div>
-            <p>We are <a href="https://cncf.io">Cloud Native Computing Foundation</a> Incubation project.</p>
+            <p>We are a <a href="https://cncf.io">Cloud Native Computing Foundation</a> Incubating project.</p>
         </div>
     </div>
 </div>
 <div class="container-fluid bg-light">
     <div class="row py-5">
         <div class="col text-center">
-            <h3 class="color-purple"><a href="{{ "/tip/contributing/community.md" | relURL }}">Join the community !</a></h3>
+            <h3 class="color-purple"><a href="{{ "/tip/contributing/community.md" | relURL }}">Join the community!</a></h3>
             <p>Join users and companies that are using Thanos in production.</p>
             <ul class="list-inline">
                 <li class="list-inline-item">
@@ -132,4 +132,5 @@
         </div>
     </div>
 </div>
+{{ partial "searchConfig/index.html" . }}
 {{ end }}
