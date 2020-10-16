@@ -104,7 +104,7 @@ func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+		resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 	}
 
 	labelSets = make([]labels.Labels, 0, len(resp.LabelSets))

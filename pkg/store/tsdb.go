@@ -74,7 +74,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.LabelsFromPromLabels(s.externalLabels),
+		Labels:    labelpb.ZLabelsFromPromLabels(s.externalLabels),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -82,9 +82,9 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []storepb.LabelSet{}
+	res.LabelSets = []labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, storepb.LabelSet{
+		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
@@ -134,7 +134,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		seriesLabels := storepb.Series{Labels: labelpb.LabelsFromPromLabels(labelpb.ExtendLabels(series.Labels(), s.externalLabels))}
+		seriesLabels := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendLabels(series.Labels(), s.externalLabels))}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&seriesLabels)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
