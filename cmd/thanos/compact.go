@@ -311,7 +311,7 @@ func runCompact(
 		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning marked blocks")
+			return errors.Wrap(err, "cleaning marked blocks")
 		}
 
 		if err := sy.SyncMetas(ctx); err != nil {
@@ -455,9 +455,7 @@ func runCompact(
 				case <-time.After(conf.cleanupBlocksInterval):
 				case <-ctx.Done():
 				}
-				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), func() error {
-					return cleanPartialMarked()
-				})
+				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), cleanPartialMarked)
 			}, func(error) {
 				cancel()
 			})
