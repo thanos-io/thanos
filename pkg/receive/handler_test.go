@@ -198,7 +198,7 @@ func TestReceiveQuorum(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: []labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",
@@ -534,7 +534,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: []labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",
@@ -927,11 +927,11 @@ type fakeRemoteWriteGRPCServer struct {
 	h storepb.WriteableStoreServer
 }
 
-func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
 }
 
-func serialize(t testing.TB, lbls []labelpb.ZLabel, samples []prompb.Sample) []byte {
+func serialize(t testing.TB, lbls []labelpb.Label, samples []prompb.Sample) []byte {
 	// Create significant number of samples to see the weight of it on profiles.
 	r := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -1039,70 +1039,70 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}{
 		{
 			name: "typical labels under 1KB, single sample",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
-				lbls := make([]labelpb.ZLabel, 10)
+			writeRequest: serialize(b, func() []labelpb.Label {
+				lbls := make([]labelpb.Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					// Label ~20B name, 50B value.
-					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "typical labels under 1KB, 2MB of samples",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
-				lbls := make([]labelpb.ZLabel, 10)
+			writeRequest: serialize(b, func() []labelpb.Label {
+				lbls := make([]labelpb.Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					// Label ~20B name, 50B value.
-					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(), manySamples),
 		},
 		{
 			name: "bigger labels over 1KB, single sample",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
-				lbls := make([]labelpb.ZLabel, 10)
+			writeRequest: serialize(b, func() []labelpb.Label {
+				lbls := make([]labelpb.Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					// Label ~50B name, 50B value.
-					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "bigger labels over 1KB, 2MB of samples",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
-				lbls := make([]labelpb.ZLabel, 10)
+			writeRequest: serialize(b, func() []labelpb.Label {
+				lbls := make([]labelpb.Label, 10)
 				for i := 0; i < len(lbls); i++ {
 					// Label ~50B name, 50B value.
-					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					lbls[i] = labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(), manySamples),
 		},
 		{
 			name: "extremely large label value 10MB, single sample",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
+			writeRequest: serialize(b, func() []labelpb.Label {
 				lbl := &strings.Builder{}
 				lbl.Grow(1024 * 1024 * 10) // 10MB.
 				word := "abcdefghij"
 				for i := 0; i < lbl.Cap()/len(word); i++ {
 					_, _ = lbl.WriteString(word)
 				}
-				return []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+				return []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
 		},
 		{
 			name: "extremely large label value 10MB, 2MB samples",
-			writeRequest: serialize(b, func() []labelpb.ZLabel {
+			writeRequest: serialize(b, func() []labelpb.Label {
 				lbl := &strings.Builder{}
 				lbl.Grow(1024 * 1024 * 10) // 10MB.
 				word := "abcdefghij"
 				for i := 0; i < lbl.Cap()/len(word); i++ {
 					_, _ = lbl.WriteString(word)
 				}
-				return []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+				return []labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 			}(), manySamples),
 		},
 	} {

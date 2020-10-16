@@ -232,7 +232,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		lset := labelpb.ExtendLabels(labelpb.ZLabelsToPromLabels(e.Labels), externalLabels)
+		lset := labelpb.ExtendLabels(labelpb.LabelsToPromLabels(e.Labels), externalLabels)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that

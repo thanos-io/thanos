@@ -62,7 +62,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var errs terrors.MultiError
 	for _, t := range wreq.Timeseries {
-		lset := labelpb.ZLabelsToPromLabels(t.Labels)
+		lset := labelpb.LabelsToPromLabels(t.Labels)
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		var ref uint64

@@ -35,8 +35,9 @@ message Sample {
 
 // TimeSeries represents samples and labels for a single time series.
 message TimeSeries {
-  // TODO(bwplotka): Don't use zero copy ZLabels, see https://github.com/thanos-io/thanos/pull/3279 for details.
-  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  // TODO(bwplotka): Don't use zero copy ZLabels. The message is to often to large and labels are sometimes referenced
+  // for longer than request time, causing long term over allocation.
+  repeated thanos.Label labels = 1 [(gogoproto.nullable) = false];
   repeated Sample samples      = 2 [(gogoproto.nullable) = false];
 }
 
