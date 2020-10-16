@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -61,29 +62,29 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var errs terrors.MultiError
 	for _, t := range wreq.Timeseries {
-		lset := make(labels.Labels, len(t.Labels))
-		for j := range t.Labels {
-			lset[j] = labels.Label{
-				Name:  t.Labels[j].Name,
-				Value: t.Labels[j].Value,
-			}
-		}
+		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Append as many valid samples as possible, but keep track of the errors.
-		for _, s := range t.Samples {
-			_, err = app.Add(lset, s.Timestamp, s.Value)
+		var ref uint64
+		for i, s := range t.Samples {
+			if i == 0 {
+				ref, err = app.Add(lset, s.Timestamp, s.Value)
+			} else {
+				err = app.AddFast(ref, s.Timestamp, s.Value)
+			}
+
 			switch err {
 			case nil:
 				continue
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample", &s)
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample", &s)
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
-				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", &s)
 			}
 		}
 	}

@@ -16,10 +16,10 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -48,6 +48,7 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
 
+		// TODO: Ensure to not create new tenant accidentally.
 		app, err := m.TenantAppendable("foo")
 		testutil.Ok(t, err)
 
