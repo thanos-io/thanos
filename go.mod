@@ -10,6 +10,7 @@ require (
 	github.com/armon/go-metrics v0.3.3
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
+	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.3.1-0.20200923145333-8587ea61fe17

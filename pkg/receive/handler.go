@@ -4,10 +4,11 @@
 package receive
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	stdlog "log"
 	"net"
 	"net/http"
@@ -282,13 +283,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	compressed, err := ioutil.ReadAll(r.Body)
+	compressed := &bytes.Buffer{}
+	if r.ContentLength >= 0 {
+		compressed.Grow(int(r.ContentLength))
+	}
+	_, err := io.Copy(compressed, r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	reqBuf, err := snappy.Decode(nil, compressed)
+	reqBuf, err := snappy.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -313,6 +318,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if len(tenant) == 0 {
 		tenant = h.options.DefaultTenantID
+	}
+	if len(tenant) == 0 {
+		http.Error(w, "no tenant ID supplied", http.StatusBadRequest)
+		return
 	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
@@ -401,9 +410,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		}
 	}()
 
-	logger := log.With(h.logger, "tenant", tenant)
+	// Avoid log.With extra allocations for rare log lines.
+	logTags := []interface{}{"tenant", tenant}
 	if id, ok := middleware.RequestIDFromContext(pctx); ok {
-		logger = log.With(logger, "request-id", id)
+		logTags = append(logTags, "request-id", id)
 	}
 
 	ec := make(chan error)
@@ -524,7 +534,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 							b.attempt++
 							dur := h.expBackoff.ForAttempt(b.attempt)
 							b.nextAllowed = time.Now().Add(dur)
-							level.Debug(h.logger).Log("msg", "target unavailable backing off", "for", dur)
+							level.Debug(h.logger).Log(append(logTags, "msg", "msg", "target unavailable backing off", "for", dur)...)
 						} else {
 							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
 						}
@@ -553,7 +563,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		go func() {
 			for err := range ec {
 				if err != nil {
-					level.Debug(logger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
+					level.Debug(h.logger).Log(append(logTags, "msg", "request failed, but not needed to achieve quorum", "err", err)...)
 				}
 			}
 		}()
