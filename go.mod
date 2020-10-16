@@ -3,6 +3,7 @@ module github.com/thanos-io/thanos
 require (
 	cloud.google.com/go v0.56.0
 	cloud.google.com/go/storage v1.6.0
+	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
