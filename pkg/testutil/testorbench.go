@@ -28,6 +28,7 @@ type TB interface {
 	IsBenchmark() bool
 	Run(name string, f func(t TB)) bool
 
+	ReportAllocs()
 	SetBytes(n int64)
 	N() int
 	ResetTimer()
@@ -36,10 +37,20 @@ type TB interface {
 // tb implements TB as well as testing.TB interfaces.
 type tb struct {
 	testing.TB
+
+	reportAlloc bool
 }
 
 // NewTB creates tb from testing.TB.
 func NewTB(t testing.TB) TB { return &tb{TB: t} }
+
+// NewTBWithAlloc creates tb from testing.TB.
+func NewTBWithAlloc(t testing.TB) TB {
+	if b, ok := t.(*testing.B); ok {
+		b.ReportAllocs()
+	}
+	return &tb{TB: t, reportAlloc: true}
+}
 
 // Run benchmarks/tests f as a subbenchmark/subtest with the given name. It reports
 // whether there were any failures.
@@ -47,10 +58,15 @@ func NewTB(t testing.TB) TB { return &tb{TB: t} }
 // A subbenchmark/subtest is like any other benchmark/test.
 func (t *tb) Run(name string, f func(t TB)) bool {
 	if b, ok := t.TB.(*testing.B); ok {
-		return b.Run(name, func(nested *testing.B) { f(&tb{TB: nested}) })
+		return b.Run(name, func(nested *testing.B) {
+			if t.reportAlloc {
+				nested.ReportAllocs()
+			}
+			f(&tb{TB: nested, reportAlloc: t.reportAlloc})
+		})
 	}
-	if t, ok := t.TB.(*testing.T); ok {
-		return t.Run(name, func(nested *testing.T) { f(&tb{TB: nested}) })
+	if tt, ok := t.TB.(*testing.T); ok {
+		return tt.Run(name, func(nested *testing.T) { f(&tb{TB: nested}) })
 	}
 	panic("not a benchmark and not a test")
 }
@@ -75,6 +91,12 @@ func (t *tb) SetBytes(n int64) {
 func (t *tb) ResetTimer() {
 	if b, ok := t.TB.(*testing.B); ok {
 		b.ResetTimer()
+	}
+}
+
+func (t *tb) ReportAllocs() {
+	if b, ok := t.TB.(*testing.B); ok {
+		b.ReportAllocs()
 	}
 }
 

@@ -473,8 +473,7 @@ func createBlock(
 		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
 
-	blockDir := filepath.Join(dir, id.String())
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
+	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, id.String()), metadata.Thanos{
 		Labels:     extLset.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,

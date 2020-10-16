@@ -7,10 +7,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,12 +23,16 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -140,7 +148,7 @@ func TestCountCause(t *testing.T) {
 	}
 }
 
-func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
+func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
 	cfg := []HashringConfig{
 		{
 			Hashring: "test",
@@ -166,7 +174,7 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Second,
+			ForwardTimeout:    10 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
@@ -476,7 +484,7 @@ func TestReceiveQuorum(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newTestHandlerHashring(tc.appendables, tc.replicationFactor)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -815,7 +823,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 		// to see all requests completing all the time, since we're using local
 		// network we are not expecting anything to go wrong with these.
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newTestHandlerHashring(tc.appendables, tc.replicationFactor)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -921,4 +929,246 @@ type fakeRemoteWriteGRPCServer struct {
 
 func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
 	return f.h.RemoteWrite(ctx, in)
+}
+
+func serialize(t testing.TB, lbls []labelpb.ZLabel, samples []prompb.Sample) []byte {
+	// Create significant number of samples to see the weight of it on profiles.
+	r := &prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Labels:  lbls,
+				Samples: samples,
+			},
+		},
+	}
+	body, err := proto.Marshal(r)
+	testutil.Ok(t, err)
+	return snappy.Encode(nil, body)
+}
+
+func BenchmarkHandlerReceiveHTTP(b *testing.B) {
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTBWithAlloc(b))
+}
+
+func TestHandlerReceiveHTTP(t *testing.T) {
+	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))
+}
+
+type tsModifierTenantStorage struct {
+	TenantStorage
+
+	modifier int64
+}
+
+func (s *tsModifierTenantStorage) TenantAppendable(tenant string) (Appendable, error) {
+	a, err := s.TenantStorage.TenantAppendable(tenant)
+	return &tsModifierAppendable{Appendable: a, modifier: s.modifier}, err
+}
+
+type tsModifierAppendable struct {
+	Appendable
+
+	modifier int64
+}
+
+func (a *tsModifierAppendable) Appender(ctx context.Context) (storage.Appender, error) {
+	ret, err := a.Appendable.Appender(ctx)
+	return &tsModifierAppender{Appender: ret, modifier: a.modifier}, err
+}
+
+type tsModifierAppender struct {
+	storage.Appender
+
+	modifier int64
+}
+
+var cnt int64
+
+func (a *tsModifierAppender) Add(l labels.Labels, _ int64, v float64) (uint64, error) {
+	cnt += a.modifier
+	return a.Appender.Add(l, cnt, v)
+}
+
+func (a *tsModifierAppender) AddFast(ref uint64, _ int64, v float64) error {
+	cnt += a.modifier
+	return a.Appender.AddFast(ref, cnt, v)
+}
+
+func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
+	dir, err := ioutil.TempDir("", "test_receive")
+	testutil.Ok(b, err)
+	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+
+	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1)
+	handler := handlers[0]
+
+	reg := prometheus.NewRegistry()
+
+	logger := log.NewNopLogger()
+	m := NewMultiTSDB(
+		dir, logger, reg, &tsdb.Options{
+			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
+			NoLockfile:        true,
+			StripeSize:        1, // Disable stripe pre allocation so we can clear profiles.
+		},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+	)
+	defer func() { testutil.Ok(b, m.Close()) }()
+	handler.writer = NewWriter(logger, m)
+
+	testutil.Ok(b, m.Flush())
+	testutil.Ok(b, m.Open())
+
+	// Create 2MB of samples payload.
+	manySamples := make([]prompb.Sample, 10e4)
+	for i := range manySamples {
+		manySamples[i] = prompb.Sample{
+			Value:     math.MaxFloat64,
+			Timestamp: math.MinInt64, // Timestamp does not matter, it will be overridden.
+		}
+	}
+
+	for _, tcase := range []struct {
+		name         string
+		writeRequest []byte
+	}{
+		{
+			name: "typical labels under 1KB, single sample",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbls := make([]labelpb.ZLabel, 10)
+				for i := 0; i < len(lbls); i++ {
+					// Label ~20B name, 50B value.
+					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+				}
+				return lbls
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
+		},
+		{
+			name: "typical labels under 1KB, 2MB of samples",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbls := make([]labelpb.ZLabel, 10)
+				for i := 0; i < len(lbls); i++ {
+					// Label ~20B name, 50B value.
+					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+				}
+				return lbls
+			}(), manySamples),
+		},
+		{
+			name: "bigger labels over 1KB, single sample",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbls := make([]labelpb.ZLabel, 10)
+				for i := 0; i < len(lbls); i++ {
+					// Label ~50B name, 50B value.
+					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+				}
+				return lbls
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
+		},
+		{
+			name: "bigger labels over 1KB, 2MB of samples",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbls := make([]labelpb.ZLabel, 10)
+				for i := 0; i < len(lbls); i++ {
+					// Label ~50B name, 50B value.
+					lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+				}
+				return lbls
+			}(), manySamples),
+		},
+		{
+			name: "extremely large label value 10MB, single sample",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbl := &strings.Builder{}
+				lbl.Grow(1024 * 1024 * 10) // 10MB.
+				word := "abcdefghij"
+				for i := 0; i < lbl.Cap()/len(word); i++ {
+					_, _ = lbl.WriteString(word)
+				}
+				return []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+			}(), []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}}), // Timestamp does not matter, it will be overridden.
+		},
+		{
+			name: "extremely large label value 10MB, 2MB samples",
+			writeRequest: serialize(b, func() []labelpb.ZLabel {
+				lbl := &strings.Builder{}
+				lbl.Grow(1024 * 1024 * 10) // 10MB.
+				word := "abcdefghij"
+				for i := 0; i < lbl.Cap()/len(word); i++ {
+					_, _ = lbl.WriteString(word)
+				}
+				return []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+			}(), manySamples),
+		},
+	} {
+		b.Run(tcase.name, func(b testutil.TB) {
+			handler.options.DefaultTenantID = fmt.Sprintf("%v-ok", tcase.name)
+			handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: 1}
+
+			// It takes time to create new tenant, wait for it.
+			{
+				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
+				testutil.Ok(b, err)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+					_, err = app.Appender(ctx)
+					return err
+				}))
+			}
+
+			b.Run("OK", func(b testutil.TB) {
+				b.ReportAllocs()
+
+				n := b.N()
+				b.ResetTimer()
+				for i := 0; i < n; i++ {
+					r := httptest.NewRecorder()
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+				}
+			})
+
+			handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
+			handler.writer.multiTSDB = &tsModifierTenantStorage{TenantStorage: m, modifier: -1} // Timestamp can't go down
+			// which will cause conflict error.
+
+			// It takes time to create new tenant, wait for it.
+			{
+				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
+				testutil.Ok(b, err)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+					_, err = app.Appender(ctx)
+					return err
+				}))
+			}
+			// First request should be fine, since we don't change timestamp, rest is wrong.
+			r := httptest.NewRecorder()
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+
+			b.Run("conflict errors", func(b testutil.TB) {
+				b.ReportAllocs()
+
+				n := b.N()
+				b.ResetTimer()
+				for i := 0; i < n; i++ {
+					r := httptest.NewRecorder()
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
+				}
+			})
+		})
+	}
 }
