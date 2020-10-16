@@ -20,7 +20,6 @@ Highlights:
 `storeMatch[]` arguments with `__address__` matchers.
 * Improved debuggability on all Thanos components by exposing [off-CPU profiles thanks to fgprof endpoint](https://github.com/felixge/fgprof).
 * Significantly improved sidecar latency and CPU usage for metrics fetches.
-* Significantly improved query performance on Store Gateway, Querier, Ruler and Receive by introducing zero allocation gRPC label encoding / decoding.
 
 ### Fixed
 
@@ -43,7 +42,6 @@ Highlights:
 
 ### Changed
 
-- [#2783](https://github.com/thanos-io/thanos/pull/2783) Querier,Store,Receive,Rule: Improved performance of all gRPC StoreAPI implementation that use labels. Label encoding and decoding reuse same bytes instead of re-allocated new for string conversion.
 - [#3136](https://github.com/thanos-io/thanos/pull/3136) Sidecar: **breaking** Added metric `thanos_sidecar_reloader_config_apply_operations_total` and rename metric `thanos_sidecar_reloader_config_apply_errors_total` to `thanos_sidecar_reloader_config_apply_operations_failed_total`.
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Querier: **breaking** Added metric `thanos_query_gate_queries_max`. Remove metric `thanos_query_concurrent_selects_gate_queries_in_flight`.
 - [#3154](https://github.com/thanos-io/thanos/pull/3154) Store: **breaking** Renamed metric `thanos_bucket_store_queries_concurrent_max` to `thanos_bucket_store_series_gate_queries_max`.
