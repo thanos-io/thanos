@@ -61,6 +61,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 
 	var errs terrors.MultiError
+	var oooSamples, dupSamples, outOfBoundsSamples []prompb.Sample
 	for _, t := range wreq.Timeseries {
 		lset := labelpb.LabelsToPromLabels(t.Labels)
 
@@ -77,29 +78,34 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			case nil:
 				continue
 			case storage.ErrOutOfOrderSample:
-				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample", &s)
+				oooSamples = append(oooSamples, s)
 			case storage.ErrDuplicateSampleForTimestamp:
-				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample", &s)
+				dupSamples = append(dupSamples, s)
 			case storage.ErrOutOfBounds:
-				numOutOfBounds++
-				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", &s)
+				outOfBoundsSamples = append(outOfBoundsSamples, s)
 			}
+		}
+		if len(oooSamples) > 0 || len(outOfBoundsSamples) > 0 || len(dupSamples) > 0 {
+			level.Warn(r.logger).Log("msg", "Skipped problematic samples", "outOfOrder", oooSamples,
+				"duplicates", dupSamples, "outOfBounds", outOfBoundsSamples, "lset", lset)
+
+			numOutOfOrder += len(oooSamples)
+			numDuplicates += len(dupSamples)
+			numOutOfBounds += len(outOfBoundsSamples)
+			oooSamples = oooSamples[:0]
+			dupSamples = dupSamples[:0]
+			outOfBoundsSamples = outOfBoundsSamples[:0]
 		}
 	}
 
 	if numOutOfOrder > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order samples", "num_dropped", numOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "failed to non-fast add %d samples", numOutOfOrder))
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, " add %d samples", numOutOfOrder))
 	}
 	if numDuplicates > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples with different value but same timestamp", "num_dropped", numDuplicates)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "failed to non-fast add %d samples", numDuplicates))
+		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numDuplicates))
 	}
 	if numOutOfBounds > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "num_dropped", numOutOfBounds)
-		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "failed to non-fast add %d samples", numOutOfBounds))
+		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
 	}
 
 	if err := app.Commit(); err != nil {
