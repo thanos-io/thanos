@@ -273,7 +273,7 @@ type BucketStore struct {
 	partitioner          partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []storepb.LabelSet
+	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
 	// Reencode postings using diff+varint+snappy when storing to cache.
@@ -412,10 +412,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	// Sync advertise labels.
 	var storeLabels labels.Labels
 	s.mtx.Lock()
-	s.advLabelSets = make([]storepb.LabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
 		storeLabels = storeLabels[:0]
-		s.advLabelSets = append(s.advLabelSets, storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(append(storeLabels, bs.labels...))})
+		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(append(storeLabels, bs.labels...))})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -604,7 +604,7 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 	if s.enableCompatibilityLabel && len(res.LabelSets) > 0 {
 		// This is for compatibility with Querier v0.7.0.
 		// See query.StoreCompatibilityTypeLabelName comment for details.
-		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: []storepb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
 	}
 	return res, nil
 }
@@ -1015,7 +1015,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				stats.mergedChunksCount += len(series.Chunks)
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
-			series.Labels = labelpb.LabelsFromPromLabels(lset)
+			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
 			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return

@@ -78,10 +78,10 @@ func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient
 		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+		resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 	}
 
-	return labelpb.LabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime, nil
+	return labelpb.ZLabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime, nil
 }
 
 // StoreSet maintains a set of active stores. It is backed up by Store Specifications that are dynamically fetched on
@@ -328,10 +328,10 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					return
 				}
 				if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-					resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+					resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 				}
 				store.storeType = component.FromProto(resp.StoreType)
-				store.Update(labelpb.LabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime)
+				store.Update(labelpb.ZLabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime)
 			}
 
 			mtx.Lock()

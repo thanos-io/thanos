@@ -104,18 +104,18 @@ func (p *PrometheusStore) Info(_ context.Context, _ *storepb.InfoRequest) (*stor
 	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		Labels:    make([]storepb.Label, 0, len(lset)),
+		Labels:    make([]labelpb.ZLabel, 0, len(lset)),
 		StoreType: p.component.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
 	}
-	res.Labels = append(res.Labels, labelpb.LabelsFromPromLabels(lset)...)
+	res.Labels = append(res.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []storepb.LabelSet{}
+	res.LabelSets = []labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, storepb.LabelSet{
+		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
@@ -160,11 +160,11 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			return err
 		}
 		for _, lbm := range labelMaps {
-			lset := make([]storepb.Label, 0, len(lbm)+len(externalLabels))
+			lset := make([]labelpb.ZLabel, 0, len(lbm)+len(externalLabels))
 			for k, v := range lbm {
-				lset = append(lset, storepb.Label{Name: k, Value: v})
+				lset = append(lset, labelpb.ZLabel{Name: k, Value: v})
 			}
-			lset = append(lset, labelpb.LabelsFromPromLabels(externalLabels)...)
+			lset = append(lset, labelpb.ZLabelsFromPromLabels(externalLabels)...)
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
@@ -232,7 +232,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		lset := labelpb.ExtendLabels(labelpb.LabelsToPromLabels(e.Labels), externalLabels)
+		lset := labelpb.ExtendLabels(labelpb.ZLabelsToPromLabels(e.Labels), externalLabels)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
@@ -252,7 +252,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 		}
 
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.LabelsFromPromLabels(lset),
+			Labels: labelpb.ZLabelsFromPromLabels(lset),
 			Chunks: aggregatedChunks,
 		})); err != nil {
 			return err
@@ -315,8 +315,8 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 			}
 
 			if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.LabelsFromPromLabels(
-					labelpb.ExtendLabels(labelpb.LabelsToPromLabels(series.Labels), externalLabels),
+				Labels: labelpb.ZLabelsFromPromLabels(
+					labelpb.ExtendLabels(labelpb.ZLabelsToPromLabels(series.Labels), externalLabels),
 				),
 				Chunks: thanosChks,
 			})); err != nil {
