@@ -38,7 +38,8 @@ const (
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
-	Prefix string      `yaml:"prefix" default:""`
+	// Prefix field allows adding an optional prefix to block (`/<ulid>`) and block files which are uploaded by any block "producer" (e.g sidecar, ruler, receiver).
+	Prefix string `yaml:"prefix" default:""` //
 }
 
 // NewBucket initializes and returns new object storage clients.

@@ -420,31 +420,13 @@ prefix: ""
 
 ## Prefix
 
-Now Thanos also supports multi-tenancy at the object storage using custom prefix. Check [this](https://github.com/thanos-io/thanos/issues/1318) issue. This feature is implemented in such a way that, no client level changes are required. All object storage implementations support this `prefix` key in their object storage config yaml.
-
+Prefix field allows adding an optional prefix to block (`/<ulid>`) and block files which are uploaded by any block "producer" (e.g sidecar, ruler, receiver).
+The sample config below ensures that all the bucket operations e.g: upload, delete, list, etc are performed on `/tenant-0` path pf the object store only.
 Sample object store config:
 ```yaml
 type: S3
 config:
-  bucket: ""
-  endpoint: ""
-  region: ""
-  access_key: ""
-  insecure: false
-  signature_version2: false
-  secret_key: ""
-  put_user_metadata: {}
-  http_config:
-    idle_conn_timeout: 1m30s
-    response_header_timeout: 2m
-    insecure_skip_verify: false
-  trace:
-    enable: false
-  part_size: 134217728
-  sse_config:
-    type: ""
-    kms_key_id: ""
-    kms_encryption_context: {}
-    encryption_key: ""
+  <provider specific config/s>
 prefix: tenant-0
 ```
+It is worth mentioning that this feature can be used to store data of different tenants in different paths of the same bucket. However, for such use-cases, putting data on different paths WILL REQUIRE totally separate Store Gateway / Compactor by design.
