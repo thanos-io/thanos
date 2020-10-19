@@ -93,6 +93,11 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			config.Expiration = 24 * time.Hour
 		}
 
+		if config.Memcached.DNSProviderUpdateInterval <= 0 {
+			level.Warn(logger).Log("msg", "memcached dns provider update interval time set to invalid value, defaulting to 10s")
+			config.Memcached.DNSProviderUpdateInterval = 10 * time.Second
+		}
+
 		return &cortexcache.Config{
 			Memcache: cortexcache.MemcachedConfig{
 				Expiration:  config.Expiration,
