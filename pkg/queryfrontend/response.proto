@@ -21,18 +21,20 @@ option (gogoproto.goproto_sizecache_all) = false;
 
 
 message ThanosLabelsResponse {
-  string Status        = 1 [(gogoproto.jsontag) = "status"];
+  string Status = 1 [(gogoproto.jsontag) = "status"];
   repeated string Data = 2 [(gogoproto.jsontag) = "data"];
-  string ErrorType     = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error          = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
+  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  repeated ResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
 }
 
 message ThanosSeriesResponse {
-  string Status                 = 1 [(gogoproto.jsontag) = "status"];
+  string Status = 1 [(gogoproto.jsontag) = "status"];
   // TODO(bwplotka): Experiment with ZLabelSet here.
   repeated thanos.LabelSet Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data"];
-  string ErrorType              = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error                  = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
+  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  repeated ResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
 }
 
 message ResponseHeader {
