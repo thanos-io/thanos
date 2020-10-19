@@ -713,11 +713,19 @@ func blockSeries(
 			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
 
+		// find is used to check whether there is at least one chunk in the required time range.
+		var find bool
 		for _, meta := range chks {
 			if meta.MaxTime < req.MinTime {
 				continue
 			}
 			if meta.MinTime > req.MaxTime {
+				break
+			}
+
+			// Fast path for no chunks series.
+			if req.SkipChunks {
+				find = true
 				break
 			}
 
@@ -730,9 +738,12 @@ func blockSeries(
 			})
 			s.refs = append(s.refs, meta.Ref)
 		}
-		if len(s.chks) > 0 {
-			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+		if find || len(s.chks) > 0 {
+			// Reserve chunksLimiter if we save chunks.
+			if len(s.chks) > 0 {
+				if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
+					return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+				}
 			}
 
 			for _, l := range lset {
@@ -750,6 +761,10 @@ func blockSeries(
 
 			res = append(res, s)
 		}
+	}
+
+	if req.SkipChunks {
+		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
 	// Preload all chunks that were marked in the previous stage.
@@ -771,75 +786,6 @@ func blockSeries(
 	}
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
-}
-
-// blockSeriesWithoutChunks is the same as blockSeries function except it only
-// fetches labels and doesn't touch chunks. This is used in /api/v1/series API.
-func blockSeriesWithoutChunks(
-	extLset map[string]string,
-	indexr *bucketIndexReader,
-	matchers []*labels.Matcher,
-	req *storepb.SeriesRequest,
-) (storepb.SeriesSet, *queryStats, error) {
-	ps, err := indexr.ExpandedPostings(matchers)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "expanded matching posting")
-	}
-
-	if len(ps) == 0 {
-		return storepb.EmptySeriesSet(), indexr.stats, nil
-	}
-
-	// Preload all series index data.
-	// TODO(bwplotka): Consider not keeping all series in memory all the time.
-	// TODO(bwplotka): Do lazy loading in one step as `ExpandingPostings` method.
-	if err := indexr.PreloadSeries(ps); err != nil {
-		return nil, nil, errors.Wrap(err, "preload series")
-	}
-
-	// Transform all series into the response types.
-	var (
-		res  []seriesEntry
-		lset labels.Labels
-		chks []chunks.Meta
-	)
-	for _, id := range ps {
-		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
-			return nil, nil, errors.Wrap(err, "read series")
-		}
-
-		// find is used to check whether there is at least one chunk in the required time range.
-		var find bool
-		for _, meta := range chks {
-			if meta.MaxTime < req.MinTime {
-				continue
-			}
-			if meta.MinTime > req.MaxTime {
-				break
-			}
-			find = true
-			break
-		}
-		if find {
-			s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
-			for _, l := range lset {
-				// Skip if the external labels of the block overrule the series' label.
-				// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-				if extLset[l.Name] != "" {
-					continue
-				}
-				s.lset = append(s.lset, l)
-			}
-			for ln, lv := range extLset {
-				s.lset = append(s.lset, labels.Label{Name: ln, Value: lv})
-			}
-			sort.Sort(s.lset)
-
-			res = append(res, s)
-		}
-	}
-
-	return newBucketSeriesSet(res), indexr.stats, nil
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
@@ -1001,24 +947,15 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			// Defer all closes to the end of Series method.
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 
-			var (
-				part   storepb.SeriesSet
-				pstats *queryStats
-				err    error
-			)
 			g.Go(func() error {
-				if req.SkipChunks {
-					part, pstats, err = blockSeriesWithoutChunks(b.meta.Thanos.Labels, indexr, blockMatchers, req)
-				} else {
-					part, pstats, err = blockSeries(
-						b.meta.Thanos.Labels,
-						indexr,
-						chunkr,
-						blockMatchers,
-						req,
-						chunksLimiter,
-					)
-				}
+				part, pstats, err := blockSeries(
+					b.meta.Thanos.Labels,
+					indexr,
+					chunkr,
+					blockMatchers,
+					req,
+					chunksLimiter,
+				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
