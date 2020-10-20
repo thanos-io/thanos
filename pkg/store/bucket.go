@@ -713,8 +713,8 @@ func blockSeries(
 			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
 
-		// find is used to check whether there is at least one chunk in the required time range.
-		var find bool
+		// hasValidChunk is used to check whether there is at least one chunk in the required time range.
+		var hasValidChunk bool
 		for _, meta := range chks {
 			if meta.MaxTime < req.MinTime {
 				continue
@@ -725,7 +725,7 @@ func blockSeries(
 
 			// Fast path for no chunks series.
 			if req.SkipChunks {
-				find = true
+				hasValidChunk = true
 				break
 			}
 
@@ -738,14 +738,15 @@ func blockSeries(
 			})
 			s.refs = append(s.refs, meta.Ref)
 		}
-		if find || len(s.chks) > 0 {
-			// Reserve chunksLimiter if we save chunks.
-			if len(s.chks) > 0 {
-				if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-					return nil, nil, errors.Wrap(err, "exceeded chunks limit")
-				}
-			}
 
+		// Reserve chunksLimiter if we save chunks.
+		if len(s.chks) > 0 {
+			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
+				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+			}
+		}
+
+		if hasValidChunk || len(s.chks) > 0 {
 			for _, l := range lset {
 				// Skip if the external labels of the block overrule the series' label.
 				// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
