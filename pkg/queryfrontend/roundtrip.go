@@ -57,8 +57,11 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		return nil, err
 	}
 
-	labelsTripperware := newLabelsTripperware(config.LabelsConfig, labelsLimits, labelsCodec,
+	labelsTripperware, err := newLabelsTripperware(config.LabelsConfig, labelsLimits, labelsCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "labels"}, reg), logger)
+	if err != nil {
+		return nil, err
+	}
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), reg)
@@ -206,7 +209,7 @@ func newLabelsTripperware(
 	codec *labelsCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
-) frontend.Tripperware {
+) (frontend.Tripperware, error) {
 	labelsMiddleware := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
@@ -222,6 +225,29 @@ func newLabelsTripperware(
 		)
 	}
 
+	if config.ResultsCacheConfig != nil {
+		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
+			logger,
+			*config.ResultsCacheConfig,
+			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
+			limits,
+			codec,
+			ThanosResponseExtractor{},
+			nil,
+			shouldCache,
+			reg,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "create results cache middleware")
+		}
+
+		labelsMiddleware = append(
+			labelsMiddleware,
+			queryrange.InstrumentMiddleware("results_cache", m),
+			queryCacheMiddleware,
+		)
+	}
+
 	if config.MaxRetries > 0 {
 		labelsMiddleware = append(
 			labelsMiddleware,
@@ -234,7 +260,7 @@ func newLabelsTripperware(
 		return frontend.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
-	}
+	}, nil
 }
 
 // Don't go to response cache if StoreMatchers are set.
