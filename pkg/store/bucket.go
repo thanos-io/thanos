@@ -741,12 +741,13 @@ func blockSeries(
 
 		// Reserve chunksLimiter if we save chunks.
 		if len(s.chks) > 0 {
+			hasValidChunk = true
 			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
 				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
 			}
 		}
 
-		if hasValidChunk || len(s.chks) > 0 {
+		if hasValidChunk {
 			for _, l := range lset {
 				// Skip if the external labels of the block overrule the series' label.
 				// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
