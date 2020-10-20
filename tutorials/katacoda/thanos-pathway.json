@@ -1,6 +1,6 @@
 {
   "title": "Learn Thanos",
-  "description": "Introduction to CNCF Thanos: Global, Scalable and Highly Available Prometheus setup.",
+  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities. Course version: v0.2",
   "icon": "fa-thanos",
   "courses": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "course_id": "4-cross-cluster-comm",
-      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup.",
+      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup",
       "description": "In progress. Stay Tuned!"
     },
     {
@@ -32,6 +32,11 @@
       "course_id": "6-caching",
       "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
       "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "7-multi-tenancy",
+      "title": "Advanced: Achieving Multi-Tenancy with Thanos",
+      "description": "Extend your Prometheus setup for Multiple Teams use with Thanos"
     }
   ]
 }
