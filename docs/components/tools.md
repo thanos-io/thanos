@@ -553,9 +553,9 @@ Flags:
 
 The `tools rules-check` subcommand contains tools for validation of Prometheus rules.
 
-This is allowing to check the rules with the same validation as is used by the Thanos rule node.
+This is allowing to check the rules with the same validation as is used by the Thanos Ruler node.
 
-NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos rule extended rules file syntax,
+NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos Ruler extended rules file syntax,
 which includes `partial_response_strategy` field which `promtool` does not allow.
 
 If the check fails the command fails with exit code `1`, otherwise `0`.

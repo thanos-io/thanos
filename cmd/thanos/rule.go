@@ -219,7 +219,7 @@ func registerRule(app *extkingpin.App) {
 	})
 }
 
-// RuleMetrics defines thanos rule metrics.
+// RuleMetrics defines Thanos Ruler metrics.
 type RuleMetrics struct {
 	configSuccess     prometheus.Gauge
 	configSuccessTime prometheus.Gauge
