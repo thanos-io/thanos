@@ -67,7 +67,7 @@ rules:
 
 ## Ruler
 
-For Thanos ruler we run some alerts in local Prometheus, to make sure that Thanos Rule is working:
+For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thanos Ruler is working:
 
 [embedmd]:# (../tmp/thanos-rule.rules.yaml yaml)
 ```yaml
@@ -162,9 +162,9 @@ rules:
     summary: Thanos Rule is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job) (rate(thanos_rule_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job) (rate(thanos_rule_query_apis_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 1
     )
   for: 15m
@@ -177,9 +177,9 @@ rules:
     summary: Thanos Rule is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job) (rate(thanos_rule_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job) (rate(thanos_rule_alertmanagers_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 1
     )
   for: 15m

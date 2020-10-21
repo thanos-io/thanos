@@ -341,7 +341,7 @@ func runRule(
 
 	queryProvider := dns.NewProvider(
 		logger,
-		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
+		extprom.WrapRegistererWithPrefix("thanos_rule_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 	var queryClients []*http_util.Client
@@ -404,7 +404,7 @@ func runRule(
 
 	amProvider := dns.NewProvider(
 		logger,
-		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
+		extprom.WrapRegistererWithPrefix("thanos_rule_alertmanagers_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager

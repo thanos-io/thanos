@@ -132,9 +132,9 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_rule_query_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_rule_query_apis_dns_lookups_total{%(selector)s}[5m]))
               * 100 > %(rulerDnsErrorThreshold)s
               )
             ||| % thanos.rule,
@@ -151,9 +151,9 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_rule_alertmanagers_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_rule_alertmanagers_dns_lookups_total{%(selector)s}[5m]))
               * 100 > %(alertManagerDnsErrorThreshold)s
               )
             ||| % thanos.rule,
