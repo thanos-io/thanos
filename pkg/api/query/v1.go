@@ -59,7 +59,7 @@ const (
 	StoreMatcherParam        = "storeMatch[]"
 )
 
-// QueryAPI is an API used by Thanos Query.
+// QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
 	baseAPI         *api.BaseAPI
 	logger          log.Logger

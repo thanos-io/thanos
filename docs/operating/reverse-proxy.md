@@ -20,7 +20,7 @@ Let's look into some example scenarios. All examples are using nginx as a revers
 
 ### Serving Thanos on a subdomain
 
-Serving a Thanos component on the root of a subdomain is pretty straight-forward. Let's say you want to run Thanos Query behind a nginx reverse proxy, accessible on domain `thanos.example.com`. A basic nginx configuration would look like this:
+Serving a Thanos component on the root of a subdomain is pretty straight-forward. Let's say you want to run Thanos Querier behind a nginx reverse proxy, accessible on domain `thanos.example.com`. A basic nginx configuration would look like this:
 
 ```
 http {
@@ -37,11 +37,11 @@ http {
 
 ### Serving Thanos on a sub-path
 
-Things become a little tricky when you want to serve Thanos on a sub-path. Let's say, you want to run Thanos Query behind an nginx server, accessible on the URL `http://example.com/thanos`. The Thanos web UI depends on it being accessed on the same URL as Thanos itself is listening. This is because the UI needs to know the URL from where to load static assets and what URL to use in links or redirects. If Thanos is behind a reverse proxy, particularly one where Thanos is not at the root, this doesn't work so well.
+Things become a little tricky when you want to serve Thanos on a sub-path. Let's say, you want to run Thanos Querier behind an nginx server, accessible on the URL `http://example.com/thanos`. The Thanos web UI depends on it being accessed on the same URL as Thanos itself is listening. This is because the UI needs to know the URL from where to load static assets and what URL to use in links or redirects. If Thanos is behind a reverse proxy, particularly one where Thanos is not at the root, this doesn't work so well.
 
 To tackle this problem, Thanos provides a flag `--web.external-prefix`.
 
-Let's say we have Thanos Query running on the usual port, we need nginx running with the following configuration:
+Let's say we have Thanos Querier running on the usual port, we need nginx running with the following configuration:
 
 ```
 http {
@@ -56,7 +56,7 @@ http {
 }
 ```
 
-With this configuration, you can access Thanos Query on `http://example.com/thanos`. Notice that because we are using `http://localhost:10902/thanos/` as the reverse proxy target, every request path will be prefixed with `/thanos`. To make this work we need to run Thanos Query like this:
+With this configuration, you can access Thanos Querier on `http://example.com/thanos`. Notice that because we are using `http://localhost:10902/thanos/` as the reverse proxy target, every request path will be prefixed with `/thanos`. To make this work we need to run Thanos Querier like this:
 
 ```
 thanos query --web.external-prefix="thanos"
