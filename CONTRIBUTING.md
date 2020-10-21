@@ -48,7 +48,7 @@ In the code and documentation prefer non-offensive terminology, for example:
 
 Thanos is a distributed system composed with several services and CLI tools as listed [here](/cmd/thanos).
 
-When we refer to them as technical reference we use verb form: `store`, `compact`, `rule`, `query`. This includes:
+When we refer to them as technical reference we use verb form: `store`, `compact`, `rule`, `query`, `query_frontend`. This includes:
 
 * Code
 * Metrics
@@ -59,7 +59,7 @@ When we refer to them as technical reference we use verb form: `store`, `compact
 * Package names
 * Log messages, traces
 
-However, when speaking about those or explaining we use `actor` noun form: `store gateway, compactor, ruler, querier`. This includes areas like:
+However, when speaking about those or explaining we use `actor` noun form: `store gateway`, `compactor`, `ruler`, `querier`, `query frontend`. This includes areas like:
 
 * Public communication
 * Documentation
