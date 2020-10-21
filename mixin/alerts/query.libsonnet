@@ -94,9 +94,9 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
               ) * 100 > %(dnsErrorThreshold)s
             ||| % thanos.query,
             'for': '15m',

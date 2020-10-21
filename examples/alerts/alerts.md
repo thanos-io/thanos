@@ -374,9 +374,9 @@ rules:
     summary: Thanos Query is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{job=~"thanos-query.*"}[5m]))
+      sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-query.*"}[5m]))
     /
-      sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{job=~"thanos-query.*"}[5m]))
+      sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-query.*"}[5m]))
     ) * 100 > 1
   for: 15m
   labels:
