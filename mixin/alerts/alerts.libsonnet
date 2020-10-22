@@ -5,4 +5,5 @@
 (import 'store.libsonnet') +
 (import 'rule.libsonnet') +
 (import 'absent.libsonnet') +
-(import 'bucket_replicate.libsonnet')
+(import 'bucket_replicate.libsonnet') +
+(import 'add-runbook-links.libsonnet')
