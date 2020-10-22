@@ -1,0 +1,44 @@
+{
+  "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
+  "description": "In progress. Stay Tuned!",
+  "details": {
+    "steps": [
+      {
+        "title": "In progress",
+        "text": "step1.md"
+      }
+    ],
+    "intro": {
+      "text": "intro.md",
+      "courseData": "courseBase.sh"
+    }
+  },
+  "files": [
+    "prometheus0.yml",
+    "prometheus1.yml",
+    "prometheus2.yml",
+    "frontend.yml"
+  ],
+  "environment": {
+    "uilayout": "editor-terminal",
+    "uisettings": "yaml",
+    "showdashboard": true,
+    "dashboards": [
+      {
+        "name": "Prometheus",
+        "port": 9090
+      },
+      {
+        "name": "Thanos Query",
+        "port": 10902
+      },
+      {
+        "name": "Thanos Query Frontend",
+        "port": 20902
+      }
+    ]
+  },
+  "backend": {
+    "imageid": "docker-direct"
+  }
+}
