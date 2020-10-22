@@ -99,12 +99,34 @@ And now, let's deploy Thanos Querier to have a global overview on our services.
 
 ### Deploy Querier
 
+<pre class="file" data-filename="nginx.conf" data-target="replace">
+server { 
+ listen 10902;
+ server_name proxy;
+ location / {
+  echo_exec @default;   
+ }
+ location ^~ /api/v1/query_range {
+     echo_sleep 1;
+     echo_exec @default;
+ }
+ location @default {
+     proxy_pass http://127.0.0.1:10912;
+ }
+}
+</pre>
+
 ```
+docker run -d --net=host --rm \
+    -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf \
+    --name nginx \
+    yannrobert/docker-nginx && echo "Started Querier Proxy!"
+    
 docker run -d --net=host --rm \
     --name querier \
     quay.io/thanos/thanos:v0.16.0-rc.1 \
     query \
-    --http-address 0.0.0.0:10902 \
+    --http-address 0.0.0.0:10912 \
     --grpc-address 0.0.0.0:10901 \
     --query.replica-label replica \
     --store 127.0.0.1:19190 \
@@ -137,6 +159,7 @@ docker run -d --net=host --rm \
     --query-frontend.downstream-url=http://127.0.0.1:10902 \
     --query-frontend.log-queries-longer-than=5s \
     --query-range.split-interval=1m \
+    --query-range.response-cache-max-freshness=1m \
     --query-range.max-retries-per-request=5 \
     --query-range.response-cache-config-file=/etc/thanos/frontend.yml \
     --cache-compression-type="snappy" && echo "Started Thanos Query Frontend!"

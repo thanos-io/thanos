@@ -17,7 +17,8 @@
     "prometheus0.yml",
     "prometheus1.yml",
     "prometheus2.yml",
-    "frontend.yml"
+    "frontend.yml",
+    "nginx.conf"
   ],
   "environment": {
     "uilayout": "editor-terminal",
