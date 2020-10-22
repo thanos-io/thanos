@@ -181,6 +181,14 @@ Flags:
                                  The default metadata time range duration for
                                  retrieving labels through Labels and Series API
                                  when the range parameters are not specified.
+      --labels.response-cache-config-file=<file-path>
+                                 Path to YAML file that contains response cache
+                                 configuration.
+      --labels.response-cache-config=<content>
+                                 Alternative to
+                                 'labels.response-cache-config-file' flag (lower
+                                 priority). Content of YAML file that contains
+                                 response cache configuration.
       --cache-compression-type=""
                                  Use compression in results cache. Supported
                                  values are: 'snappy' and ” (disable

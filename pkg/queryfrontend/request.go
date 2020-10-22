@@ -114,8 +114,9 @@ func (r *ThanosLabelsRequest) GetStart() int64 { return r.Start }
 // GetEnd returns the end timestamp of the request in milliseconds.
 func (r *ThanosLabelsRequest) GetEnd() int64 { return r.End }
 
-// GetStep returns the step of the request in milliseconds.
-func (r *ThanosLabelsRequest) GetStep() int64 { return 0 }
+// GetStep returns the step of the request in milliseconds. Returns 1 is a trick to avoid panic in
+// https://github.com/cortexproject/cortex/blob/master/pkg/querier/queryrange/results_cache.go#L447.
+func (r *ThanosLabelsRequest) GetStep() int64 { return 1 }
 
 // GetQuery returns the query of the request.
 func (r *ThanosLabelsRequest) GetQuery() string { return "" }
@@ -183,8 +184,9 @@ func (r *ThanosSeriesRequest) GetStart() int64 { return r.Start }
 // GetEnd returns the end timestamp of the request in milliseconds.
 func (r *ThanosSeriesRequest) GetEnd() int64 { return r.End }
 
-// GetStep returns the step of the request in milliseconds.
-func (r *ThanosSeriesRequest) GetStep() int64 { return 0 }
+// GetStep returns the step of the request in milliseconds. Returns 1 is a trick to avoid panic in
+// https://github.com/cortexproject/cortex/blob/master/pkg/querier/queryrange/results_cache.go#L447.
+func (r *ThanosSeriesRequest) GetStep() int64 { return 1 }
 
 // GetQuery returns the query of the request.
 func (r *ThanosSeriesRequest) GetQuery() string { return "" }

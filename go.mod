@@ -3,16 +3,16 @@ module github.com/thanos-io/thanos
 require (
 	cloud.google.com/go v0.56.0
 	cloud.google.com/go/storage v1.6.0
+	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
-	github.com/armon/go-metrics v0.3.3
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.3.1-0.20200923145333-8587ea61fe17
+	github.com/cortexproject/cortex v1.4.1-0.20201013144911-21bad57b346c
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
