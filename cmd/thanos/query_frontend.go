@@ -57,8 +57,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cfg.http.registerFlag(cmd)
 
 	// Query range tripperware flags.
-	cmd.Flag("query-range.align-querier-with-step", "Mutate incoming queries to align their start and end with their step.").
-		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignQueriesWithStep)
+	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
