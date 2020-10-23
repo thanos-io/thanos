@@ -319,7 +319,7 @@ web-serve: web-pre-process $(HUGO)
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY: examples
-examples: jsonnet-vende2eor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
 	$(EMBEDMD) -w ${THANOS_MIXIN}/README.md
 
@@ -384,4 +384,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
-
