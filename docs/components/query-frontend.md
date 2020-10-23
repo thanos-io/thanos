@@ -126,6 +126,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --query-range.align-querier-with-step
+                                 Mutate incoming queries to align their start
+                                 and end with their step.
       --query-range.split-interval=24h
                                  Split query range requests by an interval and
                                  execute in parallel, it should be greater than

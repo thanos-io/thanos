@@ -139,6 +139,7 @@ type QueryRangeConfig struct {
 	ResultsCacheConfig *queryrange.ResultsCacheConfig
 	CachePathOrContent extflag.PathOrContent
 
+	AlignQueriesWithStep   bool
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
