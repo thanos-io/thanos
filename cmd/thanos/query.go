@@ -488,7 +488,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, requestLoggingDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),

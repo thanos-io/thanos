@@ -45,7 +45,10 @@ import (
 func registerSidecar(app *extkingpin.App) {
 	cmd := app.Command(component.Sidecar.String(), "Sidecar for Prometheus server.")
 	conf := &sidecarConfig{}
+	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+
 	conf.registerFlag(cmd)
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
@@ -58,7 +61,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *requestLoggingDecision, *conf)
 	})
 }
 
@@ -69,6 +72,7 @@ func runSidecar(
 	tracer opentracing.Tracer,
 	reloader *reloader.Reloader,
 	comp component.Component,
+	requestLoggingDecision string,
 	conf sidecarConfig,
 ) error {
 	var m = &promMetadata{
@@ -215,7 +219,7 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, requestLoggingDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),

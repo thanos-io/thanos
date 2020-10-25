@@ -556,7 +556,7 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, requestLoggingDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
