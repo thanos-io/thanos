@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/oklog/ulid"
 	"github.com/go-kit/kit/log/level"
 	kit "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
@@ -20,6 +19,7 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -75,7 +75,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	loggingOpts := []grpc_logging.Option{
 		grpc_logging.WithDecider(func(_ string) grpc_logging.Decision {
-			return grpc_logging.NoLogCall
+			return grpc_logging.LogStartAndFinishCall
 		}),
 	}
 
