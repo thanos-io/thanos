@@ -73,11 +73,6 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-<<<<<<< HEAD
-	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
-||||||| parent of 427b277... Added request logging for grpc
-	grpcOpts := []grpc.ServerOption{
-=======
 	loggingOpts := []grpc_logging.Option{
 		grpc_logging.WithDecider(func(_ string) grpc_logging.Decision {
 			return grpc_logging.NoLogCall
@@ -98,7 +93,6 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 
 	grpcOpts := []grpc.ServerOption{
->>>>>>> 427b277... Added request logging for grpc
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
