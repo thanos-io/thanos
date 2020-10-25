@@ -201,6 +201,16 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --request.logging-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging=<content>
+                                 Alternative to 'request.logging-file' flag
+                                 (lower priority). Content of YAML file with
+                                 request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
 
 ```
 

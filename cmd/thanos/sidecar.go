@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -27,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -48,6 +51,12 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		// Check if the YAML configuration of request.logging is correct.
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)
+		if err != nil {
+			return errors.Wrapf(err, "error while parsing config for request logging")
+		}
+
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&reloader.Options{
@@ -59,7 +68,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, GRPCLogOpts, tagOpts)
 	})
 }
 
@@ -71,6 +80,8 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 ) error {
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
@@ -216,7 +227,7 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
@@ -390,6 +401,7 @@ type sidecarConfig struct {
 	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
+	reqLogConfig *extflag.PathOrContent
 	objStore     extflag.PathOrContent
 	shipper      shipperConfig
 	limitMinTime thanosmodel.TimeOrDurationValue
@@ -402,6 +414,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
+	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").

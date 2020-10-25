@@ -125,10 +125,17 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"If multiple headers match the request, the first matching arg specified will take precedence. "+
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
-	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
+		// Check if the YAML configuration of request.logging is correct.
+		httpLogOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrapf(err, "error while parsing config for request logging")
+		}
+
+		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)
 	})
 }
 
@@ -137,6 +144,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	httpLogOpts []logging.Option,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -201,10 +209,7 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-		return logging.LogDecision[cfg.RequestLoggingDecision]
-	})}
-	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 	ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 	// Start metrics HTTP server.

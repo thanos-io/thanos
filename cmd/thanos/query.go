@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -25,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -66,7 +68,7 @@ func registerQuery(app *extkingpin.App) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -136,6 +138,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("1s"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -153,6 +156,17 @@ func registerQuery(app *extkingpin.App) {
 
 		if dup := firstDuplicate(*metadataEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --metadata flag.", dup)
+		}
+
+		// Check if the YAML configuration of request.logging is correct.
+		httpLogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrapf(err, "error while parsing config for request logging")
+		}
+
+		tagOpts, grpcLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		var fileSD *file.Discovery
@@ -177,7 +191,9 @@ func registerQuery(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			*requestLoggingDecision,
+			httpLogOpts,
+			grpcLogOpts,
+			tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -230,7 +246,9 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	requestLoggingDecision string,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -471,10 +489,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.LogDecision[requestLoggingDecision]
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
@@ -529,7 +544,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
