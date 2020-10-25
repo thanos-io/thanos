@@ -707,10 +707,10 @@ func blockSeries(
 		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
-		s := seriesEntry{
-			lset: make(labels.Labels, 0, len(lset)+len(extLset)),
-			refs: make([]uint64, 0, len(chks)),
-			chks: make([]storepb.AggrChunk, 0, len(chks)),
+		s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
+		if !req.SkipChunks {
+			s.refs = make([]uint64, 0, len(chks))
+			s.chks = make([]storepb.AggrChunk, 0, len(chks))
 		}
 
 		// hasValidChunk is used to check whether there is at least one chunk in the required time range.
