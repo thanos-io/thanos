@@ -564,7 +564,7 @@ func TestBucketStore_Info(t *testing.T) {
 
 	defer testutil.Ok(t, os.RemoveAll(dir))
 
-	bucketStore, err := New(
+	bucketStore, err := NewBucketStoreWithOptions(
 		nil,
 		nil,
 		nil,
@@ -599,7 +599,7 @@ func TestSeries_ErrorInvalidLimiter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
-	store, err := New(
+	store, err := NewBucketStoreWithOptions(
 		nil,
 		nil,
 		nil,
@@ -856,7 +856,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			}, nil)
 			testutil.Ok(t, err)
 
-			bucketStore, err := New(
+			bucketStore, err := NewBucketStoreWithOptions(
 				logger,
 				nil,
 				objstore.WithNoopInstr(rec),
@@ -1611,7 +1611,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
-	store, err := New(
+	store, err := NewBucketStoreWithOptions(
 		logger,
 		nil,
 		instrBkt,
@@ -1720,7 +1720,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
-	store, err := New(
+	store, err := NewBucketStoreWithOptions(
 		logger,
 		nil,
 		instrBkt,
@@ -1823,7 +1823,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(t, err)
 
-	store, err := New(
+	store, err := NewBucketStoreWithOptions(
 		logger,
 		nil,
 		instrBkt,

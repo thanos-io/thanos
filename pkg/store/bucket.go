@@ -326,6 +326,7 @@ var defaultBucketStoreOptions = bucketStoreOptions{
 	chunksSizeLimitFactory: NewChunksLimiterFactory(noChunksSizeLimit),
 }
 
+// Deprecated. Use NewBucketStoreWithOptions instead.
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -350,7 +351,7 @@ func NewBucketStore(
 		WithChunksLimit(chunksLimiterFactory),
 		WithChunksSizeLimit(NewChunksLimiterFactory(noChunksSizeLimit)),
 	}
-	return New(logger,
+	return NewBucketStoreWithOptions(logger,
 		reg,
 		bkt,
 		fetcher,
@@ -369,9 +370,9 @@ func NewBucketStore(
 	)
 }
 
-// New creates a new bucket backed store that implements the store API against
+// NewBucketStoreWithOptions creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
-func New(
+func NewBucketStoreWithOptions(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	bkt objstore.InstrumentedBucketReader,

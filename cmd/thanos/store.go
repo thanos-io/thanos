@@ -69,7 +69,7 @@ func registerStore(app *extkingpin.App) {
 		Default("0").Uint()
 
 	maxSampleSize := cmd.Flag("store.grpc.series-sample-size-limit",
-		"Maximum size of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		"Maximum size of samples returned (in bytes) via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
@@ -297,7 +297,7 @@ func runStore(
 		store.WithChunksSizeLimit(store.NewChunksLimiterFactory(maxSampleSize)),
 	}
 
-	bs, err := store.New(
+	bs, err := store.NewBucketStoreWithOptions(
 		logger,
 		reg,
 		bkt,
