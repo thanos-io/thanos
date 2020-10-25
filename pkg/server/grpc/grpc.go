@@ -6,13 +6,19 @@ package grpc
 import (
 	"context"
 	"math"
+	"math/rand"
 	"net"
 	"runtime/debug"
+	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/oklog/ulid"
 	"github.com/go-kit/kit/log/level"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	kit "github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -67,17 +73,46 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
+<<<<<<< HEAD
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
+||||||| parent of 427b277... Added request logging for grpc
+	grpcOpts := []grpc.ServerOption{
+=======
+	loggingOpts := []grpc_logging.Option{
+		grpc_logging.WithDecider(func(_ string) grpc_logging.Decision {
+			return grpc_logging.NoLogCall
+		}),
+	}
+
+	tagsOption := []tags.Option{
+		tags.WithFieldExtractor(func(_ string, _ interface{}) map[string]string {
+
+			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
+
+			tagMap := make(map[string]string)
+			tagMap["request-id"] = reqID.String()
+
+			return tagMap
+		}),
+	}
+
+	grpcOpts := []grpc.ServerOption{
+>>>>>>> 427b277... Added request logging for grpc
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
+			tags.UnaryServerInterceptor(tagsOption...),
 			tracing.UnaryServerInterceptor(tracer),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
+			tags.StreamServerInterceptor(tagsOption...),
 			tracing.StreamServerInterceptor(tracer),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
 		),
 	}...)
 
