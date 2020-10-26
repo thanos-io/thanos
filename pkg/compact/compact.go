@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -413,7 +414,7 @@ func (cg *Group) MinTime() int64 {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	min := int64(0)
+	min := int64(math.MaxInt64)
 	for _, b := range cg.blocks {
 		if b.MinTime < min {
 			min = b.MinTime
@@ -427,9 +428,9 @@ func (cg *Group) MaxTime() int64 {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	max := int64(0)
+	max := int64(math.MinInt64)
 	for _, b := range cg.blocks {
-		if b.MaxTime < max {
+		if b.MaxTime > max {
 			max = b.MaxTime
 		}
 	}
