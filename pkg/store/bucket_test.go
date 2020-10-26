@@ -1231,7 +1231,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 			Series:           seriesPerBlock,
 			PrependLabels:    extLset,
 			Random:           random,
-			SkipChunks:       t.IsBenchmark(),
+			SkipChunks:       false,
 		})
 		id := createBlockFromHead(t, blockDir, head)
 		testutil.Ok(t, head.Close())
