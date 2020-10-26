@@ -226,6 +226,18 @@ test-e2e: docker
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
 	@go test $(GOTEST_OPTS) ./test/e2e/...
 
+.PHONY: test-e2e-local
+test-e2e-local: ## Runs all thanos e2e tests locally.
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
+test-e2e-local:
+	$(MAKE) test-e2e
+
+.PHONY: quickstart
+quickstart: ## Installs and runs a quickstart example of thanos.
+quickstart: build install-deps
+quickstart:
+	scripts/quickstart.sh
+
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
 install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
@@ -372,3 +384,4 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
+
