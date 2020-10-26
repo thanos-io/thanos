@@ -90,6 +90,7 @@ config:
     insecure_skip_verify: false
   trace:
     enable: false
+  list_objects_version: ""
   part_size: 134217728
   sse_config:
     type: ""
@@ -109,6 +110,8 @@ You can configure the timeout settings for the HTTP client by setting the `http_
 Please refer to the documentation of [the Transport type](https://golang.org/pkg/net/http/#Transport) in the `net/http` package for detailed information on what each option does.
 
 `part_size` is specified in bytes and refers to the minimum file size used for multipart uploads, as some custom S3 implementations may have different requirements. A value of `0` means to use a default 128 MiB size.
+
+Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListObjectsV2 (e.g. some versions of Ceph). Default value (`""`) is equivalent to `"v2"`.
 
 For debug and testing purposes you can set
 
