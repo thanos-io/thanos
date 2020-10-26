@@ -25,7 +25,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/snappy v0.0.2
 	github.com/googleapis/gax-go v2.0.2+incompatible
-	github.com/gophercloud/gophercloud v0.12.0
+	github.com/gophercloud/gophercloud v0.13.0
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
