@@ -1150,7 +1150,14 @@ func benchmarkExpandedPostings(
 func TestBucketSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, samplesPerSeries, series, 1)
+		benchBucketSeries(t, false, samplesPerSeries, series, 1)
+	})
+}
+
+func TestBucketSeriesSkipChunks(t *testing.T) {
+	tb := testutil.NewTB(t)
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+		benchBucketSeries(t, true, samplesPerSeries, series, 1)
 	})
 }
 
@@ -1158,11 +1165,19 @@ func BenchmarkBucketSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
 	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+		benchBucketSeries(t, false, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
 	})
 }
 
-func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
+func BenchmarkBucketSeriesSkipChunks(b *testing.B) {
+	tb := testutil.NewTB(b)
+	// 10e6 samples = ~1736 days with 15s scrape
+	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
+		benchBucketSeries(t, true, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+	})
+}
+
+func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
 	const numOfBlocks = 4
 
 	tmpDir, err := ioutil.TempDir("", "testorbench-bucketseries")
@@ -1240,6 +1255,12 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 		blocks = append(blocks, b)
 	}
 
+	if skipChunk {
+		for _, s := range series {
+			s.Chunks = nil
+		}
+	}
+
 	store := &BucketStore{
 		bkt:        objstore.WithNoopInstr(bkt),
 		logger:     logger,
@@ -1259,11 +1280,17 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 
 	var bCases []*storetestutil.SeriesCase
 	for _, p := range requestedRatios {
+		allCut := int(p * float64(totalSeries*samplesPerSeries))
+		if allCut == 0 {
+			allCut = 1
+		}
 		seriesCut := int(p * float64(numOfBlocks*seriesPerBlock))
 		if seriesCut == 0 {
 			seriesCut = 1
+		} else if seriesCut == 1 {
+			seriesCut = allCut / samplesPerSeriesPerBlock
 		}
-		allCut := int(p * float64(totalSeries*samplesPerSeries))
+
 		bCases = append(bCases, &storetestutil.SeriesCase{
 			Name: fmt.Sprintf("%dof%d", allCut, totalSeries*samplesPerSeries),
 			Req: &storepb.SeriesRequest{
@@ -1272,6 +1299,7 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
+				SkipChunks: skipChunk,
 			},
 			// This does not cut chunks properly, but those are assured against for non benchmarks only, where we use 100% case only.
 			ExpectedSeries: series[:seriesCut],
@@ -1280,11 +1308,13 @@ func benchBucketSeries(t testutil.TB, samplesPerSeries, totalSeries int, request
 	storetestutil.TestServerSeries(t, store, bCases...)
 
 	if !t.IsBenchmark() {
-		// Make sure the pool is correctly used. This is expected for 200k numbers.
-		testutil.Equals(t, numOfBlocks, int(chunkPool.(*mockedPool).gets.Load()))
-		// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
-		testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance.Load()))
-		chunkPool.(*mockedPool).gets.Store(0)
+		if !skipChunk {
+			// Make sure the pool is correctly used. This is expected for 200k numbers.
+			testutil.Equals(t, numOfBlocks, int(chunkPool.(*mockedPool).gets.Load()))
+			// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
+			testutil.Equals(t, 0, int(chunkPool.(*mockedPool).balance.Load()))
+			chunkPool.(*mockedPool).gets.Store(0)
+		}
 
 		for _, b := range blocks {
 			// NOTE(bwplotka): It is 4 x 1.0 for 100mln samples. Kind of make sense: long series.
