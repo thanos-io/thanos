@@ -4,14 +4,13 @@
 package compact
 
 import (
-	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/tsdb"
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/block/metadata"
-
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
