@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -394,9 +395,56 @@ func (cg *Group) Add(meta *metadata.Meta) error {
 	return nil
 }
 
+// IDs returns all sorted IDs of blocks in the group.
+func (cg *Group) IDs() (ids []ulid.ULID) {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+
+	for id := range cg.blocks {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i].Compare(ids[j]) < 0
+	})
+	return ids
+}
+
+// MinTime returns the min time across all group's blocks.
+func (cg *Group) MinTime() int64 {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+
+	min := int64(math.MaxInt64)
+	for _, b := range cg.blocks {
+		if b.MinTime < min {
+			min = b.MinTime
+		}
+	}
+	return min
+}
+
+// MaxTime returns the max time across all group's blocks.
+func (cg *Group) MaxTime() int64 {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+
+	max := int64(math.MinInt64)
+	for _, b := range cg.blocks {
+		if b.MaxTime > max {
+			max = b.MaxTime
+		}
+	}
+	return max
+}
+
 // Labels returns the labels that all blocks in the group share.
 func (cg *Group) Labels() labels.Labels {
 	return cg.labels
+}
+
+// Resolution returns the common downsampling resolution of blocks in the group.
+func (cg *Group) Resolution() int64 {
+	return cg.resolution
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
