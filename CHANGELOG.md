@@ -11,7 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-## [v0.16.0-rc.1](https://github.com/thanos-io/thanos/releases) - 2020.10.17
+## [v0.16.0](https://github.com/thanos-io/thanos/releases) - 2020.10.26
 
 Highlights:
 
