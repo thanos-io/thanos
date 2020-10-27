@@ -202,6 +202,8 @@ Flags:
                                  Log queries that are slower than the specified
                                  duration. Set to 0 to disable. Set to < 0 to
                                  enable on all queries.
+      --query-frontend.max-body-size=10485760
+                                 Max body size for downstream query results
       --log.request.decision=LogFinishCall
                                  Request Logging for logging the start and end
                                  of requests. LogFinishCall is enabled by
