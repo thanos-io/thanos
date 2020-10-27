@@ -20,7 +20,7 @@ You have an "Observer Cluster" that is hosting Thanos Querier along with Thanos 
 
 However you also need to connect from the querier to several remote instances of Thanos Sidecar within a cluster (The following example configs assume the use of NGINX Ingress in the remote cluster).
 
-Of course you want to use TLS to encrypt the connection to the remote clusters, but you don't want to use TLS within the cluster (to reduce no. of ingress, provisioning certificates, custom helm charts as most don't expose cert config for components other than querier etc.)
+Of course you want to use TLS to encrypt the connection to the remote clusters, but you don't want to use TLS within the cluster (to reduce no. of ingress, provisioning certificates, custom helm charts as most don't expose cert config for components other than querier etc.) You may also want to use client cert authentication to these remote clusters in that case see envoy v3 example.
 
 In this scenario you need to use a proxy as described above.  You will need to do the following steps:
 
@@ -170,6 +170,8 @@ metadata:
 - This is a static envoy configuration
 - You will need to update this for every sidecar you would like to talk to (or you can look into envoy dynamic configuration `XDS` etc.) or simpler get something else to generate the static configuration
   - For example you could use Terraform `templatefile()` to generate the envoy configuration using `for` loops etc.
+- This uses the v2 API an example of the v3 API is below
+- This config **does not** send a client certificate to authenticate with remote clusters
 
 ```
 admin:
@@ -252,7 +254,95 @@ static_resources:
       sni: thanos-2.sidecardomain.com
 ```
 
+## `envoy.yaml` V3 API
+- This is an example envoy config using the v3 API
+- it differs slightly to the above (more log formatting) but is essentially the same in functionality
+- This config  **sends** a client certificate to authenticate with remote clusters
+- This only implements a single port/listener, but adding more (as the v2 example has 2) is fairly trivial. Simple clone the `sidecar_name` listener and the `sidecar_name` cluster
 
+```
+admin:
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+
+static_resources:
+  listeners:
+  - name: sidecar_name
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10001
+    filter_chains:
+    - filters:
+      - name: envoy.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          codec_type: AUTO
+          access_log:
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: /dev/stdout
+              log_format:
+                text_format: |
+                  [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
+                  %RESPONSE_CODE% %RESPONSE_FLAGS% %RESPONSE_CODE_DETAILS% %BYTES_RECEIVED% %BYTES_SENT% %DURATION%
+                  %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% "%REQ(X-FORWARDED-FOR)%" "%REQ(USER-AGENT)%"
+                  "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%" "%UPSTREAM_TRANSPORT_FAILURE_REASON%"\n
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: /dev/stdout
+          stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: sidecar_name
+                  host_rewrite_literal: thanos.sidecardomain.com
+          http_filters:
+          - name: envoy.filters.http.router
+  clusters:
+  - name: sidecar_name
+    connect_timeout: 30s
+    type: LOGICAL_DNS
+    http2_protocol_options: {}
+    dns_lookup_family: V4_ONLY
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: sidecar_name
+      endpoints:
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: thanos.sidecardomain.com
+                  port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_certificates:
+            - certificate_chain:
+                filename: /certs/tls.crt
+              private_key:
+                filename: /certs/tls.key
+          validation_context:
+            trusted_ca:
+              filename: /certs/cacerts.pem
+          alpn_protocols:
+          - h2
+          - http/1.1
+        sni: thanos.sidecardomain.com
+
+```
 ## `service.yaml`
 - This is the service for the envoy sidecar
 - You will need to define a new port for every sidecar you would like to add
@@ -284,7 +374,7 @@ spec:
 ## `ingress.yaml`
 - This is an example ingress for a remote sidecar using NGINX ingress
 - You must use TLS (limitation from NGINX) as HTTP2 is only support on a separate listener
-- You must have certs configured and the CA added into the envoy sidecar earlier to allow verification.
+- You must have certs configured and the CA added into the envoy sidecar earlier to allow verification (if using client cert envoy config)
 
 ```
 kind: Ingress
