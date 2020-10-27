@@ -4,8 +4,6 @@ In this step, we will learn about Thanos Store Gateway, how to start, and what p
 
 ## Thanos Components
 
-Thanos is a single Go binary capable to run in different modes. Each mode represents a different component and can be invoked in a single command.
-
 Let's take a look at all the Thanos commands:
 
 ```docker run --rm quay.io/thanos/thanos:v0.15.0 --help```{{execute}}
@@ -19,7 +17,7 @@ In this step we will focus on thanos `store gateway`:
     Store node giving access to blocks in a bucket provider
 ```
 
-## Store Gateway/ Store :
+## Store Gateway:
 
 * This component implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space.
 * It joins a Thanos cluster on startup and advertises the data it can access.
@@ -33,7 +31,7 @@ You can read more about [Store](https://thanos.io/tip/components/store.md/) here
 
 Click on the snippet to deploy thanos store to the running Prometheus instance.
 
-### Deploying store to "EU1" Prometheus
+### Deploying store for "EU1" Prometheus data
 
 ```
 docker run -d --net=host --rm \
@@ -52,7 +50,7 @@ docker run -d --net=host --rm \
 
 In this step, we will see how we can query Thanos store data which has access to historical data from the `thanos` bucket, and let's play with this setup a bit.
 
-Click on the [Querier UI `Graph` page](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph) and try querying data for a year or two by inserting metrics [k8s_app_metric0](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.expr=k8s_app_metric0&g0.tab=1). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
+Click on the [Querier UI `Graph` page](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph) and try querying data for a year or two by inserting metrics [k8s_app_metric0](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=2d&g0.end_input=2019-10-18%2011%3A26&g0.max_source_resolution=0s&g0.expr=k8s_app_metric0&g0.tab=0). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
 
 ![](https://github.com/soniasingla/thanos/raw/master/tutorials/katacoda/thanos/2-lts/query.png)
 

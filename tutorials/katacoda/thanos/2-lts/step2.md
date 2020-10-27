@@ -7,19 +7,19 @@ In this step, we will configure the object store and change sidecar to upload to
 Now, execute the command
 
 ```
-mkdir -p /storage/thanos && docker run -d --name minio -v /storage:/data -p 9000:9000 -e "MINIO_ACCESS_KEY=minio" -e "MINIO_SECRET_KEY=minio123" minio/minio:RELEASE.2019-01-31T00-31-19Z server /data
+mkdir -p /storage/thanos && docker run -d --name minio -v /storage:/data -p 9000:9000 -e "MINIO_ACCESS_KEY=minio" -e "MINIO_SECRET_KEY=melovethanos" minio/minio:RELEASE.2019-01-31T00-31-19Z server /data
 ```{{execute}}
 
 ## Verification
 
 Now, you should have minio running well.
 
-To check if the Minio is working as intended, let's check out [here](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/)
+To check if the Minio is working as intended, let's [open Minio server UI](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/)
 
 Enter the credentials as mentioned below:
 
 **Access Key** = `minio`
-**Secret Key** = `minio123`
+**Secret Key** = `melovethanos`
 
 ## Configuration :
 
@@ -35,10 +35,10 @@ config:
   insecure: true
   signature_version2: true
   access_key: "minio"
-  secret_key: "minio123"
+  secret_key: "melovethanos"
 </pre>
 
-Before moving forward, we need to stop the `sidecar container` and we can do so by executing the following command:
+Before moving forward, we need to stop the `sidecar container` to reload the Prometheus instance with sidecar to upload metrics to object storage and allow Queriers to query Prometheus data with common, efficient StoreAPI. We can do so by executing the following command:
 
 ```
 docker stop prometheus-0-sidecar-eu1
@@ -50,7 +50,7 @@ Now, execute the following command :
 docker run -d --net=host --rm \
     -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
     -v $(pwd)/test:/prometheus \
-    --name sidecar \
+    --name prometheus-0-sidecar-eu1 \
     -u root \
     quay.io/thanos/thanos:v0.15.0 \
     sidecar \
@@ -65,4 +65,8 @@ The flag `--objstore.config-file` loads all the required configuration from the 
 
 ## Verification
 
-We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/). The stored metrics will also be available in the object storage.
+We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/). It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
+
+See [this](https://thanos.io/tip/components/sidecar.md/#upload-compacted-blocks) to read more about uploading old data already touched by Prometheus.
+
+Once all 9 blocks appear in the minio, we are sure our data is backed up. Awesome!

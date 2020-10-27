@@ -26,12 +26,12 @@ docker run -d --net=host --rm \
     compact \
     --data-dir             /prometheus \
     --objstore.config-file /etc/prometheus/bucket_storage.yml \
-    --http-address         0.0.0.0:19092
+    --http-address         0.0.0.0:19092 && echo "Thanos Compactor added"
 ```{{execute}}
 
 ## Unlimited Retention - Not Challenging anymore?
 
-As we know that Prometheus has very short retention which makes it almost stateless. This requires local compaction to be disabled to avoid any potential races with global compaction done by the Thanos compactor otherwise it will result in consuming lots of memory during the initial sync.
+Having a long time metric retention for Prometheus was always involving lots of complexity, disk space, and manual work. With Thanos, you can make Prometheus almost stateless, while having most of the data in durable and cheap object storage.
 
 ## Next
 

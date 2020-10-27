@@ -14,15 +14,24 @@ Let's start this initial Prometheus setup, ready?
 
 Before starting Prometheus, let's generate some artificial data. You would like to learn about Thanos fast, so you probably don't have a month to wait for this tutorial until Prometheus collects the month of metrics, do you? (:
 
-We will use our handy [thanosbench](link here) project to do so.
+We will use our handy [thanosbench](https://github.com/thanos-io/thanosbench) project to do so.
 
 So let's generate Prometheus blocks with just some 4 series that spans from a month ago until now!
 
-Execute the following command:
+Execute the following command (It might take a minute):
 
 ```
-mkdir -p test && docker run -i dockerenginesonia/thanosbench:v7 block plan -p realistic-key-k8s-1d-small --labels 'cluster="one"' --max-time 2019-10-18T00:00:00Z | docker run -v /root/test:/test -i  dockerenginesonia/thanosbench:v7 block gen --output.dir test
+mkdir -p test && docker run -i dockerenginesonia/thanosbench:v16 block plan -p key-k8s-30d-tiny --labels 'cluster="one"' --max-time 2019-10-18T00:00:00Z | docker run -v /root/test:/test -i  dockerenginesonia/thanosbench:v16 block gen --output.dir test
 ```{{execute}}
+
+On successful block creation you should see following log lines:
+
+```
+level=info ts=2020-10-20T18:28:42.625041939Z caller=block.go:87 msg="all blocks done" count=9
+level=info ts=2020-10-20T18:28:42.625100758Z caller=main.go:118 msg=exiting cmd="block gen"
+```
+
+Run `ls -l test/` to see the generated 9 blocks.
 
 ## Prometheus Configuration Files
 
@@ -67,6 +76,8 @@ Execute the following commands:
 
 
 ### Deploying "EU1"
+
+Let's deploy Prometheus now. Note that we disabled local Prometheus compactions `storage.tsdb.max-block-duration` and `min` flags. Currently, this is important for the basic object storage backup scenario to avoid conflicts between the bucket and local compactions. Read more [here](https://thanos.io/tip/components/sidecar.md/#sidecar).
 
 ```
 docker run -d --net=host --rm \

@@ -1,8 +1,8 @@
 [Thanos](thanos.io) is a set of components that can be composed into a highly available metric system with unlimited storage capacity. It can be added seamlessly on top of existing Prometheus deployments.
 
-This course uses docker containers with pre-built docker images.
+This course uses docker containers with pre-built Thanos, Prometheus, and Minio Docker images available publically. However, a similar scenario will work with any other deployment method like Kubernetes or Systemd, etc.
 
-In this tutorial, you will learn about :
+In this tutorial, you will learn about:
 
 * How to start uploading your Prometheus data seamlessly to cheap object storage thanks to Thanos sidecar.
 * How to further query data in object storage thanks to Thanos Store Gateway: a metric browser that serves metric blocks stored in Object Store via *StoreAPI* gRPC API.
