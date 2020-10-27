@@ -704,50 +704,31 @@ func blockSeries(
 		chks []chunks.Meta
 	)
 	for _, id := range ps {
-		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
+		if err := indexr.LoadedSeries(id, &lset, &chks, req); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
 		s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
-		if !req.SkipChunks {
-			s.refs = make([]uint64, 0, len(chks))
-			s.chks = make([]storepb.AggrChunk, 0, len(chks))
-		}
+		if len(chks) > 0 {
+			if !req.SkipChunks {
+				s.refs = make([]uint64, 0, len(chks))
+				s.chks = make([]storepb.AggrChunk, 0, len(chks))
+				for _, meta := range chks {
+					if err := chunkr.addPreload(meta.Ref); err != nil {
+						return nil, nil, errors.Wrap(err, "add chunk preload")
+					}
+					s.chks = append(s.chks, storepb.AggrChunk{
+						MinTime: meta.MinTime,
+						MaxTime: meta.MaxTime,
+					})
+					s.refs = append(s.refs, meta.Ref)
+				}
 
-		// hasValidChunk is used to check whether there is at least one chunk in the required time range.
-		var hasValidChunk bool
-		for _, meta := range chks {
-			if meta.MaxTime < req.MinTime {
-				continue
-			}
-			if meta.MinTime > req.MaxTime {
-				break
+				// Reserve chunksLimiter if we save chunks.
+				if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
+					return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+				}
 			}
 
-			// Fast path for no chunks series.
-			if req.SkipChunks {
-				hasValidChunk = true
-				break
-			}
-
-			if err := chunkr.addPreload(meta.Ref); err != nil {
-				return nil, nil, errors.Wrap(err, "add chunk preload")
-			}
-			s.chks = append(s.chks, storepb.AggrChunk{
-				MinTime: meta.MinTime,
-				MaxTime: meta.MaxTime,
-			})
-			s.refs = append(s.refs, meta.Ref)
-		}
-
-		// Reserve chunksLimiter if we save chunks.
-		if len(s.chks) > 0 {
-			hasValidChunk = true
-			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
-			}
-		}
-
-		if hasValidChunk {
 			for _, l := range lset {
 				// Skip if the external labels of the block overrule the series' label.
 				// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
@@ -2009,7 +1990,8 @@ func (g gapBasedPartitioner) Partition(length int, rng func(int) (uint64, uint64
 // LoadedSeries populates the given labels and chunk metas for the series identified
 // by the reference.
 // Returns ErrNotFound if the ref does not resolve to a known series.
-func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
+func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *[]chunks.Meta,
+	req *storepb.SeriesRequest) error {
 	b, ok := r.loadedSeries[ref]
 	if !ok {
 		return errors.Errorf("series %d not found", ref)
@@ -2018,13 +2000,103 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 	r.stats.seriesTouched++
 	r.stats.seriesTouchedSizeSum += len(b)
 
-	return r.dec.Series(b, lset, chks)
+	return r.decodeSeriesWithReq(b, lset, chks, req)
 }
 
 // Close released the underlying resources of the reader.
 func (r *bucketIndexReader) Close() error {
 	r.block.pendingReaders.Done()
 	return nil
+}
+
+// decodeSeriesWithReq decodes a series entry from the given byte slice based on the SeriesRequest.
+func (r *bucketIndexReader) decodeSeriesWithReq(b []byte, lbls *labels.Labels, chks *[]chunks.Meta,
+	req *storepb.SeriesRequest) error {
+	*lbls = (*lbls)[:0]
+	*chks = (*chks)[:0]
+
+	d := encoding.Decbuf{B: b}
+
+	k := d.Uvarint()
+
+	for i := 0; i < k; i++ {
+		lno := uint32(d.Uvarint())
+		lvo := uint32(d.Uvarint())
+
+		if d.Err() != nil {
+			return errors.Wrap(d.Err(), "read series label offsets")
+		}
+
+		ln, err := r.dec.LookupSymbol(lno)
+		if err != nil {
+			return errors.Wrap(err, "lookup label name")
+		}
+		lv, err := r.dec.LookupSymbol(lvo)
+		if err != nil {
+			return errors.Wrap(err, "lookup label value")
+		}
+
+		*lbls = append(*lbls, labels.Label{Name: ln, Value: lv})
+	}
+
+	// Read the chunks meta data.
+	k = d.Uvarint()
+
+	if k == 0 {
+		return nil
+	}
+
+	t0 := d.Varint64()
+	maxt := int64(d.Uvarint64()) + t0
+	ref0 := int64(d.Uvarint64())
+
+	// No chunk in the required time range.
+	if t0 > req.MaxTime {
+		return nil
+	}
+
+	if req.MinTime <= maxt {
+		*chks = append(*chks, chunks.Meta{
+			Ref:     uint64(ref0),
+			MinTime: t0,
+			MaxTime: maxt,
+		})
+		// Get a valid chunk, return if it is a skip chunk request.
+		if req.SkipChunks {
+			return nil
+		}
+	}
+	t0 = maxt
+
+	for i := 1; i < k; i++ {
+		mint := int64(d.Uvarint64()) + t0
+		maxt := int64(d.Uvarint64()) + mint
+
+		if maxt < req.MinTime {
+			continue
+		}
+		if mint > req.MaxTime {
+			break
+		}
+
+		ref0 += d.Varint64()
+		t0 = maxt
+
+		if d.Err() != nil {
+			return errors.Wrapf(d.Err(), "read meta for chunk %d", i)
+		}
+
+		*chks = append(*chks, chunks.Meta{
+			Ref:     uint64(ref0),
+			MinTime: mint,
+			MaxTime: maxt,
+		})
+
+		if req.SkipChunks {
+			return nil
+		}
+	}
+	return d.Err()
 }
 
 type bucketChunkReader struct {
