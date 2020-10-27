@@ -11,6 +11,9 @@ MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
 PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"prometheus"}
 THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
 S3_ENDPOINT=""
+QUERY_FRONTEND_CACHE_MAX_SIZE=${QUERY_FRONTEND_CACHE_MAX_SIZE:-""}
+QUERY_FRONTEND_CACHE_MAX_SIZE_ITEMS=${QUERY_FRONTEND_CACHE_MAX_SIZE_ITEMS:-0}
+QUERY_FRONTEND_CACHE_VALIDITY=${QUERY_FRONTEND_CACHE_VALIDITY:-"0s"}
 
 if [ ! $(command -v "$PROMETHEUS_EXECUTABLE") ]; then
   echo "Cannot find or execute Prometheus binary $PROMETHEUS_EXECUTABLE, you can override it by setting the PROMETHEUS_EXECUTABLE env variable"
@@ -249,7 +252,28 @@ QUERIER_JAEGER_CONFIG=$(
 	EOF
 )
 
-# Start two query nodes.
+QUERY_FRONTEND_JAEGER_CONFIG=$(
+  cat <<-EOF
+		type: JAEGER
+		config:
+		  service_name: thanos-query-frontend
+		  sampler_type: ratelimiting
+		  sampler_param: 2
+	EOF
+)
+
+QUERY_FRONTEND_CACHE_CONFIG=$(
+  cat <<-EOF
+		type: IN-MEMORY
+		config:
+		  max_size: "${QUERY_FRONTEND_CACHE_MAX_SIZE}"
+		  max_size_items: ${QUERY_FRONTEND_CACHE_MAX_SIZE_ITEMS}
+		  validity: ${QUERY_FRONTEND_CACHE_VALIDITY}
+	EOF
+)
+echo ${QUERY_FRONTEND_CACHE_CONFIG}
+
+# Start two query nodes with respective query-frontends.
 for i in $(seq 0 1); do
   ${THANOS_EXECUTABLE} query \
     --debug.name query-"${i}" \
@@ -262,6 +286,16 @@ for i in $(seq 0 1); do
     --tracing.config="${QUERIER_JAEGER_CONFIG}" \
     --query.replica-label receive_replica \
     ${STORES} &
+
+  sleep 0.5
+
+  ${THANOS_EXECUTABLE} query-frontend \
+    --debug.name query-frontend-"${i}" \
+    --log.level debug \
+    --http-address 0.0.0.0:2000"${i}" \
+    --query-frontend.downstream-url http://127.0.0.1:109"${i}"4 \
+    --tracing.config="${QUERY_FRONTEND_JAEGER_CONFIG}" \
+    --query-range.response-cache-config="${QUERY_FRONTEND_CACHE_CONFIG}" &
 done
 
 sleep 0.5
