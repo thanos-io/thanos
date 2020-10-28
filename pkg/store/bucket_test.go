@@ -1154,7 +1154,7 @@ func TestBucketSeries(t *testing.T) {
 	})
 }
 
-func TestBucketSeriesSkipChunks(t *testing.T) {
+func TestBucketSkipChunksSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, true, samplesPerSeries, series, 1)
@@ -1169,7 +1169,7 @@ func BenchmarkBucketSeries(b *testing.B) {
 	})
 }
 
-func BenchmarkBucketSeriesSkipChunks(b *testing.B) {
+func BenchmarkBucketSkipChunksSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
 	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
