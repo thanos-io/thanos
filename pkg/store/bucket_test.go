@@ -1231,7 +1231,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 			Series:           seriesPerBlock,
 			PrependLabels:    extLset,
 			Random:           random,
-			SkipChunks:       false,
+			SkipChunks:       t.IsBenchmark() || skipChunk,
 		})
 		id := createBlockFromHead(t, blockDir, head)
 		testutil.Ok(t, head.Close())
@@ -1255,12 +1255,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		blocks = append(blocks, b)
 	}
 
-	if skipChunk {
-		for _, s := range series {
-			s.Chunks = nil
-		}
-	}
-
 	store := &BucketStore{
 		bkt:        objstore.WithNoopInstr(bkt),
 		logger:     logger,
@@ -1280,22 +1274,22 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 
 	var bCases []*storetestutil.SeriesCase
 	for _, p := range requestedRatios {
-		allCut := int(p * float64(totalSeries*samplesPerSeries))
-		if allCut == 0 {
-			allCut = 1
+		expectedSamples := int(p * float64(totalSeries*samplesPerSeries))
+		if expectedSamples == 0 {
+			expectedSamples = 1
 		}
 		seriesCut := int(p * float64(numOfBlocks*seriesPerBlock))
 		if seriesCut == 0 {
 			seriesCut = 1
 		} else if seriesCut == 1 {
-			seriesCut = allCut / samplesPerSeriesPerBlock
+			seriesCut = expectedSamples / samplesPerSeriesPerBlock
 		}
 
 		bCases = append(bCases, &storetestutil.SeriesCase{
-			Name: fmt.Sprintf("%dof%d", allCut, totalSeries*samplesPerSeries),
+			Name: fmt.Sprintf("%dof%d", expectedSamples, totalSeries*samplesPerSeries),
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
-				MaxTime: int64(allCut) - 1,
+				MaxTime: int64(expectedSamples) - 1,
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
