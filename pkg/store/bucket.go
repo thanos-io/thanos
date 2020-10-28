@@ -787,6 +787,8 @@ func blockSeries(
 		}
 	}
 
+	// Here we have allocated:
+	// * ALL the series & chunks that match query.
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
@@ -949,6 +951,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			// Defer all closes to the end of Series method.
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 
+			// NOTE: We can match 1 block, but maybe we match everything: 1000 blocks.
 			g.Go(func() error {
 				part, pstats, err := blockSeries(
 					b.meta.Thanos.Labels,
@@ -1014,6 +1017,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		stats.getAllDuration = time.Since(begin)
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
+
+		// Number blocks X ALL the series & chunks that match query.
 	}
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
@@ -1022,10 +1027,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		// NOTE: We "carefully" assume series and chunks are sorted within each SeriesSet. This should be guaranteed by
 		// blockSeries method. In worst case deduplication logic won't deduplicate correctly, which will be accounted later.
 		set := storepb.MergeSeriesSets(res...)
+		// TODO: Ideally we can REUSE even genericSeriesSet https://github.com/prometheus/prometheus/blob/1e6e36df9dc816504e6696631181a8c28afa3353/storage/merge.go#L291
 		for set.Next() {
 			var series storepb.Series
 
 			stats.mergedSeriesCount++
+
+			// TODO(bwplotka): Load chunks here but also concurrently but with the limit!
 
 			var lset labels.Labels
 			if req.SkipChunks {

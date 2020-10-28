@@ -82,6 +82,9 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 	}
 	h := len(all) / 2
 
+	// TODO(bwplotka): Should we do this or actually use heap sort as in Prometheus: https://github.com/prometheus/prometheus/blob/1e6e36df9dc816504e6696631181a8c28afa3353/storage/merge.go#L291
+	// At the same time we need ONLY FIRST series from all blocks without even chunks!
+
 	return newMergedSeriesSet(
 		MergeSeriesSets(all[:h]...),
 		MergeSeriesSets(all[h:]...),
