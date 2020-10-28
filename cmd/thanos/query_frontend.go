@@ -42,7 +42,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
-			CortexFrontendConfig: &cortexfrontend.Config{},
+			// Max body size is 10 MiB.
+			CortexFrontendConfig: &cortexfrontend.Config{MaxBodySize: 10 * 1024 * 1024},
 			QueryRangeConfig: queryfrontend.QueryRangeConfig{
 				Limits:             &cortexvalidation.Limits{},
 				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
@@ -109,10 +110,6 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexFrontendConfig.LogQueriesLongerThan)
-
-	// Max body size is 10 MiB.
-	cmd.Flag("query-frontend.max-body-size", "Max body size for downstream query results").
-		Default("10485760").Int64Var(&cfg.CortexFrontendConfig.MaxBodySize)
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
