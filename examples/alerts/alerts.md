@@ -575,6 +575,15 @@ rules:
 ```yaml
 name: thanos-component-absent.rules
 rules:
+- alert: ThanosBucketReplicateIsDown
+  annotations:
+    description: ThanosBucketReplicate has disappeared from Prometheus target discovery.
+    summary: thanos component has disappeared from Prometheus target discovery.
+  expr: |
+    absent(up{job=~"thanos-bucket-replicate.*"} == 1)
+  for: 5m
+  labels:
+    severity: critical
 - alert: ThanosCompactIsDown
   annotations:
     description: ThanosCompact has disappeared from Prometheus target discovery.
