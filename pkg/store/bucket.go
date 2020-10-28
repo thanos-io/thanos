@@ -707,8 +707,8 @@ func blockSeries(
 		if err := indexr.LoadedSeries(id, &lset, &chks, req); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
-		s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
 		if len(chks) > 0 {
+			s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
 			if !req.SkipChunks {
 				s.refs = make([]uint64, 0, len(chks))
 				s.chks = make([]storepb.AggrChunk, 0, len(chks))
