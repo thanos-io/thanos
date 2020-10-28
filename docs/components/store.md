@@ -213,7 +213,7 @@ Filtering is done on a Chunk level, so Thanos Store might still return Samples w
 
 ### External Label Partitioning (Sharding)
 
-Check more [here](https://thanos.io/tip/thanos/sharding.md/)
+Check more [here](https://thanos.io/tip/thanos/sharding.md/).
 
 ## Probes
 
