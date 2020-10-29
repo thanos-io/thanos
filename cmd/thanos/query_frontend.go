@@ -42,7 +42,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
-			CortexFrontendConfig: &cortexfrontend.Config{},
+			// Max body size is 10 MiB.
+			CortexFrontendConfig: &cortexfrontend.Config{MaxBodySize: 10 * 1024 * 1024},
 			QueryRangeConfig: queryfrontend.QueryRangeConfig{
 				Limits:             &cortexvalidation.Limits{},
 				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
