@@ -19,7 +19,6 @@ import (
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
@@ -432,7 +431,6 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		},
 	}
 
-	now := time.Now()
 	tpw, err := NewTripperware(
 		Config{
 			QueryRangeConfig: QueryRangeConfig{
@@ -467,18 +465,18 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 			name: "request but will be partitioned",
 			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 				Step:  10 * seconds,
 			},
-			expected: 6,
+			expected: 7,
 		},
 		{
 			name: "same query as the previous one",
 			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 				Step:  10 * seconds,
 			},
 			expected: 7,
@@ -541,7 +539,6 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 		},
 	}
 
-	now := time.Now()
 	tpw, err := NewTripperware(
 		Config{
 			LabelsConfig: LabelsConfig{
@@ -575,17 +572,17 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 			name: "request but will be partitioned",
 			req: &ThanosLabelsRequest{
 				Path:  "/api/v1/labels",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 			},
-			expected: 5,
+			expected: 6,
 		},
 		{
 			name: "same query as the previous one",
 			req: &ThanosLabelsRequest{
 				Path:  "/api/v1/labels",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 			},
 			expected: 6,
 		},
