@@ -392,6 +392,8 @@ Flags:
                                  (used as a fallback)
       --query.sd-dns-interval=30s
                                  Interval between DNS resolutions.
+      --query.http-method=POST   HTTP method to use when sending queries.
+                                 Possible options: [GET, POST]
 
 ```
 
