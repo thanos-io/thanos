@@ -100,7 +100,7 @@ func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 func (s simpleHashring) ConfigHash() string {
 	h := sha256.New()
 	for _, v := range s {
-		h.Write([]byte(v))
+		_, _ = h.Write([]byte(v))
 	}
 	return string(h.Sum(nil))
 }
@@ -157,7 +157,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 func (m *multiHashring) ConfigHash() string {
 	h := sha256.New()
 	for _, v := range m.hashrings {
-		h.Write([]byte(v.ConfigHash()))
+		_, _ = h.Write([]byte(v.ConfigHash()))
 	}
 	return string(h.Sum(nil))
 }
