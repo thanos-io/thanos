@@ -95,9 +95,10 @@ type Handler struct {
 	expBackoff backoff.Backoff
 	peerStates map[string]*retryState
 
-	forwardRequests   *prometheus.CounterVec
-	replications      *prometheus.CounterVec
-	replicationFactor prometheus.Gauge
+	forwardRequests                     *prometheus.CounterVec
+	forwardRequestConfigurationMismatch prometheus.Counter
+	replications                        *prometheus.CounterVec
+	replicationFactor                   prometheus.Gauge
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -122,6 +123,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
+		),
+		forwardRequestConfigurationMismatch: promauto.With(o.Registry).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_forward_request_config_mismatches_total",
+				Help: "The number of forward requests that have mismatching configurations.",
+			},
 		),
 		replications: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -258,7 +265,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	}
 
 	if h.hashring.ConfigHash() != config {
-		// TODO(kakkoyun): Add a metric?
+		h.forwardRequestConfigurationMismatch.Inc()
 		level.Warn(h.logger).Log("msg", "hasring configuration mismatch", "current", h.hashring.ConfigHash(), "received", config)
 	}
 
