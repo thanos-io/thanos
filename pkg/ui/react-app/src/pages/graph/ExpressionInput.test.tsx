@@ -176,7 +176,7 @@ describe('ExpressionInput', () => {
       setTimeout(() => expect(spyCloseMenu).toHaveBeenCalled());
     });
     it('should not render list if enable is false', () => {
-      const input = mount(<ExpressionInput autocompleteSections={{ title: ['foo', 'bar', 'baz'] }} {...({} as any)} enable=false />);
+      const input = mount(<ExpressionInput autocompleteSections={{ title: ['foo', 'bar', 'baz'] }} {...({} as any)} enable={false} />);
       const instance: any = input.instance();
       const spyCloseMenu = jest.fn();
       instance.createAutocompleteSection({ closeMenu: spyCloseMenu });
