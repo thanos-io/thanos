@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/route"
 	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -40,6 +41,8 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+
 	"github.com/thanos-io/thanos/pkg/compact"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
@@ -618,22 +621,23 @@ func TestMetadataEndpoints(t *testing.T) {
 	dir, err := ioutil.TempDir("", "prometheus-test")
 	testutil.Ok(t, err)
 
-	var (
-		mint int64 = 0
-		maxt int64 = 600_000
-	)
-	var metricSamples []*tsdb.MetricSample
+	const chunkRange int64 = 600_000
+	var series []storage.Series
+
 	for _, lbl := range old {
+		var samples []tsdbutil.Sample
+
 		for i := int64(0); i < 10; i++ {
-			metricSamples = append(metricSamples, &tsdb.MetricSample{
-				TimestampMs: i * 60_000,
-				Value:       float64(i),
-				Labels:      lbl,
+			samples = append(samples, sample{
+				t: i * 60_000,
+				v: float64(i),
 			})
 		}
+
+		series = append(series, storage.NewListSeries(lbl, samples))
 	}
 
-	_, err = tsdb.CreateBlock(metricSamples, dir, mint, maxt, nil)
+	_, err = tsdb.CreateBlock(series, dir, chunkRange, log.NewNopLogger())
 	testutil.Ok(t, err)
 
 	opts := tsdb.DefaultOptions()
@@ -1625,4 +1629,17 @@ type mockedRulesClient struct {
 
 func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
 	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
+}
+
+type sample struct {
+	t int64
+	v float64
+}
+
+func (s sample) T() int64 {
+	return s.t
+}
+
+func (s sample) V() float64 {
+	return s.v
 }
