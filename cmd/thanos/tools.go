@@ -11,7 +11,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/rules"
 )
@@ -35,7 +35,7 @@ func registerCheckRules(app extkingpin.AppClause) {
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
-	failed := tsdb_errors.NewMulti()
+	var failed errutil.MultiError
 
 	for _, fn := range *files {
 		level.Info(logger).Log("msg", "checking", "filename", fn)
@@ -49,7 +49,7 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 		defer func() { _ = f.Close() }()
 
 		n, errs := rules.ValidateAndCount(f)
-		if len(errs) > 0 {
+		if errs.Err() != nil {
 			level.Error(logger).Log("result", "FAILED")
 			for _, e := range errs {
 				level.Error(logger).Log("error", e.Error())
