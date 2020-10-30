@@ -39,14 +39,13 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Metrics') +
           g.queryPanel(
             [
-              'sum(rate(thanos_replicate_origin_iterations_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
-              'sum(rate(thanos_replicate_origin_meta_loads_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
-              'sum(rate(thanos_replicate_origin_partial_meta_reads_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
+              'sum(rate(blocks_meta_synced{state="loaded",namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
+              'sum(rate(blocks_meta_synced{state="failed",namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
               'sum(rate(thanos_replicate_blocks_already_replicated_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
               'sum(rate(thanos_replicate_blocks_replicated_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
               'sum(rate(thanos_replicate_objects_replicated_total{namespace="$namespace",%(selector)s}[$interval]))' % thanos.bucket_replicate,
             ],
-            ['iterations', 'meta loads', 'partial meta reads', 'already replicated blocks', 'replicated blocks', 'replicated objects']
+            ['meta loads', 'partial meta reads', 'already replicated blocks', 'replicated blocks', 'replicated objects']
           )
         )
       )
