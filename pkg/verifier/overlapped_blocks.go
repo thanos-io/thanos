@@ -6,32 +6,31 @@ package verifier
 import (
 	"context"
 	"sort"
-	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
-
-const OverlappedBlocksIssueID = "overlapped_blocks"
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.
 // No repair is available for this issue.
-func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, _ objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, _ time.Duration, _ *verifierMetrics) error {
+type OverlappedBlocksIssue struct{}
+
+func (OverlappedBlocksIssue) IssueID() string { return "overlapped_blocks" }
+
+func (OverlappedBlocksIssue) Verify(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool) error {
 	if idMatcher != nil {
-		return errors.Errorf("id matching is not supported by issue %s verifier", OverlappedBlocksIssueID)
+		return errors.Errorf("id matching is not supported")
 	}
 
-	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
+	level.Info(conf.Logger).Log("msg", "started verifying issue")
 
-	overlaps, err := fetchOverlaps(ctx, fetcher)
+	overlaps, err := fetchOverlaps(ctx, conf.Fetcher)
 	if err != nil {
-		return errors.Wrap(err, OverlappedBlocksIssueID)
+		return errors.Wrap(err, "fetch overlaps")
 	}
 
 	if len(overlaps) == 0 {
@@ -40,11 +39,7 @@ func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, _ objstore.Bu
 	}
 
 	for k, o := range overlaps {
-		level.Warn(logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
-	}
-
-	if repair {
-		level.Warn(logger).Log("msg", "repair is not implemented for this issue", "issue", OverlappedBlocksIssueID)
+		level.Warn(conf.Logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
 	}
 	return nil
 }

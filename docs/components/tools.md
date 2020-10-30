@@ -37,7 +37,9 @@ Flags:
 
 Subcommands:
   tools bucket verify [<flags>]
-    Verify all blocks in the bucket against specified issues
+    Verify all blocks in the bucket against specified issues. NOTE: Depending on
+    issue this might take time and will need downloading all specified blocks to
+    disk.
 
   tools bucket ls [<flags>]
     List all blocks in the bucket
@@ -119,7 +121,9 @@ Flags:
 
 Subcommands:
   tools bucket verify [<flags>]
-    Verify all blocks in the bucket against specified issues
+    Verify all blocks in the bucket against specified issues. NOTE: Depending on
+    issue this might take time and will need downloading all specified blocks to
+    disk.
 
   tools bucket ls [<flags>]
     List all blocks in the bucket
@@ -235,7 +239,9 @@ When using the `--repair` option, make sure that the compactor job is disabled f
 ```$
 usage: thanos tools bucket verify [<flags>]
 
-Verify all blocks in the bucket against specified issues
+Verify all blocks in the bucket against specified issues. NOTE: Depending on
+issue this might take time and will need downloading all specified blocks to
+disk.
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
@@ -277,10 +283,11 @@ Flags:
                            removal.
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
-  -i, --issues=index_issue... ...
+  -i, --issues=index_known_issues... ...
                            Issues to verify (and optionally repair). Possible
-                           values: [duplicated_compaction index_issue
-                           overlapped_blocks]
+                           issue to verify, without repair: [overlapped_blocks];
+                           Possible issue to verify and repair:
+                           [index_known_issues duplicated_compaction]
       --id=ID ...          Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
