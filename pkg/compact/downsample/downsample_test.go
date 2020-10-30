@@ -915,6 +915,10 @@ func (b *memBlock) Close() error {
 	return nil
 }
 
+func (b *memBlock) Size() int64 {
+	return 0
+}
+
 type emptyTombstoneReader struct{}
 
 func (emptyTombstoneReader) Get(ref uint64) (tombstones.Intervals, error)        { return nil, nil }

@@ -61,8 +61,7 @@ func NewStreamedBlockWriter(
 	// We should close any opened Closer up to an error.
 	defer func() {
 		if err != nil {
-			var merr tsdberrors.MultiError
-			merr.Add(err)
+			merr := tsdberrors.NewMulti(err)
 			for _, cl := range closers {
 				merr.Add(cl.Close())
 			}
@@ -143,7 +142,7 @@ func (w *streamedBlockWriter) Close() error {
 	}
 	w.finalized = true
 
-	merr := tsdberrors.MultiError{}
+	merr := tsdberrors.NewMulti()
 
 	if w.ignoreFinalize {
 		// Close open file descriptors anyway.

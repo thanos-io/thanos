@@ -35,7 +35,7 @@ func registerCheckRules(app extkingpin.AppClause) {
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
-	var failed tsdb_errors.MultiError
+	failed := tsdb_errors.NewMulti()
 
 	for _, fn := range *files {
 		level.Info(logger).Log("msg", "checking", "filename", fn)
@@ -49,7 +49,7 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 		defer func() { _ = f.Close() }()
 
 		n, errs := rules.ValidateAndCount(f)
-		if errs.Err() != nil {
+		if len(errs) > 0 {
 			level.Error(logger).Log("result", "FAILED")
 			for _, e := range errs {
 				level.Error(logger).Log("error", e.Error())

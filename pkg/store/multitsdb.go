@@ -168,7 +168,7 @@ func (s *tenantSeriesSetServer) Delegate(closer io.Closer) {
 }
 
 func (s *tenantSeriesSetServer) Close() error {
-	var merr tsdb_errors.MultiError
+	merr := tsdb_errors.NewMulti()
 	for _, c := range s.closers {
 		merr.Add(c.Close())
 	}

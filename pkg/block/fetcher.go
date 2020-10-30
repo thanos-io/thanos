@@ -278,7 +278,7 @@ type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
-	metaErrs tsdberrors.MultiError
+	metaErrs []error
 
 	noMetas        float64
 	corruptedMetas float64
@@ -310,7 +310,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 				switch errors.Cause(err) {
 				default:
 					mtx.Lock()
-					resp.metaErrs.Add(err)
+					resp.metaErrs = append(resp.metaErrs, err)
 					mtx.Unlock()
 					continue
 				case ErrorSyncMetaNotFound:
@@ -447,7 +447,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	metrics.submit()
 
 	if len(resp.metaErrs) > 0 {
-		return metas, resp.partial, errors.Wrap(resp.metaErrs, "incomplete view")
+		return metas, resp.partial, errors.Wrap(tsdberrors.NewMulti(resp.metaErrs...).Err(), "incomplete view")
 	}
 
 	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))

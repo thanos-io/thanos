@@ -141,7 +141,7 @@ func (t *MultiTSDB) Flush() error {
 	defer t.mtx.RUnlock()
 
 	errmtx := &sync.Mutex{}
-	merr := terrors.MultiError{}
+	merr := terrors.NewMulti()
 	wg := &sync.WaitGroup{}
 	for id, tenant := range t.tenants {
 		db := tenant.readyStorage().Get()
@@ -170,7 +170,7 @@ func (t *MultiTSDB) Close() error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	merr := terrors.MultiError{}
+	merr := terrors.NewMulti()
 	for id, tenant := range t.tenants {
 		db := tenant.readyStorage().Get()
 		if db == nil {
@@ -192,7 +192,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) error {
 	defer t.mtx.RUnlock()
 
 	errmtx := &sync.Mutex{}
-	merr := terrors.MultiError{}
+	merr := terrors.NewMulti()
 	wg := &sync.WaitGroup{}
 	for tenantID, tenant := range t.tenants {
 		level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID)
@@ -223,7 +223,7 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 		return err
 	}
 
-	merr := terrors.MultiError{}
+	merr := terrors.NewMulti()
 	for _, fi := range fis {
 		if !fi.IsDir() {
 			continue

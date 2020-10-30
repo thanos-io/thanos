@@ -111,7 +111,7 @@ func GetQTypeName(addr string) (qtype string, name string) {
 // defaultPort is used for non-SRV records when a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	resolvedAddrs := map[string][]string{}
-	errs := tsdberrors.MultiError{}
+	errs := tsdberrors.NewMulti()
 
 	for _, addr := range addrs {
 		var resolved []string

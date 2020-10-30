@@ -73,10 +73,7 @@ func Downsample(
 	// Remove blockDir in case of errors.
 	defer func() {
 		if err != nil {
-			var merr tsdberrors.MultiError
-			merr.Add(err)
-			merr.Add(os.RemoveAll(blockDir))
-			err = merr.Err()
+			err = tsdberrors.NewMulti(err, os.RemoveAll(blockDir)).Err()
 		}
 	}()
 
