@@ -11,32 +11,31 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
-const DuplicatedCompactionIssueID = "duplicated_compaction"
-
-// DuplicatedCompactionIssue was a bug fixed in https://github.com/thanos-io/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
+// DuplicatedCompactionBlocks is for bug fixed in https://github.com/thanos-io/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
 // Bug resulted in source block not being removed immediately after compaction, so we were compacting again and again same sources
 // until sync-delay passes.
 // The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
 // If repair is enabled, all but one duplicates are safely deleted.
-func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher block.MetadataFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
+type DuplicatedCompactionBlocks struct{}
+
+func (DuplicatedCompactionBlocks) IssueID() string { return "duplicated_compaction" }
+
+func (DuplicatedCompactionBlocks) VerifyRepair(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool, repair bool) error {
 	if idMatcher != nil {
-		return errors.Errorf("id matching is not supported by issue %s verifier", DuplicatedCompactionIssueID)
+		return errors.Errorf("id matching is not supported")
 	}
 
-	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
+	level.Info(conf.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
-	overlaps, err := fetchOverlaps(ctx, fetcher)
+	overlaps, err := fetchOverlaps(ctx, conf.Fetcher)
 	if err != nil {
-		return errors.Wrap(err, DuplicatedCompactionIssueID)
+		return errors.Wrap(err, "fetch overlaps")
 	}
 
 	if len(overlaps) == 0 {
@@ -58,8 +57,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 
 			// Loop over duplicates sets.
 			for _, d := range dups {
-				level.Warn(logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max,
-					"kill", sprintMetas(d[1:]), "issue", DuplicatedCompactionIssueID)
+				level.Warn(conf.Logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max, "kill", sprintMetas(d[1:]))
 
 				for _, m := range d[1:] {
 					if _, ok := toKillLookup[m.ULID]; ok {
@@ -72,26 +70,25 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 			}
 
 			if len(dups) == 0 {
-				level.Warn(logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
-					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks), "issue", DuplicatedCompactionIssueID)
+				level.Warn(conf.Logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
+					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks))
 			}
 		}
 	}
 
-	level.Warn(logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill), "issue", DuplicatedCompactionIssueID)
+	level.Warn(conf.Logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill))
 	if !repair {
 		return nil
 	}
 
 	for i, id := range toKill {
-		if err := BackupAndDelete(ctx, logger, bkt, backupBkt, id, deleteDelay, metrics.blocksMarkedForDeletion); err != nil {
+		if err := BackupAndDelete(ctx, conf, id); err != nil {
 			return err
 		}
-		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)
+		level.Info(conf.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
 	}
 
-	level.Info(logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap",
-		"issue", DuplicatedCompactionIssueID)
+	level.Info(conf.Logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap")
 	return nil
 }
 
