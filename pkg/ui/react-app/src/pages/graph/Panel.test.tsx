@@ -39,6 +39,7 @@ const defaultProps = {
     // Do nothing.
   },
   stores: [],
+  enableMetricAutocomplete: true,
 };
 
 describe('Panel', () => {
