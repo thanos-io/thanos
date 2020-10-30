@@ -28,6 +28,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3331](https://github.com/thanos-io/thanos/pull/3331) Disable Azure blob exception logging
 - [#3341](https://github.com/thanos-io/thanos/pull/3341) Disable Azure blob syslog exception logging
 
+### Changed
+
+- [#2906](https://github.com/thanos-io/thanos/pull/2906) Tools: Refactor Bucket replicate execution. Removed all `thanos_replicate_origin_.*` metrics.
+    - `thanos_replicate_origin_meta_loads_total` can be replaced by `blocks_meta_synced{state="loaded"}`.
+    - `thanos_replicate_origin_partial_meta_reads_total` can be replaced by `blocks_meta_synced{state="failed"}`.
+
 ## [v0.16.0](https://github.com/thanos-io/thanos/releases) - 2020.10.26
 
 Highlights:
