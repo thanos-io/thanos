@@ -18,7 +18,7 @@ Of course you want to use TLS to encrypt the connection to the remote clusters, 
 
 In this scenario you need to use a proxy server. Further guidance below.
 
-### Envoy
+## Envoy
 
 Envoy can be implemented as a sidecar container (example shown here) within the Thanos Querier pod. It will perform TLS origination to connect to secure remote sidecars while forwarding their communications unencrypted back to Thanos Querier.
 
@@ -32,7 +32,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
  - Point the querier at the service and the correct port an example `--store ` field is below (`thanos-querier args`)
  - Make sure your remote cluster has TLS setup and an appropriate HTTP2 supported ingress, example below `ingress.yaml`
 
-## `deployment.yaml`
+### `deployment.yaml`
 
 - `[port_name]` is the name of the port specified within the service (see `service.yaml`)
 - `[service-name]` is the name of the envoy service
@@ -168,7 +168,7 @@ metadata:
   progressDeadlineSeconds: 600
 ```
 
-## `envoy.yaml`
+### `envoy.yaml`
 This is a static v2 envoy configuration (v3 example below). You will need to update this configuration for every sidecar you would like to talk to. There are also several options for dynamic configuration, like envoy XDS (and other associated dynamic config modes), or using something like terraform (if thats your deployment method) to generate the configs at deployment time. NOTE: This config **does not** send a client certificate to authenticate with remote clusters, see envoy v3 config.
 
 ```
@@ -252,7 +252,7 @@ static_resources:
       sni: thanos-2.sidecardomain.com
 ```
 
-## `envoy.yaml` V3 API
+### `envoy.yaml` V3 API
 This is an example envoy config using the v3 API. It does differ slightly to the above (more log formatting) but is essentially the same in functionality. This config  **sends** a client certificate to authenticate with remote clusters (they must have the CA loaded in order to verify). This only implements a single port/listener, but adding more (ie. the v2 example has 2) is fairly trivial. Simple clone the `sidecar_name` listener and the `sidecar_name` cluster blocks.
 
 ```
@@ -338,7 +338,7 @@ static_resources:
         sni: thanos.sidecardomain.com
 
 ```
-## `service.yaml`
+### `service.yaml`
 This is the service for the envoy sidecar. You will need to define a new port for every sidecar you would like to add.
 
 ```
@@ -365,7 +365,7 @@ spec:
   sessionAffinity: None
 ```
 
-## `ingress.yaml`
+### `ingress.yaml`
 This is an example ingress for a remote sidecar using NGINX ingress. You must use TLS (port 443 - limitation from NGINX) as HTTP2 is only supported on a separate listener (see [here](https://github.com/kubernetes/ingress-nginx/issues/3938))
 
 You must have certs configured and the CA added into the envoy sidecar earlier to allow verification (if using client cert v3 envoy config)
