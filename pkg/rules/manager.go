@@ -309,7 +309,7 @@ type configGroups struct {
 // special field in configGroups.configRuleAdapter struct.
 func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
-		errs            = errutil.MultiError{}
+		errs            errutil.MultiError
 		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
 		ruleFiles       = map[string]string{}
 	)
