@@ -1,14 +1,13 @@
+local capitalize(str) = std.asciiUpper(std.substr(str, 0, 1)) + std.asciiLower(std.substr(str, 1, std.length(str)));
+local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
 {
   local thanos = self,
 
   // We build alerts for the presence of all these jobs.
   jobs:: {
-    ThanosQuery: thanos.query.selector,
-    ThanosStore: thanos.store.selector,
-    ThanosReceive: thanos.receive.selector,
-    ThanosRule: thanos.rule.selector,
-    ThanosCompact: thanos.compact.selector,
-    ThanosSidecar: thanos.sidecar.selector,
+    ['Thanos%s' % titlize(component)]: thanos[component].selector
+    for component in std.objectFieldsAll(thanos)
+    if component != 'jobs' && std.type(thanos[component]) == 'object' && std.objectHas(thanos[component], 'selector')
   },
 
   prometheusAlerts+:: {

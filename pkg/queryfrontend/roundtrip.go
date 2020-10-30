@@ -144,11 +144,13 @@ func newQueryRangeTripperware(
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 
 	// step align middleware.
-	queryRangeMiddleware = append(
-		queryRangeMiddleware,
-		queryrange.InstrumentMiddleware("step_align", m),
-		queryrange.StepAlignMiddleware,
-	)
+	if config.AlignRangeWithStep {
+		queryRangeMiddleware = append(
+			queryRangeMiddleware,
+			queryrange.InstrumentMiddleware("step_align", m),
+			queryrange.StepAlignMiddleware,
+		)
+	}
 
 	queryIntervalFn := func(_ queryrange.Request) time.Duration {
 		return config.SplitQueriesByInterval

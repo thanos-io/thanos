@@ -21,9 +21,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"google.golang.org/grpc"
 
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -43,7 +43,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "nil multierror",
-			err:  terrors.MultiError([]error{}),
+			err:  errutil.MultiError([]error{}),
 			f:    isConflict,
 			out:  0,
 		},
@@ -60,7 +60,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "non-matching multierror",
-			err: terrors.MultiError([]error{
+			err: errutil.MultiError([]error{
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
@@ -69,7 +69,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "nested non-matching multierror",
-			err: errors.Wrap(terrors.MultiError([]error{
+			err: errors.Wrap(errutil.MultiError([]error{
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
@@ -78,9 +78,9 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "deep nested non-matching multierror",
-			err: errors.Wrap(terrors.MultiError([]error{
+			err: errors.Wrap(errutil.MultiError([]error{
 				errors.New("foo"),
-				terrors.MultiError([]error{
+				errutil.MultiError([]error{
 					errors.New("bar"),
 					errors.New("qux"),
 				}),
@@ -90,7 +90,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror",
-			err: terrors.MultiError([]error{
+			err: errutil.MultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
@@ -100,7 +100,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror many",
-			err: terrors.MultiError([]error{
+			err: errutil.MultiError([]error{
 				storage.ErrOutOfOrderSample,
 				conflictErr,
 				errors.New(strconv.Itoa(http.StatusConflict)),
@@ -112,7 +112,7 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "nested matching multierror",
-			err: errors.Wrap(terrors.MultiError([]error{
+			err: errors.Wrap(errutil.MultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
@@ -122,8 +122,8 @@ func TestCountCause(t *testing.T) {
 		},
 		{
 			name: "deep nested matching multierror",
-			err: errors.Wrap(terrors.MultiError([]error{
-				terrors.MultiError([]error{
+			err: errors.Wrap(errutil.MultiError([]error{
+				errutil.MultiError([]error{
 					errors.New("qux"),
 					errors.New(strconv.Itoa(http.StatusConflict)),
 				}),

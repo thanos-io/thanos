@@ -233,3 +233,26 @@ http_config:
 	_, err := parseConfig(input)
 	testutil.NotOk(t, err)
 }
+
+func TestParseConfig_ListObjectsV1(t *testing.T) {
+	input := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"`)
+
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	if cfg.ListObjectsVersion != "" {
+		t.Errorf("when list_objects_version not set, it should default to empty")
+	}
+
+	input2 := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"
+list_objects_version: "abcd"`)
+
+	cfg2, err := parseConfig(input2)
+	testutil.Ok(t, err)
+
+	if cfg2.ListObjectsVersion != "abcd" {
+		t.Errorf("parsing of list_objects_version failed: got %v, expected %v", cfg.ListObjectsVersion, "abcd")
+	}
+}
