@@ -22,7 +22,7 @@ In this scenario you need to use a proxy server. Further guidance below.
 
 Envoy can be implemented as a sidecar container (example shown here) within the Thanos Querier pod. It will perform TLS origination to connect to secure remote sidecars while forwarding their communications unencrypted back to Thanos Querier.
 
-Envoy(https://www.envoyproxy.io/) is a proxy server that has good HTTP2 and gRPC support and is relatively straightforward to configure for this purpose.
+[Envoy](https://www.envoyproxy.io/) is a proxy server that has good HTTP2 and gRPC support and is relatively straightforward to configure for this purpose.
 
 
 
@@ -366,7 +366,7 @@ spec:
 ```
 
 ## `ingress.yaml`
-This is an example ingress for a remote sidecar using NGINX ingress. You must use TLS (port 443 - limitation from NGINX) as HTTP2 is only supported on a separate listener (see here(https://github.com/kubernetes/ingress-nginx/issues/3938))
+This is an example ingress for a remote sidecar using NGINX ingress. You must use TLS (port 443 - limitation from NGINX) as HTTP2 is only supported on a separate listener (see [here](https://github.com/kubernetes/ingress-nginx/issues/3938))
 
 You must have certs configured and the CA added into the envoy sidecar earlier to allow verification (if using client cert v3 envoy config)
 
