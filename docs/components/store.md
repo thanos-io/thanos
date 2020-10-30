@@ -211,6 +211,10 @@ Thanos Querier deals with overlapping time series by merging them together.
 
 Filtering is done on a Chunk level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
 
+### External Label Partitioning (Sharding)
+
+Check more [here](https://thanos.io/tip/thanos/sharding.md/).
+
 ## Probes
 
 - Thanos Store exposes two endpoints for probing.
