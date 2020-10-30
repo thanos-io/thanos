@@ -630,7 +630,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		for i := int64(0); i < 10; i++ {
 			samples = append(samples, sample{
 				t: i * 60_000,
-				v:       float64(i),
+				v: float64(i),
 			})
 		}
 
@@ -1630,7 +1630,6 @@ type mockedRulesClient struct {
 func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
 	return &rulespb.RuleGroups{Groups: c.g[req.Type]}, c.w, c.err
 }
-
 
 type sample struct {
 	t int64
