@@ -21,16 +21,18 @@ import (
 
 type Verifier interface {
 	IssueID() string
-	Verify(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool) error
+	Verify(ctx Context, idMatcher func(ulid.ULID) bool) error
 }
 
 type VerifierRepairer interface {
 	IssueID() string
-	VerifyRepair(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool, repair bool) error
+	VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error
 }
 
-// Config is an verifier config.
-type Config struct {
+// Context is an verifier config.
+type Context struct {
+	context.Context
+
 	Logger      log.Logger
 	Bkt         objstore.Bucket
 	BackupBkt   objstore.Bucket
@@ -55,7 +57,7 @@ func newVerifierMetrics(reg prometheus.Registerer) *metrics {
 
 // Manager runs given issues to verify if bucket is healthy.
 type Manager struct {
-	Config
+	Context
 
 	vs Registry
 }
@@ -109,13 +111,18 @@ idLoop:
 }
 
 // New returns verifier's manager.
-func NewManager(reg prometheus.Registerer, config Config, vs Registry) *Manager {
-	if config.metrics == nil {
-		config.metrics = newVerifierMetrics(reg)
-	}
+func NewManager(reg prometheus.Registerer, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, vs Registry) *Manager {
 	return &Manager{
-		Config: config,
-		vs:     vs,
+		Context: Context{
+			Logger:      logger,
+			Bkt:         bkt,
+			BackupBkt:   backupBkt,
+			Fetcher:     fetcher,
+			DeleteDelay: deleteDelay,
+
+			metrics: newVerifierMetrics(reg),
+		},
+		vs: vs,
 	}
 }
 
@@ -130,16 +137,18 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 	level.Info(logger).Log("msg", "Starting verify task")
 
 	for _, v := range m.vs.Verifiers {
-		conf := m.Config
-		conf.Logger = log.With(logger, "verifier", v.IssueID())
-		if err := v.Verify(ctx, conf, idMatcher); err != nil {
+		vCtx := m.Context
+		vCtx.Logger = log.With(logger, "verifier", v.IssueID())
+		vCtx.Context = ctx
+		if err := v.Verify(vCtx, idMatcher); err != nil {
 			return errors.Wrapf(err, "verify %s", v.IssueID())
 		}
 	}
 	for _, vr := range m.vs.VerifierRepairers {
-		conf := m.Config
-		conf.Logger = log.With(logger, "verifier", vr.IssueID())
-		if err := vr.VerifyRepair(ctx, conf, idMatcher, false); err != nil {
+		vCtx := m.Context
+		vCtx.Context = ctx
+		vCtx.Logger = log.With(logger, "verifier", vr.IssueID())
+		if err := vr.VerifyRepair(vCtx, idMatcher, false); err != nil {
 			return errors.Wrapf(err, "verify %s", vr.IssueID())
 		}
 	}
@@ -160,9 +169,10 @@ func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID)
 	level.Info(logger).Log("msg", "Starting verify and repair task")
 
 	for _, vr := range m.vs.VerifierRepairers {
-		conf := m.Config
-		conf.Logger = log.With(logger, "verifier", vr.IssueID())
-		if err := vr.VerifyRepair(ctx, conf, idMatcher, true); err != nil {
+		vCtx := m.Context
+		vCtx.Logger = log.With(logger, "verifier", vr.IssueID())
+		vCtx.Context = ctx
+		if err := vr.VerifyRepair(vCtx, idMatcher, true); err != nil {
 			return errors.Wrapf(err, "verify and repair %s", vr.IssueID())
 		}
 	}

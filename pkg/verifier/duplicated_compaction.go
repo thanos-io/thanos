@@ -4,10 +4,7 @@
 package verifier
 
 import (
-	"context"
-
 	"fmt"
-
 	"strings"
 	"time"
 
@@ -26,14 +23,14 @@ type DuplicatedCompactionBlocks struct{}
 
 func (DuplicatedCompactionBlocks) IssueID() string { return "duplicated_compaction" }
 
-func (DuplicatedCompactionBlocks) VerifyRepair(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool, repair bool) error {
+func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported")
 	}
 
-	level.Info(conf.Logger).Log("msg", "started verifying issue", "with-repair", repair)
+	level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
-	overlaps, err := fetchOverlaps(ctx, conf.Fetcher)
+	overlaps, err := fetchOverlaps(ctx, ctx.Fetcher)
 	if err != nil {
 		return errors.Wrap(err, "fetch overlaps")
 	}
@@ -57,7 +54,7 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx context.Context, conf Config,
 
 			// Loop over duplicates sets.
 			for _, d := range dups {
-				level.Warn(conf.Logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max, "kill", sprintMetas(d[1:]))
+				level.Warn(ctx.Logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max, "kill", sprintMetas(d[1:]))
 
 				for _, m := range d[1:] {
 					if _, ok := toKillLookup[m.ULID]; ok {
@@ -70,25 +67,25 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx context.Context, conf Config,
 			}
 
 			if len(dups) == 0 {
-				level.Warn(conf.Logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
+				level.Warn(ctx.Logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
 					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks))
 			}
 		}
 	}
 
-	level.Warn(conf.Logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill))
+	level.Warn(ctx.Logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill))
 	if !repair {
 		return nil
 	}
 
 	for i, id := range toKill {
-		if err := BackupAndDelete(ctx, conf, id); err != nil {
+		if err := BackupAndDelete(ctx, id); err != nil {
 			return err
 		}
-		level.Info(conf.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
+		level.Info(ctx.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
 	}
 
-	level.Info(conf.Logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap")
+	level.Info(ctx.Logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap")
 	return nil
 }
 
