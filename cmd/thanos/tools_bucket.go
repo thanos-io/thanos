@@ -447,6 +447,8 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 		Default("0000-01-01T00:00:00Z"))
 	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to replicate. Thanos Replicate will replicate only metrics, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
+	ids := cmd.Flag("id", "Block to be replicated to the destination bucket. If this is specified, then only "+
+		"IDs will be used to match blocks and other matchers will be ignored. It only runs once. Repeated field").Strings()
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(*matcherStrs)
@@ -457,6 +459,12 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 		var resolutionLevels []compact.ResolutionLevel
 		for _, lvl := range *resolutions {
 			resolutionLevels = append(resolutionLevels, compact.ResolutionLevel(lvl.Milliseconds()))
+		}
+
+		for _, id := range *ids {
+			if _, err := ulid.Parse(id); err != nil {
+				return errors.Wrap(err, "invalid ULID found in --id flag")
+			}
 		}
 
 		return replicate.RunReplicate(
@@ -474,6 +482,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			*singleRun,
 			minTime,
 			maxTime,
+			*ids,
 		)
 	})
 }
