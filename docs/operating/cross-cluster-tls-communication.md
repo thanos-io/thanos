@@ -396,3 +396,5 @@ spec:
               serviceName: monitoring-rancher-monitor-prometheus
               servicePort: 10901
 ```
+## Summary
+This has outlined a scenario, potential solution and a collection of example configurations. After implementing a setup like this you can expect to be able to have a central Thanos instance that can access sidecars, storegateway's, receivers through standard unsecured HTTP etc. while simultaneously accessing resources (sidecars etc.) located externally in a secure fashion using client-cert authentication and HTTPS/TLS encryption.
