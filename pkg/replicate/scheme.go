@@ -172,8 +172,8 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return err
 	}
 
-	for id, partialError := range partials {
-		level.Info(rs.logger).Log("msg", "failed to fetch block meta. Skipping.", "block_uuid", id.String(), "err", partialError)
+	for id := range partials {
+		level.Info(rs.logger).Log("msg", "block meta not uploaded yet. Skipping.", "block_uuid", id.String())
 	}
 
 	for id, meta := range metas {
