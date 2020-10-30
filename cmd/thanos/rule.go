@@ -116,6 +116,9 @@ func registerRule(app *extkingpin.App) {
 	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
+	httpMethod := cmd.Flag("query.http-method", "HTTP method to use when sending queries. Possible options: [GET, POST]").
+		Default("POST").Enum("GET", "POST")
+
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
 
@@ -210,6 +213,7 @@ func registerRule(app *extkingpin.App) {
 			*dnsSDResolver,
 			comp,
 			*allowOutOfOrderUpload,
+			*httpMethod,
 			getFlagsMap(cmd.Flags()),
 		)
 	})
@@ -299,6 +303,7 @@ func runRule(
 	dnsSDResolver string,
 	comp component.Component,
 	allowOutOfOrderUpload bool,
+	httpMethod string,
 	flagsMap map[string]string,
 ) error {
 	metrics := newRuleMetrics(reg)
@@ -463,7 +468,7 @@ func runRule(
 				Queryable:   db,
 				ResendDelay: resendDelay,
 			},
-			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings),
+			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, httpMethod),
 			lset,
 		)
 
@@ -729,6 +734,7 @@ func queryFuncCreator(
 	queriers []*http_util.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
+	httpMethod string,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -760,6 +766,7 @@ func queryFuncCreator(
 					v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
+						Method:                  httpMethod,
 					})
 					span.Finish()
 
