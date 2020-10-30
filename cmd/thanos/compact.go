@@ -205,13 +205,16 @@ func runCompact(
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	enableVerticalCompaction := false
+	enableVerticalCompaction := conf.enableVerticalCompaction
 	if len(conf.dedupReplicaLabels) > 0 {
 		enableVerticalCompaction = true
 		level.Info(logger).Log(
-			"msg", "deduplication.replica-label specified, vertical compaction is enabled",
-			"dedupReplicaLabels",
-			strings.Join(conf.dedupReplicaLabels, ","),
+			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(conf.dedupReplicaLabels, ","),
+		)
+	}
+	if enableVerticalCompaction {
+		level.Info(logger).Log(
+			"msg", "vertical compaction is enabled", "compact.enable-vertical-compaction", fmt.Sprintf("%v", conf.enableVerticalCompaction),
 		)
 	}
 
@@ -539,6 +542,7 @@ type compactConfig struct {
 	webConf                                        webConfig
 	label                                          string
 	maxBlockIndexSize                              units.Base2Bytes
+	enableVerticalCompaction                       bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -594,6 +598,11 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h").SetValue(&cc.deleteDelay)
+
+	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
+		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
+		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
 		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
