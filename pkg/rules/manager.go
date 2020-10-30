@@ -21,9 +21,9 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
-	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -277,19 +277,19 @@ func (g configRuleAdapter) validate() (errs []error) {
 
 // ValidateAndCount validates all rules in the rule groups and return overal number of rules in all groups.
 // TODO(bwplotka): Replace this with upstream implementation after https://github.com/prometheus/prometheus/issues/7128 is fixed.
-func ValidateAndCount(group io.Reader) (numRules int, errs []error) {
+func ValidateAndCount(group io.Reader) (numRules int, errs errutil.MultiError) {
 	var rgs configGroups
 	d := yaml.NewDecoder(group)
 	d.KnownFields(true)
 	if err := d.Decode(&rgs); err != nil {
-		errs = append(errs, err)
+		errs.Add(err)
 		return 0, errs
 	}
 
 	for _, g := range rgs.Groups {
 		if err := g.validate(); err != nil {
 			for _, e := range err {
-				errs = append(errs, e)
+				errs.Add(e)
 			}
 			return 0, errs
 		}
@@ -309,7 +309,7 @@ type configGroups struct {
 // special field in configGroups.configRuleAdapter struct.
 func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
-		errs            = tsdberrors.NewMulti()
+		errs            = errutil.MultiError{}
 		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
 		ruleFiles       = map[string]string{}
 	)
