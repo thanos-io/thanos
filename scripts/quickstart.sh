@@ -74,8 +74,8 @@ cat >data/rules.yml <<-EOF
 	groups:
 	  - name: example
 	    rules:
-	    - record: job:http_inprogress_requests:sum
-	      expr: sum(http_inprogress_requests) by (job)
+	    - record: job:go_threads:sum
+	      expr: sum(go_threads) by (job)
 EOF
 
 STORES=""
@@ -249,6 +249,20 @@ QUERIER_JAEGER_CONFIG=$(
 	EOF
 )
 
+# Start Thanos Ruler.
+${THANOS_EXECUTABLE} rule \
+  --data-dir data/ \
+  --eval-interval "30s" \
+  --rule-file "data/rules.yml" \
+  --alert.query-url "http://0.0.0.0:9090" \
+  --query "http://0.0.0.0:10904" \
+  --query "http://0.0.0.0:10914" \
+  --http-address="0.0.0.0:19999" \
+  --grpc-address="0.0.0.0:19998" \
+  ${OBJSTORECFG} &
+
+STORES="${STORES} --store 127.0.0.1:19998"
+
 # Start two query nodes.
 for i in $(seq 0 1); do
   ${THANOS_EXECUTABLE} query \
@@ -276,18 +290,6 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
 fi
 
 sleep 0.5
-
-# Start Thanos Ruler.
-${THANOS_EXECUTABLE} rule \
-  --data-dir data/ \
-  --eval-interval "30s" \
-  --rule-file "data/rules.yml" \
-  --alert.query-url "http://0.0.0.0:9090" \
-  --query "http://0.0.0.0:10904" \
-  --query "http://0.0.0.0:10914" \
-  --http-address="0.0.0.0:19999" \
-  --grpc-address="0.0.0.0:19998" \
-  ${OBJSTORECFG} &
 
 echo "all started; waiting for signal"
 
