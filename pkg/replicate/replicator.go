@@ -83,7 +83,6 @@ func RunReplicate(
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
-	deleteOldBlocks bool,
 ) error {
 	logger = log.With(logger, "component", "replicate")
 
@@ -164,14 +163,6 @@ func RunReplicate(
 	}, []string{"result"})
 	replicationRunDuration.WithLabelValues(labelSuccess)
 	replicationRunDuration.WithLabelValues(labelError)
-	blocksCleaned := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_replicate_blocks_cleaned_total",
-		Help: "Total number of blocks deleted in replicator.",
-	})
-	blockCleanupFailures := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_replicate_block_cleanup_failures_total",
-		Help: "Failures encountered while deleting blocks in replicator.",
-	})
 
 	fetcher, err := thanosblock.NewMetaFetcher(
 		logger,
@@ -195,8 +186,6 @@ func RunReplicate(
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	blocksCleaner := compact.NewBlocksCleaner(logger, toBkt, thanosblock.NewIgnoreDeletionMarkFilter(logger, toBkt, time.Hour), time.Hour, blocksCleaned, blockCleanupFailures)
-
 	replicateFn := func() error {
 		timestamp := time.Now()
 		entropy := ulid.Monotonic(rand.New(rand.NewSource(timestamp.UnixNano())), 0)
@@ -209,14 +198,8 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", ulid.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg, maxTime, deleteOldBlocks).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
 			return errors.Wrap(err, "replication execute")
-		}
-
-		if deleteOldBlocks {
-			if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-				return errors.Wrap(err, "failed to delete old blocks")
-			}
 		}
 
 		return nil

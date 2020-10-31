@@ -11,13 +11,9 @@ import (
 	"io/ioutil"
 	"path"
 	"sort"
-	"time"
-
-	"github.com/thanos-io/thanos/pkg/model"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -117,9 +113,6 @@ type replicationScheme struct {
 	metrics *replicationMetrics
 
 	reg prometheus.Registerer
-
-	maxTime                     *model.TimeOrDurationValue
-	markBlocksForFutureDeletion bool
 }
 
 type replicationMetrics struct {
@@ -152,21 +145,19 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, fetcher thanosblock.MetadataFetcher, from objstore.InstrumentedBucketReader, to objstore.Bucket, reg prometheus.Registerer, maxTime *model.TimeOrDurationValue, markFoFutureDeletion bool) *replicationScheme {
+func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, fetcher thanosblock.MetadataFetcher, from objstore.InstrumentedBucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	return &replicationScheme{
-		logger:                      logger,
-		blockFilter:                 blockFilter,
-		fetcher:                     fetcher,
-		fromBkt:                     from,
-		toBkt:                       to,
-		metrics:                     metrics,
-		reg:                         reg,
-		maxTime:                     maxTime,
-		markBlocksForFutureDeletion: markFoFutureDeletion,
+		logger:      logger,
+		blockFilter: blockFilter,
+		fetcher:     fetcher,
+		fromBkt:     from,
+		toBkt:       to,
+		metrics:     metrics,
+		reg:         reg,
 	}
 }
 
@@ -273,14 +264,6 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, meta *
 
 	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewReader(originMetaFileContent)); err != nil {
 		return errors.Wrap(err, "upload meta file")
-	}
-
-	if rs.markBlocksForFutureDeletion {
-		deletionTime := time.Unix(meta.MaxTime/1000, 0).Add(time.Duration(*rs.maxTime.Dur))
-		if err := thanosblock.MarkForFutureDeletion(ctx, rs.logger, rs.toBkt, meta.ULID, deletionTime, nil); err != nil {
-			return errors.Wrap(err, "failed to mark block for future deletion")
-		}
-		rs.metrics.blocksMarkedForDeletion.Inc()
 	}
 
 	rs.metrics.blocksReplicated.Inc()
