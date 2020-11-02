@@ -25,6 +25,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
   stores: StoreListProps;
+  enableMetricAutocomplete: boolean;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -33,6 +34,7 @@ export const PanelListContent: FC<PanelListProps> = ({
   pathPrefix,
   queryHistoryEnabled,
   stores = {},
+  enableMetricAutocomplete,
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
@@ -41,8 +43,8 @@ export const PanelListContent: FC<PanelListProps> = ({
 
   useEffect(() => {
     // Convert stores data to a unified stores array.
-    let storeList: Store[] = [];
-    for (let type in stores) {
+    const storeList: Store[] = [];
+    for (const type in stores) {
       storeList.push(...stores[type]);
     }
     setStoreData(storeList);
@@ -114,6 +116,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
           stores={storeData}
+          enableMetricAutocomplete={enableMetricAutocomplete}
         />
       ))}
       <Button className="mb-3" color="primary" onClick={addPanel}>
@@ -130,6 +133,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
+  const [enableMetricAutocomplete, setEnableMetricAutocomplete] = useLocalStorage('enable-metric-autocomplete', true);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
@@ -178,6 +182,14 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       >
         Enable Store Filtering
       </Checkbox>
+      <Checkbox
+        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+        id="metric-autocomplete"
+        defaultChecked={enableMetricAutocomplete}
+        onChange={({ target }) => setEnableMetricAutocomplete(target.checked)}
+      >
+        Enable metric autocomplete
+      </Checkbox>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
@@ -204,6 +216,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
         stores={debugMode ? storesRes.data : {}}
+        enableMetricAutocomplete={enableMetricAutocomplete}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading}
       />

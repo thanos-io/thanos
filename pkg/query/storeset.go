@@ -104,7 +104,7 @@ func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+		resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 	}
 
 	labelSets = make([]labels.Labels, 0, len(resp.LabelSets))
@@ -254,7 +254,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -262,6 +262,7 @@ func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int6
 	s.labelSets = labelSets
 	s.minTime = minTime
 	s.maxTime = maxTime
+	s.rule = rule
 }
 
 func (s *storeRef) StoreType() component.StoreAPI {
@@ -436,12 +437,13 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				var rule rulespb.RulesClient
-				if _, ok := ruleAddrSet[addr]; ok {
-					rule = rulespb.NewRulesClient(conn)
-				}
 
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, rule: rule, cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
+			}
+
+			var rule rulespb.RulesClient
+			if _, ok := ruleAddrSet[addr]; ok {
+				rule = rulespb.NewRulesClient(st.cc)
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
@@ -468,7 +470,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			s.updateStoreStatus(st, nil)
-			st.Update(labelSets, minTime, maxTime, storeType)
+			st.Update(labelSets, minTime, maxTime, storeType, rule)
 
 			mtx.Lock()
 			defer mtx.Unlock()

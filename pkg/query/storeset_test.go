@@ -19,6 +19,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -57,7 +58,7 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 }
 
 type testStoreMeta struct {
-	extlsetFn        func(addr string) []storepb.LabelSet
+	extlsetFn        func(addr string) []labelpb.ZLabelSet
 	storeType        component.StoreAPI
 	minTime, maxTime int64
 	infoDelay        time.Duration
@@ -133,15 +134,15 @@ func TestStoreSet_Update(t *testing.T) {
 	stores, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "addr", Value: addr},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "a", Value: "b"},
 						},
 					},
@@ -150,15 +151,15 @@ func TestStoreSet_Update(t *testing.T) {
 		},
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "addr", Value: addr},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "a", Value: "b"},
 						},
 					},
@@ -167,10 +168,10 @@ func TestStoreSet_Update(t *testing.T) {
 		},
 		{
 			storeType: component.Query,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "a", Value: "broken"},
 						},
 					},
@@ -261,16 +262,16 @@ func TestStoreSet_Update(t *testing.T) {
 	stores2, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Query,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -280,16 +281,16 @@ func TestStoreSet_Update(t *testing.T) {
 		{
 			// Duplicated Querier, in previous versions it would be deduplicated. Now it should be not.
 			storeType: component.Query,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -298,10 +299,10 @@ func TestStoreSet_Update(t *testing.T) {
 		},
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -312,10 +313,10 @@ func TestStoreSet_Update(t *testing.T) {
 		{
 			// Duplicated Sidecar, in previous versions it would be deduplicated. Now it should be not.
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -326,10 +327,10 @@ func TestStoreSet_Update(t *testing.T) {
 		{
 			// Querier that duplicates with sidecar, in previous versions it would be deduplicated. Now it should be not.
 			storeType: component.Query,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -341,10 +342,10 @@ func TestStoreSet_Update(t *testing.T) {
 			// Ruler that duplicates with sidecar, in previous versions it would be deduplicated. Now it should be not.
 			// Warning should be produced.
 			storeType: component.Rule,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -355,10 +356,10 @@ func TestStoreSet_Update(t *testing.T) {
 		{
 			// Duplicated Rule, in previous versions it would be deduplicated. Now it should be not. Warning should be produced.
 			storeType: component.Rule,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -368,10 +369,10 @@ func TestStoreSet_Update(t *testing.T) {
 		},
 		{
 			// No storeType.
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "no-store-type"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -382,30 +383,30 @@ func TestStoreSet_Update(t *testing.T) {
 		// Two pre v0.8.0 store gateway nodes, they don't have ext labels set.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{}
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
 			},
 		},
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{}
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
 			},
 		},
 		// Regression tests against https://github.com/thanos-io/thanos/issues/1632: From v0.8.0 stores advertise labels.
 		// If the object storage handled by store gateway has only one sidecar we used to hitting issue.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
 						},
 					},
@@ -415,21 +416,21 @@ func TestStoreSet_Update(t *testing.T) {
 		// Stores v0.8.1 has compatibility labels. Check if they are correctly removed.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: store.CompatibilityTypeLabelName, Value: "store"},
 						},
 					},
@@ -439,21 +440,21 @@ func TestStoreSet_Update(t *testing.T) {
 		// Duplicated store, in previous versions it would be deduplicated. Now it should be not.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l3", Value: "v4"},
 						},
 					},
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: store.CompatibilityTypeLabelName, Value: "store"},
 						},
 					},
@@ -499,10 +500,10 @@ func TestStoreSet_Update(t *testing.T) {
 func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 	st, err := startTestStores([]testStoreMeta{
 		{
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -514,10 +515,10 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 			storeType: component.Sidecar,
 		},
 		{
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -564,10 +565,10 @@ func TestQuerierStrict(t *testing.T) {
 		{
 			minTime: 12345,
 			maxTime: 54321,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -581,10 +582,10 @@ func TestQuerierStrict(t *testing.T) {
 		{
 			minTime: 66666,
 			maxTime: 77777,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -599,10 +600,10 @@ func TestQuerierStrict(t *testing.T) {
 		{
 			minTime: 65644,
 			maxTime: 77777,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{
 								Name:  "addr",
 								Value: addr,
@@ -662,14 +663,14 @@ func TestQuerierStrict(t *testing.T) {
 func TestStoreSet_Update_Rules(t *testing.T) {
 	stores, err := startTestStores([]testStoreMeta{
 		{
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{}
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
 			},
 			storeType: component.Sidecar,
 		},
 		{
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{}
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
 			},
 			storeType: component.Rule,
 		},
@@ -772,6 +773,196 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 			}
 
 			testutil.Equals(t, tc.expectedRules, gotRules)
+		})
+	}
+}
+
+func TestStoreSet_Rules_Discovery(t *testing.T) {
+	stores, err := startTestStores([]testStoreMeta{
+		{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
+			},
+			storeType: component.Sidecar,
+		},
+		{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{}
+			},
+			storeType: component.Rule,
+		},
+	})
+	testutil.Ok(t, err)
+	defer stores.Close()
+
+	type discoveryState struct {
+		name           string
+		storeSpecs     func() []StoreSpec
+		ruleSpecs      func() []RuleSpec
+		expectedStores int
+		expectedRules  int
+	}
+
+	for _, tc := range []struct {
+		states []discoveryState
+		name   string
+	}{
+		{
+			name: "StoreAPI and RulesAPI concurrent discovery",
+			states: []discoveryState{
+				{
+					name:           "no stores",
+					storeSpecs:     nil,
+					ruleSpecs:      nil,
+					expectedRules:  0,
+					expectedStores: 0,
+				},
+				{
+					name: "RulesAPI discovered",
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedRules:  1,
+					expectedStores: 1,
+				},
+			},
+		},
+
+		{
+			name: "StoreAPI discovery first, eventually discovered RulesAPI",
+			states: []discoveryState{
+				{
+					name:           "no stores",
+					storeSpecs:     nil,
+					ruleSpecs:      nil,
+					expectedRules:  0,
+					expectedStores: 0,
+				},
+				{
+					name: "StoreAPI discovered, no RulesAPI discovered",
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  0,
+				},
+				{
+					name: "RulesAPI discovered",
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  1,
+				},
+			},
+		},
+
+		{
+			name: "RulesAPI discovery first, eventually discovered StoreAPI",
+			states: []discoveryState{
+				{
+					name:           "no stores",
+					storeSpecs:     nil,
+					ruleSpecs:      nil,
+					expectedRules:  0,
+					expectedStores: 0,
+				},
+				{
+					name:       "RulesAPI discovered, no StoreAPI discovered",
+					storeSpecs: nil,
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 0,
+					expectedRules:  0,
+				},
+				{
+					name: "StoreAPI discovered",
+					storeSpecs: func() []StoreSpec {
+						return []StoreSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					ruleSpecs: func() []RuleSpec {
+						return []RuleSpec{
+							NewGRPCStoreSpec(stores.orderAddrs[0], false),
+						}
+					},
+					expectedStores: 1,
+					expectedRules:  1,
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			currentState := 0
+
+			storeSet := NewStoreSet(nil, nil,
+				func() []StoreSpec {
+					if tc.states[currentState].storeSpecs == nil {
+						return nil
+					}
+
+					return tc.states[currentState].storeSpecs()
+				},
+				func() []RuleSpec {
+					if tc.states[currentState].ruleSpecs == nil {
+						return nil
+					}
+
+					return tc.states[currentState].ruleSpecs()
+				},
+				testGRPCOpts, time.Minute)
+
+			defer storeSet.Close()
+
+			for {
+				storeSet.Update(context.Background())
+				testutil.Equals(
+					t,
+					tc.states[currentState].expectedStores,
+					len(storeSet.stores),
+					"unexepected discovered stores in state %q",
+					tc.states[currentState].name,
+				)
+
+				gotRules := 0
+				for _, ref := range storeSet.stores {
+					if ref.HasRulesAPI() {
+						gotRules += 1
+					}
+				}
+				testutil.Equals(
+					t,
+					tc.states[currentState].expectedRules,
+					gotRules,
+					"unexpected discovered rules in state %q",
+					tc.states[currentState].name,
+				)
+
+				currentState = currentState + 1
+				if len(tc.states) == currentState {
+					break
+				}
+			}
 		})
 	}
 }

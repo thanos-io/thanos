@@ -42,33 +42,65 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
-			CortexFrontendConfig:     &cortexfrontend.Config{},
-			CortexLimits:             &cortexvalidation.Limits{},
-			CortexResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+			// Max body size is 10 MiB.
+			CortexFrontendConfig: &cortexfrontend.Config{MaxBodySize: 10 * 1024 * 1024},
+			QueryRangeConfig: queryfrontend.QueryRangeConfig{
+				Limits:             &cortexvalidation.Limits{},
+				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+			},
+			LabelsConfig: queryfrontend.LabelsConfig{
+				Limits:             &cortexvalidation.Limits{},
+				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+			},
 		},
 	}
 
 	cfg.http.registerFlag(cmd)
 
-	cmd.Flag("query-range.split-interval", "Split queries by an interval and execute in parallel, it should be greater than 0 when response-cache-config is configured.").
-		Default("24h").DurationVar(&cfg.SplitQueriesByInterval)
+	// Query range tripperware flags.
+	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
 
-	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single request; beyond this, the downstream error is returned.").
-		Default("5").IntVar(&cfg.MaxRetries)
+	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
+		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
+
+	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
+		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
-		Default("0").DurationVar(&cfg.CortexLimits.MaxQueryLength)
+		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLength)
 
-	cmd.Flag("query-range.max-query-parallelism", "Maximum number of queries will be scheduled in parallel by the Frontend.").
-		Default("14").IntVar(&cfg.CortexLimits.MaxQueryParallelism)
+	cmd.Flag("query-range.max-query-parallelism", "Maximum number of query range requests will be scheduled in parallel by the Frontend.").
+		Default("14").IntVar(&cfg.QueryRangeConfig.Limits.MaxQueryParallelism)
 
-	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.CortexLimits.MaxCacheFreshness)
+	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result for query range requests, to prevent caching very recent results that might still be in flux.").
+		Default("1m").DurationVar(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness)
 
-	cmd.Flag("query-range.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query-range.partial-response for disabling.").
-		Default("true").BoolVar(&cfg.PartialResponseStrategy)
+	cmd.Flag("query-range.partial-response", "Enable partial response for query range requests if no partial_response param is specified. --no-query-range.partial-response for disabling.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.PartialResponseStrategy)
 
-	cfg.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
+
+	// Labels tripperware flags.
+	cmd.Flag("labels.split-interval", "Split labels requests by an interval and execute in parallel, it should be greater than 0 when labels.response-cache-config is configured.").
+		Default("24h").DurationVar(&cfg.LabelsConfig.SplitQueriesByInterval)
+
+	cmd.Flag("labels.max-retries-per-request", "Maximum number of retries for a single label/series API request; beyond this, the downstream error is returned.").
+		Default("5").IntVar(&cfg.LabelsConfig.MaxRetries)
+
+	cmd.Flag("labels.max-query-parallelism", "Maximum number of labels requests will be scheduled in parallel by the Frontend.").
+		Default("14").IntVar(&cfg.LabelsConfig.Limits.MaxQueryParallelism)
+
+	cmd.Flag("labels.response-cache-max-freshness", "Most recent allowed cacheable result for labels requests, to prevent caching very recent results that might still be in flux.").
+		Default("1m").DurationVar(&cfg.LabelsConfig.Limits.MaxCacheFreshness)
+
+	cmd.Flag("labels.partial-response", "Enable partial response for labels requests if no partial_response param is specified. --no-labels.partial-response for disabling.").
+		Default("true").BoolVar(&cfg.LabelsConfig.PartialResponseStrategy)
+
+	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
+		Default("24h").DurationVar(&cfg.DefaultTimeRange)
+
+	cfg.LabelsConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "labels.response-cache-config", "YAML file that contains response cache configuration.", false)
 
 	cmd.Flag("cache-compression-type", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
 		Default("").StringVar(&cfg.CacheCompression)
@@ -97,20 +129,31 @@ func runQueryFrontend(
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
-	cacheConfContentYaml, err := cfg.CachePathOrContent.Content()
+	queryRangeCacheConfContentYaml, err := cfg.QueryRangeConfig.CachePathOrContent.Content()
 	if err != nil {
 		return err
 	}
-	if len(cacheConfContentYaml) > 0 {
-		cacheConfig, err := queryfrontend.NewCacheConfig(logger, cacheConfContentYaml)
+	if len(queryRangeCacheConfContentYaml) > 0 {
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
 		if err != nil {
-			return errors.Wrap(err, "initializing the query frontend config")
+			return errors.Wrap(err, "initializing the query range cache config")
 		}
-		if cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration == 0 {
-			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
-			cfg.CortexResultsCacheConfig.CacheConfig.Memcache.Expiration = 24 * time.Hour
+		cfg.QueryRangeConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
+			Compression: cfg.CacheCompression,
+			CacheConfig: *cacheConfig,
 		}
-		cfg.CortexResultsCacheConfig = &queryrange.ResultsCacheConfig{
+	}
+
+	labelsCacheConfContentYaml, err := cfg.LabelsConfig.CachePathOrContent.Content()
+	if err != nil {
+		return err
+	}
+	if len(labelsCacheConfContentYaml) > 0 {
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "initializing the labels cache config")
+		}
+		cfg.LabelsConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
 			Compression: cfg.CacheCompression,
 			CacheConfig: *cacheConfig,
 		}
@@ -128,7 +171,7 @@ func runQueryFrontend(
 
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
-		return errors.Wrap(err, "setup query range middlewares")
+		return errors.Wrap(err, "setup tripperwares")
 	}
 
 	fe.Wrap(tripperWare)

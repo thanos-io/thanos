@@ -1,0 +1,11 @@
+{{ $tip := "tip"}}
+<script nonce="93HDK8392dfjh4Gb" type="text/javascript"
+    src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
+<script nonce="93HDK8392dfjh4Gb" type="text/javascript"> docsearch({
+        apiKey: '649aaeb84811844d97cb5aa0398b94d9',
+        indexName: 'thanos',
+        inputSelector: '#searchInput',
+        algoliaOptions: { 'facetFilters': ["version:{{ $tip }}"] },
+        debug: false // Set debug to true if you want to inspect the dropdown.
+    });
+</script>

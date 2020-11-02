@@ -18,13 +18,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestCodec_DecodeRequest(t *testing.T) {
+func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		url             string
 		partialResponse bool
 		expectedError   error
-		expectedRequest *ThanosRequest
+		expectedRequest *ThanosQueryRangeRequest
 	}{
 		{
 			name:            "instant query, no params set",
@@ -89,7 +89,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 		{
 			name: "auto downsampling enabled",
 			url:  "/api/v1/query_range?start=123&end=456&step=10&max_source_resolution=auto",
-			expectedRequest: &ThanosRequest{
+			expectedRequest: &ThanosQueryRangeRequest{
 				Path:                "/api/v1/query_range",
 				Start:               123000,
 				End:                 456000,
@@ -110,7 +110,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			name:            "partial_response default to true",
 			url:             "/api/v1/query_range?start=123&end=456&step=1",
 			partialResponse: true,
-			expectedRequest: &ThanosRequest{
+			expectedRequest: &ThanosQueryRangeRequest{
 				Path:            "/api/v1/query_range",
 				Start:           123000,
 				End:             456000,
@@ -124,7 +124,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			name:            "partial_response default to false, but set to true in query",
 			url:             "/api/v1/query_range?start=123&end=456&step=1&partial_response=true",
 			partialResponse: false,
-			expectedRequest: &ThanosRequest{
+			expectedRequest: &ThanosQueryRangeRequest{
 				Path:            "/api/v1/query_range",
 				Start:           123000,
 				End:             456000,
@@ -138,7 +138,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			name:            "replicaLabels",
 			url:             "/api/v1/query_range?start=123&end=456&step=1&replicaLabels[]=foo&replicaLabels[]=bar",
 			partialResponse: false,
-			expectedRequest: &ThanosRequest{
+			expectedRequest: &ThanosQueryRangeRequest{
 				Path:          "/api/v1/query_range",
 				Start:         123000,
 				End:           456000,
@@ -152,7 +152,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			name:            "storeMatchers",
 			url:             `/api/v1/query_range?start=123&end=456&step=1&storeMatch[]={__address__="localhost:10901", cluster="test"}`,
 			partialResponse: false,
-			expectedRequest: &ThanosRequest{
+			expectedRequest: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
 				Start: 123000,
 				End:   456000,
@@ -171,7 +171,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			testutil.Ok(t, err)
 
-			codec := NewThanosCodec(tc.partialResponse)
+			codec := NewThanosQueryRangeCodec(tc.partialResponse)
 			req, err := codec.DecodeRequest(context.Background(), r)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
@@ -183,7 +183,7 @@ func TestCodec_DecodeRequest(t *testing.T) {
 	}
 }
 
-func TestCodec_EncodeRequest(t *testing.T) {
+func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		expectedError error
@@ -197,7 +197,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "normal thanos request",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Start: 123000,
 				End:   456000,
 				Step:  1000,
@@ -210,7 +210,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "Dedup enabled",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Start: 123000,
 				End:   456000,
 				Step:  1000,
@@ -225,7 +225,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "Partial response set to true",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Start:           123000,
 				End:             456000,
 				Step:            1000,
@@ -240,7 +240,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "Downsampling resolution set to 5m",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Start:               123000,
 				End:                 456000,
 				Step:                1000,
@@ -255,7 +255,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "Downsampling resolution set to 1h",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Start:               123000,
 				End:                 456000,
 				Step:                1000,
@@ -271,7 +271,7 @@ func TestCodec_EncodeRequest(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Default partial response value doesn't matter when encoding requests.
-			codec := NewThanosCodec(false)
+			codec := NewThanosQueryRangeCodec(false)
 			r, err := codec.EncodeRequest(context.TODO(), tc.req)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)

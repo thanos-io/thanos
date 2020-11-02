@@ -27,8 +27,8 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/tsdb"
-	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/util/strutil"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -94,7 +94,7 @@ func registerRule(app *extkingpin.App) {
 
 	alertExcludeLabels := cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		Strings()
-	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
@@ -115,6 +115,9 @@ func registerRule(app *extkingpin.App) {
 
 	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
+
+	httpMethod := cmd.Flag("query.http-method", "HTTP method to use when sending queries. Possible options: [GET, POST]").
+		Default("POST").Enum("GET", "POST")
 
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
@@ -210,6 +213,7 @@ func registerRule(app *extkingpin.App) {
 			*dnsSDResolver,
 			comp,
 			*allowOutOfOrderUpload,
+			*httpMethod,
 			getFlagsMap(cmd.Flags()),
 		)
 	})
@@ -299,6 +303,7 @@ func runRule(
 	dnsSDResolver string,
 	comp component.Component,
 	allowOutOfOrderUpload bool,
+	httpMethod string,
 	flagsMap map[string]string,
 ) error {
 	metrics := newRuleMetrics(reg)
@@ -463,7 +468,7 @@ func runRule(
 				Queryable:   db,
 				ResendDelay: resendDelay,
 			},
-			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings),
+			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, httpMethod),
 			lset,
 		)
 
@@ -729,6 +734,7 @@ func queryFuncCreator(
 	queriers []*http_util.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
+	httpMethod string,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -760,6 +766,7 @@ func queryFuncCreator(
 					v, warns, err := promClient.PromqlQueryInstant(ctx, endpoints[i], q, t, promclient.QueryOptions{
 						Deduplicate:             true,
 						PartialResponseStrategy: partialResponseStrategy,
+						Method:                  httpMethod,
 					})
 					span.Finish()
 
@@ -805,7 +812,7 @@ func reloadRules(logger log.Logger,
 	metrics *RuleMetrics) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 	var (
-		errs      tsdberrors.MultiError
+		errs      errutil.MultiError
 		files     []string
 		seenFiles = make(map[string]struct{})
 	)

@@ -231,13 +231,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.LabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
 			continue
 		}
 
 		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
 			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.LabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -435,25 +435,25 @@ func (x LabelMatcher_Type) PromString() string {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.LabelsToPromLabels(m.Labels)
+	return labelpb.ZLabelsToPromLabels(m.Labels)
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
-type Label = labelpb.Label
+type Label = labelpb.ZLabel
 
 // Deprecated.
 // TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
-type LabelSet = labelpb.LabelSet
+type LabelSet = labelpb.ZLabelSet
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func CompareLabels(a, b []Label) int {
-	return labels.Compare(labelpb.LabelsToPromLabels(a), labelpb.LabelsToPromLabels(b))
+	return labels.Compare(labelpb.ZLabelsToPromLabels(a), labelpb.ZLabelsToPromLabels(b))
 }
 
 // Deprecated.
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
-	return labelpb.LabelsToPromLabels(lset)
+	return labelpb.ZLabelsToPromLabels(lset)
 }

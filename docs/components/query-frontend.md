@@ -85,6 +85,11 @@ config:
   expiration: 0s
 ```
 
+`expiration` specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
+
+Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
+
+
 ### Slow Query Log
 
 Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
@@ -102,71 +107,112 @@ usage: thanos query-frontend [<flags>]
 query frontend
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
-      --log.format=logfmt     Log format to use. Possible options: logfmt or
-                              json.
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --version                  Show application version.
+      --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use. Possible options: logfmt or
+                                 json.
       --tracing.config-file=<file-path>
-                              Path to YAML file with tracing configuration. See
-                              format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                              Alternative to 'tracing.config-file' flag (lower
-                              priority). Content of YAML file with tracing
-                              configuration. See format details:
-                              https://thanos.io/tip/thanos/tracing.md/#configuration
+                                 Alternative to 'tracing.config-file' flag
+                                 (lower priority). Content of YAML file with
+                                 tracing configuration. See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
+                                 Listen host:port for HTTP endpoints.
+      --http-grace-period=2m     Time to wait after an interrupt received for
+                                 HTTP Server.
+      --query-range.align-range-with-step
+                                 Mutate incoming queries to align their start
+                                 and end with their step for better
+                                 cache-ability. Note: Grafana dashboards do that
+                                 by default.
       --query-range.split-interval=24h
-                              Split queries by an interval and execute in
-                              parallel, it should be greater than 0 when
-                              response-cache-config is configured.
+                                 Split query range requests by an interval and
+                                 execute in parallel, it should be greater than
+                                 0 when query-range.response-cache-config is
+                                 configured.
       --query-range.max-retries-per-request=5
-                              Maximum number of retries for a single request;
-                              beyond this, the downstream error is returned.
+                                 Maximum number of retries for a single query
+                                 range request; beyond this, the downstream
+                                 error is returned.
       --query-range.max-query-length=0
-                              Limit the query time range (end - start time) in
-                              the query-frontend, 0 disables it.
+                                 Limit the query time range (end - start time)
+                                 in the query-frontend, 0 disables it.
       --query-range.max-query-parallelism=14
-                              Maximum number of queries will be scheduled in
-                              parallel by the Frontend.
+                                 Maximum number of query range requests will be
+                                 scheduled in parallel by the Frontend.
       --query-range.response-cache-max-freshness=1m
-                              Most recent allowed cacheable result, to prevent
-                              caching very recent results that might still be in
-                              flux.
+                                 Most recent allowed cacheable result for query
+                                 range requests, to prevent caching very recent
+                                 results that might still be in flux.
       --query-range.partial-response
-                              Enable partial response for queries if no
-                              partial_response param is specified.
-                              --no-query-range.partial-response for disabling.
+                                 Enable partial response for query range
+                                 requests if no partial_response param is
+                                 specified. --no-query-range.partial-response
+                                 for disabling.
       --query-range.response-cache-config-file=<file-path>
-                              Path to YAML file that contains response cache
-                              configuration.
+                                 Path to YAML file that contains response cache
+                                 configuration.
       --query-range.response-cache-config=<content>
-                              Alternative to
-                              'query-range.response-cache-config-file' flag
-                              (lower priority). Content of YAML file that
-                              contains response cache configuration.
+                                 Alternative to
+                                 'query-range.response-cache-config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains response cache configuration.
+      --labels.split-interval=24h
+                                 Split labels requests by an interval and
+                                 execute in parallel, it should be greater than
+                                 0 when labels.response-cache-config is
+                                 configured.
+      --labels.max-retries-per-request=5
+                                 Maximum number of retries for a single
+                                 label/series API request; beyond this, the
+                                 downstream error is returned.
+      --labels.max-query-parallelism=14
+                                 Maximum number of labels requests will be
+                                 scheduled in parallel by the Frontend.
+      --labels.response-cache-max-freshness=1m
+                                 Most recent allowed cacheable result for labels
+                                 requests, to prevent caching very recent
+                                 results that might still be in flux.
+      --labels.partial-response  Enable partial response for labels requests if
+                                 no partial_response param is specified.
+                                 --no-labels.partial-response for disabling.
+      --labels.default-time-range=24h
+                                 The default metadata time range duration for
+                                 retrieving labels through Labels and Series API
+                                 when the range parameters are not specified.
+      --labels.response-cache-config-file=<file-path>
+                                 Path to YAML file that contains response cache
+                                 configuration.
+      --labels.response-cache-config=<content>
+                                 Alternative to
+                                 'labels.response-cache-config-file' flag (lower
+                                 priority). Content of YAML file that contains
+                                 response cache configuration.
       --cache-compression-type=""
-                              Use compression in results cache. Supported values
-                              are: 'snappy' and ” (disable compression).
+                                 Use compression in results cache. Supported
+                                 values are: 'snappy' and ” (disable
+                                 compression).
       --query-frontend.downstream-url="http://localhost:9090"
-                              URL of downstream Prometheus Query compatible API.
+                                 URL of downstream Prometheus Query compatible
+                                 API.
       --query-frontend.compress-responses
-                              Compress HTTP responses.
+                                 Compress HTTP responses.
       --query-frontend.log-queries-longer-than=0
-                              Log queries that are slower than the specified
-                              duration. Set to 0 to disable. Set to < 0 to
-                              enable on all queries.
+                                 Log queries that are slower than the specified
+                                 duration. Set to 0 to disable. Set to < 0 to
+                                 enable on all queries.
       --log.request.decision=LogFinishCall
-                              Request Logging for logging the start and end of
-                              requests. LogFinishCall is enabled by default.
-                              LogFinishCall : Logs the finish call of the
-                              requests. LogStartAndFinishCall : Logs the start
-                              and finish call of the requests. NoLogCall :
-                              Disable request logging.
+                                 Request Logging for logging the start and end
+                                 of requests. LogFinishCall is enabled by
+                                 default. LogFinishCall : Logs the finish call
+                                 of the requests. LogStartAndFinishCall : Logs
+                                 the start and finish call of the requests.
+                                 NoLogCall : Disable request logging.
 
 ```

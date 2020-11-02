@@ -20,6 +20,8 @@ type options struct {
 	network     string
 
 	tlsConfig *tls.Config
+
+	grpcOpts []grpc.ServerOption
 }
 
 // Option overrides behavior of Server.
@@ -40,6 +42,14 @@ type registerServerFunc func(s *grpc.Server)
 func WithServer(f registerServerFunc) Option {
 	return optionFunc(func(o *options) {
 		o.registerServerFuncs = append(o.registerServerFuncs, f)
+	})
+}
+
+// WithGRPCServerOption allows adding raw grpc.ServerOption's to the
+// instantiated gRPC server.
+func WithGRPCServerOption(opt grpc.ServerOption) Option {
+	return optionFunc(func(o *options) {
+		o.grpcOpts = append(o.grpcOpts, opt)
 	})
 }
 

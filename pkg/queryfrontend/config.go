@@ -88,6 +88,16 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			level.Warn(logger).Log("message", "MaxItemSize is not yet supported by the memcached client")
 		}
 
+		if config.Expiration == 0 {
+			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
+			config.Expiration = 24 * time.Hour
+		}
+
+		if config.Memcached.DNSProviderUpdateInterval <= 0 {
+			level.Warn(logger).Log("msg", "memcached dns provider update interval time set to invalid value, defaulting to 10s")
+			config.Memcached.DNSProviderUpdateInterval = 10 * time.Second
+		}
+
 		return &cortexcache.Config{
 			Memcache: cortexcache.MemcachedConfig{
 				Expiration:  config.Expiration,
@@ -112,32 +122,69 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 
 // Config holds the query frontend configs.
 type Config struct {
+	QueryRangeConfig
+	LabelsConfig
+
+	CortexFrontendConfig   *cortexfrontend.Config
+	CacheCompression       string
+	RequestLoggingDecision string
+}
+
+// QueryRangeConfig holds the config for query range tripperware.
+type QueryRangeConfig struct {
 	// PartialResponseStrategy is the default strategy used
 	// when parsing thanos query request.
 	PartialResponseStrategy bool
 
-	CortexFrontendConfig     *cortexfrontend.Config
-	CortexLimits             *cortexvalidation.Limits
-	CortexResultsCacheConfig *queryrange.ResultsCacheConfig
+	ResultsCacheConfig *queryrange.ResultsCacheConfig
+	CachePathOrContent extflag.PathOrContent
 
-	CachePathOrContent     extflag.PathOrContent
-	CacheCompression       string
-	RequestLoggingDecision string
+	AlignRangeWithStep     bool
+	SplitQueriesByInterval time.Duration
+	MaxRetries             int
+	Limits                 *cortexvalidation.Limits
+}
+
+// LabelsConfig holds the config for labels tripperware.
+type LabelsConfig struct {
+	// PartialResponseStrategy is the default strategy used
+	// when parsing thanos query request.
+	PartialResponseStrategy bool
+	DefaultTimeRange        time.Duration
+
+	ResultsCacheConfig *queryrange.ResultsCacheConfig
+	CachePathOrContent extflag.PathOrContent
 
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
+
+	Limits *cortexvalidation.Limits
 }
 
 // Validate a fully initialized config.
 func (cfg *Config) Validate() error {
-	if cfg.CortexResultsCacheConfig != nil {
-		if cfg.SplitQueriesByInterval <= 0 {
-			return errors.New("split queries interval should be greater then 0")
+	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
+		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 {
+			return errors.New("split queries interval should be greater than 0 when caching is enabled")
 		}
-		if err := cfg.CortexResultsCacheConfig.Validate(); err != nil {
-			return errors.Wrap(err, "invalid ResultsCache config")
+		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(); err != nil {
+			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
 		}
 	}
+
+	if cfg.LabelsConfig.ResultsCacheConfig != nil {
+		if cfg.LabelsConfig.SplitQueriesByInterval <= 0 {
+			return errors.New("split queries interval should be greater than 0  when caching is enabled")
+		}
+		if err := cfg.LabelsConfig.ResultsCacheConfig.Validate(); err != nil {
+			return errors.Wrap(err, "invalid ResultsCache config for labels tripperware")
+		}
+	}
+
+	if cfg.LabelsConfig.DefaultTimeRange == 0 {
+		return errors.New("labels.default-time-range cannot be set to 0")
+	}
+
 	if len(cfg.CortexFrontendConfig.DownstreamURL) == 0 {
 		return errors.New("downstream URL should be configured")
 	}

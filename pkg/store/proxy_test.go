@@ -73,7 +73,7 @@ func TestProxyStore_Info(t *testing.T) {
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []storepb.LabelSet(nil), resp.LabelSets)
+	testutil.Equals(t, []labelpb.ZLabelSet(nil), resp.LabelSets)
 	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
 	testutil.Equals(t, int64(0), resp.MinTime)
 	testutil.Equals(t, int64(0), resp.MaxTime)
@@ -1383,7 +1383,7 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n %v", got)
 
 	for i, series := range got {
-		testutil.Equals(t, expected[i].lset, labelpb.LabelsToPromLabels(series.Labels))
+		testutil.Equals(t, expected[i].lset, labelpb.ZLabelsToPromLabels(series.Labels))
 		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks for series %v", series.Labels)
 
 		for k, chk := range series.Chunks {
@@ -1654,7 +1654,7 @@ func (c *StoreSeriesClient) Context() context.Context {
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	s.Labels = append(s.Labels, labelpb.LabelsFromPromLabels(lset)...)
+	s.Labels = append(s.Labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()

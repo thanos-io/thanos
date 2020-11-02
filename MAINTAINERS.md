@@ -22,6 +22,8 @@ Feel free to contact us (preferably on Slack) anytime for feedback, questions or
 
 Especially feedback, please share if you have ideas what we can do better!
 
+You can reach us under `thanos-io@googlegroups.com` email.
+
 ## Triage
 
 We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization)

@@ -43,7 +43,7 @@ Keep in mind, that the initial goal of downsampling is not saving disk space (Re
 
 To avoid confusion - you might want to think about `raw` data as about "zoom in" opportunity. Considering the values for mentioned options - always think "Will I need to zoom in to the day 1 year ago?" if the answer "yes" - you most likely want to keep raw data for as long as 1h and 5m resolution, otherwise you'll be able to see only downsampled representation of how your raw data looked like.
 
-There's also a case when you might want to disable downsampling at all with `debug.disable-downsampling`. You might want to do it when you know for sure that you are not going to request long ranges of data (obviously, because without downsampling those requests are going to be much much more expensive than with it). A valid example of that case if when you only care about the last couple of weeks of your data or use it only for alerting, but if it's your case - you also need to ask yourself if you want to introduce Thanos at all instead of vanilla Prometheus?
+There's also a case when you might want to disable downsampling at all with `--downsampling.disable`. You might want to do it when you know for sure that you are not going to request long ranges of data (obviously, because without downsampling those requests are going to be much much more expensive than with it). A valid example of that case is when you only care about the last couple weeks of your data or use it only for alerting, but if that's your case - you also need to ask yourself if you want to introduce Thanos at all instead of just vanilla Prometheus?
 
 Ideally, you will have equal retention set (or no retention at all) to all resolutions which allow both "zoom in" capabilities as well as performant long ranges queries. Since object storages are usually quite cheap, storage size might not matter that much, unless your goal with thanos is somewhat very specific and you know exactly what you're doing.
 
@@ -147,6 +147,12 @@ Flags:
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --compact.cleanup-interval=5m
+                                How often we should clean up partially uploaded
+                                blocks and blocks with deletion mark in the
+                                background when --wait has been enabled. Setting
+                                it to "0s" disables it - the cleaning will only
+                                happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
       --delete-delay=48h        Time before a block marked for deletion is

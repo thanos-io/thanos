@@ -19,15 +19,15 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-message LabelSet {
-    repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Label"];
-}
-
-message FullCopyLabel {
+message Label {
     string name  = 1;
     string value = 2;
 }
 
-message FullCopyLabelSet {
-    repeated FullCopyLabel labels = 1 [(gogoproto.nullable) = false];
+message LabelSet {
+    repeated Label labels = 1 [(gogoproto.nullable) = false];
+}
+
+message ZLabelSet {
+    repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ZLabel"];
 }

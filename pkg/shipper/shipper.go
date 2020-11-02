@@ -282,6 +282,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			return 0, errors.Wrap(err, "check exists")
 		}
 		if ok {
+			meta.Uploaded = append(meta.Uploaded, m.ULID)
 			continue
 		}
 
