@@ -40,8 +40,8 @@ const (
 )
 
 const (
-	// MetaVersion is a enumeration of meta versions supported by Thanos.
-	MetaVersion1 = iota + 1
+	// MetaVersion is a enumeration of TSDB meta versions supported by Thanos.
+	TSDBVersion1 = iota + 1
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
@@ -54,6 +54,10 @@ type Meta struct {
 
 // Thanos holds block meta information specific to Thanos.
 type Thanos struct {
+	// Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version
+	// specified).
+	Version int `json:"version"`
+
 	Labels     map[string]string `json:"labels"`
 	Downsample ThanosDownsample  `json:"downsample"`
 
@@ -145,7 +149,7 @@ func Read(dir string) (*Meta, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
-	if m.Version != MetaVersion1 {
+	if m.Version != TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
 	return &m, nil

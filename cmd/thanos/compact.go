@@ -280,7 +280,7 @@ func runCompact(
 
 	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, compact.NewTSDBPlanner(logger, levels), comp, compactDir, bkt, conf.compactionConcurrency)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
