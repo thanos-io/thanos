@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -119,8 +120,6 @@ type replicationMetrics struct {
 	blocksAlreadyReplicated prometheus.Counter
 	blocksReplicated        prometheus.Counter
 	objectsReplicated       prometheus.Counter
-
-	blocksMarkedForDeletion prometheus.Counter
 }
 
 func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
@@ -137,15 +136,19 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 			Name: "thanos_replicate_objects_replicated_total",
 			Help: "Total number of objects replicated.",
 		}),
-		blocksMarkedForDeletion: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_replicate_blocks_marked_for_deletion_total",
-			Help: "Total number of blocks marked for deletion in compactor.",
-		}),
 	}
 	return m
 }
 
-func newReplicationScheme(logger log.Logger, metrics *replicationMetrics, blockFilter blockFilterFunc, fetcher thanosblock.MetadataFetcher, from objstore.InstrumentedBucketReader, to objstore.Bucket, reg prometheus.Registerer) *replicationScheme {
+func newReplicationScheme(
+	logger log.Logger,
+	metrics *replicationMetrics,
+	blockFilter blockFilterFunc,
+	fetcher thanosblock.MetadataFetcher,
+	from objstore.InstrumentedBucketReader,
+	to objstore.Bucket,
+	reg prometheus.Registerer,
+) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -187,7 +190,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 	})
 
 	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b); err != nil {
+		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
 			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 		}
 	}
@@ -197,8 +200,8 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is
 // present in the target bucket.
-func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, meta *metadata.Meta) error {
-	blockID := meta.ULID.String()
+func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id ulid.ULID) error {
+	blockID := id.String()
 	chunksDir := path.Join(blockID, thanosblock.ChunksDirname)
 	indexFile := path.Join(blockID, thanosblock.IndexFilename)
 	metaFile := path.Join(blockID, thanosblock.MetaFilename)
@@ -238,7 +241,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, meta *
 			// If the origin meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
-			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", meta.ULID.String())
+			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
 			rs.metrics.blocksAlreadyReplicated.Inc()
 
 			return nil
