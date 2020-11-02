@@ -4,6 +4,7 @@
 package queryfrontend
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"net/http"
@@ -155,17 +156,11 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 	}
 
-	u := &url.URL{
-		Path:     thanosReq.Path,
-		RawQuery: params.Encode(),
+	req, err := http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
+	if err != nil {
+		return nil, httpgrpc.Errorf(http.StatusBadRequest, "error creating request: %s", err.Error())
 	}
-	req := &http.Request{
-		Method:     "GET",
-		RequestURI: u.String(), // This is what the httpgrpc code looks at.
-		URL:        u,
-		Body:       http.NoBody,
-		Header:     http.Header{},
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	return req.WithContext(ctx), nil
 }

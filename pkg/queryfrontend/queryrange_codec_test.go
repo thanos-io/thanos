@@ -203,9 +203,9 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				Step:  1000,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
-					r.URL.Query().Get("step") == "1"
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1"
 			},
 		},
 		{
@@ -217,10 +217,10 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				Dedup: true,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
-					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get(queryv1.DedupParam) == "true"
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue(queryv1.DedupParam) == "true"
 			},
 		},
 		{
@@ -232,10 +232,10 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				PartialResponse: true,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
-					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue(queryv1.PartialResponseParam) == "true"
 			},
 		},
 		{
@@ -247,10 +247,10 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				MaxSourceResolution: int64(compact.ResolutionLevel5m),
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
-					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get(queryv1.MaxSourceResolutionParam) == "300"
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue(queryv1.MaxSourceResolutionParam) == "300"
 			},
 		},
 		{
@@ -262,10 +262,10 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				MaxSourceResolution: int64(compact.ResolutionLevel1h),
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get("start") == "123" &&
-					r.URL.Query().Get("end") == "456" &&
-					r.URL.Query().Get("step") == "1" &&
-					r.URL.Query().Get(queryv1.MaxSourceResolutionParam) == "3600"
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue(queryv1.MaxSourceResolutionParam) == "3600"
 			},
 		},
 	} {
