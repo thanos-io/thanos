@@ -168,13 +168,14 @@ func Read(dir string) (*Meta, error) {
 	if m.Version != TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
-	if m.Thanos.Version == 0 {
+
+	version := m.Thanos.Version
+	if version == 0 {
 		// For compatibility.
-		m.Thanos.Version = ThanosVersion1
-		return &m, nil
+		version = ThanosVersion1
 	}
 
-	if m.Thanos.Version != ThanosVersion1 {
+	if version != ThanosVersion1 {
 		return nil, errors.Errorf("unexpected meta file Thanos section version %d", m.Version)
 	}
 	return &m, nil
