@@ -241,7 +241,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 			// If the origin meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
-			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", id.String())
+			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
 			rs.metrics.blocksAlreadyReplicated.Inc()
 
 			return nil
