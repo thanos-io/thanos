@@ -128,6 +128,8 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 type MetadataFetcher interface {
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
 	UpdateOnChange(func([]metadata.Meta, error))
+
+	ResetCache() error
 }
 
 type MetadataFilter interface {
@@ -258,7 +260,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v", metaFile, err)
 	}
 
-	if m.Version != metadata.MetaVersion1 {
+	if m.Version != metadata.TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
 
@@ -268,7 +270,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 			level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 
-		if err := metadata.Write(f.logger, cachedBlockDir, m); err != nil {
+		if err := m.WriteToDir(f.logger, cachedBlockDir); err != nil {
 			level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 	}
@@ -486,6 +488,10 @@ func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 // UpdateOnChange allows to add listener that will be update on every change.
 func (f *MetaFetcher) UpdateOnChange(listener func([]metadata.Meta, error)) {
 	f.listener = listener
+}
+
+func (f *MetaFetcher) ResetCache() error {
+	return nil
 }
 
 var _ MetadataFilter = &TimePartitionMetaFilter{}

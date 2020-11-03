@@ -56,7 +56,7 @@ func testMeta(ulid ulid.ULID) *metadata.Meta {
 			Compaction: tsdb.BlockMetaCompaction{
 				Level: 1,
 			},
-			Version: metadata.MetaVersion1,
+			Version: metadata.TSDBVersion1,
 		},
 	}
 }
