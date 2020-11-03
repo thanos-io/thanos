@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,6 +67,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 // It makes sure cleanup is done on error to avoid partial block uploads.
 // It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
+// NOTE: Upload updates `meta.Thanos.File` section.
 func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
@@ -91,8 +93,18 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
-		return errors.Wrap(err, "upload meta file to debug dir")
+	meta.Thanos.Files, err = gatherFileStats(bdir)
+	if err != nil {
+		return errors.Wrap(err, "gather meta file stats")
+	}
+
+	metaEncoded := bytes.Buffer{}
+	if err := meta.Write(&metaEncoded); err != nil {
+		return errors.Wrap(err, "encode meta file")
+	}
+
+	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), bytes.NewReader(metaEncoded.Bytes())); err != nil {
+		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
 	}
 
 	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
@@ -103,9 +115,8 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
 	}
 
-	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
-	// to be pending uploads.
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
+	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
+	if err := bkt.Upload(ctx, path.Join(id.String(), MetaFilename), &metaEncoded); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload meta file"))
 	}
 
@@ -226,9 +237,7 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 // GetSegmentFiles returns list of segment files for given block. Paths are relative to the chunks directory.
 // In case of errors, nil is returned.
 func GetSegmentFiles(blockDir string) []string {
-	chunksDir := filepath.Join(blockDir, ChunksDirname)
-
-	files, err := ioutil.ReadDir(chunksDir)
+	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
 	if err != nil {
 		return nil
 	}
@@ -239,4 +248,39 @@ func GetSegmentFiles(blockDir string) []string {
 		result = append(result, f.Name())
 	}
 	return result
+}
+
+// TODO(bwplotka): Gather stats when dirctly uploading files.
+func gatherFileStats(blockDir string) (res []metadata.File, _ error) {
+	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
+	if err != nil {
+		return nil, errors.Wrapf(err, "read dir %v", filepath.Join(blockDir, ChunksDirname))
+	}
+	for _, f := range files {
+		res = append(res, metadata.File{
+			RelPath:   filepath.Join(ChunksDirname, f.Name()),
+			SizeBytes: f.Size(),
+		})
+	}
+
+	indexFile, err := os.Stat(filepath.Join(blockDir, IndexFilename))
+	if err != nil {
+		return nil, errors.Wrapf(err, "stat %v", filepath.Join(blockDir, IndexFilename))
+	}
+	res = append(res, metadata.File{
+		RelPath:   indexFile.Name(),
+		SizeBytes: indexFile.Size(),
+	})
+
+	metaFile, err := os.Stat(filepath.Join(blockDir, MetaFilename))
+	if err != nil {
+		return nil, errors.Wrapf(err, "stat %v", filepath.Join(blockDir, MetaFilename))
+	}
+	res = append(res, metadata.File{RelPath: metaFile.Name()})
+
+	sort.Slice(res, func(i, j int) bool {
+		return strings.Compare(res[i].RelPath, res[j].RelPath) < 0
+	})
+	// TODO(bwplotka): Add optional files like tombstones?
+	return res, err
 }
