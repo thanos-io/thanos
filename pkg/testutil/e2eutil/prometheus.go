@@ -391,7 +391,7 @@ func CreateBlockWithBlockDelay(
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
 
-	if err := metadata.Write(log.NewNopLogger(), path.Join(dir, blockID.String()), m); err != nil {
+	if err := m.WriteToDir(log.NewNopLogger(), path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}
 
