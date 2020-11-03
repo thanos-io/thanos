@@ -73,7 +73,7 @@ func TestRespondSuccess(t *testing.T) {
 
 func TestRespondError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		RespondError(w, &ApiError{ErrorTimeout, errors.New("message")}, "test")
+		RespondError(w, &Error{ErrorTimeout, errors.New("message")}, "test")
 	}))
 	defer s.Close()
 

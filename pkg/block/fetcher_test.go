@@ -106,15 +106,15 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					meta.ULID = ULID(1)
 
 					var buf bytes.Buffer
-					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, meta.Write(&buf))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 
 					meta.ULID = ULID(2)
-					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, meta.Write(&buf))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 
 					meta.ULID = ULID(3)
-					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, meta.Write(&buf))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
 
@@ -189,7 +189,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					meta.ULID = ULID(6)
 
 					var buf bytes.Buffer
-					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, meta.Write(&buf))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
 
@@ -224,7 +224,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					meta.ULID = ULID(7)
 
 					var buf bytes.Buffer
-					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, meta.Write(&buf))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
 
@@ -293,6 +293,116 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestMetaFetcher_ResetCache(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	dir, err := ioutil.TempDir("", "test-meta-fetcher")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	bkt := objstore.NewInMemBucket()
+	baseFetcher, err := NewBaseFetcher(log.NewNopLogger(), 20, objstore.WithNoopInstr(bkt), dir, nil)
+	testutil.Ok(t, err)
+	metaFetcher := baseFetcher.NewMetaFetcher(nil, nil, nil)
+
+	// 3 metas in bucket
+	var meta1 metadata.Meta
+	meta1.Version = 1
+	meta1.ULID = ULID(1)
+	var buf bytes.Buffer
+	testutil.Ok(t, meta1.Write(&buf))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(meta1.ULID.String(), metadata.MetaFilename), &buf))
+
+	var meta2 metadata.Meta
+	meta2.Version = 1
+	meta2.ULID = ULID(2)
+	buf.Reset()
+	testutil.Ok(t, meta2.Write(&buf))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(meta2.ULID.String(), metadata.MetaFilename), &buf))
+
+	var meta3 metadata.Meta
+	meta3.Version = 1
+	meta3.ULID = ULID(3)
+	buf.Reset()
+	testutil.Ok(t, meta3.Write(&buf))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(meta3.ULID.String(), metadata.MetaFilename), &buf))
+
+	metas, partial, err := metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metas)
+	testutil.Equals(t, map[ulid.ULID]error{}, partial)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metaFetcher.base.cached)
+
+	// Confirm all is cached by modifying one meta file.
+	buf.Reset()
+	oldMeta2 := meta2
+	meta2.Stats.NumSeries = 1424
+	testutil.Ok(t, meta2.Write(&buf))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(meta2.ULID.String(), metadata.MetaFilename), &buf))
+
+	metas, partial, err = metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &oldMeta2,
+		ULID(3): &meta3,
+	}, metas)
+	testutil.Equals(t, map[ulid.ULID]error{}, partial)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &oldMeta2,
+		ULID(3): &meta3,
+	}, metaFetcher.base.cached)
+
+	// Reset cache for 2 and 1.
+	testutil.Ok(t, metaFetcher.ResetCache(ULID(2), ULID(1)))
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(3): &meta3,
+	}, metaFetcher.base.cached)
+
+	// Fetch should still work and give result with new meta.
+	metas, partial, err = metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metas)
+	testutil.Equals(t, map[ulid.ULID]error{}, partial)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metaFetcher.base.cached)
+
+	// Reset all now.
+	testutil.Ok(t, metaFetcher.ResetCache())
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{}, metaFetcher.base.cached)
+
+	metas, partial, err = metaFetcher.Fetch(ctx)
+	testutil.Ok(t, err)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metas)
+	testutil.Equals(t, map[ulid.ULID]error{}, partial)
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{
+		ULID(1): &meta1,
+		ULID(2): &meta2,
+		ULID(3): &meta3,
+	}, metaFetcher.base.cached)
 }
 
 func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {

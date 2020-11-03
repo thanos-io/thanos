@@ -1308,7 +1308,7 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 			storeMatchers, err := api.parseStoreDebugMatchersParam(r)
 			if !tc.fail {
 				testutil.Equals(t, tc.result, storeMatchers)
-				testutil.Equals(t, (*baseAPI.ApiError)(nil), err)
+				testutil.Equals(t, (*baseAPI.Error)(nil), err)
 			} else {
 				testutil.NotOk(t, err)
 			}

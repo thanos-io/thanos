@@ -126,8 +126,17 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 }
 
 type MetadataFetcher interface {
+	// Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
+	// It's caller responsibility to not change the returned metadata files. Maps can be modified.
+	//
+	// Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
+	// UpdateOnChange allows to add listener that will be update on every change.
 	UpdateOnChange(func([]metadata.Meta, error))
+
+	// ResetCache removes all cache entries (disk, memory) for given block IDs. If no ID is specified, it removes all entries.
+	// NOTE: This is useful to ensure meta.json updates and mutations are eventually noticed.
+	ResetCache(...ulid.ULID) error
 }
 
 type MetadataFilter interface {
@@ -150,6 +159,7 @@ type BaseFetcher struct {
 	cached   map[ulid.ULID]*metadata.Meta
 	syncs    prometheus.Counter
 	g        singleflight.Group
+	fetchMtx sync.Mutex
 }
 
 // NewBaseFetcher constructs BaseFetcher.
@@ -191,7 +201,7 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 
 // NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
 func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier, logTags ...interface{}) *MetaFetcher {
-	return &MetaFetcher{metrics: newFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers, logger: log.With(f.logger, logTags...)}
+	return &MetaFetcher{metrics: newFetcherMetrics(reg), base: f, filters: filters, modifiers: modifiers, logger: log.With(f.logger, logTags...)}
 }
 
 var (
@@ -412,6 +422,9 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	// Run this in thread safe run group.
 	// TODO(bwplotka): Consider custom singleflight with ttl.
 	v, err := f.g.Do("", func() (i interface{}, err error) {
+		f.fetchMtx.Lock()
+		defer f.fetchMtx.Unlock()
+
 		// NOTE: First go routine context will go through.
 		return f.fetchMetadata(ctx)
 	})
@@ -456,7 +469,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 }
 
 type MetaFetcher struct {
-	wrapped *BaseFetcher
+	base    *BaseFetcher
 	metrics *fetcherMetrics
 
 	filters   []MetadataFilter
@@ -472,7 +485,7 @@ type MetaFetcher struct {
 //
 // Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
 func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error) {
-	metas, partial, err = f.wrapped.fetch(ctx, f.metrics, f.filters, f.modifiers)
+	metas, partial, err = f.base.fetch(ctx, f.metrics, f.filters, f.modifiers)
 	if f.listener != nil {
 		blocks := make([]metadata.Meta, 0, len(metas))
 		for _, meta := range metas {
@@ -486,6 +499,28 @@ func (f *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 // UpdateOnChange allows to add listener that will be update on every change.
 func (f *MetaFetcher) UpdateOnChange(listener func([]metadata.Meta, error)) {
 	f.listener = listener
+}
+
+// ResetCache removes all cache entries (disk, memory) for given block IDs. If no ID is specified, it removes all entries.
+// NOTE: This is useful to ensure meta.json updates and mutations are eventually noticed.
+func (f *MetaFetcher) ResetCache(ids ...ulid.ULID) error {
+	f.base.fetchMtx.Lock()
+	defer f.base.fetchMtx.Unlock()
+
+	if len(ids) == 0 {
+		f.base.cached = map[ulid.ULID]*metadata.Meta{}
+		if err := os.RemoveAll(f.base.cacheDir); err != nil {
+			return errors.Wrapf(err, "remove of cached dir %v", f.base.cacheDir)
+		}
+		return nil
+	}
+	for _, id := range ids {
+		delete(f.base.cached, id)
+		if err := os.RemoveAll(filepath.Join(f.base.cacheDir, id.String())); err != nil {
+			return errors.Wrapf(err, "remove of cached block %v", filepath.Join(f.base.cacheDir, id.String()))
+		}
+	}
+	return nil
 }
 
 var _ MetadataFilter = &TimePartitionMetaFilter{}

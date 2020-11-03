@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +25,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/api"
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -219,7 +222,7 @@ func runCompact(
 		"/loaded",
 		component,
 	)
-	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	blockAPI := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
 	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
@@ -233,7 +236,7 @@ func runCompact(
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			compactorView.Set(blocks, err)
-			api.SetLoaded(blocks, err)
+			blockAPI.SetLoaded(blocks, err)
 		})
 		sy, err = compact.NewSyncer(
 			logger,
@@ -434,16 +437,17 @@ func runCompact(
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
-		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+		blockAPI.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
 		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			global.Set(blocks, err)
-			api.SetGlobal(blocks, err)
+			blockAPI.SetGlobal(blocks, err)
 		})
 
+		registerResetCache(r, f, api.GetInstr(tracer, logger, ins, logMiddleware))
 		srv.Handle("/", r)
 
 		// Periodically remove partial blocks and blocks marked for deletion
@@ -487,6 +491,29 @@ func runCompact(
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
 	return nil
+}
+
+// TODO(bwplotka): Once more mature, put it in `pkg/api/cache` package.
+func registerResetCache(r *route.Router, fetcher *block.MetaFetcher, instrFunc api.InstrFunc) {
+	r.Get("/api/v1/reset_cache/meta_json", instrFunc("reset_cache_meta_json", func(r *http.Request) (interface{}, []error, *api.Error) {
+		if err := r.ParseForm(); err != nil {
+			return nil, nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		}
+
+		var ids []ulid.ULID
+		for _, id := range r.Form["id[]"] {
+			u, err := ulid.Parse(id)
+			if err != nil {
+				return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "id[] parameter provided is not valid ulid.ULID: %v", id)}
+			}
+			ids = append(ids, u)
+		}
+
+		if err := fetcher.ResetCache(ids...); err != nil {
+			return nil, nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Wrap(err, "reset cache on feta metcher")}
+		}
+		return "success", nil, nil
+	}))
 }
 
 type compactConfig struct {

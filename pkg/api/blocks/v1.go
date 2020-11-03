@@ -55,7 +55,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 }
 
-func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.Error) {
 	viewParam := r.URL.Query().Get("view")
 	if viewParam == "loaded" {
 		return bapi.loadedBlocksInfo, nil, nil

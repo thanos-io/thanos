@@ -84,12 +84,12 @@ var BuildInfo = &ThanosVersion{
 	GoVersion: version.GoVersion,
 }
 
-type ApiError struct {
+type Error struct {
 	Typ ErrorType
 	Err error
 }
 
-func (e *ApiError) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.Typ, e.Err)
 }
 
@@ -121,7 +121,7 @@ func SetCORS(w http.ResponseWriter) {
 	}
 }
 
-type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
+type ApiFunc func(r *http.Request) (interface{}, []error, *Error)
 
 type BaseAPI struct {
 	logger      log.Logger
@@ -154,19 +154,19 @@ func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger 
 	r.Get("/status/buildinfo", instr("status_build", api.serveBuildInfo))
 }
 
-func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *ApiError) {
+func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *Error) {
 	return nil, nil, nil
 }
 
-func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *ApiError) {
+func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *Error) {
 	return api.flagsMap, nil, nil
 }
 
-func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError) {
+func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *Error) {
 	return api.runtimeInfo(), nil, nil
 }
 
-func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError) {
+func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *Error) {
 	return api.buildInfo, nil, nil
 }
 
@@ -233,7 +233,7 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
+func RespondError(w http.ResponseWriter, apiErr *Error, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 

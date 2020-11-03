@@ -146,22 +146,22 @@ type queryData struct {
 	Warnings []error `json:"warnings,omitempty"`
 }
 
-func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
+func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.Error) {
 	enableDeduplication = true
 
 	if val := r.FormValue(DedupParam); val != "" {
 		var err error
 		enableDeduplication, err = strconv.ParseBool(val)
 		if err != nil {
-			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", DedupParam)}
+			return false, &api.Error{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", DedupParam)}
 		}
 	}
 	return enableDeduplication, nil
 }
 
-func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
+func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.Error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
 	replicaLabels = qapi.replicaLabels
@@ -173,15 +173,15 @@ func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []
 	return replicaLabels, nil
 }
 
-func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatchers [][]*labels.Matcher, _ *api.ApiError) {
+func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatchers [][]*labels.Matcher, _ *api.Error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
 	for _, s := range r.Form[StoreMatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 		}
 		storeMatchers = append(storeMatchers, matchers)
 	}
@@ -189,7 +189,7 @@ func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatche
 	return storeMatchers, nil
 }
 
-func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *api.ApiError) {
+func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *api.Error) {
 	maxSourceResolution := 0 * time.Second
 
 	val := r.FormValue(MaxSourceResolutionParam)
@@ -200,33 +200,33 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
-			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", MaxSourceResolutionParam)}
+			return 0, &api.Error{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", MaxSourceResolutionParam)}
 		}
 	}
 
 	if maxSourceResolution < 0 {
-		return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("negative '%s' is not accepted. Try a positive integer", MaxSourceResolutionParam)}
+		return 0, &api.Error{Typ: api.ErrorBadData, Err: errors.Errorf("negative '%s' is not accepted. Try a positive integer", MaxSourceResolutionParam)}
 	}
 
 	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
-func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePartialResponse bool) (enablePartialResponse bool, _ *api.ApiError) {
+func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePartialResponse bool) (enablePartialResponse bool, _ *api.Error) {
 	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(PartialResponseParam); val != "" {
 		var err error
 		defaultEnablePartialResponse, err = strconv.ParseBool(val)
 		if err != nil {
-			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", PartialResponseParam)}
+			return false, &api.Error{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", PartialResponseParam)}
 		}
 	}
 	return defaultEnablePartialResponse, nil
 }
 
-func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.Error) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	ctx := r.Context()
@@ -234,7 +234,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 		}
 
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -272,14 +272,14 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
 	})
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 	defer qapi.gate.Done()
 
@@ -287,13 +287,13 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
-			return nil, nil, &api.ApiError{Typ: api.ErrorCanceled, Err: res.Err}
+			return nil, nil, &api.Error{Typ: api.ErrorCanceled, Err: res.Err}
 		case promql.ErrQueryTimeout:
-			return nil, nil, &api.ApiError{Typ: api.ErrorTimeout, Err: res.Err}
+			return nil, nil, &api.Error{Typ: api.ErrorTimeout, Err: res.Err}
 		case promql.ErrStorage:
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: res.Err}
+			return nil, nil, &api.Error{Typ: api.ErrorInternal, Err: res.Err}
 		}
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: res.Err}
 	}
 
 	return &queryData{
@@ -302,35 +302,35 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}, res.Warnings, nil
 }
 
-func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Error) {
 	start, err := parseTime(r.FormValue("start"))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 	end, err := parseTime(r.FormValue("end"))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 	if end.Before(start) {
 		err := errors.New("end timestamp must not be before start time")
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	step, err := parseDuration(r.FormValue("step"))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "param step")}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: errors.Wrap(err, "param step")}
 	}
 
 	if step <= 0 {
 		err := errors.New("zero or negative query resolution step widths are not accepted. Try a positive integer")
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	// For safety, limit the number of returned points per timeseries.
 	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
 	if end.Sub(start)/step > 11000 {
 		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	ctx := r.Context()
@@ -338,7 +338,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 		}
 
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -383,14 +383,14 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		step,
 	)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
 	})
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 	defer qapi.gate.Done()
 
@@ -398,11 +398,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
-			return nil, nil, &api.ApiError{Typ: api.ErrorCanceled, Err: res.Err}
+			return nil, nil, &api.Error{Typ: api.ErrorCanceled, Err: res.Err}
 		case promql.ErrQueryTimeout:
-			return nil, nil, &api.ApiError{Typ: api.ErrorTimeout, Err: res.Err}
+			return nil, nil, &api.Error{Typ: api.ErrorTimeout, Err: res.Err}
 		}
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: res.Err}
 	}
 
 	return &queryData{
@@ -411,17 +411,17 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}, res.Warnings, nil
 }
 
-func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.Error) {
 	ctx := r.Context()
 	name := route.Param(ctx, "name")
 
 	if !model.LabelNameRE.MatchString(name) {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
 	}
 
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
@@ -437,7 +437,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable labelValues")
 
@@ -445,7 +445,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 
 	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 
 	if vals == nil {
@@ -455,25 +455,25 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	return vals, warnings, nil
 }
 
-func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.Error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
 	if len(r.Form[MatcherParam]) == 0 {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	var matcherSets [][]*labels.Matcher
 	for _, s := range r.Form[MatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 		}
 		matcherSets = append(matcherSets, matchers)
 	}
@@ -501,7 +501,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable series")
 
@@ -518,15 +518,15 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		metrics = append(metrics, set.At().Labels())
 	}
 	if set.Err() != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: set.Err()}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: set.Err()}
 	}
 	return metrics, set.Warnings(), nil
 }
 
-func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Error) {
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
@@ -542,19 +542,19 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable labelNames")
 
 	names, warnings, err := q.LabelNames()
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		return nil, nil, &api.Error{Typ: api.ErrorExec, Err: err}
 	}
 
 	return names, warnings, nil
 }
 
-func (qapi *QueryAPI) stores(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) stores(r *http.Request) (interface{}, []error, *api.Error) {
 	statuses := make(map[string][]query.StoreStatus)
 	for _, status := range qapi.storeSet.GetStoreStatus() {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
@@ -564,18 +564,18 @@ func (qapi *QueryAPI) stores(r *http.Request) (interface{}, []error, *api.ApiErr
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
-func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.Error) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+	return func(r *http.Request) (interface{}, []error, *api.Error) {
 		typeParam := r.URL.Query().Get("type")
 		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
 		if !ok {
 			if typeParam != "" {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid rules parameter type='%v'", typeParam)}
+				return nil, nil, &api.Error{Typ: api.ErrorBadData, Err: errors.Errorf("invalid rules parameter type='%v'", typeParam)}
 			}
 			typ = int32(rulespb.RulesRequest_ALL)
 		}
@@ -587,7 +587,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		}
 		groups, warnings, err := client.Rules(r.Context(), req)
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
+			return nil, nil, &api.Error{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
 		}
 		return groups, warnings, nil
 	}
@@ -612,14 +612,14 @@ func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Durat
 
 	start, err := parseTimeParam(r, "start", defaultStartTime)
 	if err != nil {
-		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return time.Time{}, time.Time{}, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 	end, err := parseTimeParam(r, "end", defaultEndTime)
 	if err != nil {
-		return time.Time{}, time.Time{}, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		return time.Time{}, time.Time{}, &api.Error{Typ: api.ErrorBadData, Err: err}
 	}
 	if end.Before(start) {
-		return time.Time{}, time.Time{}, &api.ApiError{
+		return time.Time{}, time.Time{}, &api.Error{
 			Typ: api.ErrorBadData,
 			Err: errors.New("end timestamp must not be before start time"),
 		}

@@ -53,7 +53,7 @@ func (rapi *RuleAPI) Register(r *route.Router, tracer opentracing.Tracer, logger
 
 	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
 
-	r.Get("/alerts", instr("alerts", func(r *http.Request) (interface{}, []error, *api.ApiError) {
+	r.Get("/alerts", instr("alerts", func(r *http.Request) (interface{}, []error, *api.Error) {
 		return struct{ Alerts []*rulespb.AlertInstance }{Alerts: rapi.alerts.Active()}, nil, nil
 	}))
 	r.Get("/rules", instr("rules", qapi.NewRulesHandler(rapi.ruleGroups, false)))
