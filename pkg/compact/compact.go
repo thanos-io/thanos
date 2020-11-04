@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/extprom"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -982,5 +983,52 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 	}
 	level.Info(c.logger).Log("msg", "compaction iterations done")
+	return nil
+}
+
+var _ block.MetadataFilter = &GatherNoCompactionMarkFilter{}
+
+// GatherNoCompactionMarkFilter is a block.Fetcher filter that passes all metas. While doing it, it gathers all no-compact-mark.json markers.
+// Not go routine safe.
+// TODO(bwplotka): Add unit test.
+type GatherNoCompactionMarkFilter struct {
+	logger             log.Logger
+	bkt                objstore.InstrumentedBucketReader
+	noCompactMarkedMap map[ulid.ULID]*metadata.NoCompactMark
+}
+
+// NewGatherNoCompactionMarkFilter creates GatherNoCompactionMarkFilter.
+func NewGatherNoCompactionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader) *GatherNoCompactionMarkFilter {
+	return &GatherNoCompactionMarkFilter{
+		logger: logger,
+		bkt:    bkt,
+	}
+}
+
+// DeletionMarkBlocks returns block ids that were marked for deletion.
+func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*metadata.NoCompactMark {
+	return f.noCompactMarkedMap
+}
+
+// Filter passes all metas, while gathering no compact markers.
+func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+	f.noCompactMarkedMap = make(map[ulid.ULID]*metadata.NoCompactMark)
+
+	for id := range metas {
+		m := &metadata.NoCompactMark{}
+		// TODO(bwplotka): Hook up bucket cache here + reset API so we don't introduce API calls .
+		if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
+			if errors.Cause(err) == metadata.ErrorMarkerNotFound {
+				continue
+			}
+			if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
+				level.Warn(f.logger).Log("msg", "found partial no-compact-mark.json; if we will see it happening often for the same block, consider manually deleting no-compact-mark.json from the object storage", "block", id, "err", err)
+				continue
+			}
+			return err
+		}
+		synced.WithLabelValues(block.MarkedForNoCompactionMeta).Inc()
+		f.noCompactMarkedMap[id] = m
+	}
 	return nil
 }
