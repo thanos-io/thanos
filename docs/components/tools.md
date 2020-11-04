@@ -472,6 +472,22 @@ Flags:
       --matcher=key="value" ...  Only blocks whose external labels exactly match
                                  this matcher will be replicated.
       --single-run               Run replication only one time, then exit.
+      --min-time=0000-01-01T00:00:00Z
+                                 Start of time range limit to replicate. Thanos
+                                 Replicate will replicate only metrics, which
+                                 happened later than this value. Option can be a
+                                 constant time in RFC3339 format or time
+                                 duration relative to current time, such as -1d
+                                 or 2h45m. Valid duration units are ms, s, m, h,
+                                 d, w, y.
+      --max-time=9999-12-31T23:59:59Z
+                                 End of time range limit to replicate. Thanos
+                                 Replicate will replicate only metrics, which
+                                 happened earlier than this value. Option can be
+                                 a constant time in RFC3339 format or time
+                                 duration relative to current time, such as -1d
+                                 or 2h45m. Valid duration units are ms, s, m, h,
+                                 d, w, y.
 
 ```
 
