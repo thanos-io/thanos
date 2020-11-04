@@ -344,6 +344,8 @@ The default limit for using SLO is 1 GiB which is also the maximum size of the 
 If you don't want to use the same container for the segments
 (best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects)
 you can use the `large_file_segments_container_name` option to override the default and put the segments to other container.
+_In rare cases you can switch to [Dynamic Large Objects (DLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html)
+by setting the `use_dynamic_large_objects` to true, but use it with caution since it even more relies on eventual consistency._
 
 [embedmd]:# (flags/config_bucket_swift.txt yaml)
 ```yaml
@@ -369,6 +371,7 @@ config:
   retries: 3
   connect_timeout: 10s
   timeout: 5m
+  use_dynamic_large_objects: false
 ```
 
 #### Tencent COS
