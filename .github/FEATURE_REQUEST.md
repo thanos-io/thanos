@@ -2,7 +2,7 @@
 name: "Feature Request"
 about: Suggest an idea for improving Thanos
 title: ''
-labels: Enhancement
+labels: "feature request / improvement"
 assignees: ''
 
 ---
