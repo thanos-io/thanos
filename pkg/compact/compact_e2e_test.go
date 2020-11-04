@@ -195,8 +195,10 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
+		planner := NewTSDBBasedPlanner(logger, []int64{1000, 3000})
+
 		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
-		bComp, err := NewBucketCompactor(logger, sy, grouper, comp, dir, bkt, 2)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.

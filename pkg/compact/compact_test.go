@@ -6,7 +6,6 @@ package compact
 import (
 	"testing"
 
-	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -116,20 +115,12 @@ func TestGroupKey(t *testing.T) {
 
 func TestGroupMaxMinTime(t *testing.T) {
 	g := &Group{
-		blocks: make(map[ulid.ULID]*metadata.Meta),
+		metasByMinTime: []*metadata.Meta{
+			{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 10}},
+			{BlockMeta: tsdb.BlockMeta{MinTime: 1, MaxTime: 20}},
+			{BlockMeta: tsdb.BlockMeta{MinTime: 2, MaxTime: 30}},
+		},
 	}
-
-	now := ulid.Now()
-	id1, err := ulid.New(now, nil)
-	testutil.Ok(t, err)
-	id2, err := ulid.New(now-10, nil)
-	testutil.Ok(t, err)
-	id3, err := ulid.New(now+10, nil)
-	testutil.Ok(t, err)
-
-	g.blocks[id1] = &metadata.Meta{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 10}}
-	g.blocks[id2] = &metadata.Meta{BlockMeta: tsdb.BlockMeta{MinTime: 1, MaxTime: 20}}
-	g.blocks[id3] = &metadata.Meta{BlockMeta: tsdb.BlockMeta{MinTime: 2, MaxTime: 30}}
 
 	testutil.Equals(t, int64(0), g.MinTime())
 	testutil.Equals(t, int64(30), g.MaxTime())

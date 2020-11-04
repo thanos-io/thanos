@@ -148,7 +148,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 				{RelPath: "index", SizeBytes: 13},
 				{RelPath: "meta.json"},
 			}
-			meta.Thanos.Version = 1
 
 			buf := bytes.Buffer{}
 			testutil.Ok(t, meta.Write(&buf))
@@ -305,7 +304,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 				{RelPath: "index", SizeBytes: 13},
 				{RelPath: "meta.json"},
 			}
-			meta.Thanos.Version = 1
 
 			buf := bytes.Buffer{}
 			testutil.Ok(t, meta.Write(&buf))
