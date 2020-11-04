@@ -677,7 +677,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := os.MkdirAll(bdir, 0777); err != nil {
 			return false, ulid.ULID{}, errors.Wrap(err, "create planning block dir")
 		}
-		if err := metadata.Write(cg.logger, bdir, meta); err != nil {
+		if err := meta.WriteToDir(cg.logger, bdir); err != nil {
 			return false, ulid.ULID{}, errors.Wrap(err, "write planning meta file")
 		}
 	}
