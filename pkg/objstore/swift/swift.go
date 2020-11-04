@@ -360,7 +360,6 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 
 	return c, func() {
 		objstore.EmptyBucket(t, context.Background(), c)
-		time.Sleep(time.Second)
 		if err := c.connection.ContainerDelete(c.name); err != nil {
 			t.Logf("deleting container %s failed: %s", c.Name(), err)
 		}
