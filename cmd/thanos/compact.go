@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -512,6 +513,7 @@ type compactConfig struct {
 	selectorRelabelConf                            extflag.PathOrContent
 	webConf                                        webConfig
 	label                                          string
+	maxBlockIndexSize                              units.Base2Bytes
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -573,6 +575,13 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
+
+	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
+	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
+		"total size is approximated in worst case. If the block that would be resulted from compaction is estimated to exceed this number, biggest source"+
+		"block is marked for no compaction (no-compact-mark.json is uploaded) which causes this block to be excluded from any compaction. "+
+		"Default is due to https://github.com/thanos-io/thanos/issues/1424, but it's overall recommended to keeps block size to some reasonable size.").
+		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
