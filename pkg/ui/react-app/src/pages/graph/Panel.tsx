@@ -284,7 +284,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
               onExpressionChange={this.handleExpressionChange}
               executeQuery={this.executeQuery}
               loading={this.state.loading}
-              enable={this.props.enableMetricAutocomplete}
+              enableMetricAutocomplete={this.props.enableMetricAutocomplete}
               autocompleteSections={{
                 'Query History': pastQueries,
                 'Metric Names': metricNames,
