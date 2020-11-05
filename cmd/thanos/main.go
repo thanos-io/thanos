@@ -90,7 +90,6 @@ func main() {
 		}
 
 		if len(confContentYaml) == 0 {
-			level.Info(logger).Log("msg", "Tracing will be disabled")
 			tracer = client.NoopTracer()
 		} else {
 			tracer, closer, err = client.NewTracer(ctx, logger, metrics, confContentYaml)

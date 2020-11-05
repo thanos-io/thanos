@@ -807,13 +807,16 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	return nil
 }
 
+var (
+	SelectorSupportedRelabelActions = map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
+)
+
 // ParseRelabelConfig parses relabel configuration.
-func ParseRelabelConfig(contentYaml []byte) ([]*relabel.Config, error) {
+func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
 	var relabelConfig []*relabel.Config
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
 	}
-	supportedActions := map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
 
 	for _, cfg := range relabelConfig {
 		if _, ok := supportedActions[cfg.Action]; !ok {
