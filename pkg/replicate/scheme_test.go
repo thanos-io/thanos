@@ -56,7 +56,7 @@ func testMeta(ulid ulid.ULID) *metadata.Meta {
 			Compaction: tsdb.BlockMetaCompaction{
 				Level: 1,
 			},
-			Version: metadata.MetaVersion1,
+			Version: metadata.TSDBVersion1,
 		},
 	}
 }
@@ -315,15 +315,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil, nil)
 		testutil.Ok(t, err)
 
-		r := newReplicationScheme(
-			logger,
-			newReplicationMetrics(nil),
-			filter,
-			fetcher,
-			objstore.WithNoopInstr(originBucket),
-			targetBucket,
-			nil,
-		)
+		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
 
 		err = r.execute(ctx)
 		testutil.Ok(t, err)

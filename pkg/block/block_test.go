@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -115,10 +116,7 @@ func TestUpload(t *testing.T) {
 		// Missing chunks.
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
 		testutil.NotOk(t, err)
-		testutil.Assert(t, strings.HasSuffix(err.Error(), "/chunks: no such file or directory"), "")
-
-		// Only debug meta.json present.
-		testutil.Equals(t, 1, len(bkt.Objects()))
+		testutil.Assert(t, strings.HasSuffix(err.Error(), "/chunks: no such file or directory"), err.Error())
 	}
 	testutil.Ok(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String(), ChunksDirname), os.ModePerm))
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), ChunksDirname, "000001"), path.Join(tmpDir, "test", b1.String(), ChunksDirname, "000001"))
@@ -127,9 +125,6 @@ func TestUpload(t *testing.T) {
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/index: no such file or directory"), "")
-
-		// Only debug meta.json present.
-		testutil.Equals(t, 1, len(bkt.Objects()))
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), IndexFilename), path.Join(tmpDir, "test", b1.String(), IndexFilename))
 	testutil.Ok(t, os.Remove(path.Join(tmpDir, "test", b1.String(), MetaFilename)))
@@ -138,9 +133,6 @@ func TestUpload(t *testing.T) {
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
-
-		// Only debug meta.json present.
-		testutil.Equals(t, 1, len(bkt.Objects()))
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
@@ -149,7 +141,49 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 365, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+
+		// File stats are gathered.
+		testutil.Equals(t, fmt.Sprintf(`{
+	"ulid": "%s",
+	"minTime": 0,
+	"maxTime": 1000,
+	"stats": {
+		"numSamples": 500,
+		"numSeries": 5,
+		"numChunks": 5
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"%s"
+		]
+	},
+	"version": 1,
+	"thanos": {
+		"labels": {
+			"ext1": "val1"
+		},
+		"downsample": {
+			"resolution": 124
+		},
+		"source": "test",
+		"files": [
+			{
+				"rel_path": "chunks/000001",
+				"size_bytes": 3751
+			},
+			{
+				"rel_path": "index",
+				"size_bytes": 401
+			},
+			{
+				"rel_path": "meta.json"
+			}
+		]
+	}
+}
+`, b1.String(), b1.String()), string(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Test Upload is idempotent.
@@ -157,7 +191,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 365, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.

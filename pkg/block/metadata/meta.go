@@ -10,6 +10,7 @@ package metadata
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -37,11 +38,10 @@ const (
 const (
 	// MetaFilename is the known JSON filename for meta information.
 	MetaFilename = "meta.json"
-)
-
-const (
-	// MetaVersion is a enumeration of meta versions supported by Thanos.
-	MetaVersion1 = iota + 1
+	// TSDBVersion1 is a enumeration of TSDB meta versions supported by Thanos.
+	TSDBVersion1 = 1
+	// ThanosVersion1 is a enumeration of Thanos section of TSDB meta supported by Thanos.
+	ThanosVersion1 = 1
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
@@ -54,6 +54,9 @@ type Meta struct {
 
 // Thanos holds block meta information specific to Thanos.
 type Thanos struct {
+	// Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version specified).
+	Version int `json:"version,omitempty"`
+
 	Labels     map[string]string `json:"labels"`
 	Downsample ThanosDownsample  `json:"downsample"`
 
@@ -61,7 +64,20 @@ type Thanos struct {
 	Source SourceType `json:"source"`
 
 	// List of segment files (in chunks directory), in sorted order. Optional.
+	// Deprecated. Use Files instead.
 	SegmentFiles []string `json:"segment_files,omitempty"`
+
+	// File is a sorted (by rel path) list of all files in block directory of this block known to TSDB.
+	// Sorted by relative path.
+	// Useful to avoid API call to get size of each file, as well as for debugging purposes.
+	// Optional, added in v0.17.0.
+	Files []File `json:"files,omitempty"`
+}
+
+type File struct {
+	RelPath string `json:"rel_path"`
+	// SizeBytes is optional (e.g meta.json does not show size).
+	SizeBytes int64 `json:"size_bytes,omitempty"`
 }
 
 type ThanosDownsample struct {
@@ -82,15 +98,15 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 		newMeta.Compaction = downsampledMeta.Compaction
 	}
 
-	if err := Write(logger, bdir, newMeta); err != nil {
+	if err := newMeta.WriteToDir(logger, bdir); err != nil {
 		return nil, errors.Wrap(err, "write new meta")
 	}
 
 	return newMeta, nil
 }
 
-// Write writes the given meta into <dir>/meta.json.
-func Write(logger log.Logger, dir string, meta *Meta) error {
+// WriteToDir writes the encoded meta into <dir>/meta.json.
+func (m Meta) WriteToDir(logger log.Logger, dir string) error {
 	// Make any changes to the file appear atomic.
 	path := filepath.Join(dir, MetaFilename)
 	tmp := path + ".tmp"
@@ -100,10 +116,7 @@ func Write(logger log.Logger, dir string, meta *Meta) error {
 		return err
 	}
 
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "\t")
-
-	if err := enc.Encode(meta); err != nil {
+	if err := m.Write(f); err != nil {
 		runutil.CloseWithLogOnErr(logger, f, "close meta")
 		return err
 	}
@@ -111,6 +124,13 @@ func Write(logger log.Logger, dir string, meta *Meta) error {
 		return err
 	}
 	return renameFile(logger, tmp, path)
+}
+
+// Write writes the given encoded meta to writer.
+func (m Meta) Write(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "\t")
+	return enc.Encode(&m)
 }
 
 func renameFile(logger log.Logger, from, to string) error {
@@ -145,8 +165,18 @@ func Read(dir string) (*Meta, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
-	if m.Version != MetaVersion1 {
+	if m.Version != TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
+	}
+
+	version := m.Thanos.Version
+	if version == 0 {
+		// For compatibility.
+		version = ThanosVersion1
+	}
+
+	if version != ThanosVersion1 {
+		return nil, errors.Errorf("unexpected meta file Thanos section version %d", m.Version)
 	}
 	return &m, nil
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	thanosmodel "github.com/thanos-io/thanos/pkg/model"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -80,6 +82,7 @@ func RunReplicate(
 	fromObjStoreConfig *extflag.PathOrContent,
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
+	minTime, maxTime *thanosmodel.TimeOrDurationValue,
 ) error {
 	logger = log.With(logger, "component", "replicate")
 
@@ -161,7 +164,15 @@ func RunReplicate(
 	replicationRunDuration.WithLabelValues(labelSuccess)
 	replicationRunDuration.WithLabelValues(labelError)
 
-	fetcher, err := thanosblock.NewMetaFetcher(logger, 32, fromBkt, "", reg, nil, nil)
+	fetcher, err := thanosblock.NewMetaFetcher(
+		logger,
+		32,
+		fromBkt,
+		"",
+		reg,
+		[]thanosblock.MetadataFilter{thanosblock.NewTimePartitionMetaFilter(*minTime, *maxTime)},
+		nil,
+	)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
 	}
