@@ -73,6 +73,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketReplicate(cmd, objStoreConfig)
 	registerBucketDownsample(cmd, objStoreConfig)
 	registerBucketCleanup(cmd, objStoreConfig)
+	registerBucketMarkBlock(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -709,4 +710,45 @@ func compare(s1, s2 string) bool {
 		return s1Duration < s2Duration
 	}
 	return s1Time.Before(s2Time)
+}
+
+func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command(component.Mark.String(), "Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is currently running compacting same block, this operation would be potentially a noop.")
+	blockIDs := cmd.Flag("id", "ID (ULID) of the blocks to be marked for deletion (repeated flag)").Required().Strings()
+	// TODO(bwplotka): Add no-compact option once https://github.com/thanos-io/thanos/pull/3409 is merged.
+	// marker := cmd.Flag("marker", "").Required().Enum(metadata.DeletionMarkFilename)
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
+		if err != nil {
+			return err
+		}
+
+		var ids []ulid.ULID
+		for _, id := range *blockIDs {
+			u, err := ulid.Parse(id)
+			if err != nil {
+				return errors.Errorf("id is not a valid block ULID, got: %v", id)
+			}
+			ids = append(ids, u)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		g.Add(func() error {
+			for _, id := range ids {
+				if err := block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+					return errors.Wrapf(err, "mark for %v deletion", id)
+				}
+			}
+			level.Info(logger).Log("msg", "marking for deletion done", "IDs", strings.Join(*blockIDs, ","))
+			return nil
+		}, func(err error) {
+			cancel()
+		})
+		return nil
+	})
 }

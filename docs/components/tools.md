@@ -60,6 +60,11 @@ Subcommands:
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion
 
+  tools bucket mark --id=ID
+    Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
+    is currently running compacting same block, this operation would be
+    potentially a noop.
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -143,6 +148,11 @@ Subcommands:
 
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion
+
+  tools bucket mark --id=ID
+    Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
+    is currently running compacting same block, this operation would be
+    potentially a noop.
 
 
 ```
@@ -493,7 +503,7 @@ Flags:
 
 ### Bucket downsample
 
-`tools bucket downsample` is used to continuously downsample blocks in an object store bucket as a service.
+`tools bucket downsample` is used to downsample blocks in an object store bucket as a service.
 It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
@@ -549,6 +559,64 @@ Flags:
                               process downsamplings.
 
 ```
+
+### Bucket mark
+
+`tools bucket mark` can be used to manually mark block for deletion.
+
+NOTE: If the [Compactor](compact.md) is currently running and compacting exactly same block, this operation would be potentially a noop."
+
+```bash
+thanos tools bucket mark \
+    --id "01C8320GCGEWBZF51Q46TTQEH9" --id "01C8J352831FXGZQMN2NTJ08DY"
+    --objstore.config-file "bucket.yml"
+```
+
+The example content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
+```
+
+[embedmd]:# (flags/tools_bucket_mark.txt $)
+```$
+usage: thanos tools bucket mark --id=ID
+
+Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is
+currently running compacting same block, this operation would be potentially a
+noop.
+
+Flags:
+  -h, --help               Show context-sensitive help (also try --help-long and
+                           --help-man).
+      --version            Show application version.
+      --log.level=info     Log filtering level.
+      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
+                           https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
+                           https://thanos.io/tip/thanos/tracing.md/#configuration
+      --objstore.config-file=<file-path>
+                           Path to YAML file that contains object store
+                           configuration. See format details:
+                           https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config=<content>
+                           Alternative to 'objstore.config-file' flag (lower
+                           priority). Content of YAML file that contains object
+                           store configuration. See format details:
+                           https://thanos.io/tip/thanos/storage.md/#configuration
+      --id=ID ...          ID (ULID) of the blocks to be marked for deletion
+                           (repeated flag)
+
+```
+
 ## Rules-check
 
 The `tools rules-check` subcommand contains tools for validation of Prometheus rules.
