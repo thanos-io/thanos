@@ -550,6 +550,9 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
+	if names == nil {
+		names = make([]string, 0)
+	}
 
 	return names, warnings, nil
 }
