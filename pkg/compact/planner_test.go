@@ -73,7 +73,7 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 		expected []*metadata.Meta
 	}{
 		{
-			name: "Outside Range",
+			name: "Outside range",
 			metas: []*metadata.Meta{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 			},
@@ -106,6 +106,21 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+			},
+		},
+		{
+			name: "There are blocks to fill the entire 2nd parent range.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 200, MaxTime: 220}},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
 			},
 		},
 		{
@@ -146,7 +161,21 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
 			},
 		},
-		{name: "We have 20, 60, 20, 60, 240 range blocks. We can compact 20 + 60 + 60",
+		{
+			name: "There are blocks to fill the entire 2nd parent range, but there is a gap",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 200, MaxTime: 220}},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+			},
+		},
+		{
+			name: "We have 20, 60, 20, 60, 240 range blocks. We can compact 20 + 60 + 60",
 			metas: []*metadata.Meta{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
@@ -405,6 +434,198 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 				testutil.Ok(t, err)
 				testutil.Equals(t, []*metadata.Meta(nil), plan)
 			})
+		})
+	}
+}
+
+func TestTSDBBasedPlanners_PlanWithNoCompactMarkers(t *testing.T) {
+	ranges := []int64{
+		20,
+		60,
+		180,
+		540,
+		1620,
+	}
+
+	g := &GatherNoCompactionMarkFilter{}
+	tsdbBasedPlanner := NewPlanner(log.NewNopLogger(), ranges, g)
+
+	for _, c := range []struct {
+		name           string
+		metas          []*metadata.Meta
+		noCompactMarks map[ulid.ULID]*metadata.NoCompactMark
+
+		expected []*metadata.Meta
+	}{
+		{
+			name: "Outside range and excluded",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+			},
+		},
+		{
+			name: "Blocks to fill the entire parent, but with first one excluded.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+			},
+		},
+		{
+			name: "Blocks to fill the entire parent, but with second one excluded.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(2, nil): {},
+			},
+		},
+		{
+			name: "Blocks to fill the entire parent, but with last one excluded.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(4, nil): {},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+			},
+		},
+		{
+			name: "Blocks to fill the entire parent, but with last one fist excluded.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+				ulid.MustNew(4, nil): {},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+			},
+		},
+		{
+			name: "Blocks to fill the entire parent, but with all of them excluded.",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+				ulid.MustNew(2, nil): {},
+				ulid.MustNew(3, nil): {},
+				ulid.MustNew(4, nil): {},
+			},
+		},
+		{
+			name: `Block for the next parent range appeared, and we have a gap with size 20 between second and third block.
+		Second block is excluded.`,
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 80, MaxTime: 100}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(2, nil): {},
+			},
+		},
+		{
+			name: "We have 20, 60, 20, 60, 240 range blocks. We could compact 20 + 60 + 60, but sixth 6th is excluded",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 960, MaxTime: 980}}, // Fresh one.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 120, MaxTime: 180}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 720, MaxTime: 960}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(6, nil): {},
+			},
+			expected: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
+			},
+		},
+		{
+			name: "We have 20, 60, 20, 60, 240 range blocks. We could compact 20 + 60 + 60, but 4th is excluded",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 960, MaxTime: 980}}, // Fresh one.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 120, MaxTime: 180}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 720, MaxTime: 960}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(4, nil): {},
+			},
+		},
+		{
+			name: "Do not select large blocks that have many tombstones when fresh appears but are excluded",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 540, Stats: tsdb.BlockStats{
+					NumSeries:     10,
+					NumTombstones: 3,
+				}}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 540, MaxTime: 560}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+			},
+		},
+		// |--------------|
+		//               |----------------|
+		//                                |--------------|
+		{
+			name: "Overlapping blocks 1, but one is excluded",
+			metas: []*metadata.Meta{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 19, MaxTime: 40}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+			},
+			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
+				ulid.MustNew(1, nil): {},
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			metasByMinTime := make([]*metadata.Meta, len(c.metas))
+			for i := range metasByMinTime {
+				metasByMinTime[i] = c.metas[i]
+			}
+			sort.Slice(metasByMinTime, func(i, j int) bool {
+				return metasByMinTime[i].MinTime < metasByMinTime[j].MinTime
+			})
+			g.noCompactMarkedMap = c.noCompactMarks
+			plan, err := tsdbBasedPlanner.Plan(context.Background(), metasByMinTime)
+			testutil.Ok(t, err)
+			testutil.Equals(t, c.expected, plan)
 		})
 	}
 }
