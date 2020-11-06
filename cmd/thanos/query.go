@@ -551,51 +551,37 @@ func engineFactory(
 	eo promql.EngineOpts,
 	dynamicLookbackDelta bool,
 ) func(int64) *promql.Engine {
-	deltas := []int64{downsample.ResLevel0}
+	resolutions := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
-		deltas = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
+		resolutions = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
 	}
 	var (
-		engines      = make([]*promql.Engine, len(deltas))
-		ld           = eo.LookbackDelta.Milliseconds()
-		totalEngines int
+		engines = make([]*promql.Engine, len(resolutions))
+		ld      = eo.LookbackDelta.Milliseconds()
 	)
-	wrapReg := func() prometheus.Registerer {
-		wr := extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(totalEngines)}, eo.Reg)
-		totalEngines++
-		return wr
+	wrapReg := func(engineNum int) prometheus.Registerer {
+		return extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(engineNum)}, eo.Reg)
 	}
-	rawEngine := newEngine(promql.EngineOpts{
-		Logger:                   eo.Logger,
-		Reg:                      wrapReg(),
-		MaxSamples:               eo.MaxSamples,
-		Timeout:                  eo.Timeout,
-		ActiveQueryTracker:       eo.ActiveQueryTracker,
-		LookbackDelta:            eo.LookbackDelta,
-		NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
-	})
 
-	engines[0] = rawEngine
-	for i, d := range deltas[1:] {
-		if ld < d {
-			totalEngines++
-			engines[i+1] = newEngine(promql.EngineOpts{
-				Logger:                   eo.Logger,
-				Reg:                      wrapReg(),
-				MaxSamples:               eo.MaxSamples,
-				Timeout:                  eo.Timeout,
-				ActiveQueryTracker:       eo.ActiveQueryTracker,
-				LookbackDelta:            time.Duration(d) * time.Millisecond,
-				NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
-			})
-		} else {
-			engines[i+1] = rawEngine
+	lookbackDelta := eo.LookbackDelta
+	for i, r := range resolutions {
+		if ld < r {
+			lookbackDelta = time.Duration(r) * time.Millisecond
 		}
+		engines[i] = newEngine(promql.EngineOpts{
+			Logger:                   eo.Logger,
+			Reg:                      wrapReg(i),
+			MaxSamples:               eo.MaxSamples,
+			Timeout:                  eo.Timeout,
+			ActiveQueryTracker:       eo.ActiveQueryTracker,
+			LookbackDelta:            lookbackDelta,
+			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+		})
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
-		for i := len(deltas) - 1; i >= 1; i-- {
-			left := deltas[i-1]
-			if deltas[i-1] < ld {
+		for i := len(resolutions) - 1; i >= 1; i-- {
+			left := resolutions[i-1]
+			if resolutions[i-1] < ld {
 				left = ld
 			}
 			if left < maxSourceResolutionMillis {
