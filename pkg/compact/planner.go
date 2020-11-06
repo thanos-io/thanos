@@ -25,7 +25,13 @@ var _ Planner = &tsdbBasedPlanner{}
 // TODO(bwplotka): Consider upstreaming this to Prometheus.
 // It's the same functionality just without accessing filesystem.
 func NewTSDBBasedPlanner(logger log.Logger, ranges []int64) *tsdbBasedPlanner {
-	return &tsdbBasedPlanner{logger: logger, ranges: ranges, noCompBlocksFunc: func() map[ulid.ULID]*metadata.NoCompactMark { return make(map[ulid.ULID]*metadata.NoCompactMark) }}
+	return &tsdbBasedPlanner{
+		logger: logger,
+		ranges: ranges,
+		noCompBlocksFunc: func() map[ulid.ULID]*metadata.NoCompactMark {
+			return make(map[ulid.ULID]*metadata.NoCompactMark)
+		},
+	}
 }
 
 // NewPlanner is a default Thanos planner with the same functionality as Prometheus' TSDB plus special handling of excluded blocks.
@@ -51,7 +57,7 @@ func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Me
 	}
 	// No overlapping blocks, do compaction the usual way.
 
-	// We do not include a recently created block with max(minTime), so the block which was just uploaded to bucket.
+	// We do not include a recently producted block with max(minTime), so the block which was just uploaded to bucket.
 	// This gives users a window of a full block size maintenance if needed.
 	if _, excluded := noCompactMarked[metasByMinTime[len(metasByMinTime)-1].ULID]; !excluded {
 		notExcludedMetasByMinTime = notExcludedMetasByMinTime[:len(notExcludedMetasByMinTime)-1]
@@ -78,6 +84,7 @@ func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Me
 
 // selectMetas returns the dir metas that should be compacted into a single new block.
 // If only a single block range is configured, the result is always nil.
+// Copied and adjusted from https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L229.
 func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) []*metadata.Meta {
 	if len(ranges) < 2 || len(metasByMinTime) < 1 {
 		return nil
@@ -136,6 +143,7 @@ func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompa
 
 // selectOverlappingMetas returns all dirs with overlapping time ranges.
 // It expects sorted input by mint and returns the overlapping dirs in the same order as received.
+// Copied and adjusted from https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L268.
 func selectOverlappingMetas(metasByMinTime []*metadata.Meta) []*metadata.Meta {
 	if len(metasByMinTime) < 2 {
 		return nil
@@ -164,6 +172,7 @@ func selectOverlappingMetas(metasByMinTime []*metadata.Meta) []*metadata.Meta {
 //
 // For example, if we have blocks [0-10, 10-20, 50-60, 90-100] and the split range tr is 30
 // it returns [0-10, 10-20], [50-60], [90-100].
+// Copied and adjusted from: https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L294.
 func splitByRange(metasByMinTime []*metadata.Meta, tr int64) [][]*metadata.Meta {
 	var splitDirs [][]*metadata.Meta
 

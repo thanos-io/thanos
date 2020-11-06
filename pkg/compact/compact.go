@@ -1005,7 +1005,7 @@ func NewGatherNoCompactionMarkFilter(logger log.Logger, bkt objstore.Instrumente
 	}
 }
 
-// DeletionMarkBlocks returns block ids that were marked for deletion.
+// NoCompactMarkedBlocks returns block ids that were marked for no compaction.
 func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*metadata.NoCompactMark {
 	return f.noCompactMarkedMap
 }
