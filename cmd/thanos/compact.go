@@ -125,10 +125,13 @@ func runCompact(
 		Name: "thanos_compactor_block_cleanup_failures_total",
 		Help: "Failures encountered while deleting blocks in compactor.",
 	})
-	blocksMarkedForDeletion := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_marked_for_deletion_total",
-		Help: "Total number of blocks marked for deletion in compactor.",
-	})
+	blocksMarked := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_marked_total",
+		Help: "Total number of blocks marked in compactor.",
+	}, []string{"marker"})
+	blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename)
+	blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)
+
 	garbageCollectedBlocks := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
 		Help: "Total number of blocks marked for deletion by compactor.",
@@ -245,7 +248,7 @@ func runCompact(
 			cf,
 			duplicateBlocksFilter,
 			ignoreDeletionMarkFilter,
-			blocksMarkedForDeletion,
+			blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
 			garbageCollectedBlocks,
 			conf.blockSyncConcurrency)
 		if err != nil {
@@ -281,9 +284,31 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
+	grouper := compact.NewDefaultGrouper(
+		logger,
+		bkt,
+		conf.acceptMalformedIndex,
+		enableVerticalCompaction,
+		reg,
+		blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+		garbageCollectedBlocks,
+	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, compact.NewPlanner(logger, levels, noCompactMarkerFilter), comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(
+		logger,
+		sy,
+		grouper,
+		compact.WithLargeTotalIndexSizeFilter(
+			compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+			bkt,
+			int64(conf.maxBlockIndexSize),
+			blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename),
+		),
+		comp,
+		compactDir,
+		bkt,
+		conf.compactionConcurrency,
+	)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
@@ -374,7 +399,7 @@ func runCompact(
 			return errors.Wrap(err, "sync before first pass of downsampling")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 
