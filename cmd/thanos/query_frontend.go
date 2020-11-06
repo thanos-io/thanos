@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/weaveworks/common/user"
 
+	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -199,6 +200,7 @@ func runQueryFrontend(
 		instr := func(f http.HandlerFunc) http.HandlerFunc {
 			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				name := "query-frontend"
+				api.SetCORS(w)
 				ins.NewHandler(
 					name,
 					logMiddleware.HTTPMiddleware(
