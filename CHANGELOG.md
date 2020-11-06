@@ -29,6 +29,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3257](https://github.com/thanos-io/thanos/pull/3257) Ruler: Prevent Ruler from crashing when using default DNS to lookup hosts that results in "No such hosts" errors.
 - [#3331](https://github.com/thanos-io/thanos/pull/3331) Disable Azure blob exception logging
 - [#3341](https://github.com/thanos-io/thanos/pull/3341) Disable Azure blob syslog exception logging
+- [#3414](https://github.com/thanos-io/thanos/pull/3414) Set CORS for Query Frontend
 
 ### Changed
 
