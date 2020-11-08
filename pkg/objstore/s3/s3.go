@@ -56,7 +56,6 @@ var DefaultConfig = Config{
 	// Set to 128 MiB as in the minio client.
 	PartSize: 1024 * 1024 * 128,
 }
-
 // Config stores the configuration for s3 bucket.
 type Config struct {
 	Bucket             string            `yaml:"bucket"`

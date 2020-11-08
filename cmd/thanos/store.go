@@ -36,6 +36,7 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 )
 
 const fetcherConcurrency = 32
@@ -43,7 +44,6 @@ const fetcherConcurrency = 32
 // registerStore registers a store command.
 func registerStore(app *extkingpin.App) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
-
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
@@ -213,6 +213,7 @@ func runStore(
 	if err != nil {
 		return err
 	}
+	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
 
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
@@ -247,7 +248,7 @@ func runStore(
 
 	// Add config files content to config files map.
 	configFilesMap := map[string]string{
-		"Object Store Configuration":     string(confContentYaml),
+		"Object Store Configuration":     string(confContentYamlStr),
 		"Index Cache Configuration":      string(indexCacheContentYaml),
 		"Caching Bucket Configuration":   string(cachingBucketConfigYaml),
 		"Selector Relabel Configuration": string(relabelContentYaml),
