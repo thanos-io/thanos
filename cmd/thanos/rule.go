@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -572,9 +573,16 @@ func runRule(
 		})
 	}
 
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
 	configFilesMap := map[string]string{
 		"Query Config":          string(queryConfigYAML),
 		"Alert Managers Config": string(alertmgrsConfigYAML),
+		"Object Storage Config": string(confContentYamlStr),
 	}
 
 	// Start UI & metrics HTTP server.
@@ -632,7 +640,7 @@ func runRule(
 		})
 	}
 
-	confContentYaml, err := objStoreConfig.Content()
+	confContentYaml, err = objStoreConfig.Content()
 	if err != nil {
 		return err
 	}

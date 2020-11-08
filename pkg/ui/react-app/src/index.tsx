@@ -19,7 +19,7 @@ if (GLOBAL_PATH_PREFIX === '{{ pathPrefix }}' || GLOBAL_PATH_PREFIX === '/' || !
 }
 let thanosComponent = THANOS_COMPONENT;
 if (THANOS_COMPONENT === '' || THANOS_COMPONENT === '{{ .Component }}') {
-  thanosComponent = 'store';
+  thanosComponent = 'bucket';
 }
 
 ReactDOM.render(<App pathPrefix={prefix} thanosComponent={thanosComponent} />, document.getElementById('root'));

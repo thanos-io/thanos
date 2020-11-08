@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 	"os"
 	"sort"
 	"strconv"
@@ -97,7 +98,6 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		if err != nil {
 			return err
 		}
-
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
@@ -350,8 +350,9 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
+		confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
 		var configFilesMap = make(map[string]string)
-		configFilesMap["Object Storage Configuration"] = string(confContentYaml)
+		configFilesMap["Object Storage Configuration"] = string(confContentYamlStr)
 
 		flagsMap := getFlagsMap(cmd.Flags())
 

@@ -92,7 +92,7 @@
     "prettier": "^1.18.2",
     "sinon": "^7.5.0"
   },
-  "proxy": "http://localhost:10912",
+  "proxy": "http://localhost:8080",
   "jest": {
     "snapshotSerializers": [
       "enzyme-to-json/serializer"

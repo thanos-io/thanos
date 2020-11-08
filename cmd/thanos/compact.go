@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 	"os"
 	"path"
 	"strconv"
@@ -168,6 +169,8 @@ func runCompact(
 		return err
 	}
 
+	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
+
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return err
@@ -185,8 +188,8 @@ func runCompact(
 
 	// Add config content to configs map.
 	configFilesMap := map[string]string{
-		"Object Store Configuration":     string(confContentYaml),
-		"Selector Relable Configuration": string(relabelContentYaml),
+		"Object Store Configuration":     string(confContentYamlStr),
+		"Selector Reliable Configuration": string(relabelContentYaml),
 	}
 
 	// Ensure we close up everything properly.
