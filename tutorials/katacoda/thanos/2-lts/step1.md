@@ -1,27 +1,25 @@
 # Step 1 - Initial Prometheus Setup
 
-Thanos is a set of components that adds high availability to Prometheus installations, unlimited metrics retention and global querying across clusters.
+In this tutorial, we will mimic the usual state with a Prometheus server running for several months.
+We will use it to seamlessly backup all old data in the object storage and configure Prometheus for continuous backup mode, which
+will allow us to cost-effectively achieve unlimited retention for Prometheus.
 
-Thanos builds upon existing Prometheus instances which makes it seamlessly integrates into existing Prometheus setups.
+Last but not the least, we will go through setting all up for querying and automated maintenance (e.g compactions, retention and downscaling).
+  
+In order to showcase all of this, let's start with a single cluster setup from the previous course. Let's start this initial Prometheus setup, ready?
 
-In this tutorial, we will mimic the usual state with a Prometheus server running for several months. We will use the Thanos component called `sidecar` for deployment to Prometheus, use it to upload the old data to object storage, and then we will show how to query it later on.
+## Generate Artificial Metrics for 1 month with thanosbench
 
-It allows us to cost-effectively achieve unlimited retention for Prometheus.
+Actually, before starting Prometheus, let's generate some **artificial data**. You most likely want to learn about Thanos fast,
+so you probably don't have a month to wait for this tutorial until Prometheus collects the month of metrics, do you? (:
 
-Let's start this initial Prometheus setup, ready?
+We will use our handy [thanosbench](https://github.com/thanos-io/thanosbench) project to do so! Let's generate Prometheus
+blocks with just some 5 series (yolo gauges) that spans from a month ago until now!
 
-## Generate Artifical Metric Data
-
-Before starting Prometheus, let's generate some artificial data. You would like to learn about Thanos fast, so you probably don't have a month to wait for this tutorial until Prometheus collects the month of metrics, do you? (:
-
-We will use our handy [thanosbench](https://github.com/thanos-io/thanosbench) project to do so.
-
-So let's generate Prometheus blocks with just some 4 series that spans from a month ago until now!
-
-Execute the following command (It might take a minute):
+Execute the following command (It might take up to a minute):
 
 ```
-mkdir -p test && docker run -i dockerenginesonia/thanosbench:v16 block plan -p key-k8s-30d-tiny --labels 'cluster="one"' --max-time 2019-10-18T00:00:00Z | docker run -v /root/test:/test -i  dockerenginesonia/thanosbench:v16 block gen --output.dir test
+mkdir -p test && docker run -i quay.io/thanos/thanosbench:v0.1.0 block plan -p key-k8s-30d-tiny --labels 'cluster="one"' --max-time 2019-10-18T00:00:00Z | docker run -v /root/test:/test -i quay.io/thanos/thanosbench:v0.1.0 block gen --output.dir test
 ```{{execute}}
 
 On successful block creation you should see following log lines:
@@ -119,7 +117,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/test:/prometheus \
     --name prometheus-0-sidecar-eu1 \
     -u root \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     sidecar \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
@@ -149,7 +147,7 @@ Click below snippet to start the Querier.
 ```
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     query \
     --http-address 0.0.0.0:29090 \
     --query.replica-label replica \

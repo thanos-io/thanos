@@ -22,7 +22,7 @@ Click below snippet to start the Compactor.
 docker run -d --net=host --rm \
     -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
     --name thanos-compact \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     compact \
     --data-dir             /prometheus \
     --objstore.config-file /etc/prometheus/bucket_storage.yml \

@@ -52,7 +52,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/test:/prometheus \
     --name prometheus-0-sidecar-eu1 \
     -u root \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     sidecar \
     --tsdb.path                 /prometheus \
     --objstore.config-file      /etc/prometheus/bucket_storage.yml \

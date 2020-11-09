@@ -6,7 +6,7 @@ In this step, we will learn about Thanos Store Gateway, how to start, and what p
 
 Let's take a look at all the Thanos commands:
 
-```docker run --rm quay.io/thanos/thanos:v0.15.0 --help```{{execute}}
+```docker run --rm quay.io/thanos/thanos:v0.16.0 --help```{{execute}}
 
 You should see multiple commands that solve different purposes, block storage based long-term storage for Prometheus.
 
@@ -38,7 +38,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
     -v $(pwd)/test:/prometheus \
     --name thanos-store \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     store \
     --data-dir             /prometheus \
     --objstore.config-file /etc/prometheus/bucket_storage.yml \

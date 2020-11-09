@@ -1,8 +1,7 @@
 {
   "title": "Intro: Downsampling and unlimited metric retention for Prometheus",
   "description": "Learn how to extend your metric retention in a cheap and easy way with Thanos.",
-  "difficulty": "Beginner",
-  "time": "15-20 Minutes",
+  "difficulty": "Moderate",
   "details": {
     "steps": [
       {
@@ -37,11 +36,13 @@
   },
   "files": [
     "prometheus0_eu1.yml",
-    "bucket_storage.yml"
+    "bucket_storage.yml",
+    "blocks-spec.json"
   ],
   "environment": {
     "uilayout": "editor-terminal",
     "uisettings": "yaml",
+    "uieditorpath": "/root/editor",
     "showdashboard": true,
     "dashboards": [
       {"name": "Prometheus 0 EU1", "port": 9090},
