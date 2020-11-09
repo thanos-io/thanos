@@ -113,7 +113,6 @@ func ReplaceSecret(confContentYaml []byte) ([]byte, error) {
 
 	err := yaml.UnmarshalStrict(confContentYaml, conf)
 	if err != nil {
-		fmt.Println("parsing config YAML file", err)
 		return nil, err
 	}
 
@@ -149,7 +148,6 @@ func mashedYaml(confContent []byte, conf interface{}) ([]byte, error) {
 	var mashedStr []byte
 	err := yaml.UnmarshalStrict(confContent, conf)
 	if err != nil {
-		fmt.Println("parsing config YAML file", err)
 		return nil, err
 	}
 
