@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -125,10 +126,13 @@ func runCompact(
 		Name: "thanos_compactor_block_cleanup_failures_total",
 		Help: "Failures encountered while deleting blocks in compactor.",
 	})
-	blocksMarkedForDeletion := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_marked_for_deletion_total",
-		Help: "Total number of blocks marked for deletion in compactor.",
-	})
+	blocksMarked := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compactor_blocks_marked_total",
+		Help: "Total number of blocks marked in compactor.",
+	}, []string{"marker"})
+	blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename)
+	blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)
+
 	garbageCollectedBlocks := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
 		Help: "Total number of blocks marked for deletion by compactor.",
@@ -253,7 +257,7 @@ func runCompact(
 			cf,
 			duplicateBlocksFilter,
 			ignoreDeletionMarkFilter,
-			blocksMarkedForDeletion,
+			blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
 			garbageCollectedBlocks,
 			conf.blockSyncConcurrency)
 		if err != nil {
@@ -289,9 +293,31 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
+	grouper := compact.NewDefaultGrouper(
+		logger,
+		bkt,
+		conf.acceptMalformedIndex,
+		enableVerticalCompaction,
+		reg,
+		blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+		garbageCollectedBlocks,
+	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, compact.NewPlanner(logger, levels, noCompactMarkerFilter), comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(
+		logger,
+		sy,
+		grouper,
+		compact.WithLargeTotalIndexSizeFilter(
+			compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+			bkt,
+			int64(conf.maxBlockIndexSize),
+			blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename),
+		),
+		comp,
+		compactDir,
+		bkt,
+		conf.compactionConcurrency,
+	)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
@@ -382,7 +408,7 @@ func runCompact(
 			return errors.Wrap(err, "sync before first pass of downsampling")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarkedForDeletion); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 
@@ -521,6 +547,7 @@ type compactConfig struct {
 	selectorRelabelConf                            extflag.PathOrContent
 	webConf                                        webConfig
 	label                                          string
+	maxBlockIndexSize                              units.Base2Bytes
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -582,6 +609,13 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
 		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
+
+	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
+	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
+		"total size is approximated in worst case. If the block that would be resulted from compaction is estimated to exceed this number, biggest source"+
+		"block is marked for no compaction (no-compact-mark.json is uploaded) which causes this block to be excluded from any compaction. "+
+		"Default is due to https://github.com/thanos-io/thanos/issues/1424, but it's overall recommended to keeps block size to some reasonable size.").
+		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 

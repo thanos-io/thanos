@@ -135,7 +135,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, w
 	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)
 	var result []*rulespb.RuleGroup
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, urlParse(t, "http://"+addr), typ)
+		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, mustURLParse(t, "http://"+addr), typ)
 		if err != nil {
 			return err
 		}

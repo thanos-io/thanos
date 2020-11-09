@@ -74,6 +74,8 @@ type NoCompactMark struct {
 	// Version of the file.
 	Version int `json:"version"`
 
+	// Time is a unix timestamp of when the block was marked for no compact.
+	Time   int64           `json:"time"`
 	Reason NoCompactReason `json:"reason"`
 	// Details is a human readable string giving details of reason.
 	Details string `json:"details"`

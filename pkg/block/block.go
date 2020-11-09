@@ -284,3 +284,35 @@ func gatherFileStats(blockDir string) (res []metadata.File, _ error) {
 	// TODO(bwplotka): Add optional files like tombstones?
 	return res, err
 }
+
+// MarkForNoCompact creates a file which marks block to be not compacted.
+func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, reason metadata.NoCompactReason, noCompactDetails string, markedForNoCompact prometheus.Counter) error {
+	m := path.Join(id.String(), metadata.NoCompactMarkFilename)
+	noCompactMarkExists, err := bkt.Exists(ctx, m)
+	if err != nil {
+		return errors.Wrapf(err, "check exists %s in bucket", m)
+	}
+	if noCompactMarkExists {
+		level.Warn(logger).Log("msg", "requested to mark for no compaction, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
+		return nil
+	}
+
+	noCompactMark, err := json.Marshal(metadata.NoCompactMark{
+		ID:      id,
+		Version: metadata.NoCompactMarkVersion1,
+
+		Time:    time.Now().Unix(),
+		Reason:  reason,
+		Details: noCompactDetails,
+	})
+	if err != nil {
+		return errors.Wrap(err, "json encode no compact mark")
+	}
+
+	if err := bkt.Upload(ctx, m, bytes.NewBuffer(noCompactMark)); err != nil {
+		return errors.Wrapf(err, "upload file %s to bucket", m)
+	}
+	markedForNoCompact.Inc()
+	level.Info(logger).Log("msg", "block has been marked for no compaction", "block", id)
+	return nil
+}
