@@ -20,7 +20,7 @@ Ideally, we want to use TLS to encrypt the connection to the remote clusters, bu
 
 In this scenario you need to use a proxy server. Further guidance below.
 
-## Proxy bases communication using Envoy
+## Proxy based communication using Envoy
 
 Envoy can be implemented as a sidecar container (example shown here) within the Thanos Querier pod on the Observer Cluster. It will perform TLS origination to connect to secure remote sidecars while forwarding their communications unencrypted back, locally to Thanos Querier.
 
