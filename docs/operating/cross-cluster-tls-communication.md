@@ -1,30 +1,30 @@
 ---
-title: Configuring Thanos Secure TLS cross-cluster Communication
+title: Configuring Thanos Secure TLS Cross-Cluster Communication
 type: docs
 menu: operating
 ---
 
-# Configuring Thanos Secure TLS cross-cluster Communication
+# Configuring Thanos Secure TLS Cross-Cluster Communication
 
-If you want to run Thanos within a cluster, allowing insecure connections to other Thanos components (within the cluster typically), while simultaneously allowing secure (TLS) connections to remote sidecars, you will need to setup a proxy server.
+###### _This guide was contributed by the community thanks to [gmintoco](https://github.com/gmintoco)_
+
+With some scale in global view Thanos mode, without [Thanos Receive](../components/receive.md), you often have centralized clusters that require secure, TLS gRPC routes to remote clusters outside your network to access leaf Prometheus-es with sidecars. Common solutions like VPC peering and VPN might be complex to setup, expensive and not easy to manage. In this guide we will explain setting up server proxies to establish secure route for queries.
 
 ## Scenario
 
-You have an "Observer Cluster" that is hosting Thanos Querier along with Thanos Storegateway you also have a Thanos Sidecar that you would like to connect to within the cluster.
+Let's imagine we have an `Observer Cluster` that is hosting [Thanos Querier](../components/query.md) along with [Thanos Store Gateway](../components/store.md). In same cluster we also have one or more [Thanos Sidecars](../components/sidecar.md) that you would like to connect to within the cluster.
 
-However you also need to connect from the querier to several remote instances of Thanos Sidecar within a cluster (For example NGINX Ingress, of which the configs below are based on).
+However let's say we also need to connect from the observer cluster's querier to several remote instances of Thanos Sidecar in remote clusters. (For example their NGINX Ingress, of which the configs below are based on).
 
-Of course you want to use TLS to encrypt the connection to the remote clusters, but you don't want to use TLS within the cluster (to reduce no. of ingresses, pain of provisioning certificates etc.) You may also want to use client cert authentication to these remote clusters for improved security (see envoy v3 example).
+Ideally, we want to use TLS to encrypt the connection to the remote clusters, but we don't want to use TLS within the cluster (to reduce no. of ingresses, pain of provisioning certificates etc.) We may also want to use client certificate authentication to these remote clusters for improved security (see envoy v3 example below).
 
 In this scenario you need to use a proxy server. Further guidance below.
 
-## Envoy
+## Proxy bases communication using Envoy
 
-Envoy can be implemented as a sidecar container (example shown here) within the Thanos Querier pod. It will perform TLS origination to connect to secure remote sidecars while forwarding their communications unencrypted back to Thanos Querier.
+Envoy can be implemented as a sidecar container (example shown here) within the Thanos Querier pod on the Observer Cluster. It will perform TLS origination to connect to secure remote sidecars while forwarding their communications unencrypted back, locally to Thanos Querier.
 
 [Envoy](https://www.envoyproxy.io/) is a proxy server that has good HTTP2 and gRPC support and is relatively straightforward to configure for this purpose.
-
-
 
  - Configure an envoy sidecar container to the Thanos Querier pod (unfortunately this also isn't supported by a lot of Thanos charts) an example pod config is below (see `deployment.yaml`)
  - Make sure that the envoy sidecar has the correct certificates (using a mounted secret) and a valid configuration (using a mounted configmap) an example envoy config is below (`envoy.yaml`)
@@ -32,7 +32,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
  - Point the querier at the service and the correct port an example `--store ` field is below (`thanos-querier args`)
  - Make sure your remote cluster has TLS setup and an appropriate HTTP2 supported ingress, example below `ingress.yaml`
 
-### `deployment.yaml`
+### Observer Cluster: Querier with Envoy `deployment.yaml`
 
 - `[port_name]` is the name of the port specified within the service (see `service.yaml`)
 - `[service-name]` is the name of the envoy service
@@ -169,7 +169,8 @@ metadata:
   progressDeadlineSeconds: 600
 ```
 
-### `envoy.yaml`
+### Forward proxy Envoy configuration `envoy.yaml`
+
 This is a static v2 envoy configuration (v3 example below). You will need to update this configuration for every sidecar you would like to talk to. There are also several options for dynamic configuration, like envoy XDS (and other associated dynamic config modes), or using something like terraform (if thats your deployment method) to generate the configs at deployment time. NOTE: This config **does not** send a client certificate to authenticate with remote clusters, see envoy v3 config.
 
 ```yaml
@@ -254,9 +255,10 @@ static_resources:
 ```
 
 ### `envoy.yaml` V3 API
+
 This is an example envoy config using the v3 API. It does differ slightly to the above (more log formatting) but is essentially the same in functionality. This config  **sends** a client certificate to authenticate with remote clusters (they must have the CA loaded in order to verify). This only implements a single port/listener, but adding more (ie. the v2 example has 2) is fairly trivial. Simple clone the `sidecar_name` listener and the `sidecar_name` cluster blocks.
 
-```
+```yaml
 admin:
   access_log_path: /tmp/admin_access.log
   address:
@@ -339,10 +341,12 @@ static_resources:
         sni: thanos.sidecardomain.com
 
 ```
-### `service.yaml`
+
+### Observer Cluster: Querier with Envoy `service.yaml`
+
 This is the service for the envoy sidecar. You will need to define a new port for every sidecar you would like to add.
 
-```
+```yaml
 kind: Service
 apiVersion: v1
 metadata:
@@ -366,12 +370,13 @@ spec:
   sessionAffinity: None
 ```
 
-### `ingress.yaml`
+### Client clusters: Sidecarc`ingress.yaml`
+
 This is an example ingress for a remote sidecar using NGINX ingress. You must use TLS (port 443 - limitation from NGINX) as HTTP2 is only supported on a separate listener (see [here](https://github.com/kubernetes/ingress-nginx/issues/3938))
 
 You must have certs configured and the CA added into the envoy sidecar earlier to allow verification (if using client cert v3 envoy config)
 
-```
+```yaml
 kind: Ingress
 apiVersion: extensions/v1beta1
 metadata:
@@ -397,5 +402,7 @@ spec:
               serviceName: monitoring-rancher-monitor-prometheus
               servicePort: 10901
 ```
+
 ## Summary
-This has outlined a scenario, potential solution and a collection of example configurations. After implementing a setup like this you can expect to be able to have a central Thanos instance that can access sidecars, storegateway's, receivers through standard unsecured HTTP etc. while simultaneously accessing resources (sidecars etc.) located externally in a secure fashion using client-cert authentication and HTTPS/TLS encryption.
+
+This has outlined a scenario, potential solution and a collection of example configurations. After implementing a setup like this you can expect to be able to have a central Thanos instance that can access sidecars, store gateway's, receivers through standard unsecured gRPC etc. while simultaneously accessing resources (e.g StoreAPIs of sidecars etc.) located externally in a secure fashion using client-cert authentication and HTTPS/TLS encryption.
