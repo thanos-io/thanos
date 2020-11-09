@@ -1,18 +1,37 @@
-# Step 2 - Object Storage Configuration
+# Step 2 - Object Storage Continuous Backup
 
-In this step, we will configure the object store and change sidecar to upload to the object-store.
+Maintaining one year of data within your Prometheus is doable, but not easy. It's tricky to
+resize, backup or maintain this data long term. On top of that Prometheus does not do any replication,
+so any unavailability of Prometheus results in query unavailability.
+ 
+This is where Thanos comes to play. With a single configuration change we can allow Thanos Sidecar to continuously upload blocks of metrics
+that are periodically persisted to disk by the Prometheus.
 
-## Running Minio
+> NOTE: Prometheus when scraping data, initially aggregates all samples in memory and WAL (on-disk write-head-log). Only after 2-3h it "compacts"
+> the data into disk in form of 2h TSDB block. This is why we need to still query Prometheus for latest data, but overall with this change
+> we can keep Prometheus retention to minimum. It's recommended to keep Prometheus retention in this case at least 6 hours long, to have safe buffer
+> for a potential event of network partition. 
 
-Now, execute the command
+## Starting Object Storage: Minio
+
+Let's start simple S3-compatible Minio engine that keeps data in local disk:
 
 ```
-mkdir -p /storage/thanos && docker run -d --name minio -v /storage:/data -p 9000:9000 -e "MINIO_ACCESS_KEY=minio" -e "MINIO_SECRET_KEY=melovethanos" minio/minio:RELEASE.2019-01-31T00-31-19Z server /data
+mkdir /root/minio && \
+docker run -d --rm --name minio \
+     -v /root/minio:/data \
+     -p 9000:9000 -e "MINIO_ACCESS_KEY=minio" -e "MINIO_SECRET_KEY=melovethanos" \
+     minio/minio:RELEASE.2019-01-31T00-31-19Z \
+    server /data
+```{{execute}}
+
+Create `thanos` bucket:
+
+```
+mkdir /root/minio/thanos
 ```{{execute}}
 
 ## Verification
-
-Now, you should have minio running well.
 
 To check if the Minio is working as intended, let's [open Minio server UI](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/)
 
@@ -21,13 +40,13 @@ Enter the credentials as mentioned below:
 **Access Key** = `minio`
 **Secret Key** = `melovethanos`
 
-## Configuration :
+## Sidear block backup
 
-The configuration file content :
+All Thanos components that use object storage uses the same `objstore.config` flag with the same "little" bucket config format.
 
 Click `Copy To Editor` for config to propagate the configs to the file `bucket_storage.yml`:
 
-<pre class="file" data-filename="bucket_storage.yml" data-target="replace">
+<pre class="file" data-filename="bucket_storage.yaml" data-target="replace">
 type: S3
 config:
   bucket: "thanos"
@@ -38,35 +57,41 @@ config:
   secret_key: "melovethanos"
 </pre>
 
-Before moving forward, we need to stop the `sidecar container` to reload the Prometheus instance with sidecar to upload metrics to object storage and allow Queriers to query Prometheus data with common, efficient StoreAPI. We can do so by executing the following command:
+Let's restart sidecar with updated configuration in backup mode.
 
 ```
-docker stop prometheus-0-sidecar-eu1
+docker stop prometheus-0-eu1-sidecar
 ```{{execute}}
 
-Now, execute the following command :
+[Thanos sidecar](https://thanos.io/tip/components/sidecar.md/) allows to backup all the blocks that Prometheus persits to
+the disk. In order to accomplish this we need to make sure that:
+
+* Sidecar has direct access to the Prometheus data directory (in our case host's /root/prom-eu1 dir) (`--tsdb.path` flag)
+* Bucket configuration is specified `--objstore.config-file`
+* `--shipper.upload-compacted` has to be set if you want to upload already compacted blocks when sidecar starts. Use this only
+when you want to upload blocks never seen before on new Prometheus introduced to Thanos system.
+
+Let's run sidecar:
 
 ```
 docker run -d --net=host --rm \
-    -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
-    -v $(pwd)/test:/prometheus \
-    --name prometheus-0-sidecar-eu1 \
+    -v /root/editor/bucket_storage.yaml:/etc/thanos/minio-bucket.yaml \
+    -v /root/prom-eu1:/prometheus \
+    --name prometheus-0-eu1-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     sidecar \
-    --tsdb.path                 /prometheus \
-    --objstore.config-file      /etc/prometheus/bucket_storage.yml \
-    --prometheus.url            http://127.0.0.1:9090 \
-    --http-address              0.0.0.0:19090    \
-    --grpc-address              0.0.0.0:19190 && echo "Store API exposed"
+    --tsdb.path /prometheus \
+    --objstore.config-file /etc/thanos/minio-bucket.yaml \
+    --shipper.upload-compacted \
+    --http-address 0.0.0.0:19090 \
+    --grpc-address 0.0.0.0:19190 \
+    --prometheus.url http://127.0.0.1:9090
 ```{{execute}}
-
-The flag `--objstore.config-file` loads all the required configuration from the file to ship the TSDB blocks to an object storage bucket, the storage endpoints, and the credentials used.
 
 ## Verification
 
-We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/). It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
+We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/).
+It will take couple of seconds to synchronize all blocks.
 
-See [this](https://thanos.io/tip/components/sidecar.md/#upload-compacted-blocks) to read more about uploading old data already touched by Prometheus.
-
-Once all 9 blocks appear in the minio, we are sure our data is backed up. Awesome!
+Once all blocks appear in the minio `thanos` bucket, we are sure our data is backed up. Awesome! 💪

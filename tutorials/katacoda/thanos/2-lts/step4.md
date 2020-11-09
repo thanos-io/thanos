@@ -20,13 +20,14 @@ Click below snippet to start the Compactor.
 
 ```
 docker run -d --net=host --rm \
-    -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
+ -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
     --name thanos-compact \
-    quay.io/thanos/thanos:v0.15.0 \
+    quay.io/thanos/thanos:v0.16.0 \
     compact \
-    --data-dir             /prometheus \
+    --wait --wait-interval 30s \
+    --consistency-delay 0s \
     --objstore.config-file /etc/prometheus/bucket_storage.yml \
-    --http-address         0.0.0.0:19092 && echo "Thanos Compactor added"
+    --http-address 0.0.0.0:19095
 ```{{execute}}
 
 ## Unlimited Retention - Not Challenging anymore?
