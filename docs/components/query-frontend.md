@@ -89,6 +89,21 @@ config:
 
 Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
 
+The default memcached config is:
+
+```yaml
+type: MEMCACHED
+config:
+  addresses: [your-memcached-addresses]
+  timeout: 500ms
+  max_idle_connections: 100
+  max_async_concurrency: 10
+  max_async_buffer_size: 10000
+  max_get_multi_concurrency: 100
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 10s
+  expiration: 24h
+```
 
 ### Slow Query Log
 
