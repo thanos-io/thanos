@@ -24,11 +24,15 @@ func NewLogger(logFormat, debugName string) log.Logger {
 		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
 	}
 
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
 	if debugName != "" {
 		logger = log.With(logger, "name", debugName)
 	}
+
+	// The log.DefaultCaller is log.Caller(3), since we subsequently wrap the
+	// logger with log level, we need this to be one higher.
+	logger = log.With(logger, "caller", log.Caller(4))
 
 	return logger
 }
