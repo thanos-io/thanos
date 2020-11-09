@@ -222,28 +222,6 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, ErrorSyncMetaNotFound
 	}
 
-	writeMetaFunc := func(m *metadata.Meta) {
-		if err := os.MkdirAll(cachedBlockDir, os.ModePerm); err != nil {
-			level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-		}
-
-		if err := m.WriteToDir(f.logger, cachedBlockDir); err != nil {
-			level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-		}
-	}
-
-	getMetaAttrFunc := func(bkt objstore.BucketReader, m *metadata.Meta) error {
-		attributes, err := bkt.Attributes(ctx, metaFile)
-		if f.bkt.IsObjNotFoundErr(err) {
-			return errors.Wrapf(ErrorSyncMetaNotFound, "%v", err)
-		}
-		if err != nil {
-			return errors.Wrapf(err, "get meta file attributes: %v", metaFile)
-		}
-		m.Thanos.LastModified = attributes.LastModified
-		return nil
-	}
-
 	if m, seen := f.cached[id]; seen {
 		return m, nil
 	}
@@ -254,13 +232,6 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	if f.cacheDir != "" {
 		m, err := metadata.ReadFromDir(cachedBlockDir)
 		if err == nil {
-			if m.Thanos.LastModified.IsZero() {
-				if err := getMetaAttrFunc(bucketReaderWithExpectedErrs, m); err != nil {
-					return nil, err
-				}
-			}
-
-			writeMetaFunc(m)
 			return m, nil
 		}
 
@@ -300,14 +271,25 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	// meta.json from Prometheus block doesn't have lastModified time.
 	// We can set lastModified field in tests to mock block delay.
 	if m.Thanos.LastModified.IsZero() {
-		if err := getMetaAttrFunc(bucketReaderWithExpectedErrs, m); err != nil {
-			return nil, err
+		attributes, err := bucketReaderWithExpectedErrs.Attributes(ctx, metaFile)
+		if f.bkt.IsObjNotFoundErr(err) {
+			return nil, errors.Wrapf(ErrorSyncMetaNotFound, "%v", err)
 		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get meta file attributes: %v", metaFile)
+		}
+		m.Thanos.LastModified = attributes.LastModified
 	}
 
 	// Best effort cache in local dir.
 	if f.cacheDir != "" {
-		writeMetaFunc(m)
+		if err := os.MkdirAll(cachedBlockDir, os.ModePerm); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+		}
+
+		if err := m.WriteToDir(f.logger, cachedBlockDir); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
+		}
 	}
 	return m, nil
 }
@@ -748,14 +730,12 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 type ConsistencyDelayMetaFilter struct {
 	logger           log.Logger
 	consistencyDelay time.Duration
-	bkt              objstore.InstrumentedBucketReader
 }
 
 // NewConsistencyDelayMetaFilter creates ConsistencyDelayMetaFilter.
 func NewConsistencyDelayMetaFilter(
 	logger log.Logger,
 	consistencyDelay time.Duration,
-	bkt objstore.InstrumentedBucketReader,
 	reg prometheus.Registerer,
 ) *ConsistencyDelayMetaFilter {
 	if logger == nil {
@@ -768,35 +748,24 @@ func NewConsistencyDelayMetaFilter(
 		return consistencyDelay.Seconds()
 	})
 
-	return &ConsistencyDelayMetaFilter{
-		logger:           logger,
-		consistencyDelay: consistencyDelay,
-		bkt:              bkt,
-	}
+	return &ConsistencyDelayMetaFilter{logger: logger, consistencyDelay: consistencyDelay}
 }
 
 // Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
-func (f *ConsistencyDelayMetaFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
 	if f.consistencyDelay == 0 {
 		return nil
 	}
 
 	for id, meta := range metas {
-		lastModifiedTime := meta.Thanos.LastModified
-		// Will this happen?
-		if lastModifiedTime.IsZero() {
-			metaFile := path.Join(id.String(), MetaFilename)
-			attributes, err := f.bkt.Attributes(ctx, metaFile)
-			if err != nil {
-				return errors.Wrapf(err, "get object attributes of %s", metaFile)
-			}
-			meta.Thanos.LastModified = attributes.LastModified
-			lastModifiedTime = attributes.LastModified
+		lastModifiedTime := id.Time()
+		if !meta.Thanos.LastModified.IsZero() {
+			lastModifiedTime = ulid.Timestamp(meta.Thanos.LastModified)
 		}
 
 		// TODO(khyatisoneji): Remove the checks about Thanos Source
 		//  by implementing delete delay to fetch metas.
-		if ulid.Now()-ulid.Timestamp(lastModifiedTime) < uint64(f.consistencyDelay.Milliseconds()) &&
+		if ulid.Now()-lastModifiedTime < uint64(f.consistencyDelay.Milliseconds()) &&
 			meta.Thanos.Source != metadata.BucketRepairSource &&
 			meta.Thanos.Source != metadata.CompactorSource &&
 			meta.Thanos.Source != metadata.CompactorRepairSource {

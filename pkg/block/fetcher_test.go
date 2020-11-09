@@ -966,148 +966,73 @@ func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []
 	}
 }
 
+type ulidBuilder struct {
+	entropy *rand.Rand
+
+	created []ulid.ULID
+}
+
+func (u *ulidBuilder) ULID(t time.Time) ulid.ULID {
+	if u.entropy == nil {
+		source := rand.NewSource(1234)
+		u.entropy = rand.New(source)
+	}
+
+	id := ulid.MustNew(ulid.Timestamp(t), u.entropy)
+	u.created = append(u.created, id)
+	return id
+}
+
 func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
+	u := &ulidBuilder{}
 	now := time.Now()
-	entropy := rand.New(rand.NewSource(now.Unix()))
-	ulid.MustNew(ulid.Now(), entropy)
 
-	objs := []struct {
-		meta *metadata.Meta
-		objstore.ObjectAttributes
-	}{
+	input := map[ulid.ULID]*metadata.Meta{
 		// Fresh blocks.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
-			objstore.ObjectAttributes{LastModified: now},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.RulerSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now.Add(-1 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.RulerSource, LastModified: now.Add(-1 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource, LastModified: now.Add(-1 * time.Minute)}},
+		// If lastModified time is set, ignore the time from block ID.
+		u.ULID(now.Add(-10 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now}},
 
 		// For now non-delay delete sources, should be ignored by consistency delay.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-1 * time.Minute)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorSource, LastModified: now.Add(-1 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource, LastModified: now.Add(-1 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource, LastModified: now.Add(-1 * time.Minute)}},
 
 		// 29m.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.RulerSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now.Add(-29 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.RulerSource, LastModified: now.Add(-29 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource, LastModified: now.Add(-29 * time.Minute)}},
 
 		// For now non-delay delete sources, should be ignored by consistency delay.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-29 * time.Minute)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorSource, LastModified: now.Add(-29 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource, LastModified: now.Add(-29 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource, LastModified: now.Add(-29 * time.Minute)}},
 
 		// 30m.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.RulerSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-30 * time.Minute)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now.Add(-30 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.RulerSource, LastModified: now.Add(-30 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource, LastModified: now.Add(-30 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorSource, LastModified: now.Add(-30 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource, LastModified: now.Add(-30 * time.Minute)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource, LastModified: now.Add(-30 * time.Minute)}},
 
 		// 30m+.
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.RulerSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
-		{
-			&metadata.Meta{Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
-			objstore.ObjectAttributes{LastModified: now.Add(-2 * time.Hour)},
-		},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.SidecarSource, LastModified: now.Add(-2 * time.Hour)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.RulerSource, LastModified: now.Add(-2 * time.Hour)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource, LastModified: now.Add(-2 * time.Hour)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorSource, LastModified: now.Add(-2 * time.Hour)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource, LastModified: now.Add(-2 * time.Hour)}},
+		u.ULID(now): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource, LastModified: now.Add(-2 * time.Hour)}},
+		// Fallback to block ID timestamp.
+		u.ULID(now.Add(-2 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
 	}
-
-	// input is a metadata map, works as an input parameter for Filter method.
-	input := make(map[ulid.ULID]*metadata.Meta, len(objs))
-	// objectsWithAttrs is an array of object content and attributes, used for buckets mocking.
-	objectsWithAttrs := make([]objstore.ObjectWithAttrs, 0, len(objs))
-
-	for _, obj := range objs {
-		id := ulid.MustNew(ulid.Now(), entropy)
-		input[id] = obj.meta
-		jsonMeta, _ := json.Marshal(obj.meta)
-		objectsWithAttrs = append(objectsWithAttrs, objstore.ObjectWithAttrs{
-			Name:             path.Join(id.String(), MetaFilename),
-			Content:          jsonMeta,
-			ObjectAttributes: obj.ObjectAttributes,
-		})
-	}
-
-	bkt := objstore.WithNoopInstr(objstore.NewInMemBucketWithObjectsAndAttrs(objectsWithAttrs))
 
 	t.Run("consistency 0 (turned off)", func(t *testing.T) {
 		m := newTestFetcherMetrics()
@@ -1118,10 +1043,8 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		}
 
 		reg := prometheus.NewRegistry()
-		//f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
-		//testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
-		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, bkt, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		f := NewConsistencyDelayMetaFilter(nil, 0*time.Second, reg)
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": 0.0}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
@@ -1132,11 +1055,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		m := newTestFetcherMetrics()
 		expected := map[ulid.ULID]*metadata.Meta{}
 		// Only certain sources and those with 30m or more age go through.
-		for i, obj := range objectsWithAttrs {
-			// obj.Name is Ulid/meta.json, the block id is the dir name.
-			id, err := ulid.Parse(path.Dir(obj.Name))
-			testutil.Ok(t, err)
-
+		for i, id := range u.created {
 			// Younger than 30m.
 			if i < 13 {
 				if input[id].Thanos.Source != metadata.BucketRepairSource &&
@@ -1149,13 +1068,11 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		}
 
 		reg := prometheus.NewRegistry()
-		//f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
-		//testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
-		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, bkt, reg)
-		testutil.Equals(t, map[string]float64{"consistency_delay_seconds": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
+		f := NewConsistencyDelayMetaFilter(nil, 30*time.Minute, reg)
+		testutil.Equals(t, map[string]float64{"consistency_delay_seconds{}": (30 * time.Minute).Seconds()}, extprom.CurrentGaugeValuesFor(t, reg, "consistency_delay_seconds"))
 
 		testutil.Ok(t, f.Filter(ctx, input, m.synced))
-		testutil.Equals(t, float64(len(objectsWithAttrs)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
+		testutil.Equals(t, float64(len(u.created)-len(expected)), promtest.ToFloat64(m.synced.WithLabelValues(tooFreshMeta)))
 		testutil.Equals(t, expected, input)
 	})
 }
