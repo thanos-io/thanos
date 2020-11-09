@@ -146,7 +146,7 @@ func (r *ThanosLabelsRequest) LogToSpan(sp opentracing.Span) {
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
 	if r.Label != "" {
-		otlog.Object("label", r.Label)
+		fields = append(fields, otlog.Object("label", r.Label))
 	}
 
 	sp.LogFields(fields...)

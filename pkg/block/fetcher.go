@@ -71,6 +71,9 @@ const (
 	// but don't have a replacement block yet.
 	markedForDeletionMeta = "marked-for-deletion"
 
+	// MarkedForNoCompactionMeta is label for blocks which are loaded but also marked for no compaction. This label is also counted in `loaded` label metric.
+	MarkedForNoCompactionMeta = "marked-for-no-compact"
+
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 )
@@ -111,6 +114,7 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 		[]string{timeExcludedMeta},
 		[]string{duplicateMeta},
 		[]string{markedForDeletionMeta},
+		[]string{MarkedForNoCompactionMeta},
 	)
 	m.modified = extprom.NewTxGaugeVec(
 		reg,
@@ -782,19 +786,20 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
-		deletionMark, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
-		if err == metadata.ErrorDeletionMarkNotFound {
-			continue
-		}
-		if errors.Cause(err) == metadata.ErrorUnmarshalDeletionMark {
-			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
-			continue
-		}
-		if err != nil {
+		m := &metadata.DeletionMark{}
+		if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
+			if errors.Cause(err) == metadata.ErrorMarkerNotFound {
+				continue
+			}
+			if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
+				level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+				continue
+			}
 			return err
 		}
-		f.deletionMarkMap[id] = deletionMark
-		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
+
+		f.deletionMarkMap[id] = m
+		if time.Since(time.Unix(m.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
 			synced.WithLabelValues(markedForDeletionMeta).Inc()
 			delete(metas, id)
 		}

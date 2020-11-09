@@ -220,6 +220,7 @@ func runCompact(
 		component,
 	)
 	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
 	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
@@ -229,6 +230,7 @@ func runCompact(
 				block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
+				noCompactMarkerFilter,
 			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
@@ -280,7 +282,7 @@ func runCompact(
 
 	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, compact.NewPlanner(logger, levels, noCompactMarkerFilter), comp, compactDir, bkt, conf.compactionConcurrency)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
