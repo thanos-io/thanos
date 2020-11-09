@@ -15,7 +15,7 @@ Example command to run Query Frontend:
 
 ```bash
 thanos query-frontend \
-    --http-address     "http://0.0.0.0:9090" \
+    --http-address     "0.0.0.0:9090" \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 
