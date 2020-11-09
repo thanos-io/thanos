@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -322,6 +321,7 @@ func TestRule_AlertmanagerHTTPClient(t *testing.T) {
 }
 
 func TestRule(t *testing.T) {
+	t.Skip("Flaky test. Fix it. See: https://github.com/thanos-io/thanos/issues/3425.")
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_rule")
@@ -547,19 +547,13 @@ func TestRule(t *testing.T) {
 		},
 	}
 
-	alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustUrlParse(t, "http://"+am2.HTTPEndpoint()))
+	alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.HTTPEndpoint()))
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, len(expAlertLabels), len(alrts))
 	for i, a := range alrts {
 		testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
 	}
-}
-
-func mustUrlParse(t *testing.T, addr string) *url.URL {
-	u, err := url.Parse(addr)
-	testutil.Ok(t, err)
-	return u
 }
 
 // Test Ruler behavior on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
