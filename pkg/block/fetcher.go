@@ -24,14 +24,15 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
-	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 type fetcherMetrics struct {
@@ -69,6 +70,9 @@ const (
 	// Blocks that are marked for deletion can be loaded as well. This is done to make sure that we load blocks that are meant to be deleted,
 	// but don't have a replacement block yet.
 	markedForDeletionMeta = "marked-for-deletion"
+
+	// MarkedForNoCompactionMeta is label for blocks which are loaded but also marked for no compaction. This label is also counted in `loaded` label metric.
+	MarkedForNoCompactionMeta = "marked-for-no-compact"
 
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
@@ -110,6 +114,7 @@ func newFetcherMetrics(reg prometheus.Registerer) *fetcherMetrics {
 		[]string{timeExcludedMeta},
 		[]string{duplicateMeta},
 		[]string{markedForDeletionMeta},
+		[]string{MarkedForNoCompactionMeta},
 	)
 	m.modified = extprom.NewTxGaugeVec(
 		reg,
@@ -257,7 +262,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v", metaFile, err)
 	}
 
-	if m.Version != metadata.MetaVersion1 {
+	if m.Version != metadata.TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
 
@@ -267,7 +272,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 			level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 
-		if err := metadata.Write(f.logger, cachedBlockDir, m); err != nil {
+		if err := m.WriteToDir(f.logger, cachedBlockDir); err != nil {
 			level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
 		}
 	}
@@ -278,7 +283,7 @@ type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
-	metaErrs tsdberrors.MultiError
+	metaErrs errutil.MultiError
 
 	noMetas        float64
 	corruptedMetas float64
@@ -781,19 +786,20 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
 
 	for id := range metas {
-		deletionMark, err := metadata.ReadDeletionMark(ctx, f.bkt, f.logger, id.String())
-		if err == metadata.ErrorDeletionMarkNotFound {
-			continue
-		}
-		if errors.Cause(err) == metadata.ErrorUnmarshalDeletionMark {
-			level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
-			continue
-		}
-		if err != nil {
+		m := &metadata.DeletionMark{}
+		if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
+			if errors.Cause(err) == metadata.ErrorMarkerNotFound {
+				continue
+			}
+			if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
+				level.Warn(f.logger).Log("msg", "found partial deletion-mark.json; if we will see it happening often for the same block, consider manually deleting deletion-mark.json from the object storage", "block", id, "err", err)
+				continue
+			}
 			return err
 		}
-		f.deletionMarkMap[id] = deletionMark
-		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
+
+		f.deletionMarkMap[id] = m
+		if time.Since(time.Unix(m.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
 			synced.WithLabelValues(markedForDeletionMeta).Inc()
 			delete(metas, id)
 		}

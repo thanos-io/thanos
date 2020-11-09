@@ -204,11 +204,17 @@ func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req q
 		if err := json.Unmarshal(buf, &resp); err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
 		}
+		for h, hv := range r.Header {
+			resp.Headers = append(resp.Headers, &ResponseHeader{Name: h, Values: hv})
+		}
 		return &resp, nil
 	case *ThanosSeriesRequest:
 		var resp ThanosSeriesResponse
 		if err := json.Unmarshal(buf, &resp); err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
+		}
+		for h, hv := range r.Header {
+			resp.Headers = append(resp.Headers, &ResponseHeader{Name: h, Values: hv})
 		}
 		return &resp, nil
 	default:

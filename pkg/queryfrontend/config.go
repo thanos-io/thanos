@@ -93,6 +93,11 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			config.Expiration = 24 * time.Hour
 		}
 
+		if config.Memcached.DNSProviderUpdateInterval <= 0 {
+			level.Warn(logger).Log("msg", "memcached dns provider update interval time set to invalid value, defaulting to 10s")
+			config.Memcached.DNSProviderUpdateInterval = 10 * time.Second
+		}
+
 		return &cortexcache.Config{
 			Memcache: cortexcache.MemcachedConfig{
 				Expiration:  config.Expiration,
@@ -134,6 +139,7 @@ type QueryRangeConfig struct {
 	ResultsCacheConfig *queryrange.ResultsCacheConfig
 	CachePathOrContent extflag.PathOrContent
 
+	AlignRangeWithStep     bool
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
@@ -159,10 +165,19 @@ type LabelsConfig struct {
 func (cfg *Config) Validate() error {
 	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 {
-			return errors.New("split queries interval should be greater than 0")
+			return errors.New("split queries interval should be greater than 0 when caching is enabled")
 		}
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(); err != nil {
-			return errors.Wrap(err, "invalid ResultsCache config")
+			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
+		}
+	}
+
+	if cfg.LabelsConfig.ResultsCacheConfig != nil {
+		if cfg.LabelsConfig.SplitQueriesByInterval <= 0 {
+			return errors.New("split queries interval should be greater than 0  when caching is enabled")
+		}
+		if err := cfg.LabelsConfig.ResultsCacheConfig.Validate(); err != nil {
+			return errors.Wrap(err, "invalid ResultsCache config for labels tripperware")
 		}
 	}
 

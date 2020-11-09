@@ -10,6 +10,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -219,6 +220,7 @@ func runCompact(
 		component,
 	)
 	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
 	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
@@ -228,6 +230,7 @@ func runCompact(
 				block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
+				noCompactMarkerFilter,
 			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
@@ -279,7 +282,7 @@ func runCompact(
 
 	grouper := compact.NewDefaultGrouper(logger, bkt, conf.acceptMalformedIndex, enableVerticalCompaction, reg, blocksMarkedForDeletion, garbageCollectedBlocks)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, comp, compactDir, bkt, conf.compactionConcurrency)
+	compactor, err := compact.NewBucketCompactor(logger, sy, grouper, compact.NewPlanner(logger, levels, noCompactMarkerFilter), comp, compactDir, bkt, conf.compactionConcurrency)
 	if err != nil {
 		cancel()
 		return errors.Wrap(err, "create bucket compactor")
@@ -299,6 +302,35 @@ func runCompact(
 	}
 	if retentionByResolution[compact.ResolutionLevel1h].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
+	}
+
+	var cleanMtx sync.Mutex
+	// TODO(GiedriusS): we could also apply retention policies here but the logic would be a bit more complex.
+	cleanPartialMarked := func() error {
+		cleanMtx.Lock()
+		defer cleanMtx.Unlock()
+
+		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "cleaning marked blocks")
+		}
+
+		if err := sy.SyncMetas(ctx); err != nil {
+			level.Error(logger).Log("msg", "failed to sync metas", "err", err)
+		}
+		return nil
+	}
+
+	// Do it once at the beginning to ensure that it runs at least once before
+	// the main loop.
+	if err := sy.SyncMetas(ctx); err != nil {
+		cancel()
+		return errors.Wrap(err, "syncing metas")
+	}
+	if err := cleanPartialMarked(); err != nil {
+		cancel()
+		return errors.Wrap(err, "cleaning partial and marked blocks")
 	}
 
 	compactMainFn := func() error {
@@ -345,12 +377,7 @@ func runCompact(
 			return errors.Wrap(err, "retention failed")
 		}
 
-		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning blocks")
-		}
-		return nil
+		return cleanPartialMarked()
 	}
 
 	g.Add(func() error {
@@ -421,6 +448,21 @@ func runCompact(
 
 		srv.Handle("/", r)
 
+		// Periodically remove partial blocks and blocks marked for deletion
+		// since one iteration potentially could take a long time.
+		if conf.cleanupBlocksInterval > 0 {
+			g.Add(func() error {
+				// Wait the whole period at the beginning because we've executed this on boot.
+				select {
+				case <-time.After(conf.cleanupBlocksInterval):
+				case <-ctx.Done():
+				}
+				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), cleanPartialMarked)
+			}, func(error) {
+				cancel()
+			})
+		}
+
 		g.Add(func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, conf.waitInterval)
 			_, _, _ = f.Fetch(iterCtx)
@@ -463,6 +505,7 @@ type compactConfig struct {
 	disableDownsampling                            bool
 	blockSyncConcurrency                           int
 	blockViewerSyncBlockInterval                   time.Duration
+	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
@@ -512,6 +555,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("20").IntVar(&cc.blockSyncConcurrency)
 	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
 		Default("1m").DurationVar(&cc.blockViewerSyncBlockInterval)
+	cmd.Flag("compact.cleanup-interval", "How often we should clean up partially uploaded blocks and blocks with deletion mark in the background when --wait has been enabled. Setting it to \"0s\" disables it - the cleaning will only happen at the end of an iteration.").
+		Default("5m").DurationVar(&cc.cleanupBlocksInterval)
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)

@@ -239,7 +239,7 @@ rules:
     summary: Thanos Store has high latency for store series gate requests.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
+      histogram_quantile(0.99, sum by (job, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_bucket_store_series_gate_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -268,7 +268,7 @@ rules:
     summary: Thanos Store is having high latency for bucket operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
+      histogram_quantile(0.99, sum by (job, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{job=~"thanos-store.*"}[5m]))) > 2
     and
       sum by (job) (rate(thanos_objstore_bucket_operation_duration_seconds_count{job=~"thanos-store.*"}[5m])) > 0
     )
@@ -558,7 +558,7 @@ rules:
     summary: Thanos Replicate has a high latency for replicate operations.
   expr: |
     (
-      histogram_quantile(0.9, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m]))) > 20
+      histogram_quantile(0.99, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m]))) > 20
     and
       sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{job=~"thanos-bucket-replicate.*"}[5m])) > 0
     )
@@ -575,6 +575,15 @@ rules:
 ```yaml
 name: thanos-component-absent.rules
 rules:
+- alert: ThanosBucketReplicateIsDown
+  annotations:
+    description: ThanosBucketReplicate has disappeared from Prometheus target discovery.
+    summary: thanos component has disappeared from Prometheus target discovery.
+  expr: |
+    absent(up{job=~"thanos-bucket-replicate.*"} == 1)
+  for: 5m
+  labels:
+    severity: critical
 - alert: ThanosCompactIsDown
   annotations:
     description: ThanosCompact has disappeared from Prometheus target discovery.

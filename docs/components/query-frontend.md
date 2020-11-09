@@ -15,7 +15,7 @@ Example command to run Query Frontend:
 
 ```bash
 thanos query-frontend \
-    --http-address     "http://0.0.0.0:9090" \
+    --http-address     "0.0.0.0:9090" \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 
@@ -126,6 +126,11 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --query-range.align-range-with-step
+                                 Mutate incoming queries to align their start
+                                 and end with their step for better
+                                 cache-ability. Note: Grafana dashboards do that
+                                 by default.
       --query-range.split-interval=24h
                                  Split query range requests by an interval and
                                  execute in parallel, it should be greater than
@@ -181,6 +186,14 @@ Flags:
                                  The default metadata time range duration for
                                  retrieving labels through Labels and Series API
                                  when the range parameters are not specified.
+      --labels.response-cache-config-file=<file-path>
+                                 Path to YAML file that contains response cache
+                                 configuration.
+      --labels.response-cache-config=<content>
+                                 Alternative to
+                                 'labels.response-cache-config-file' flag (lower
+                                 priority). Content of YAML file that contains
+                                 response cache configuration.
       --cache-compression-type=""
                                  Use compression in results cache. Supported
                                  values are: 'snappy' and ” (disable

@@ -303,12 +303,12 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	resmeta.Thanos.SegmentFiles = GetSegmentFiles(resdir)
-	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
+	if err := resmeta.WriteToDir(logger, resdir); err != nil {
 		return resid, err
 	}
 	// TSDB may rewrite metadata in bdir.
 	// TODO: This is not needed in newer TSDB code. See https://github.com/prometheus/tsdb/pull/637.
-	if err := metadata.Write(logger, bdir, meta); err != nil {
+	if err := meta.WriteToDir(logger, bdir); err != nil {
 		return resid, err
 	}
 	return resid, nil

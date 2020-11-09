@@ -113,7 +113,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 		meta, err := metadata.Read(dir2)
 		testutil.Ok(t, err)
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
-		testutil.Ok(t, metadata.Write(logger, dir2, meta))
+		testutil.Ok(t, meta.WriteToDir(logger, dir2))
 
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
