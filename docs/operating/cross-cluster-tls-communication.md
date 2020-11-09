@@ -40,7 +40,8 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 
 You may need to change cluster.local depending on your cluster domain.
 The `--store` entries for thanos storegateway etc. may be named different in your setup
-```
+
+```yaml
 kind: Deployment
 apiVersion: apps/v1
 metadata:
@@ -171,7 +172,7 @@ metadata:
 ### `envoy.yaml`
 This is a static v2 envoy configuration (v3 example below). You will need to update this configuration for every sidecar you would like to talk to. There are also several options for dynamic configuration, like envoy XDS (and other associated dynamic config modes), or using something like terraform (if thats your deployment method) to generate the configs at deployment time. NOTE: This config **does not** send a client certificate to authenticate with remote clusters, see envoy v3 config.
 
-```
+```yaml
 admin:
   access_log_path: /tmp/admin_access.log
   address:
