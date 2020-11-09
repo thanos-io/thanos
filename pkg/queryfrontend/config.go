@@ -27,6 +27,21 @@ const (
 	MEMCACHED ResponseCacheProvider = "MEMCACHED"
 )
 
+var (
+	defaultMemcachedConfig = MemcachedResponseCacheConfig{
+		Memcached: cacheutil.MemcachedClientConfig{
+			Timeout:                   500 * time.Millisecond,
+			MaxIdleConnections:        100,
+			MaxAsyncConcurrency:       10,
+			MaxAsyncBufferSize:        10000,
+			MaxGetMultiConcurrency:    100,
+			MaxGetMultiBatchSize:      0,
+			DNSProviderUpdateInterval: 10 * time.Second,
+		},
+		Expiration: 24 * time.Hour,
+	}
+)
+
 // InMemoryResponseCacheConfig holds the configs for the in-memory cache provider.
 type InMemoryResponseCacheConfig struct {
 	// MaxSize represents overall maximum number of bytes cache can contain.
@@ -79,7 +94,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			},
 		}, nil
 	case string(MEMCACHED):
-		var config MemcachedResponseCacheConfig
+		config := defaultMemcachedConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
 		}
@@ -96,6 +111,11 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		if config.Memcached.DNSProviderUpdateInterval <= 0 {
 			level.Warn(logger).Log("msg", "memcached dns provider update interval time set to invalid value, defaulting to 10s")
 			config.Memcached.DNSProviderUpdateInterval = 10 * time.Second
+		}
+
+		if config.Memcached.MaxAsyncConcurrency <= 0 {
+			level.Warn(logger).Log("msg", "memcached max async concurrency must be positive, defaulting to 10")
+			config.Memcached.MaxAsyncConcurrency = 10
 		}
 
 		return &cortexcache.Config{
