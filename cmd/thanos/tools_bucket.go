@@ -715,8 +715,8 @@ func compare(s1, s2 string) bool {
 func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Mark.String(), "Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is currently running compacting same block, this operation would be potentially a noop.")
 	blockIDs := cmd.Flag("id", "ID (ULID) of the blocks to be marked for deletion (repeated flag)").Required().Strings()
-	// TODO(bwplotka): Add no-compact option once https://github.com/thanos-io/thanos/pull/3409 is merged.
-	// marker := cmd.Flag("marker", "").Required().Enum(metadata.DeletionMarkFilename)
+	marker := cmd.Flag("marker", "Marker to be put.").Required().Enum(metadata.DeletionMarkFilename, metadata.NoCompactMarkFilename)
+	details := cmd.Flag("details", "Human readable details to be put into marker.").String()
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -740,11 +740,20 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		g.Add(func() error {
 			for _, id := range ids {
-				if err := block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
-					return errors.Wrapf(err, "mark for %v deletion", id)
+				switch *marker {
+				case metadata.DeletionMarkFilename:
+					if err := block.MarkForDeletion(ctx, logger, bkt, id, *details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for %v", id, *marker)
+					}
+				case metadata.NoCompactMarkFilename:
+					if err := block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, *details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for %v", id, *marker)
+					}
+				default:
+					return errors.Errorf("not supported marker %v", *marker)
 				}
 			}
-			level.Info(logger).Log("msg", "marking for deletion done", "IDs", strings.Join(*blockIDs, ","))
+			level.Info(logger).Log("msg", "marking done", "marker", *marker, "IDs", strings.Join(*blockIDs, ","))
 			return nil
 		}, func(err error) {
 			cancel()

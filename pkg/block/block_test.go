@@ -335,9 +335,9 @@ func TestMarkForNoCompact(t *testing.T) {
 			name: "block with no-compact mark already, expected log and no metric increment",
 			preUpload: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
 				m, err := json.Marshal(metadata.NoCompactMark{
-					ID:      id,
-					Time:    time.Now().Unix(),
-					Version: metadata.NoCompactMarkVersion1,
+					ID:            id,
+					NoCompactTime: time.Now().Unix(),
+					Version:       metadata.NoCompactMarkVersion1,
 				})
 				testutil.Ok(t, err)
 				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.NoCompactMarkFilename), bytes.NewReader(m)))
