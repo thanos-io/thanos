@@ -60,6 +60,8 @@ The example content of `hashring.json`:
     }
 ]
 ```
+With such configuration any receive is listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
+for tenancy and replication.
 
 ## Flags
 
