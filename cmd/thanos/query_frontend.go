@@ -242,10 +242,7 @@ func runQueryFrontend(
 	return nil
 }
 
-func extractOrgId(
-	conf *queryFrontendConfig,
-	r *http.Request,
-) string {
+func extractOrgId(conf *queryFrontendConfig, r *http.Request) string {
 	for _, header := range conf.orgIdHeaders {
 		headerVal := r.Header.Get(header)
 		if headerVal != "" {
