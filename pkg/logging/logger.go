@@ -4,7 +4,6 @@
 package logging
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/go-kit/kit/log"
@@ -16,32 +15,17 @@ const (
 	LogFormatJSON   = "json"
 )
 
-// NewLogger returns a log.Logger that prints in the provided format with a UTC
-// timestamp and the caller of the log entry.
-func NewLogger(logFormat, debugName string) log.Logger {
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	if logFormat == LogFormatJSON {
-		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
-	}
+// NewLogger returns a log.Logger that prints in the provided format at the
+// provided level with a UTC timestamp and the caller of the log entry. If non
+// empty, the debug name is also appended as a field to all log lines. Panics
+// if the log level is not error, warn, info or debug. Log level is expected to
+// be validated before passed to this function.
+func NewLogger(logLevel, logFormat, debugName string) log.Logger {
+	var (
+		logger log.Logger
+		lvl    level.Option
+	)
 
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-
-	if debugName != "" {
-		logger = log.With(logger, "name", debugName)
-	}
-
-	// The log.DefaultCaller is log.Caller(3), since we subsequently wrap the
-	// logger with log level, we need this to be one higher.
-	logger = log.With(logger, "caller", log.Caller(4))
-
-	return logger
-}
-
-// WithLogLevel returns the passed logger with the appropriate log level
-// filter. If an unknown log level is passed an error is returned alongside the
-// original logger.
-func WithLogLevel(logger log.Logger, logLevel string) (log.Logger, error) {
-	var lvl level.Option
 	switch logLevel {
 	case "error":
 		lvl = level.AllowError()
@@ -52,8 +36,21 @@ func WithLogLevel(logger log.Logger, logLevel string) (log.Logger, error) {
 	case "debug":
 		lvl = level.AllowDebug()
 	default:
-		return logger, fmt.Errorf("unexpected log level: %s (expected error, warn, info or debug)", logLevel)
+		// This enum is already checked and enforced by flag validations, so
+		// this should never happen.
+		panic("unexpected log level")
 	}
 
-	return level.NewFilter(logger, lvl), nil
+	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	if logFormat == LogFormatJSON {
+		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+	}
+
+	logger = level.NewFilter(logger, lvl)
+
+	if debugName != "" {
+		logger = log.With(logger, "name", debugName)
+	}
+
+	return log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
 }

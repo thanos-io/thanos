@@ -51,14 +51,7 @@ func main() {
 	registerQueryFrontend(app)
 
 	cmd, setup := app.Parse()
-	logger := logging.NewLogger(*logFormat, *debugName)
-	logger, err := logging.WithLogLevel(logger, *logLevel)
-	if err != nil {
-		// This log line intentionally does not call the error level
-		// explicitly, as the log level configuration failed.
-		logger.Log("level", "error", "err", err)
-		os.Exit(1)
-	}
+	logger := logging.NewLogger(*logLevel, *logFormat, *debugName)
 
 	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
 	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
