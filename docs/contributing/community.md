@@ -15,7 +15,7 @@ Follow and interact with us on Twitter: [@ThanosMetrics](https://twitter.com/Tha
 
 ### Thanos Community Meetings
 
-Thanos Community Meeting is a **public** and **recorded** monthly meeting every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
+Thanos Community Meeting is a **public** and **recorded** monthly meeting every second Wednesday 13:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=13%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
 
 Thanos maintainers & the community meet to discuss open issues, features and other Thanos related things.
 Everyone is welcome to join & add items to the agenda. The meeting happens in Zoom. Right now meeting is in a Webinar format, where only small amount of people will have ability to speak and video share, due to recent [Zoombombing](https://en.wikipedia.org/wiki/Zoombombing) issues.
