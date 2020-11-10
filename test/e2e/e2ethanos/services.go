@@ -184,7 +184,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
-func NewReceiver(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+func NewReceiver(sharedDir string, networkName string, defaultTenantID string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
 	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
 	if len(hashring) == 0 {
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
@@ -205,6 +205,11 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		return nil, errors.Wrap(err, "creating receive config")
 	}
 
+	dtID := defaultTenantID
+	if dtID == "" {
+		dtID = receive.DefaultTenant
+	}
+
 	receiver := NewService(
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
@@ -220,6 +225,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 			"--log.level":                               logLevel,
 			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
 			"--receive.local-endpoint":                  localEndpoint,
+			"--receive.default-tenant-id":               dtID,
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),

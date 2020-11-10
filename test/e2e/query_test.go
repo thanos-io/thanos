@@ -88,7 +88,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 
@@ -125,7 +125,7 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
 			"replica":    "1234",
-			"tenant_id":  "default-tenant",
+			"tenant_id":  "test-tenant",
 		},
 		{
 			"job":        "myself",
@@ -156,7 +156,7 @@ func TestQuery(t *testing.T) {
 			"job":        "myself",
 			"prometheus": "prom-both-remote-write-and-sidecar",
 			"receive":    "1",
-			"tenant_id":  "default-tenant",
+			"tenant_id":  "test-tenant",
 		},
 		{
 			"job":        "myself",
@@ -256,7 +256,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 
@@ -300,7 +300,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 

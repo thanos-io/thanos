@@ -255,8 +255,11 @@ func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
+	lbls := t.labels
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
+	if tenantID != DefaultTenant {
+		lbls = append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
+	}
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")

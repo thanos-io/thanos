@@ -33,11 +33,11 @@ func TestReceive(t *testing.T) {
 		// receiver in the hashring than the one handling the request.
 		// The querier queries all the receivers and the test verifies
 		// the time series are forwarded to the correct receive node.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 1)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 1)
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
+		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "3", 1)
 		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
@@ -49,11 +49,11 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 1, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1, h)
+		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 1, h)
 		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1, h)
+		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "3", 1, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
@@ -82,21 +82,21 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom2",
 				"receive":    "1",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom3",
 				"receive":    "2",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 		})
 	})
@@ -112,11 +112,11 @@ func TestReceive(t *testing.T) {
 		// receives Prometheus remote-written data. The querier queries all
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 3)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 3)
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
+		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "3", 3)
 		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
@@ -128,11 +128,11 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 3, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
+		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 3, h)
 		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3, h)
+		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "3", 3, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
 
@@ -157,21 +157,21 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "1",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "3",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 		})
 	})
@@ -186,11 +186,11 @@ func TestReceive(t *testing.T) {
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 3)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 3)
 		testutil.Ok(t, err)
-		notRunningR3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
+		notRunningR3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "3", 3)
 		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
@@ -202,9 +202,9 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
+		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "1", 3, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
+		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "test-tenant", "2", 3, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
@@ -229,14 +229,14 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "1",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
-				"tenant_id":  "default-tenant",
+				"tenant_id":  "test-tenant",
 			},
 		})
 	})
