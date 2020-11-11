@@ -15,7 +15,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/yaml.v2"
 
-	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/pkg/errors"
@@ -146,7 +145,6 @@ type Config struct {
 	QueryRangeConfig
 	LabelsConfig
 
-	CortexFrontendConfig   *cortexfrontend.Config
 	CortexHandlerConfig    *transport.HandlerConfig
 	CompressResponses      bool
 	CacheCompression       string

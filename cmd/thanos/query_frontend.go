@@ -45,7 +45,6 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
-			CortexFrontendConfig: &cortexfrontendv1.Config{},
 			// Max body size is 10 MiB.
 			CortexHandlerConfig: &transport.HandlerConfig{
 				MaxBodySize: 10 * 1024 * 1024,
@@ -169,7 +168,7 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontendv1.New(*cfg.CortexFrontendConfig, nil, logger, reg)
+	fe, err := cortexfrontendv1.New(cortexfrontendv1.Config{}, nil, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
