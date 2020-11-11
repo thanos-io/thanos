@@ -1,3 +1,11 @@
+---
+name: "\U0001F41B Bug Report"
+about: Something isn't working as expected
+title: ''
+assignees: ''
+
+---
+
 <!--
 Template relevant to bug reports only!
 
