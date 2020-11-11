@@ -1,6 +1,6 @@
-# Step 3 - Installing the Thanos Store
+# Step 3 - Fetching metrics from Bucket.
 
-In this step, we will learn about Thanos Store Gateway, how to start, and what problems are solved by it.
+In this step, we will learn about Thanos Store Gateway and how to deploy it.
 
 ## Thanos Components
 
@@ -19,31 +19,24 @@ In this step we will focus on thanos `store gateway`:
 
 ## Store Gateway:
 
-* This component implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space.
-* It joins a Thanos cluster on startup and advertises the data it can access.
-* It keeps a small amount of information about all remote blocks on the local disk and keeps it in sync with the bucket.
+* This component implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need
+significant amounts of local disk space.
+* It keeps a small amount of information about all remote blocks on the local disk and keeps it in sync with the bucket. 
 This data is generally safe to delete across restarts at the cost of increased startup times.
 
-
 You can read more about [Store](https://thanos.io/tip/components/store.md/) here.
-
-## Deployment
-
-Click on the snippet to deploy thanos store to the running Prometheus instance.
 
 ### Deploying store for "EU1" Prometheus data
 
 ```
 docker run -d --net=host --rm \
-    -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
-    -v $(pwd)/test:/prometheus \
-    --name thanos-store \
+    -v /root/editor/bucket_storage.yaml:/etc/thanos/minio-bucket.yaml \
+    --name store-gateway \
     quay.io/thanos/thanos:v0.16.0 \
     store \
-    --data-dir             /prometheus \
-    --objstore.config-file /etc/prometheus/bucket_storage.yml \
-    --http-address         0.0.0.0:10905 \
-    --grpc-address         0.0.0.0:10906 && echo "Thanos Store added"
+    --objstore.config-file /etc/thanos/minio-bucket.yaml \
+    --http-address 0.0.0.0:19091 \
+    --grpc-address 0.0.0.0:19191
 ```{{execute}}
 
 ## How to query Thanos store data?

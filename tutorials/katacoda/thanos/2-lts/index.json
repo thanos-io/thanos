@@ -36,8 +36,7 @@
   },
   "files": [
     "prometheus0_eu1.yml",
-    "bucket_storage.yml",
-    "blocks-spec.json"
+    "bucket_storage.yaml"
   ],
   "environment": {
     "uilayout": "editor-terminal",
