@@ -96,7 +96,7 @@ func TestReaders(t *testing.T) {
 
 			b := realByteSlice(indexFile.Bytes())
 
-			t.Run("binary", func(t *testing.T) {
+			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
 				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
 
@@ -165,6 +165,18 @@ func TestReaders(t *testing.T) {
 					_, err = br.PostingsOffset("longer-string", "21")
 					testutil.Equals(t, NotFoundRangeErr, err)
 				}
+
+				compareIndexToHeader(t, b, br)
+			})
+
+			t.Run("lazy binary reader", func(t *testing.T) {
+				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
+				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
+
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
+				testutil.Ok(t, err)
+
+				defer func() { testutil.Ok(t, br.Close()) }()
 
 				compareIndexToHeader(t, b, br)
 			})

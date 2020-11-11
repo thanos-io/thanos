@@ -135,14 +135,10 @@ func (r *LazyBinaryReader) LabelNames() ([]string, error) {
 // open ensure the underlying binary index-header reader has been successfully opened. Returns
 // an error on failure. This function MUST be called with the read lock already acquired.
 func (r *LazyBinaryReader) open() error {
-	// Nothing to do if it's already opened.
+	// Nothing to do if we already tried opening it.
 	if r.reader != nil {
 		return nil
-	}
-
-	// If we already tried to open it and it failed, we don't retry again
-	// and we always return the same error.
-	if r.readerErr != nil {
+	} else if r.readerErr != nil {
 		return r.readerErr
 	}
 
