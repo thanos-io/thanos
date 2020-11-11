@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	cortexfrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
+	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend"
+	"github.com/cortexproject/cortex/pkg/frontend/transport"
+	cortexfrontendv1 "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
@@ -43,8 +45,11 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "query frontend")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
+			CortexFrontendConfig: &cortexfrontendv1.Config{},
 			// Max body size is 10 MiB.
-			CortexFrontendConfig: &cortexfrontend.Config{MaxBodySize: 10 * 1024 * 1024},
+			CortexHandlerConfig: &transport.HandlerConfig{
+				MaxBodySize: 10 * 1024 * 1024,
+			},
 			QueryRangeConfig: queryfrontend.QueryRangeConfig{
 				Limits:             &cortexvalidation.Limits{},
 				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
@@ -107,13 +112,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("").StringVar(&cfg.CacheCompression)
 
 	cmd.Flag("query-frontend.downstream-url", "URL of downstream Prometheus Query compatible API.").
-		Default("http://localhost:9090").StringVar(&cfg.CortexFrontendConfig.DownstreamURL)
+		Default("http://localhost:9090").StringVar(&cfg.DownstreamURL)
 
 	cmd.Flag("query-frontend.compress-responses", "Compress HTTP responses.").
-		Default("false").BoolVar(&cfg.CortexFrontendConfig.CompressResponses)
+		Default("false").BoolVar(&cfg.CompressResponses)
 
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
-		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexFrontendConfig.LogQueriesLongerThan)
+		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
@@ -164,7 +169,7 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontend.New(*cfg.CortexFrontendConfig, nil, logger, reg)
+	fe, err := cortexfrontendv1.New(*cfg.CortexFrontendConfig, nil, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "setup query frontend")
 	}
@@ -175,7 +180,20 @@ func runQueryFrontend(
 		return errors.Wrap(err, "setup tripperwares")
 	}
 
-	fe.Wrap(tripperWare)
+	// Create a downstream roundtripper.
+	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL)
+	if err != nil {
+		return errors.Wrap(err, "setup downstream roundtripper")
+	}
+
+	// Wrap the downstream RoundTripper into query frontend Tripperware.
+	roundTripper = tripperWare(roundTripper)
+
+	// Create the query frontend transport.
+	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger)
+	if cfg.CompressResponses {
+		handler = gziphandler.GzipHandler(handler)
+	}
 
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
@@ -217,7 +235,7 @@ func runQueryFrontend(
 			})
 			return hf
 		}
-		srv.Handle("/", instr(fe.Handler().ServeHTTP))
+		srv.Handle("/", instr(handler.ServeHTTP))
 
 		g.Add(func() error {
 			statusProber.Healthy()

@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.4.1-0.20201030080541-83ad6df2abea
+	github.com/cortexproject/cortex v1.5.1-0.20201111110551-ba512881b076
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0

@@ -8,13 +8,14 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
+	"github.com/cortexproject/cortex/pkg/frontend/transport"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"gopkg.in/yaml.v2"
 
-	cortexfrontend "github.com/cortexproject/cortex/pkg/querier/frontend"
+	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/pkg/errors"
@@ -146,8 +147,11 @@ type Config struct {
 	LabelsConfig
 
 	CortexFrontendConfig   *cortexfrontend.Config
+	CortexHandlerConfig    *transport.HandlerConfig
+	CompressResponses      bool
 	CacheCompression       string
 	RequestLoggingDecision string
+	DownstreamURL          string
 }
 
 // QueryRangeConfig holds the config for query range tripperware.
@@ -205,7 +209,7 @@ func (cfg *Config) Validate() error {
 		return errors.New("labels.default-time-range cannot be set to 0")
 	}
 
-	if len(cfg.CortexFrontendConfig.DownstreamURL) == 0 {
+	if len(cfg.DownstreamURL) == 0 {
 		return errors.New("downstream URL should be configured")
 	}
 
