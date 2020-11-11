@@ -1066,6 +1066,8 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	resHints := &hintspb.SeriesResponseHints{}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -1077,6 +1079,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
+
+		resHints.AddQueriedBlock(b.meta.ULID)
+
 		indexr := b.indexReader(gctx)
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
@@ -1102,13 +1107,25 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	var anyHints *types.Any
+	var err error
+
+	if anyHints, err = types.MarshalAny(resHints); err != nil {
+		err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+		return nil, err
+	}
+
 	return &storepb.LabelNamesResponse{
 		Names: strutil.MergeSlices(sets...),
+		Hints: anyHints,
 	}, nil
 }
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	resHints := &hintspb.SeriesResponseHints{}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -1120,6 +1137,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
+
+		resHints.AddQueriedBlock(b.meta.ULID)
+
 		indexr := b.indexReader(gctx)
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
@@ -1143,8 +1163,18 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
+
+	var anyHints *types.Any
+	var err error
+
+	if anyHints, err = types.MarshalAny(resHints); err != nil {
+		err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+		return nil, err
+	}
+
 	return &storepb.LabelValuesResponse{
 		Values: strutil.MergeSlices(sets...),
+		Hints:  anyHints,
 	}, nil
 }
 
