@@ -107,10 +107,10 @@ func registerStore(app *extkingpin.App) {
 		"Default is 24h, half of the default value for --delete-delay on compactor.").
 		Default("24h"))
 
-	lazyIndexReaderEnabled := cmd.Flag("store.enable-index-header-lazy-loading", "If true, Store Gateway will lazy memory map index-header only once required by a query.").
+	lazyIndexReaderEnabled := cmd.Flag("store.enable-index-header-lazy-reader", "If true, Store Gateway will lazy memory map index-header only once required by a query.").
 		Hidden().Default("false").Bool()
 
-	lazyIndexReaderIdleTimeout := cmd.Flag("store.lazy-index-header-idle-timeout", "If index-header lazy loading is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
+	lazyIndexReaderIdleTimeout := cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").Duration()
 
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
