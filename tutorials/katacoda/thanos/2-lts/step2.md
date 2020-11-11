@@ -3,14 +3,14 @@
 Maintaining one year of data within your Prometheus is doable, but not easy. It's tricky to
 resize, backup or maintain this data long term. On top of that Prometheus does not do any replication,
 so any unavailability of Prometheus results in query unavailability.
- 
+
 This is where Thanos comes to play. With a single configuration change we can allow Thanos Sidecar to continuously upload blocks of metrics
 that are periodically persisted to disk by the Prometheus.
 
 > NOTE: Prometheus when scraping data, initially aggregates all samples in memory and WAL (on-disk write-head-log). Only after 2-3h it "compacts"
 > the data into disk in form of 2h TSDB block. This is why we need to still query Prometheus for latest data, but overall with this change
 > we can keep Prometheus retention to minimum. It's recommended to keep Prometheus retention in this case at least 6 hours long, to have safe buffer
-> for a potential event of network partition. 
+> for a potential event of network partition.
 
 ## Starting Object Storage: Minio
 

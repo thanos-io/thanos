@@ -1,4 +1,4 @@
-# Step 3 - Fetching metrics from Bucket.
+# Step 3 - Fetching metrics from Bucket
 
 In this step, we will learn about Thanos Store Gateway and how to deploy it.
 
@@ -21,7 +21,7 @@ In this step we will focus on thanos `store gateway`:
 
 * This component implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need
 significant amounts of local disk space.
-* It keeps a small amount of information about all remote blocks on the local disk and keeps it in sync with the bucket. 
+* It keeps a small amount of information about all remote blocks on the local disk and keeps it in sync with the bucket.
 This data is generally safe to delete across restarts at the cost of increased startup times.
 
 You can read more about [Store](https://thanos.io/tip/components/store.md/) here.

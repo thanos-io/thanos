@@ -3,7 +3,7 @@
 They say that [Thanos](thanos.io) is a set of components that can be composed into a highly available metric system with **unlimited storage capacity**
 and that it can be added **seamlessly** on top of existing Prometheus deployments. 🤔🤔
 
-In this course you can experience all of this yourself.  
+In this course you can experience all of this yourself.
 
 In this tutorial, you will learn about:
 
@@ -13,7 +13,7 @@ In this tutorial, you will learn about:
 
 All of this allows you to keep your metrics in cheap and reliable object storage, allowing virtually unlimited metric retention for Prometheus.
 
-> NOTE: This course uses docker containers with pre-built Thanos, Prometheus, and Minio Docker images available publicly. 
+> NOTE: This course uses docker containers with pre-built Thanos, Prometheus, and Minio Docker images available publicly.
 > However, a similar scenario will work with any other deployment method like Kubernetes or systemd, etc.
 
 ### Prerequisites

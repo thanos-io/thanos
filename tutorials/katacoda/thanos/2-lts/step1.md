@@ -2,10 +2,10 @@
 
 In this tutorial, we will mimic the usual state with a Prometheus server running for... a year!.
 We will use it to seamlessly backup all old data in the object storage and configure Prometheus for continuous backup mode, which
-will allows us to cost-effectively achieve unlimited retention for Prometheus.
+will allow us to cost-effectively achieve unlimited retention for Prometheus.
 
 Last but not the least, we will go through setting all up for querying and automated maintenance (e.g compactions, retention and downsampling).
-  
+
 In order to showcase all of this, let's start with single cluster setup from the previous course. Let's start this initial Prometheus setup, ready?
 
 ## Generate Artificial Metrics for 1 year
@@ -19,8 +19,7 @@ data (in form of TSDB blocks) with just 5 series (gauges) that spans from a year
 Execute the following command (should take few seconds):
 
 ```
-mkdir -p /root/prom-eu1 && docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-365d-tiny --max-time -6h \
-    --labels 'cluster="eu1"' | docker run -v /root/prom-eu1:/prom-eu1 -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir prom-eu1
+mkdir -p /root/prom-eu1 && docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-365d-tiny --labels 'cluster="eu1"' --max-time=6h | docker run -v /root/prom-eu1:/prom-eu1 -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir prom-eu1
 ```{{execute}}
 
 On successful block creation you should see following log lines:
