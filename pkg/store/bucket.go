@@ -484,7 +484,8 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
-	indexHeaderReader, err := indexheader.NewBinaryReader(
+	// TODO enable it conditionally (via hidden CLI flag)
+	indexHeaderReader, err := indexheader.NewLazyBinaryReader(
 		ctx,
 		s.logger,
 		s.bkt,
@@ -1075,7 +1076,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
 			// Do it via index reader to have pending reader registered correctly.
-			res := indexr.block.indexHeaderReader.LabelNames()
+			res, err := indexr.block.indexHeaderReader.LabelNames()
+			if err != nil {
+				return errors.Wrap(err, "label names")
+			}
+
 			sort.Strings(res)
 
 			mtx.Lock()
@@ -1555,7 +1560,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 
 	// As of version two all series entries are 16 byte padded. All references
 	// we get have to account for that to get the correct offset.
-	if r.block.indexHeaderReader.IndexVersion() >= 2 {
+	version, err := r.block.indexHeaderReader.IndexVersion()
+	if err != nil {
+		return nil, errors.Wrap(err, "get index version")
+	}
+	if version >= 2 {
 		for i, id := range ps {
 			ps[i] = id * 16
 		}

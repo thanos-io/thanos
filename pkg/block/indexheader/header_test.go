@@ -178,7 +178,9 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
 
-	testutil.Equals(t, indexReader.Version(), headerReader.IndexVersion())
+	actVersion, err := headerReader.IndexVersion()
+	testutil.Ok(t, err)
+	testutil.Equals(t, indexReader.Version(), actVersion)
 
 	if indexReader.Version() == index.FormatV2 {
 		// For v2 symbols ref sequential integers 0, 1, 2 etc.
@@ -211,7 +213,9 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 
 	expLabelNames, err := indexReader.LabelNames()
 	testutil.Ok(t, err)
-	testutil.Equals(t, expLabelNames, headerReader.LabelNames())
+	actualLabelNames, err := headerReader.LabelNames()
+	testutil.Ok(t, err)
+	testutil.Equals(t, expLabelNames, actualLabelNames)
 
 	expRanges, err := indexReader.PostingsRanges()
 	testutil.Ok(t, err)
