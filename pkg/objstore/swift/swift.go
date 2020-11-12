@@ -293,15 +293,18 @@ func (c *Container) Upload(_ context.Context, name string, r io.Reader) error {
 			CheckHash:        true,
 		}
 		if c.useDynamicLargeObjects {
-			file, err = c.connection.DynamicLargeObjectCreateFile(&opts)
+			if file, err = c.connection.DynamicLargeObjectCreateFile(&opts); err != nil {
+				return errors.Wrap(err, "create DLO file")
+			}
 		} else {
-			file, err = c.connection.StaticLargeObjectCreateFile(&opts)
+			if file, err = c.connection.StaticLargeObjectCreateFile(&opts); err != nil {
+				return errors.Wrap(err, "create SLO file")
+			}
 		}
 	} else {
-		file, err = c.connection.ObjectCreate(c.name, name, true, "", "", swift.Headers{})
-	}
-	if err != nil {
-		return errors.Wrap(err, "swift failed to create file")
+		if file, err = c.connection.ObjectCreate(c.name, name, true, "", "", swift.Headers{}); err != nil {
+			return errors.Wrap(err, "create file")
+		}
 	}
 	defer runutil.CloseWithLogOnErr(c.logger, file, "upload object close")
 	if _, err := io.Copy(file, r); err != nil {
