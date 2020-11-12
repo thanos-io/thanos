@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3277](https://github.com/thanos-io/thanos/pull/3277) Thanos Query: Introduce dynamic lookback interval. This allows queries with large step to make use of downsampled data.
 - [#3409](https://github.com/thanos-io/thanos/pull/3409) Compactor: Added support for no-compact-mark.json which excludes the block from compaction.
 - [#3245](https://github.com/thanos-io/thanos/pull/3245) Query Frontend: Add `query-frontend.org-id-header` flag to specify HTTP header(s) to populate slow query log (e.g. X-Grafana-User).
+- [#3431](https://github.com/thanos-io/thanos/pull/3431) Store: Added experimental support to lazy load index-headers at query time. When enabled via `--store.enable-index-header-lazy-reader=true` flag, the store-gateway will load into memory an index-header only once required at query time and will be automatically released after `--store.index-header-lazy-reader-idle-timeout` of inactivity.
 
 ### Fixed
 
