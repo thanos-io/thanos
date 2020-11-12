@@ -83,7 +83,7 @@ func RunReplicate(
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
-	blockIDs []string,
+	blockIDs []ulid.ULID,
 ) error {
 	logger = log.With(logger, "component", "replicate")
 

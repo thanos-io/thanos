@@ -66,7 +66,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 	var cases = []struct {
 		name     string
 		selector labels.Selector
-		blockIDs []string
+		blockIDs []ulid.ULID
 		prepare  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 		assert   func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
@@ -295,7 +295,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		},
 		{
 			name:     "BlockIDs",
-			blockIDs: []string{testBlockID.String()},
+			blockIDs: []ulid.ULID{testBlockID},
 			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				meta := testMeta(testBlockID)
 

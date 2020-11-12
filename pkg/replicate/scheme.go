@@ -32,7 +32,7 @@ type BlockFilter struct {
 	labelSelector    labels.Selector
 	resolutionLevels map[compact.ResolutionLevel]struct{}
 	compactionLevels map[int]struct{}
-	blockIDs         map[string]struct{}
+	blockIDs         []ulid.ULID
 }
 
 // NewBlockFilter returns block filter.
@@ -41,7 +41,7 @@ func NewBlockFilter(
 	labelSelector labels.Selector,
 	resolutionLevels []compact.ResolutionLevel,
 	compactionLevels []int,
-	blockIDs []string,
+	blockIDs []ulid.ULID,
 ) *BlockFilter {
 	allowedResolutions := make(map[compact.ResolutionLevel]struct{})
 	for _, resolutionLevel := range resolutionLevels {
@@ -51,16 +51,13 @@ func NewBlockFilter(
 	for _, compactionLevel := range compactionLevels {
 		allowedCompactions[compactionLevel] = struct{}{}
 	}
-	blockSet := make(map[string]struct{})
-	for _, id := range blockIDs {
-		blockSet[id] = struct{}{}
-	}
+
 	return &BlockFilter{
 		labelSelector:    labelSelector,
 		logger:           logger,
 		resolutionLevels: allowedResolutions,
 		compactionLevels: allowedCompactions,
-		blockIDs:         blockSet,
+		blockIDs:         blockIDs,
 	}
 }
 
@@ -73,11 +70,11 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 
 	// If required block IDs are set, we only match required blocks and ignore others.
 	if len(bf.blockIDs) > 0 {
-		id := b.ULID.String()
-		if _, ok := bf.blockIDs[id]; ok {
-			return true
+		for _, id := range bf.blockIDs {
+			if b.ULID == id {
+				return true
+			}
 		}
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "block ID doesn't match", "block_uuid", id)
 		return false
 	}
 
