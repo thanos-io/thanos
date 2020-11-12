@@ -1,9 +1,9 @@
 import { RouteComponentProps } from '@reach/router';
 import React, { FC } from 'react';
-import { useFetch } from '../../hooks/useFetch';
-import PathPrefixProps from '../../types/PathPrefixProps';
+import { useFetch } from '../../../hooks/useFetch';
+import PathPrefixProps from '../../../types/PathPrefixProps';
 import { Table } from 'reactstrap';
-import { withStatusIndicator } from '../../components/withStatusIndicator';
+import { withStatusIndicator } from '../../../components/withStatusIndicator';
 
 interface ConfigFilesMap {
   [key: string]: string;

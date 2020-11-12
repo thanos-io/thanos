@@ -10,7 +10,7 @@ import Navigation from './thanos/Navbar';
 import { Stores, ErrorBoundary, Blocks } from './thanos/pages';
 
 import './App.css';
-import ConfigFiles from './pages/configfiles/ConfigFiles';
+import ConfigFiles from './thanos/pages/configfiles/ConfigFiles';
 
 const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',

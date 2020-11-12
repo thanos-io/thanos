@@ -173,7 +173,10 @@ func runCompact(
 		return err
 	}
 
-	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
+	confContentYamlStr, err := config.ReplaceSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
 
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {

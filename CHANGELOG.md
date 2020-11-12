@@ -10,7 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
-- [#3423](https://github.com/thanos-io/thanos/pull/3423) Thanos Configurations file page: Display all available configuration for each component on the UI.
+
 ### Added
 
 - [#3259](https://github.com/thanos-io/thanos/pull/3259) Thanos BlockViewer: Added a button in the blockviewer that allows users to download the metadata of a block.
@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3277](https://github.com/thanos-io/thanos/pull/3277) Thanos Query: Introduce dynamic lookback interval. This allows queries with large step to make use of downsampled data.
 - [#3409](https://github.com/thanos-io/thanos/pull/3409) Compactor: Added support for no-compact-mark.json which excludes the block from compaction.
 - [#3245](https://github.com/thanos-io/thanos/pull/3245) Query Frontend: Add `query-frontend.org-id-header` flag to specify HTTP header(s) to populate slow query log (e.g. X-Grafana-User).
+- [#3423](https://github.com/thanos-io/thanos/pull/3423) Thanos Configurations file page: Display all available configuration for each component on the UI.
 
 ### Fixed
 

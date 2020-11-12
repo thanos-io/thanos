@@ -54,6 +54,7 @@ func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *m
 func RegisterCommonObjStoreFlags(cmd FlagClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
 	help := fmt.Sprintf("YAML file that contains object store%s configuration. See format details: https://thanos.io/tip/thanos/storage.md/#configuration ", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
+
 	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("objstore%s.config", suffix), help, required)
 }
 

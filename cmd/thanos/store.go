@@ -44,6 +44,7 @@ const fetcherConcurrency = 32
 // registerStore registers a store command.
 func registerStore(app *extkingpin.App) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
+
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
@@ -213,8 +214,10 @@ func runStore(
 	if err != nil {
 		return err
 	}
-	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
-
+	confContentYamlStr, err := config.ReplaceSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")

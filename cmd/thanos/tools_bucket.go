@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -98,10 +99,12 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		if err != nil {
 			return err
 		}
+
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
+
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		backupconfContentYaml, err := objStoreBackupConfig.Content()
@@ -350,7 +353,11 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
-		confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
+		confContentYamlStr, err := config.ReplaceSecret(confContentYaml)
+		if err != nil {
+			return err
+		}
+
 		var configFilesMap = make(map[string]string)
 		configFilesMap["Object Storage Configuration"] = string(confContentYamlStr)
 

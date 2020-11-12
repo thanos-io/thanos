@@ -56,6 +56,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 )
 
 // registerRule registers a rule command.
@@ -578,7 +579,11 @@ func runRule(
 		return err
 	}
 
-	confContentYamlStr, _ := config.ReplaceSecret(confContentYaml)
+	confContentYamlStr, err := config.ReplaceSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
+
 	configFilesMap := map[string]string{
 		"Query Config":          string(queryConfigYAML),
 		"Alert Managers Config": string(alertmgrsConfigYAML),
