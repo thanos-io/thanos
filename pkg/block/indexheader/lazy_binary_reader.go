@@ -33,23 +33,23 @@ type LazyBinaryReaderMetrics struct {
 func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetrics {
 	return &LazyBinaryReaderMetrics{
 		loadCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "binary_reader_lazy_load_total",
+			Name: "indexheader_lazy_load_total",
 			Help: "Total number of index-header lazy load operations.",
 		}),
 		loadFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "binary_reader_lazy_load_failed_total",
+			Name: "indexheader_lazy_load_failed_total",
 			Help: "Total number of failed index-header lazy load operations.",
 		}),
 		unloadCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "binary_reader_lazy_unload_total",
+			Name: "indexheader_lazy_unload_total",
 			Help: "Total number of index-header lazy unload operations.",
 		}),
 		unloadFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "binary_reader_lazy_unload_failed_total",
+			Name: "indexheader_lazy_unload_failed_total",
 			Help: "Total number of failed index-header lazy unload operations.",
 		}),
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "binary_reader_lazy_load_duration_seconds",
+			Name:    "indexheader_lazy_load_duration_seconds",
 			Help:    "Duration of the index-header lazy loading in seconds.",
 			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5},
 		}),

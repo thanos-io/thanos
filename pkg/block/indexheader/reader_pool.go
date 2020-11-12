@@ -15,7 +15,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 
-	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -38,7 +37,7 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 		logger:                logger,
 		lazyReaderEnabled:     lazyReaderEnabled,
 		lazyReaderIdleTimeout: lazyReaderIdleTimeout,
-		lazyReaderMetrics:     NewLazyBinaryReaderMetrics(extprom.WrapRegistererWithPrefix("indexheader_pool_", reg)),
+		lazyReaderMetrics:     NewLazyBinaryReaderMetrics(reg),
 		readers:               make(map[*readerTracker]struct{}),
 		close:                 make(chan struct{}),
 	}
