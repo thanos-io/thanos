@@ -585,6 +585,7 @@ func TestBucketStore_Info(t *testing.T) {
 		0,
 	)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
@@ -836,6 +837,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				0,
 			)
 			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 			testutil.Ok(t, bucketStore.InitialSync(context.Background()))
 
@@ -1617,6 +1619,8 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		0,
 	)
 	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
 
 	testCases := []*storetestutil.SeriesCase{
@@ -1728,6 +1732,8 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		0,
 	)
 	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
 
 	// Create a request with invalid hints (uses response hints instead of request hints).
@@ -1963,6 +1969,8 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		0,
 	)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(t, store.SyncBlocks(context.Background()))
 
 	req := &storepb.SeriesRequest{
