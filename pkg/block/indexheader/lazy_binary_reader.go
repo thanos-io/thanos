@@ -14,11 +14,47 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
+
+type LazyBinaryReaderMetrics struct {
+	loadCount         prometheus.Counter
+	loadFailedCount   prometheus.Counter
+	unloadCount       prometheus.Counter
+	unloadFailedCount prometheus.Counter
+	loadDuration      prometheus.Histogram
+}
+
+func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetrics {
+	return &LazyBinaryReaderMetrics{
+		loadCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "binary_reader_lazy_load_total",
+			Help: "Total number of index-header lazy load operations.",
+		}),
+		loadFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "binary_reader_lazy_load_failed_total",
+			Help: "Total number of failed index-header lazy load operations.",
+		}),
+		unloadCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "binary_reader_lazy_unload_total",
+			Help: "Total number of index-header lazy unload operations.",
+		}),
+		unloadFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "binary_reader_lazy_unload_failed_total",
+			Help: "Total number of failed index-header lazy unload operations.",
+		}),
+		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Name:    "binary_reader_lazy_load_duration_seconds",
+			Help:    "Duration of the index-header lazy loading in seconds.",
+			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5},
+		}),
+	}
+}
 
 type LazyBinaryReader struct {
 	ctx                         context.Context
@@ -28,13 +64,22 @@ type LazyBinaryReader struct {
 	filepath                    string
 	id                          ulid.ULID
 	postingOffsetsInMemSampling int
+	metrics                     *LazyBinaryReaderMetrics
 
 	readerMx  sync.RWMutex
 	reader    *BinaryReader
 	readerErr error
 }
 
-func NewLazyBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID, postingOffsetsInMemSampling int) (*LazyBinaryReader, error) {
+func NewLazyBinaryReader(
+	ctx context.Context,
+	logger log.Logger,
+	bkt objstore.BucketReader,
+	dir string,
+	id ulid.ULID,
+	postingOffsetsInMemSampling int,
+	metrics *LazyBinaryReaderMetrics,
+) (*LazyBinaryReader, error) {
 	filepath := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 
 	// If the index-header doesn't exist we should download it.
@@ -61,6 +106,7 @@ func NewLazyBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bu
 		filepath:                    filepath,
 		id:                          id,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
+		metrics:                     metrics,
 	}, nil
 }
 
@@ -72,11 +118,14 @@ func (r *LazyBinaryReader) Close() error {
 		return nil
 	}
 
+	r.metrics.unloadCount.Inc()
 	if err := r.reader.Close(); err != nil {
+		r.metrics.unloadFailedCount.Inc()
 		return err
 	}
 
 	r.reader = nil
+
 	return nil
 }
 
@@ -160,17 +209,20 @@ func (r *LazyBinaryReader) open() error {
 	}
 
 	level.Debug(r.logger).Log("msg", "lazy loading index-header file", "path", r.filepath)
+	r.metrics.loadCount.Inc()
 	startTime := time.Now()
 
 	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling)
 	if err != nil {
 		level.Error(r.logger).Log("msg", "failed to lazy load index-header file", "path", r.filepath, "err", err)
+		r.metrics.loadFailedCount.Inc()
 		r.readerErr = err
 		return err
 	}
 
 	r.reader = reader
 	level.Info(r.logger).Log("msg", "lazy loaded index-header file", "path", r.filepath, "elapsed", time.Since(startTime))
+	r.metrics.loadDuration.Observe(time.Since(startTime).Seconds())
 
 	return nil
 }

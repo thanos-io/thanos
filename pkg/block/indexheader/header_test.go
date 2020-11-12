@@ -173,7 +173,7 @@ func TestReaders(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
 				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
 
-				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil))
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()

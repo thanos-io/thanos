@@ -11,15 +11,18 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/atomic"
 
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 type ReaderPool struct {
 	lazyReaderEnabled     bool
 	lazyReaderIdleTimeout time.Duration
+	lazyReaderMetrics     *LazyBinaryReaderMetrics
 	logger                log.Logger
 
 	// Channel used to signal once the pool is closing.
@@ -30,11 +33,12 @@ type ReaderPool struct {
 	readers   map[*readerTracker]struct{}
 }
 
-func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration) *ReaderPool {
+func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration, reg prometheus.Registerer) *ReaderPool {
 	p := &ReaderPool{
 		logger:                logger,
 		lazyReaderEnabled:     lazyReaderEnabled,
 		lazyReaderIdleTimeout: lazyReaderIdleTimeout,
+		lazyReaderMetrics:     NewLazyBinaryReaderMetrics(extprom.WrapRegistererWithPrefix("indexheader_pool_", reg)),
 		readers:               make(map[*readerTracker]struct{}),
 		close:                 make(chan struct{}),
 	}
@@ -63,7 +67,7 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 	var err error
 
 	if p.lazyReaderEnabled {
-		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling)
+		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.lazyReaderMetrics)
 	} else {
 		reader, err = NewBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling)
 	}
@@ -89,7 +93,7 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 }
 
 // Close the pool and stop checking for idle readers. No reader tracked by this pool
-// will be closed. It's the caller responsability to close readers.
+// will be closed. It's the caller responsibility to close readers.
 func (p *ReaderPool) Close() {
 	close(p.close)
 }

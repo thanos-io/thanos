@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -58,7 +59,7 @@ func TestReaderPool_NewBinaryReader(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			pool := NewReaderPool(log.NewNopLogger(), testData.lazyReaderEnabled, testData.lazyReaderIdleTimeout)
+			pool := NewReaderPool(log.NewNopLogger(), testData.lazyReaderEnabled, testData.lazyReaderIdleTimeout, nil)
 			defer pool.Close()
 
 			r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3)
@@ -94,7 +95,7 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String())))
 
-	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout)
+	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, nil)
 	defer pool.Close()
 
 	r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3)
@@ -105,24 +106,28 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	labelNames, err := r.LabelNames()
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string{"a"}, labelNames)
-	testutil.Assert(t, r.(*readerTracker).reader.(*LazyBinaryReader).reader != nil)
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 
 	// Wait enough time before checking it.
 	time.Sleep(idleTimeout * 2)
 
 	// We expect the reader has been closed, but not released from the pool.
-	testutil.Assert(t, r.(*readerTracker).reader.(*LazyBinaryReader).reader == nil)
 	testutil.Assert(t, pool.isTracking(r.(*readerTracker)))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 
 	// Ensure it can still read data (will be re-opened).
 	labelNames, err = r.LabelNames()
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string{"a"}, labelNames)
-	testutil.Assert(t, r.(*readerTracker).reader.(*LazyBinaryReader).reader != nil)
 	testutil.Assert(t, pool.isTracking(r.(*readerTracker)))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 
 	// We expect an explicit call to Close() to close the reader and release it from the pool too.
 	testutil.Ok(t, r.Close())
-	testutil.Assert(t, r.(*readerTracker).reader.(*LazyBinaryReader).reader == nil)
 	testutil.Assert(t, !pool.isTracking(r.(*readerTracker)))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
+	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 }

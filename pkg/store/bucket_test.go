@@ -1264,7 +1264,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		bkt:             objstore.WithNoopInstr(bkt),
 		logger:          logger,
 		indexCache:      noopCache{},
-		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0),
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
 		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{blocks}},
@@ -1476,7 +1476,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		bkt:             objstore.WithNoopInstr(bkt),
 		logger:          logger,
 		indexCache:      indexCache,
-		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0),
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
 		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
