@@ -14,23 +14,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/common/model"
-
-	"github.com/go-kit/kit/log/level"
-
-	"github.com/thanos-io/thanos/pkg/runutil"
-
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/ncw/swift"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
-
+	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/yaml.v2"
 )
 
-// DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const (
-	DirDelim    = '/'
+	// DirDelim is the delimiter used to model a directory structure in an object store bucket.
+	DirDelim = '/'
+	// Name of the directory in bucket, where to store file parts of SLO and DLO.
 	SegmentsDir = "segments/"
 )
 
@@ -43,7 +40,7 @@ var DefaultConfig = Config{
 }
 
 // TODO(FUSAKLA): Added to avoid breaking dependency of Cortex which uses the original struct name SwiftConfig.
-type SwiftConfig Config
+type SwiftConfig = Config
 
 type Config struct {
 	AuthVersion            int            `yaml:"auth_version"`
@@ -106,7 +103,7 @@ func configFromEnv() (*Config, error) {
 		var err error
 		config.ChunkSize, err = strconv.ParseInt(os.Getenv("SWIFT_CHUNK_SIZE"), 10, 64)
 		if err != nil {
-			return nil, errors.Wrap(err, "swift parsing chunk size")
+			return nil, errors.Wrap(err, "parsing chunk size")
 		}
 	}
 	if strings.ToLower(os.Getenv("SWIFT_USE_DYNAMIC_LARGE_OBJECTS")) == "true" {
@@ -148,7 +145,7 @@ type Container struct {
 func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 	sc, err := parseConfig(conf)
 	if err != nil {
-		return nil, errors.Wrap(err, "swift parse config")
+		return nil, errors.Wrap(err, "parse config")
 	}
 	return NewContainerFromConfig(logger, sc, false)
 }
@@ -156,7 +153,7 @@ func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 func ensureContainer(connection *swift.Connection, name string, createIfNotExist bool) error {
 	if _, _, err := connection.Container(name); err != nil {
 		if err != swift.ContainerNotFound {
-			return errors.Wrapf(err, "swift verify container %s", name)
+			return errors.Wrapf(err, "verify container %s", name)
 		}
 		if !createIfNotExist {
 			return fmt.Errorf("unable to find the expected container %s", name)
@@ -172,7 +169,7 @@ func ensureContainer(connection *swift.Connection, name string, createIfNotExist
 func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool) (*Container, error) {
 	connection := connectionFromConfig(sc)
 	if err := connection.Authenticate(); err != nil {
-		return nil, errors.Wrap(err, "swift authentication")
+		return nil, errors.Wrap(err, "authentication")
 	}
 
 	if err := ensureContainer(connection, sc.ContainerName, createContainer); err != nil {
@@ -208,14 +205,14 @@ func (c *Container) Iter(_ context.Context, dir string, f func(string) error) er
 	return c.connection.ObjectsWalk(c.name, &swift.ObjectsOpts{Prefix: dir, Delimiter: DirDelim}, func(opts *swift.ObjectsOpts) (interface{}, error) {
 		objects, err := c.connection.ObjectNames(c.name, opts)
 		if err != nil {
-			return objects, errors.Wrap(err, "swift list object names")
+			return objects, errors.Wrap(err, "list object names")
 		}
 		for _, object := range objects {
 			if object == SegmentsDir {
 				continue
 			}
 			if err := f(object); err != nil {
-				return objects, errors.Wrap(err, "swift iteration over objects")
+				return objects, errors.Wrap(err, "iteration over objects")
 			}
 		}
 		return objects, nil
@@ -228,7 +225,7 @@ func (c *Container) get(name string, headers swift.Headers, checkHash bool) (io.
 	}
 	file, _, err := c.connection.ObjectOpen(c.name, name, checkHash, headers)
 	if err != nil {
-		return nil, errors.Wrap(err, "swift open object")
+		return nil, errors.Wrap(err, "open object")
 	}
 	return file, err
 }
@@ -254,7 +251,7 @@ func (c *Container) Attributes(_ context.Context, name string) (objstore.ObjectA
 	}
 	info, _, err := c.connection.Object(c.name, name)
 	if err != nil {
-		return objstore.ObjectAttributes{}, errors.Wrap(err, "swift get object attributes")
+		return objstore.ObjectAttributes{}, errors.Wrap(err, "get object attributes")
 	}
 	return objstore.ObjectAttributes{
 		Size:         info.Bytes,
@@ -306,16 +303,16 @@ func (c *Container) Upload(_ context.Context, name string, r io.Reader) error {
 	if err != nil {
 		return errors.Wrap(err, "swift failed to create file")
 	}
-	defer runutil.CloseWithLogOnErr(c.logger, file, "swift upload obj close")
+	defer runutil.CloseWithLogOnErr(c.logger, file, "upload object close")
 	if _, err := io.Copy(file, r); err != nil {
-		return errors.Wrap(err, "failed to write uploaded file to swift")
+		return errors.Wrap(err, "uploading object")
 	}
 	return nil
 }
 
 // Delete removes the object with the given name.
 func (c *Container) Delete(_ context.Context, name string) error {
-	return errors.Wrap(c.connection.LargeObjectDelete(c.name, name), "swift delete object")
+	return errors.Wrap(c.connection.LargeObjectDelete(c.name, name), "delete object")
 }
 
 func (*Container) Close() error {
@@ -328,7 +325,7 @@ func (*Container) Close() error {
 func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 	config, err := configFromEnv()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "swift loading config from ENV")
+		return nil, nil, errors.Wrap(err, "loading config from ENV")
 	}
 	if config.ContainerName != "" {
 		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
@@ -340,12 +337,12 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 		}
 		c, err := NewContainerFromConfig(log.NewNopLogger(), config, false)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "swift initializing new container")
+			return nil, nil, errors.Wrap(err, "initializing new container")
 		}
 		if err := c.Iter(context.Background(), "", func(f string) error {
 			return errors.Errorf("container %s is not empty", c.Name())
 		}); err != nil {
-			return nil, nil, errors.Wrapf(err, "swift check container %s", c.Name())
+			return nil, nil, errors.Wrapf(err, "check container %s", c.Name())
 		}
 		t.Log("WARNING. Reusing", c.Name(), "container for Swift tests. Manual cleanup afterwards is required")
 		return c, func() {}, nil
@@ -354,7 +351,7 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 	config.SegmentContainerName = config.ContainerName
 	c, err := NewContainerFromConfig(log.NewNopLogger(), config, true)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "swift initializing new container")
+		return nil, nil, errors.Wrap(err, "initializing new container")
 	}
 	t.Log("created temporary container for swift tests with name", c.Name())
 
