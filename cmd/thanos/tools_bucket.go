@@ -462,11 +462,11 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		blockIDs := make([]ulid.ULID, 0, len(*ids))
 		for _, id := range *ids {
-			if bid, err := ulid.Parse(id); err != nil {
+			bid, err := ulid.Parse(id)
+			if err != nil {
 				return errors.Wrap(err, "invalid ULID found in --id flag")
-			} else {
-				blockIDs = append(blockIDs, bid)
 			}
+			blockIDs = append(blockIDs, bid)
 		}
 
 		return replicate.RunReplicate(
