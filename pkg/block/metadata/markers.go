@@ -49,6 +49,8 @@ type DeletionMark struct {
 	ID ulid.ULID `json:"id"`
 	// Version of the file.
 	Version int `json:"version"`
+	// Details is a human readable string giving details of reason.
+	Details string `json:"details,omitempty"`
 
 	// DeletionTime is a unix timestamp of when the block was marked to be deleted.
 	DeletionTime int64 `json:"deletion_time"`
@@ -73,12 +75,12 @@ type NoCompactMark struct {
 	ID ulid.ULID `json:"id"`
 	// Version of the file.
 	Version int `json:"version"`
-
-	// Time is a unix timestamp of when the block was marked for no compact.
-	Time   int64           `json:"time"`
-	Reason NoCompactReason `json:"reason"`
 	// Details is a human readable string giving details of reason.
-	Details string `json:"details"`
+	Details string `json:"details,omitempty"`
+
+	// NoCompactTime is a unix timestamp of when the block was marked for no compact.
+	NoCompactTime int64           `json:"no_compact_time"`
+	Reason        NoCompactReason `json:"reason"`
 }
 
 func (n *NoCompactMark) markerFilename() string { return NoCompactMarkFilename }

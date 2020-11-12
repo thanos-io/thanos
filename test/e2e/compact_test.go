@@ -372,7 +372,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, 0*time.Second)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay.
@@ -385,7 +385,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + old deletion mark ready to be deleted.
@@ -412,7 +412,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, 50*time.Hour)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 	}
 
