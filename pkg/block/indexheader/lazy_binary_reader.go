@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -69,10 +70,14 @@ type LazyBinaryReader struct {
 	id                          ulid.ULID
 	postingOffsetsInMemSampling int
 	metrics                     *LazyBinaryReaderMetrics
+	onClosed                    func(*LazyBinaryReader)
 
 	readerMx  sync.RWMutex
 	reader    *BinaryReader
 	readerErr error
+
+	// Keep track of the last time it was used.
+	usedAt *atomic.Int64
 }
 
 // NewLazyBinaryReader makes a new LazyBinaryReader. If the index-header does not exist
@@ -87,6 +92,7 @@ func NewLazyBinaryReader(
 	id ulid.ULID,
 	postingOffsetsInMemSampling int,
 	metrics *LazyBinaryReaderMetrics,
+	onClosed func(*LazyBinaryReader),
 ) (*LazyBinaryReader, error) {
 	filepath := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 
@@ -115,28 +121,20 @@ func NewLazyBinaryReader(
 		id:                          id,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		metrics:                     metrics,
+		usedAt:                      atomic.NewInt64(time.Now().UnixNano()),
+		onClosed:                    onClosed,
 	}, nil
 }
 
 // Close implements Reader. It unloads the index-header from memory (releasing the mmap
 // area), but a subsequent call to any other Reader function will automatically reload it.
 func (r *LazyBinaryReader) Close() error {
-	r.readerMx.Lock()
-	defer r.readerMx.Unlock()
-
-	if r.reader == nil {
-		return nil
+	// Invoke the callback after having released the lock.
+	if r.onClosed != nil {
+		defer r.onClosed(r)
 	}
 
-	r.metrics.unloadCount.Inc()
-	if err := r.reader.Close(); err != nil {
-		r.metrics.unloadFailedCount.Inc()
-		return err
-	}
-
-	r.reader = nil
-
-	return nil
+	return r.unload()
 }
 
 // IndexVersion implements Reader.
@@ -144,10 +142,11 @@ func (r *LazyBinaryReader) IndexVersion() (int, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
-	if err := r.open(); err != nil {
+	if err := r.load(); err != nil {
 		return 0, err
 	}
 
+	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.IndexVersion()
 }
 
@@ -156,10 +155,11 @@ func (r *LazyBinaryReader) PostingsOffset(name string, value string) (index.Rang
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
-	if err := r.open(); err != nil {
+	if err := r.load(); err != nil {
 		return index.Range{}, err
 	}
 
+	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.PostingsOffset(name, value)
 }
 
@@ -168,10 +168,11 @@ func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
-	if err := r.open(); err != nil {
+	if err := r.load(); err != nil {
 		return "", err
 	}
 
+	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LookupSymbol(o)
 }
 
@@ -180,10 +181,11 @@ func (r *LazyBinaryReader) LabelValues(name string) ([]string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
-	if err := r.open(); err != nil {
+	if err := r.load(); err != nil {
 		return nil, err
 	}
 
+	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LabelValues(name)
 }
 
@@ -192,17 +194,18 @@ func (r *LazyBinaryReader) LabelNames() ([]string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
-	if err := r.open(); err != nil {
+	if err := r.load(); err != nil {
 		return nil, err
 	}
 
+	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LabelNames()
 }
 
-// open ensure the underlying binary index-header reader has been successfully opened. Returns
+// load ensure the underlying binary index-header reader has been successfully loaded. Returns
 // an error on failure. This function MUST be called with the read lock already acquired.
-func (r *LazyBinaryReader) open() error {
-	// Nothing to do if we already tried opening it.
+func (r *LazyBinaryReader) load() error {
+	// Nothing to do if we already tried loading it.
 	if r.reader != nil {
 		return nil
 	}
@@ -210,14 +213,14 @@ func (r *LazyBinaryReader) open() error {
 		return r.readerErr
 	}
 
-	// Take the write lock to ensure we'll try to open it only once. Take again
+	// Take the write lock to ensure we'll try to load it only once. Take again
 	// the read lock once done.
 	r.readerMx.RUnlock()
 	r.readerMx.Lock()
 	defer r.readerMx.RLock()
 	defer r.readerMx.Unlock()
 
-	// Ensure none else tried to open it in the meanwhile.
+	// Ensure none else tried to load it in the meanwhile.
 	if r.reader != nil {
 		return nil
 	}
@@ -241,4 +244,31 @@ func (r *LazyBinaryReader) open() error {
 	r.metrics.loadDuration.Observe(time.Since(startTime).Seconds())
 
 	return nil
+}
+
+// unload closes underlying BinaryReader. Calling this function on a already unloaded reader is a no-op.
+func (r *LazyBinaryReader) unload() error {
+	// Always update the used timestamp so that the pool will not call unload() again until the next
+	// idle timeout is hit.
+	r.usedAt.Store(time.Now().UnixNano())
+
+	r.readerMx.Lock()
+	defer r.readerMx.Unlock()
+
+	if r.reader == nil {
+		return nil
+	}
+
+	r.metrics.unloadCount.Inc()
+	if err := r.reader.Close(); err != nil {
+		r.metrics.unloadFailedCount.Inc()
+		return err
+	}
+
+	r.reader = nil
+	return nil
+}
+
+func (r *LazyBinaryReader) lastUsedAt() int64 {
+	return r.usedAt.Load()
 }

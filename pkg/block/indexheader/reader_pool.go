@@ -12,8 +12,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/tsdb/index"
-	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
@@ -32,8 +30,8 @@ type ReaderPool struct {
 	close chan struct{}
 
 	// Keep track of all readers managed by the pool.
-	readersMx sync.Mutex
-	readers   map[*readerTracker]struct{}
+	lazyReadersMx sync.Mutex
+	lazyReaders   map[*LazyBinaryReader]struct{}
 }
 
 // NewReaderPool makes a new ReaderPool.
@@ -43,7 +41,7 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 		lazyReaderEnabled:     lazyReaderEnabled,
 		lazyReaderIdleTimeout: lazyReaderIdleTimeout,
 		lazyReaderMetrics:     NewLazyBinaryReaderMetrics(reg),
-		readers:               make(map[*readerTracker]struct{}),
+		lazyReaders:           make(map[*LazyBinaryReader]struct{}),
 		close:                 make(chan struct{}),
 	}
 
@@ -74,7 +72,7 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 	var err error
 
 	if p.lazyReaderEnabled {
-		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.lazyReaderMetrics)
+		reader, err = NewLazyBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling, p.lazyReaderMetrics, p.onLazyReaderClosed)
 	} else {
 		reader, err = NewBinaryReader(ctx, logger, bkt, dir, id, postingOffsetsInMemSampling)
 	}
@@ -85,15 +83,9 @@ func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt
 
 	// Keep track of lazy readers only if required.
 	if p.lazyReaderEnabled && p.lazyReaderIdleTimeout > 0 {
-		reader = &readerTracker{
-			reader: reader,
-			pool:   p,
-			usedAt: atomic.NewInt64(time.Now().UnixNano()),
-		}
-
-		p.readersMx.Lock()
-		p.readers[reader.(*readerTracker)] = struct{}{}
-		p.readersMx.Unlock()
+		p.lazyReadersMx.Lock()
+		p.lazyReaders[reader.(*LazyBinaryReader)] = struct{}{}
+		p.lazyReadersMx.Unlock()
 	}
 
 	return reader, err
@@ -114,25 +106,21 @@ func (p *ReaderPool) closeIdleReaders() {
 		// Due to concurrency, the current implementation may close a reader which was
 		// use between when the list of idle readers has been computed and now. This is
 		// an edge case we're willing to accept, to not further complicate the logic.
-		if err := r.reader.Close(); err != nil {
+		if err := r.unload(); err != nil {
 			level.Warn(p.logger).Log("msg", "failed to close idle index-header reader", "err", err)
 		}
-
-		// Update the used timestamp so that we'll not call Close() again until the next
-		// idle timeout is hit.
-		r.usedAt.Store(time.Now().UnixNano())
 	}
 }
 
-func (p *ReaderPool) getIdleReaders() []*readerTracker {
-	p.readersMx.Lock()
-	defer p.readersMx.Unlock()
+func (p *ReaderPool) getIdleReaders() []*LazyBinaryReader {
+	p.lazyReadersMx.Lock()
+	defer p.lazyReadersMx.Unlock()
 
-	var idle []*readerTracker
+	var idle []*LazyBinaryReader
 	threshold := time.Now().Add(-p.lazyReaderIdleTimeout).UnixNano()
 
-	for r := range p.readers {
-		if r.usedAt.Load() < threshold {
+	for r := range p.lazyReaders {
+		if r.lastUsedAt() < threshold {
 			idle = append(idle, r)
 		}
 	}
@@ -140,62 +128,20 @@ func (p *ReaderPool) getIdleReaders() []*readerTracker {
 	return idle
 }
 
-func (p *ReaderPool) isTracking(r *readerTracker) bool {
-	p.readersMx.Lock()
-	defer p.readersMx.Unlock()
+func (p *ReaderPool) isTracking(r *LazyBinaryReader) bool {
+	p.lazyReadersMx.Lock()
+	defer p.lazyReadersMx.Unlock()
 
-	_, ok := p.readers[r]
+	_, ok := p.lazyReaders[r]
 	return ok
 }
 
-func (p *ReaderPool) onReaderClosed(r *readerTracker) {
-	p.readersMx.Lock()
-	defer p.readersMx.Unlock()
+func (p *ReaderPool) onLazyReaderClosed(r *LazyBinaryReader) {
+	p.lazyReadersMx.Lock()
+	defer p.lazyReadersMx.Unlock()
 
 	// When this function is called, it means the reader has been closed NOT because was idle
 	// but because the consumer closed it. By contract, a reader closed by the consumer can't
 	// be used anymore, so we can automatically remove it from the pool.
-	delete(p.readers, r)
-}
-
-type readerTracker struct {
-	reader Reader
-	pool   *ReaderPool
-	usedAt *atomic.Int64
-}
-
-// Close implements Reader.
-func (r *readerTracker) Close() error {
-	r.pool.onReaderClosed(r)
-	return r.reader.Close()
-}
-
-// IndexVersion implements Reader.
-func (r *readerTracker) IndexVersion() (int, error) {
-	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.IndexVersion()
-}
-
-// PostingsOffset implements Reader.
-func (r *readerTracker) PostingsOffset(name string, value string) (index.Range, error) {
-	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.PostingsOffset(name, value)
-}
-
-// LookupSymbol implements Reader.
-func (r *readerTracker) LookupSymbol(o uint32) (string, error) {
-	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LookupSymbol(o)
-}
-
-// LabelValues implements Reader.
-func (r *readerTracker) LabelValues(name string) ([]string, error) {
-	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LabelValues(name)
-}
-
-// LabelNames implements Reader.
-func (r *readerTracker) LabelNames() ([]string, error) {
-	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LabelNames()
+	delete(p.lazyReaders, r)
 }

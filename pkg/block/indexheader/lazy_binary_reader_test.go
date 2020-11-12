@@ -32,7 +32,7 @@ func TestNewLazyBinaryReader_ShouldFailIfUnableToBuildIndexHeader(t *testing.T) 
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
-	_, err = NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, ulid.MustNew(0, nil), 3, NewLazyBinaryReaderMetrics(nil))
+	_, err = NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, ulid.MustNew(0, nil), 3, NewLazyBinaryReaderMetrics(nil), nil)
 	testutil.NotOk(t, err)
 }
 
@@ -56,7 +56,7 @@ func TestNewLazyBinaryReader_ShouldBuildIndexHeaderFromBucket(t *testing.T) {
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String())))
 
 	m := NewLazyBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadCount))
@@ -101,7 +101,7 @@ func TestNewLazyBinaryReader_ShouldRebuildCorruptedIndexHeader(t *testing.T) {
 	testutil.Ok(t, ioutil.WriteFile(headerFilename, []byte("xxx"), os.ModePerm))
 
 	m := NewLazyBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadCount))
@@ -137,7 +137,7 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String())))
 
 	m := NewLazyBinaryReaderMetrics(nil)
-	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
 	testutil.Ok(t, err)
 	testutil.Assert(t, r.reader == nil)
 

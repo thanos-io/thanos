@@ -113,7 +113,7 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	time.Sleep(idleTimeout * 2)
 
 	// We expect the reader has been closed, but not released from the pool.
-	testutil.Assert(t, pool.isTracking(r.(*readerTracker)))
+	testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 
@@ -121,13 +121,13 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	labelNames, err = r.LabelNames()
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string{"a"}, labelNames)
-	testutil.Assert(t, pool.isTracking(r.(*readerTracker)))
+	testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 
 	// We expect an explicit call to Close() to close the reader and release it from the pool too.
 	testutil.Ok(t, r.Close())
-	testutil.Assert(t, !pool.isTracking(r.(*readerTracker)))
+	testutil.Assert(t, !pool.isTracking(r.(*LazyBinaryReader)))
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.loadCount))
 	testutil.Equals(t, float64(2), promtestutil.ToFloat64(pool.lazyReaderMetrics.unloadCount))
 }
