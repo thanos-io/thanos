@@ -236,7 +236,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 					{{Name: "a", Value: "6"}},
 				},
 			},
-			// Mix order to make sure compact is able to deduct min time / max time.
+			// Mix order to make sure compactor is able to deduct min time / max time.
 			// Currently TSDB does not produces empty blocks (see: https://github.com/prometheus/tsdb/pull/374). However before v2.7.0 it was
 			// so we still want to mimick this case as close as possible.
 			{

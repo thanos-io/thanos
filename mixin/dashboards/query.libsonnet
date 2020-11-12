@@ -75,15 +75,15 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of DNS lookups to discover stores.') +
           g.queryPanel(
-            'sum(rate(thanos_querier_store_apis_dns_lookups_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'sum(rate(thanos_query_store_apis_dns_lookups_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
             'lookups {{job}}'
           )
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of failures compared to the the total number of executed DNS lookups.') +
           g.qpsErrTotalPanel(
-            'thanos_querier_store_apis_dns_failures_total{namespace="$namespace",job=~"$job"}',
-            'thanos_querier_store_apis_dns_lookups_total{namespace="$namespace",job=~"$job"}',
+            'thanos_query_store_apis_dns_failures_total{namespace="$namespace",job=~"$job"}',
+            'thanos_query_store_apis_dns_lookups_total{namespace="$namespace",job=~"$job"}',
           )
         )
       )
