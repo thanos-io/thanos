@@ -18,6 +18,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+// ReaderPool is used to istantiate new index-header readers and keep track of them.
+// When the lazy reader is enabled, the pool keeps track of all instantiated readers
+// and automatically close them once the idle timeout is reached. A closed lazy reader
+// will be automatically re-opened upon next usage.
 type ReaderPool struct {
 	lazyReaderEnabled     bool
 	lazyReaderIdleTimeout time.Duration
@@ -32,6 +36,7 @@ type ReaderPool struct {
 	readers   map[*readerTracker]struct{}
 }
 
+// NewReaderPool makes a new ReaderPool.
 func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration, reg prometheus.Registerer) *ReaderPool {
 	p := &ReaderPool{
 		logger:                logger,
@@ -61,6 +66,9 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 	return p
 }
 
+// NewBinaryReader creates and returns a new binary reader. If the pool has been configured
+// with lazy reader enabled, this function will return a lazy reader. The returned lazy reader
+// is tracked by the pool and automatically closed once the idle timeout expires.
 func (p *ReaderPool) NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID, postingOffsetsInMemSampling int) (Reader, error) {
 	var reader Reader
 	var err error
@@ -156,31 +164,37 @@ type readerTracker struct {
 	usedAt *atomic.Int64
 }
 
+// Close implements Reader.
 func (r *readerTracker) Close() error {
 	r.pool.onReaderClosed(r)
 	return r.reader.Close()
 }
 
+// IndexVersion implements Reader.
 func (r *readerTracker) IndexVersion() (int, error) {
 	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.IndexVersion()
 }
 
+// PostingsOffset implements Reader.
 func (r *readerTracker) PostingsOffset(name string, value string) (index.Range, error) {
 	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.PostingsOffset(name, value)
 }
 
+// LookupSymbol implements Reader.
 func (r *readerTracker) LookupSymbol(o uint32) (string, error) {
 	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LookupSymbol(o)
 }
 
+// LabelValues implements Reader.
 func (r *readerTracker) LabelValues(name string) ([]string, error) {
 	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LabelValues(name)
 }
 
+// LabelNames implements Reader.
 func (r *readerTracker) LabelNames() ([]string, error) {
 	r.usedAt.Store(time.Now().UnixNano())
 	return r.reader.LabelNames()

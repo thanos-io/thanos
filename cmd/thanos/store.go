@@ -107,8 +107,8 @@ func registerStore(app *extkingpin.App) {
 		"Default is 24h, half of the default value for --delete-delay on compactor.").
 		Default("24h"))
 
-	lazyIndexReaderEnabled := cmd.Flag("store.enable-index-header-lazy-reader", "If true, Store Gateway will lazy memory map index-header only once required by a query.").
-		Hidden().Default("false").Bool()
+	lazyIndexReaderEnabled := cmd.Flag("store.enable-index-header-lazy-reader", "If true, Store Gateway will lazy memory map index-header only once the block is required by a query.").
+		Default("false").Bool()
 
 	lazyIndexReaderIdleTimeout := cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").Duration()

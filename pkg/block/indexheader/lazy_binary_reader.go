@@ -22,6 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+// LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
 type LazyBinaryReaderMetrics struct {
 	loadCount         prometheus.Counter
 	loadFailedCount   prometheus.Counter
@@ -30,6 +31,7 @@ type LazyBinaryReaderMetrics struct {
 	loadDuration      prometheus.Histogram
 }
 
+// NewLazyBinaryReaderMetrics makes new LazyBinaryReaderMetrics.
 func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetrics {
 	return &LazyBinaryReaderMetrics{
 		loadCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -56,6 +58,8 @@ func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetr
 	}
 }
 
+// LazyBinaryReader wraps BinaryReader and loads (mmap) the index-header only upon
+// the first Reader function is called.
 type LazyBinaryReader struct {
 	ctx                         context.Context
 	logger                      log.Logger
@@ -71,6 +75,10 @@ type LazyBinaryReader struct {
 	readerErr error
 }
 
+// NewLazyBinaryReader makes a new LazyBinaryReader. If the index-header does not exist
+// on the local disk at dir location, this function will build it downloading required
+// sections from the full index stored in the bucket. However, this function doesn't load
+// (mmap) the index-header; it will be loaded at first Reader function call.
 func NewLazyBinaryReader(
 	ctx context.Context,
 	logger log.Logger,
@@ -110,6 +118,8 @@ func NewLazyBinaryReader(
 	}, nil
 }
 
+// Close implements Reader. It unloads the index-header from memory (releasing the mmap
+// area), but a subsequent call to any other Reader function will automatically reload it.
 func (r *LazyBinaryReader) Close() error {
 	r.readerMx.Lock()
 	defer r.readerMx.Unlock()
@@ -129,6 +139,7 @@ func (r *LazyBinaryReader) Close() error {
 	return nil
 }
 
+// IndexVersion implements Reader.
 func (r *LazyBinaryReader) IndexVersion() (int, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
@@ -140,6 +151,7 @@ func (r *LazyBinaryReader) IndexVersion() (int, error) {
 	return r.reader.IndexVersion()
 }
 
+// PostingsOffset implements Reader.
 func (r *LazyBinaryReader) PostingsOffset(name string, value string) (index.Range, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
@@ -151,6 +163,7 @@ func (r *LazyBinaryReader) PostingsOffset(name string, value string) (index.Rang
 	return r.reader.PostingsOffset(name, value)
 }
 
+// LookupSymbol implements Reader.
 func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
@@ -162,6 +175,7 @@ func (r *LazyBinaryReader) LookupSymbol(o uint32) (string, error) {
 	return r.reader.LookupSymbol(o)
 }
 
+// LabelValues implements Reader.
 func (r *LazyBinaryReader) LabelValues(name string) ([]string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
@@ -173,6 +187,7 @@ func (r *LazyBinaryReader) LabelValues(name string) ([]string, error) {
 	return r.reader.LabelValues(name)
 }
 
+// LabelNames implements Reader.
 func (r *LazyBinaryReader) LabelNames() ([]string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
@@ -190,7 +205,8 @@ func (r *LazyBinaryReader) open() error {
 	// Nothing to do if we already tried opening it.
 	if r.reader != nil {
 		return nil
-	} else if r.readerErr != nil {
+	}
+	if r.readerErr != nil {
 		return r.readerErr
 	}
 
@@ -204,7 +220,8 @@ func (r *LazyBinaryReader) open() error {
 	// Ensure none else tried to open it in the meanwhile.
 	if r.reader != nil {
 		return nil
-	} else if r.readerErr != nil {
+	}
+	if r.readerErr != nil {
 		return r.readerErr
 	}
 
@@ -214,14 +231,13 @@ func (r *LazyBinaryReader) open() error {
 
 	reader, err := NewBinaryReader(r.ctx, r.logger, r.bkt, r.dir, r.id, r.postingOffsetsInMemSampling)
 	if err != nil {
-		level.Error(r.logger).Log("msg", "failed to lazy load index-header file", "path", r.filepath, "err", err)
 		r.metrics.loadFailedCount.Inc()
 		r.readerErr = err
-		return err
+		return errors.Wrapf(err, "lazy load index-header file at %s", r.filepath)
 	}
 
 	r.reader = reader
-	level.Info(r.logger).Log("msg", "lazy loaded index-header file", "path", r.filepath, "elapsed", time.Since(startTime))
+	level.Debug(r.logger).Log("msg", "lazy loaded index-header file", "path", r.filepath, "elapsed", time.Since(startTime))
 	r.metrics.loadDuration.Observe(time.Since(startTime).Seconds())
 
 	return nil
