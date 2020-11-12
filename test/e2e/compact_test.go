@@ -540,7 +540,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
 		// Expect compactor halted.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compactor_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_halted"))
 
 		// The compact directory is still there.
 		dataDir := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt")
@@ -549,9 +549,9 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Equals(t, false, empty, "directory %s should not be empty", dataDir)
 
 		// We expect no ops.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_marked_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_marked_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_group_compactions_failures_total"))
@@ -559,8 +559,8 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_group_compaction_runs_completed_total"))
 
 		// However, the blocks have been cleaned because that happens concurrently.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 
 		// Ensure bucket UI.
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "global"))
@@ -577,11 +577,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2*4+2+2*3+2), "thanos_compactor_blocks_marked_total")) // 18.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2*4+2+2*3+2), "thanos_compact_blocks_marked_total")) // 18.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(6), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
@@ -598,7 +598,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, s.Stop(c))
 
@@ -626,11 +626,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(18), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_marked_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(18), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_marked_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
@@ -643,7 +643,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-18-2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, s.Stop(c))
 

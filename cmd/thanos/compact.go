@@ -101,32 +101,32 @@ func runCompact(
 ) error {
 	deleteDelay := time.Duration(conf.deleteDelay)
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_compactor_halted",
+		Name: "thanos_compact_halted",
 		Help: "Set to 1 if the compactor halted due to an unexpected error.",
 	})
 	halted.Set(0)
 	retried := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_retries_total",
+		Name: "thanos_compact_retries_total",
 		Help: "Total number of retries after retriable compactor error.",
 	})
 	iterations := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_iterations_total",
+		Name: "thanos_compact_iterations_total",
 		Help: "Total number of iterations that were executed successfully.",
 	})
 	partialUploadDeleteAttempts := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
+		Name: "thanos_compact_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
 	})
 	blocksCleaned := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_cleaned_total",
+		Name: "thanos_compact_blocks_cleaned_total",
 		Help: "Total number of blocks deleted in compactor.",
 	})
 	blockCleanupFailures := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compactor_block_cleanup_failures_total",
+		Name: "thanos_compact_block_cleanup_failures_total",
 		Help: "Failures encountered while deleting blocks in compactor.",
 	})
 	blocksMarked := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_compactor_blocks_marked_total",
+		Name: "thanos_compact_blocks_marked_total",
 		Help: "Total number of blocks marked in compactor.",
 	}, []string{"marker"})
 	blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename)

@@ -28,7 +28,7 @@
               description: 'Thanos Compact {{$labels.job}} has failed to run and now is halted.',
               summary: 'Thanos Compact has failed to run ans is now halted.',
             },
-            expr: 'thanos_compactor_halted{%(selector)s} == 1' % thanos.compact,
+            expr: 'thanos_compact_halted{%(selector)s} == 1' % thanos.compact,
             'for': '5m',
             labels: {
               severity: 'warning',

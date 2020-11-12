@@ -17,11 +17,11 @@ groups:
     record: :grpc_client_failures_per_stream:sum_rate
   - expr: |
       (
-        sum(rate(thanos_querier_store_apis_dns_failures_total{job=~"thanos-query.*"}[5m]))
+        sum(rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-query.*"}[5m]))
       /
-        sum(rate(thanos_querier_store_apis_dns_lookups_total{job=~"thanos-query.*"}[5m]))
+        sum(rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-query.*"}[5m]))
       )
-    record: :thanos_querier_store_apis_dns_failures_per_lookup:sum_rate
+    record: :thanos_query_store_apis_dns_failures_per_lookup:sum_rate
   - expr: |
       histogram_quantile(0.99,
         sum(rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) by (le)

@@ -29,12 +29,12 @@
             ||| % thanos.query,
           },
           {
-            record: ':thanos_querier_store_apis_dns_failures_per_lookup:sum_rate',
+            record: ':thanos_query_store_apis_dns_failures_per_lookup:sum_rate',
             expr: |||
               (
-                sum(rate(thanos_querier_store_apis_dns_failures_total{%(selector)s}[5m]))
+                sum(rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum(rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
+                sum(rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
               )
             ||| % thanos.query,
           },
