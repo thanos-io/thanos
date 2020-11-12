@@ -1541,87 +1541,8 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 }
 
 func TestSeries_RequestAndResponseHints(t *testing.T) {
-	tb := testutil.NewTB(t)
-
-	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
-
-	bktDir := filepath.Join(tmpDir, "bkt")
-	bkt, err := filesystem.NewBucket(bktDir)
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bkt.Close()) }()
-
-	var (
-		logger   = log.NewNopLogger()
-		instrBkt = objstore.WithNoopInstr(bkt)
-		random   = rand.New(rand.NewSource(120))
-	)
-
-	extLset := labels.Labels{{Name: "ext1", Value: "1"}}
-	// Inject the Thanos meta to each block in the storage.
-	thanosMeta := metadata.Thanos{
-		Labels:     extLset.Map(),
-		Downsample: metadata.ThanosDownsample{Resolution: 0},
-		Source:     metadata.TestSource,
-	}
-
-	// Create TSDB blocks.
-	head, seriesSet1 := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
-		TSDBDir:          filepath.Join(tmpDir, "0"),
-		SamplesPerSeries: 1,
-		Series:           2,
-		PrependLabels:    extLset,
-		Random:           random,
-	})
-	block1 := createBlockFromHead(t, bktDir, head)
-	testutil.Ok(t, head.Close())
-	head2, seriesSet2 := storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
-		TSDBDir:          filepath.Join(tmpDir, "1"),
-		SamplesPerSeries: 1,
-		Series:           2,
-		PrependLabels:    extLset,
-		Random:           random,
-	})
-	block2 := createBlockFromHead(t, bktDir, head2)
-	testutil.Ok(t, head2.Close())
-
-	for _, blockID := range []ulid.ULID{block1, block2} {
-		_, err := metadata.InjectThanos(logger, filepath.Join(bktDir, blockID.String()), thanosMeta, nil)
-		testutil.Ok(t, err)
-	}
-
-	// Instance a real bucket store we'll use to query back the series.
-	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
-	testutil.Ok(tb, err)
-
-	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
-	testutil.Ok(tb, err)
-
-	store, err := NewBucketStore(
-		logger,
-		nil,
-		instrBkt,
-		fetcher,
-		tmpDir,
-		indexCache,
-		nil,
-		1000000,
-		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
-		false,
-		10,
-		nil,
-		false,
-		true,
-		DefaultPostingOffsetInMemorySampling,
-		true,
-		false,
-		0,
-	)
-	testutil.Ok(tb, err)
-	defer func() { testutil.Ok(t, store.Close()) }()
-
-	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+	tb, store, seriesSet1, seriesSet2, block1, block2, close := setupStoreForHintsTest(t)
+	defer close()
 
 	testCases := []*storetestutil.SeriesCase{
 		{
@@ -2051,17 +1972,19 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	return createBlockFromHead(t, dir, h)
 }
 
-func TestLabelNamesAndValuesHints(t *testing.T) {
+func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb.Series, []*storepb.Series, ulid.ULID, ulid.ULID, func()) {
 	tb := testutil.NewTB(t)
 
-	tmpDir, err := ioutil.TempDir("", "test-labels-hints")
+	closers := []func(){}
+
+	tmpDir, err := ioutil.TempDir("", "test-hints")
 	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	closers = append(closers, func() { testutil.Ok(t, os.RemoveAll(tmpDir)) })
 
 	bktDir := filepath.Join(tmpDir, "bkt")
 	bkt, err := filesystem.NewBucket(bktDir)
 	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, bkt.Close()) }()
+	closers = append(closers, func() { testutil.Ok(t, bkt.Close()) })
 
 	var (
 		logger   = log.NewNopLogger()
@@ -2126,9 +2049,24 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	closers = append(closers, func() { testutil.Ok(t, store.Close()) })
+
+	return tb, store, seriesSet1, seriesSet2, block1, block2, func() {
+		for _, close := range closers {
+			close()
+		}
+	}
+}
+
+func TestLabelNamesAndValuesHints(t *testing.T) {
+	_, store, seriesSet1, seriesSet2, block1, block2, close := setupStoreForHintsTest(t)
+	defer close()
 
 	type labelNamesValuesCase struct {
 		name string
@@ -2158,11 +2096,11 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			},
 
 			labelValuesReq: &storepb.LabelValuesRequest{
-				Label: "__name__",
+				Label: "ext1",
 				Start: 0,
 				End:   1,
 			},
-			expectedValues: []string{},
+			expectedValues: []string{"1"},
 			expectedValuesHints: hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []hintspb.Block{
 					{Id: block1.String()},
@@ -2187,11 +2125,11 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			},
 
 			labelValuesReq: &storepb.LabelValuesRequest{
-				Label: "__name__",
+				Label: "ext1",
 				Start: 0,
 				End:   3,
 			},
-			expectedValues: []string{},
+			expectedValues: []string{"1"},
 			expectedValuesHints: hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []hintspb.Block{
 					{Id: block1.String()},
@@ -2206,15 +2144,25 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			namesResp, err := store.LabelNames(context.Background(), tc.labelNamesReq)
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.expectedNames, namesResp.Names)
+
 			var namesHints hintspb.LabelNamesResponseHints
 			testutil.Ok(t, types.UnmarshalAny(namesResp.Hints, &namesHints))
+			// The order is not determinate, so we are sorting them.
+			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
+				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
+			})
 			testutil.Equals(t, tc.expectedNamesHints, namesHints)
 
 			valuesResp, err := store.LabelValues(context.Background(), tc.labelValuesReq)
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.expectedValues, valuesResp.Values)
+
 			var valuesHints hintspb.LabelValuesResponseHints
 			testutil.Ok(t, types.UnmarshalAny(valuesResp.Hints, &valuesHints))
+			// The order is not determinate, so we are sorting them.
+			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
+				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id
+			})
 			testutil.Equals(t, tc.expectedValuesHints, valuesHints)
 		})
 	}

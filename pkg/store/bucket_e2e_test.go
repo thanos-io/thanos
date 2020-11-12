@@ -629,7 +629,8 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 			End:   timestamp.FromTime(maxTime),
 		})
 		testutil.Ok(t, err)
-		testutil.Equals(t, []string{"a", "b", "c"}, vals.Names)
+		// ext2 is added by the prepareStoreWithTestBlocks function.
+		testutil.Equals(t, []string{"a", "b", "c", "ext1", "ext2"}, vals.Names)
 
 		// Outside the time range.
 		vals, err = s.store.LabelNames(ctx, &storepb.LabelNamesRequest{

@@ -1083,6 +1083,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader(gctx)
+		extLabels := b.meta.Thanos.Labels
+
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
@@ -1092,7 +1094,17 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				return errors.Wrap(err, "label names")
 			}
 
+			// Add  a set for the external labels as well.
+			// We're not adding them directly to res because there could be duplicates.
+			extRes := make([]string, 0, len(extLabels))
+			for lName := range extLabels {
+				extRes = append(extRes, lName)
+			}
+
 			sort.Strings(res)
+			sort.Strings(extRes)
+
+			res = strutil.MergeSlices(res, extRes)
 
 			mtx.Lock()
 			sets = append(sets, res)
@@ -1110,7 +1122,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 	anyHints, err := types.MarshalAny(resHints)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
 
 	return &storepb.LabelNamesResponse{
@@ -1138,6 +1150,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader(gctx)
+		extLabels := b.meta.Thanos.Labels
+
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
@@ -1145,6 +1159,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			res, err := indexr.block.indexHeaderReader.LabelValues(req.Label)
 			if err != nil {
 				return errors.Wrap(err, "index header label values")
+			}
+
+			// Add the external label value as well.
+			if extLabelValue, ok := extLabels[req.Label]; ok {
+				res = strutil.MergeSlices(res, []string{extLabelValue})
 			}
 
 			mtx.Lock()
@@ -1163,7 +1182,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	anyHints, err := types.MarshalAny(resHints)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}
 
 	return &storepb.LabelValuesResponse{
