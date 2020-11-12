@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -247,13 +248,14 @@ type FilterConfig struct {
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
-	logger     log.Logger
-	metrics    *bucketStoreMetrics
-	bkt        objstore.InstrumentedBucketReader
-	fetcher    block.MetadataFetcher
-	dir        string
-	indexCache storecache.IndexCache
-	chunkPool  pool.BytesPool
+	logger          log.Logger
+	metrics         *bucketStoreMetrics
+	bkt             objstore.InstrumentedBucketReader
+	fetcher         block.MetadataFetcher
+	dir             string
+	indexCache      storecache.IndexCache
+	indexReaderPool *indexheader.ReaderPool
+	chunkPool       pool.BytesPool
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
 	mtx       sync.RWMutex
@@ -305,6 +307,8 @@ func NewBucketStore(
 	enablePostingsCompression bool,
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
+	lazyIndexReaderEnabled bool,
+	lazyIndexReaderIdleTimeout time.Duration,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -321,6 +325,7 @@ func NewBucketStore(
 		fetcher:                     fetcher,
 		dir:                         dir,
 		indexCache:                  indexCache,
+		indexReaderPool:             indexheader.NewReaderPool(logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", reg)),
 		chunkPool:                   chunkPool,
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
@@ -352,6 +357,8 @@ func (s *BucketStore) Close() (err error) {
 	for _, b := range s.blocks {
 		runutil.CloseWithErrCapture(&err, b, "closing Bucket Block")
 	}
+
+	s.indexReaderPool.Close()
 	return err
 }
 
@@ -484,7 +491,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
-	indexHeaderReader, err := indexheader.NewBinaryReader(
+	indexHeaderReader, err := s.indexReaderPool.NewBinaryReader(
 		ctx,
 		s.logger,
 		s.bkt,
@@ -1075,7 +1082,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
 			// Do it via index reader to have pending reader registered correctly.
-			res := indexr.block.indexHeaderReader.LabelNames()
+			res, err := indexr.block.indexHeaderReader.LabelNames()
+			if err != nil {
+				return errors.Wrap(err, "label names")
+			}
+
 			sort.Strings(res)
 
 			mtx.Lock()
@@ -1555,7 +1566,11 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 
 	// As of version two all series entries are 16 byte padded. All references
 	// we get have to account for that to get the correct offset.
-	if r.block.indexHeaderReader.IndexVersion() >= 2 {
+	version, err := r.block.indexHeaderReader.IndexVersion()
+	if err != nil {
+		return nil, errors.Wrap(err, "get index version")
+	}
+	if version >= 2 {
 		for i, id := range ps {
 			ps[i] = id * 16
 		}

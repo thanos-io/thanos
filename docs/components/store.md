@@ -171,6 +171,10 @@ Flags:
                                  before being deleted from bucket. Default is
                                  24h, half of the default value for
                                  --delete-delay on compactor.
+      --store.enable-index-header-lazy-reader
+                                 If true, Store Gateway will lazy memory map
+                                 index-header only once the block is required by
+                                 a query.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
                                  URLs in the bucket web UI interface. Actual
                                  endpoints are still served on / or the

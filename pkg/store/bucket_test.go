@@ -581,8 +581,11 @@ func TestBucketStore_Info(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
+		false,
+		0,
 	)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
@@ -830,8 +833,11 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
+				false,
+				0,
 			)
 			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, bucketStore.Close()) }()
 
 			testutil.Ok(t, bucketStore.InitialSync(context.Background()))
 
@@ -1257,10 +1263,11 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	}
 
 	store := &BucketStore{
-		bkt:        objstore.WithNoopInstr(bkt),
-		logger:     logger,
-		indexCache: noopCache{},
-		metrics:    newBucketStoreMetrics(nil),
+		bkt:             objstore.WithNoopInstr(bkt),
+		logger:          logger,
+		indexCache:      noopCache{},
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
+		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{blocks}},
 		},
@@ -1468,10 +1475,11 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	}
 
 	store := &BucketStore{
-		bkt:        objstore.WithNoopInstr(bkt),
-		logger:     logger,
-		indexCache: indexCache,
-		metrics:    newBucketStoreMetrics(nil),
+		bkt:             objstore.WithNoopInstr(bkt),
+		logger:          logger,
+		indexCache:      indexCache,
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
+		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
 		},
@@ -1607,8 +1615,12 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
 
 	testCases := []*storetestutil.SeriesCase{
@@ -1716,8 +1728,12 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(tb, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
 
 	// Create a request with invalid hints (uses response hints instead of request hints).
@@ -1806,6 +1822,8 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1949,8 +1967,12 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	testutil.Ok(t, store.SyncBlocks(context.Background()))
 
 	req := &storepb.SeriesRequest{
