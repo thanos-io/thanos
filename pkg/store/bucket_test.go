@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
 
@@ -1733,6 +1734,136 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	err = store.Series(req, srv)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, true, regexp.MustCompile(".*unmarshal series request hints.*").MatchString(err.Error()))
+}
+
+func TestSeries_BlockWithMultipleChunks(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir, err := ioutil.TempDir("", "test-block-with-multiple-chunks")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	// Create a block with 1 series but an high number of samples,
+	// so that they will span across multiple chunks.
+	blkDir := filepath.Join(tmpDir, "block")
+
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, blkDir, nil, tsdb.DefaultStripeSize, nil)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, h.Close()) }()
+
+	series := labels.FromStrings("__name__", "test")
+	for ts := int64(0); ts < 10000; ts++ {
+		// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
+		// (except the last one, which could be smaller).
+		app := h.Appender(context.Background())
+		_, err := app.Add(series, ts, float64(ts))
+		testutil.Ok(t, err)
+		testutil.Ok(t, app.Commit())
+	}
+
+	blk := createBlockFromHead(t, blkDir, h)
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blkDir, blk.String()), thanosMeta, nil)
+	testutil.Ok(t, err)
+
+	// Create a bucket and upload the block there.
+	bktDir := filepath.Join(tmpDir, "bucket")
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	logger := log.NewNopLogger()
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blkDir, blk.String())))
+
+	// Instance a real bucket store we'll use to query the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		logger,
+		nil,
+		instrBkt,
+		fetcher,
+		tmpDir,
+		indexCache,
+		nil,
+		1000000,
+		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+		false,
+		10,
+		nil,
+		false,
+		true,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	tests := map[string]struct {
+		reqMinTime      int64
+		reqMaxTime      int64
+		expectedSamples int
+	}{
+		"query the entire block": {
+			reqMinTime:      math.MinInt64,
+			reqMaxTime:      math.MaxInt64,
+			expectedSamples: 10000,
+		},
+		"query the beginning of the block": {
+			reqMinTime:      0,
+			reqMaxTime:      100,
+			expectedSamples: MaxSamplesPerChunk,
+		},
+		"query the middle of the block": {
+			reqMinTime:      4000,
+			reqMaxTime:      4050,
+			expectedSamples: MaxSamplesPerChunk,
+		},
+		"query the end of the block": {
+			reqMinTime:      9800,
+			reqMaxTime:      10000,
+			expectedSamples: (MaxSamplesPerChunk * 2) + (10000 % MaxSamplesPerChunk),
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			req := &storepb.SeriesRequest{
+				MinTime: testData.reqMinTime,
+				MaxTime: testData.reqMaxTime,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+				},
+			}
+
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == 1)
+
+			// Count the number of samples in the returned chunks.
+			numSamples := 0
+			for _, rawChunk := range srv.SeriesSet[0].Chunks {
+				decodedChunk, err := chunkenc.FromData(chunkenc.EncXOR, rawChunk.Raw.Data)
+				testutil.Ok(t, err)
+
+				numSamples += decodedChunk.NumSamples()
+			}
+
+			testutil.Assert(t, testData.expectedSamples == numSamples, "expected: %d, actual: %d", testData.expectedSamples, numSamples)
+		})
+	}
 }
 
 func mustMarshalAny(pb proto.Message) *types.Any {
