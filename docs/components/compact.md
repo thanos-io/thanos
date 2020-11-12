@@ -28,6 +28,8 @@ config:
   bucket: example-bucket
 ```
 
+By default `thanos compact` will run to completion which makes it possible to execute in a cronjob. Using the arguments `--wait` and `--wait-interval=5m` it's possible to keep it running.
+
 The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 
