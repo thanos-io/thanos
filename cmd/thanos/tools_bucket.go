@@ -73,6 +73,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketReplicate(cmd, objStoreConfig)
 	registerBucketDownsample(cmd, objStoreConfig)
 	registerBucketCleanup(cmd, objStoreConfig)
+	registerBucketMarkBlock(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -709,4 +710,54 @@ func compare(s1, s2 string) bool {
 		return s1Duration < s2Duration
 	}
 	return s1Time.Before(s2Time)
+}
+
+func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command(component.Mark.String(), "Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is currently running compacting same block, this operation would be potentially a noop.")
+	blockIDs := cmd.Flag("id", "ID (ULID) of the blocks to be marked for deletion (repeated flag)").Required().Strings()
+	marker := cmd.Flag("marker", "Marker to be put.").Required().Enum(metadata.DeletionMarkFilename, metadata.NoCompactMarkFilename)
+	details := cmd.Flag("details", "Human readable details to be put into marker.").Required().String()
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
+		if err != nil {
+			return err
+		}
+
+		var ids []ulid.ULID
+		for _, id := range *blockIDs {
+			u, err := ulid.Parse(id)
+			if err != nil {
+				return errors.Errorf("id is not a valid block ULID, got: %v", id)
+			}
+			ids = append(ids, u)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		g.Add(func() error {
+			for _, id := range ids {
+				switch *marker {
+				case metadata.DeletionMarkFilename:
+					if err := block.MarkForDeletion(ctx, logger, bkt, id, *details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for %v", id, *marker)
+					}
+				case metadata.NoCompactMarkFilename:
+					if err := block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, *details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for %v", id, *marker)
+					}
+				default:
+					return errors.Errorf("not supported marker %v", *marker)
+				}
+			}
+			level.Info(logger).Log("msg", "marking done", "marker", *marker, "IDs", strings.Join(*blockIDs, ","))
+			return nil
+		}, func(err error) {
+			cancel()
+		})
+		return nil
+	})
 }

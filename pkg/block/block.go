@@ -133,7 +133,7 @@ func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) er
 }
 
 // MarkForDeletion creates a file which stores information about when the block was marked for deletion.
-func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, markedForDeletion prometheus.Counter) error {
+func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, details string, markedForDeletion prometheus.Counter) error {
 	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
 	deletionMarkExists, err := bkt.Exists(ctx, deletionMarkFile)
 	if err != nil {
@@ -148,6 +148,7 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		ID:           id,
 		DeletionTime: time.Now().Unix(),
 		Version:      metadata.DeletionMarkVersion1,
+		Details:      details,
 	})
 	if err != nil {
 		return errors.Wrap(err, "json encode deletion mark")
@@ -286,7 +287,7 @@ func gatherFileStats(blockDir string) (res []metadata.File, _ error) {
 }
 
 // MarkForNoCompact creates a file which marks block to be not compacted.
-func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, reason metadata.NoCompactReason, noCompactDetails string, markedForNoCompact prometheus.Counter) error {
+func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, reason metadata.NoCompactReason, details string, markedForNoCompact prometheus.Counter) error {
 	m := path.Join(id.String(), metadata.NoCompactMarkFilename)
 	noCompactMarkExists, err := bkt.Exists(ctx, m)
 	if err != nil {
@@ -301,9 +302,9 @@ func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucke
 		ID:      id,
 		Version: metadata.NoCompactMarkVersion1,
 
-		Time:    time.Now().Unix(),
-		Reason:  reason,
-		Details: noCompactDetails,
+		NoCompactTime: time.Now().Unix(),
+		Reason:        reason,
+		Details:       details,
 	})
 	if err != nil {
 		return errors.Wrap(err, "json encode no compact mark")
