@@ -2071,6 +2071,8 @@ func (r *bucketIndexReader) decodeSeriesWithReq(b []byte, lbls *labels.Labels, c
 	for i := 1; i < k; i++ {
 		mint := int64(d.Uvarint64()) + t0
 		maxt := int64(d.Uvarint64()) + mint
+		ref0 += d.Varint64()
+		t0 = maxt
 
 		if maxt < req.MinTime {
 			continue
@@ -2078,9 +2080,6 @@ func (r *bucketIndexReader) decodeSeriesWithReq(b []byte, lbls *labels.Labels, c
 		if mint > req.MaxTime {
 			break
 		}
-
-		ref0 += d.Varint64()
-		t0 = maxt
 
 		if d.Err() != nil {
 			return errors.Wrapf(d.Err(), "read meta for chunk %d", i)
