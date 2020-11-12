@@ -171,8 +171,12 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		true,
+		time.Minute,
 	)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, store.Close()) }()
+
 	s.store = store
 
 	if manyParts {

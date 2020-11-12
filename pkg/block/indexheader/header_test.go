@@ -96,7 +96,7 @@ func TestReaders(t *testing.T) {
 
 			b := realByteSlice(indexFile.Bytes())
 
-			t.Run("binary", func(t *testing.T) {
+			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
 				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
 
@@ -168,6 +168,18 @@ func TestReaders(t *testing.T) {
 
 				compareIndexToHeader(t, b, br)
 			})
+
+			t.Run("lazy binary reader", func(t *testing.T) {
+				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
+				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
+
+				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
+				testutil.Ok(t, err)
+
+				defer func() { testutil.Ok(t, br.Close()) }()
+
+				compareIndexToHeader(t, b, br)
+			})
 		})
 	}
 
@@ -178,7 +190,9 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
 
-	testutil.Equals(t, indexReader.Version(), headerReader.IndexVersion())
+	actVersion, err := headerReader.IndexVersion()
+	testutil.Ok(t, err)
+	testutil.Equals(t, indexReader.Version(), actVersion)
 
 	if indexReader.Version() == index.FormatV2 {
 		// For v2 symbols ref sequential integers 0, 1, 2 etc.
@@ -211,7 +225,9 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 
 	expLabelNames, err := indexReader.LabelNames()
 	testutil.Ok(t, err)
-	testutil.Equals(t, expLabelNames, headerReader.LabelNames())
+	actualLabelNames, err := headerReader.LabelNames()
+	testutil.Ok(t, err)
+	testutil.Equals(t, expLabelNames, actualLabelNames)
 
 	expRanges, err := indexReader.PostingsRanges()
 	testutil.Ok(t, err)
