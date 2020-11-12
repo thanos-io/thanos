@@ -60,7 +60,7 @@ Subcommands:
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion
 
-  tools bucket mark --id=ID
+  tools bucket mark --id=ID --marker=MARKER --details=DETAILS
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
     is currently running compacting same block, this operation would be
     potentially a noop.
@@ -149,7 +149,7 @@ Subcommands:
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion
 
-  tools bucket mark --id=ID
+  tools bucket mark --id=ID --marker=MARKER --details=DETAILS
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
     is currently running compacting same block, this operation would be
     potentially a noop.
@@ -582,7 +582,7 @@ config:
 
 [embedmd]:# (flags/tools_bucket_mark.txt $)
 ```$
-usage: thanos tools bucket mark --id=ID
+usage: thanos tools bucket mark --id=ID --marker=MARKER --details=DETAILS
 
 Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is
 currently running compacting same block, this operation would be potentially a
@@ -614,6 +614,8 @@ Flags:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --id=ID ...          ID (ULID) of the blocks to be marked for deletion
                            (repeated flag)
+      --marker=MARKER      Marker to be put.
+      --details=DETAILS    Human readable details to be put into marker.
 
 ```
 

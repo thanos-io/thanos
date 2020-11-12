@@ -305,7 +305,7 @@ func TestMarkForDeletion(t *testing.T) {
 			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String())))
 
 			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, c)
+			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, "", c)
 			testutil.Ok(t, err)
 			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
 		})

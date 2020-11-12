@@ -78,7 +78,7 @@ func BackupAndDelete(ctx context.Context, conf Config, id ulid.ULID) error {
 	}
 
 	level.Info(conf.Logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, conf.metrics.blocksMarkedForDeletion); err != nil {
+	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, "manual verify-repair", conf.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
 	return nil
@@ -115,7 +115,7 @@ func BackupAndDeleteDownloaded(ctx context.Context, conf Config, bdir string, id
 	}
 
 	level.Info(conf.Logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, conf.metrics.blocksMarkedForDeletion); err != nil {
+	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, "manual verify-repair", conf.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
 	return nil
