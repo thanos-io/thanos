@@ -1066,7 +1066,7 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	resHints := &hintspb.SeriesResponseHints{}
+	resHints := &hintspb.LabelNamesResponseHints{}
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -1108,12 +1108,9 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	var anyHints *types.Any
-	var err error
-
-	if anyHints, err = types.MarshalAny(resHints); err != nil {
-		err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
-		return nil, err
+	anyHints, err := types.MarshalAny(resHints)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 	}
 
 	return &storepb.LabelNamesResponse{
@@ -1124,7 +1121,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	resHints := &hintspb.SeriesResponseHints{}
+	resHints := &hintspb.LabelValuesResponseHints{}
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -1164,12 +1161,9 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
 
-	var anyHints *types.Any
-	var err error
-
-	if anyHints, err = types.MarshalAny(resHints); err != nil {
-		err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
-		return nil, err
+	anyHints, err := types.MarshalAny(resHints)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 	}
 
 	return &storepb.LabelValuesResponse{
