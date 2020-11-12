@@ -129,7 +129,6 @@ func NewLazyBinaryReader(
 // Close implements Reader. It unloads the index-header from memory (releasing the mmap
 // area), but a subsequent call to any other Reader function will automatically reload it.
 func (r *LazyBinaryReader) Close() error {
-	// Invoke the callback after having released the lock.
 	if r.onClosed != nil {
 		defer r.onClosed(r)
 	}
@@ -202,7 +201,7 @@ func (r *LazyBinaryReader) LabelNames() ([]string, error) {
 	return r.reader.LabelNames()
 }
 
-// load ensure the underlying binary index-header reader has been successfully loaded. Returns
+// load ensures the underlying binary index-header reader has been successfully loaded. Returns
 // an error on failure. This function MUST be called with the read lock already acquired.
 func (r *LazyBinaryReader) load() error {
 	// Nothing to do if we already tried loading it.

@@ -1822,6 +1822,8 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
+		false,
+		0,
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
