@@ -20,7 +20,7 @@ Click below snippet to start the Compactor.
 
 ```
 docker run -d --net=host --rm \
- -v $(pwd)/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
+ -v /root/editor/bucket_storage.yml:/etc/prometheus/bucket_storage.yml \
     --name thanos-compact \
     quay.io/thanos/thanos:v0.16.0 \
     compact \
@@ -29,6 +29,8 @@ docker run -d --net=host --rm \
     --objstore.config-file /etc/prometheus/bucket_storage.yml \
     --http-address 0.0.0.0:19095
 ```{{execute}}
+
+The flag `wait` is used to make sure all compactions have been processed while `--wait-interval` is kept in 30s to perform all the compactions and downsampling very quickly. Also, this only works when when `--wait` flag is specified. Another flag `--consistency-delay` is basically used for buckets which are not consistent strongly. It is the minimum age of non-compacted blocks before they are being processed. Here, we kept the delay at 0s assuming the bucket is consistent.
 
 ## Unlimited Retention - Not Challenging anymore?
 

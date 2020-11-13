@@ -43,13 +43,15 @@ docker run -d --net=host --rm \
 
 In this step, we will see how we can query Thanos store data which has access to historical data from the `thanos` bucket, and let's play with this setup a bit.
 
-Click on the [Querier UI `Graph` page](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph) and try querying data for a year or two by inserting metrics [k8s_app_metric0](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=2d&g0.end_input=2019-10-18%2011%3A26&g0.max_source_resolution=0s&g0.expr=k8s_app_metric0&g0.tab=0). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
+Click on the [Querier UI `Graph` page](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph) and try querying data for a year or two by inserting metrics [continuous_app_metric0](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
 
 ![](https://github.com/soniasingla/thanos/raw/master/tutorials/katacoda/thanos/2-lts/query.png)
 
-Also, you can check all the active endpoints located by thanos-store by clicking on [Stores](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/stores).
+Also, you can check all the active endpoints located by thanos-store by clicking on [Stores](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/stores).
 
 We've added Thanos Query, a web and API frontend that can query a Prometheus instance and Thanos Store at the same time, which gives transparent access to the archived blocks and real-time metrics. The vanilla PromQL Prometheus engine used for evaluating the query deduces what time series and for what time ranges we need to fetch the data. Also, StoreAPIs propagate external labels and the time range they have data for, so we can do basic filtering on this. However, if you don't specify any of these in the query (only "up" series) the querier concurrently asks all the StoreAPI servers. It might cause a duplication of results between sidecar and store data.
+
+Now, another interesting question here is how to ensure if we query the data from bucket only? We can check this by visitng the New UI, inseting `continuous_app_metric0` metrics again with 1 year time range of graph, and click on `Enable Store Filtering`. This allows us to filter stores and helps in debugging from where we are querying the data exactly.
 
 ## Question Time? 🤔
 
@@ -57,7 +59,7 @@ In an HA Prometheus setup with Thanos sidecars, would there be issues with multi
 
 Think over this 😉
 
-To see the answer to this question click SHOW SOLUTION below.
+To see the answer to this question click `SHOW SOLUTION` below.
 
 ## Next
 

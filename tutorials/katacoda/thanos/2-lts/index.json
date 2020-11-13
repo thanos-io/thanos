@@ -46,7 +46,7 @@
     "dashboards": [
       {"name": "Prometheus 0 EU1", "port": 9090},
       {"name": "Minio", "port": 9000},
-      {"name": "Thanos Query", "port": 29090}
+      {"name": "Thanos Query", "port": 9091}
   ]
   },
   "backend": {
