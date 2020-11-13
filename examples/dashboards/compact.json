@@ -616,9 +616,252 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows rate of execution for all meta files from blocks in the bucket into the memory.",
+               "description": "Shows deletion rate of blocks already marked for deletion.",
                "fill": 10,
                "id": 8,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 0,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 4,
+               "stack": true,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_compact_blocks_cleaned_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Blocks cleanup {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Deletion Rate",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows deletion failures rate of blocks already marked for deletion.",
+               "fill": 1,
+               "id": 9,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 4,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_compact_block_cleanup_failures_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Blocks cleanup failures {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Deletion Error Rate",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows rate at which blocks are marked for deletion (from GC and retention policy).",
+               "fill": 1,
+               "id": 10,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 4,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_compact_blocks_marked_for_deletion_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "Blocks marked {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Marking Rate",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Blocks deletion",
+         "titleSize": "h6"
+      },
+      {
+         "collapse": false,
+         "height": "250px",
+         "panels": [
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows rate of execution for all meta files from blocks in the bucket into the memory.",
+               "fill": 10,
+               "id": 11,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -697,7 +940,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of executed meta file sync.",
                "fill": 10,
-               "id": 9,
+               "id": 12,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -774,7 +1017,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to execute meta file sync, in quantiles.",
                "fill": 1,
-               "id": 10,
+               "id": 13,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -879,7 +1122,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of execution for operations against the bucket.",
                "fill": 10,
-               "id": 11,
+               "id": 14,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -958,7 +1201,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of executed operations against the bucket.",
                "fill": 10,
-               "id": 12,
+               "id": 15,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1035,7 +1278,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to execute operations against the bucket, in quantiles.",
                "fill": 1,
-               "id": 13,
+               "id": 16,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1139,7 +1382,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 14,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1255,7 +1498,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 15,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1331,7 +1574,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 16,
+               "id": 19,
                "legend": {
                   "avg": false,
                   "current": false,

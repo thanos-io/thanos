@@ -209,6 +209,7 @@ sse_config:
 - [#2579](https://github.com/thanos-io/thanos/pull/2579) Store: Experimental caching bucket can now cache metadata as well. Config has changed from #2532.
 - [#2526](https://github.com/thanos-io/thanos/pull/2526) Compact: In case there are no labels left after deduplication via `--deduplication.replica-label`, assign first `replica-label` with value `deduped`.
 - [#2621](https://github.com/thanos-io/thanos/pull/2621) Receive: Added flag to configure forward request timeout. Receive write will complete request as soon as quorum of writes succeeds.
+- [#3380](https://github.com/thanos-io/thanos/pull/3380) mixin: add deletion metrics for compactor.
 
 ### Changed
 
