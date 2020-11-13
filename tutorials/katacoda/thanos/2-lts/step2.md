@@ -22,7 +22,7 @@ docker run -d --rm --name minio \
      -v /root/minio:/data \
      -p 9000:9000 -e "MINIO_ACCESS_KEY=minio" -e "MINIO_SECRET_KEY=melovethanos" \
      minio/minio:RELEASE.2019-01-31T00-31-19Z \
-    server /data
+     server /data
 ```{{execute}}
 
 Create `thanos` bucket:
@@ -44,7 +44,7 @@ Enter the credentials as mentioned below:
 
 All Thanos components that use object storage uses the same `objstore.config` flag with the same "little" bucket config format.
 
-Click `Copy To Editor` for config to propagate the configs to the file `bucket_storage.yml`:
+Click `Copy To Editor` for config to propagate the configs to the file `bucket_storage.yaml`:
 
 <pre class="file" data-filename="bucket_storage.yaml" data-target="replace">
 type: S3

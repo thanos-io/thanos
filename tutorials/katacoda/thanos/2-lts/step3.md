@@ -51,7 +51,9 @@ Also, you can check all the active endpoints located by thanos-store by clicking
 
 We've added Thanos Query, a web and API frontend that can query a Prometheus instance and Thanos Store at the same time, which gives transparent access to the archived blocks and real-time metrics. The vanilla PromQL Prometheus engine used for evaluating the query deduces what time series and for what time ranges we need to fetch the data. Also, StoreAPIs propagate external labels and the time range they have data for, so we can do basic filtering on this. However, if you don't specify any of these in the query (only "up" series) the querier concurrently asks all the StoreAPI servers. It might cause a duplication of results between sidecar and store data.
 
-Now, another interesting question here is how to ensure if we query the data from bucket only? We can check this by visitng the New UI, inseting `continuous_app_metric0` metrics again with 1 year time range of graph, and click on `Enable Store Filtering`. This allows us to filter stores and helps in debugging from where we are querying the data exactly.
+Now, another interesting question here is how to ensure if we query the data from bucket only?
+
+We can check this by visitng the [New UI]((https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.expr=&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=[])), inserting `continuous_app_metric0` metrics again with 1 year time range of graph, and click on `Enable Store Filtering`. This allows us to filter stores and helps in debugging from where we are querying the data exactly.
 
 ## Question Time? 🤔
 
