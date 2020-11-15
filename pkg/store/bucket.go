@@ -1672,7 +1672,10 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 	output := make([]index.Postings, len(keys))
 
 	// Fetch postings from the cache with a single call.
-	fromCache, _ := r.block.indexCache.FetchMultiPostings(r.ctx, r.block.meta.ULID, keys)
+	var fromCache map[labels.Label][]byte
+	if r.block.indexCache != nil {
+		fromCache, _ = r.block.indexCache.FetchMultiPostings(r.ctx, r.block.meta.ULID, keys)
+	}
 
 	// Iterate over all groups and fetch posting from cache.
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
@@ -1795,7 +1798,9 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 
-				r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], dataToCache)
+				if r.block.indexCache != nil {
+					r.block.indexCache.StorePostings(r.ctx, r.block.meta.ULID, keys[p.keyID], dataToCache)
+				}
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -1889,9 +1894,12 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
-	fromCache, ids := r.block.indexCache.FetchMultiSeries(r.ctx, r.block.meta.ULID, ids)
-	for id, b := range fromCache {
-		r.loadedSeries[id] = b
+	var fromCache map[uint64][]byte
+	if r.block.indexCache != nil {
+		fromCache, ids = r.block.indexCache.FetchMultiSeries(r.ctx, r.block.meta.ULID, ids)
+		for id, b := range fromCache {
+			r.loadedSeries[id] = b
+		}
 	}
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
@@ -1946,7 +1954,9 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetc
 		c = c[n : n+int(l)]
 		r.mtx.Lock()
 		r.loadedSeries[id] = c
-		r.block.indexCache.StoreSeries(r.ctx, r.block.meta.ULID, id, c)
+		if r.block.indexCache != nil {
+			r.block.indexCache.StoreSeries(r.ctx, r.block.meta.ULID, id, c)
+		}
 		r.mtx.Unlock()
 	}
 	return nil
@@ -2015,7 +2025,10 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 	r.stats.seriesTouched++
 	r.stats.seriesTouchedSizeSum += len(b)
 
-	return r.decodeSeriesWithReq(b, lset, chks, req)
+	if req != nil {
+		return r.decodeSeriesWithReq(b, lset, chks, req)
+	}
+	return r.dec.Series(b, lset, chks)
 }
 
 // Close released the underlying resources of the reader.
@@ -2377,4 +2390,24 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.mergeDuration += o.mergeDuration
 
 	return &s
+}
+
+// NewBucketIndexReaderForAnalysis creates a bucket index reader. Used in bucket analyze command.
+func NewBucketIndexReaderForAnalysis(
+	ctx context.Context,
+	bkt objstore.BucketReader,
+	meta *metadata.Meta,
+	header indexheader.Reader,
+	logger log.Logger,
+) (*bucketIndexReader, error) {
+	b := &bucketBlock{
+		logger:            logger,
+		metrics:           newBucketStoreMetrics(nil),
+		bkt:               bkt,
+		partitioner:       gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+		meta:              meta,
+		indexHeaderReader: header,
+	}
+
+	return b.indexReader(ctx), nil
 }

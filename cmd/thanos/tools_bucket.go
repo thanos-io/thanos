@@ -7,6 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
+	"github.com/thanos-io/thanos/pkg/store"
 	"os"
 	"sort"
 	"strconv"
@@ -74,6 +78,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketDownsample(cmd, objStoreConfig)
 	registerBucketCleanup(cmd, objStoreConfig)
 	registerBucketMarkBlock(cmd, objStoreConfig)
+	registerBucketAnalyze(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -758,6 +763,188 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 		}, func(err error) {
 			cancel()
 		})
+		return nil
+	})
+}
+
+func registerBucketAnalyze(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	const commandName = "analyze"
+	cmd := app.Command(commandName, "Analyze churn, label pair cardinality.")
+	blockID := cmd.Flag("id", "Block to analyze").Required().String()
+	limit := cmd.Flag("limit", "How many items to show in each list.").Default("20").Int()
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		id, err := ulid.Parse(*blockID)
+		if err != nil {
+			return errors.Errorf("id is not a valid block ULID, got: %v", *blockID)
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, commandName)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+		// TODO: Simplify this since we only need to fetch metadata file for one block.
+		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		if err != nil {
+			return err
+		}
+		metas, _, err := fetcher.Fetch(context.TODO())
+		if err != nil {
+			return err
+		}
+		if _, ok := metas[id]; !ok {
+			return errors.New("Failed to ")
+		}
+		meta := metas[id]
+
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		ihr, err := indexheader.NewBinaryReader(context.TODO(), logger, bkt, "", id, 32)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "index header")
+
+		indexr, err := store.NewBucketIndexReaderForAnalysis(context.TODO(), bkt, meta, ihr, logger)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket index reader")
+
+		name, value := index.AllPostingsKey()
+		refs, err := indexr.ExpandedPostings([]*labels.Matcher{{Name: name, Value: value, Type: labels.MatchEqual}})
+		if err != nil {
+			return err
+		}
+
+		if err := indexr.PreloadSeries(refs); err != nil {
+			return err
+		}
+
+		fmt.Printf("Block ID: %s\n", meta.ULID)
+		// Presume 1ms resolution that Prometheus uses.
+		fmt.Printf("Duration: %s\n", (time.Duration(meta.MaxTime-meta.MinTime) * 1e6).String())
+		fmt.Printf("Series: %d\n", meta.Stats.NumSeries)
+
+		allLabelNames, err := ihr.LabelNames()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Label names: %d\n", len(allLabelNames))
+
+		type postingInfo struct {
+			key    string
+			metric uint64
+		}
+		postingInfos := []postingInfo{}
+
+		printInfo := func(postingInfos []postingInfo) {
+			sort.Slice(postingInfos, func(i, j int) bool { return postingInfos[i].metric > postingInfos[j].metric })
+
+			for i, pc := range postingInfos {
+				if i >= *limit {
+					break
+				}
+				fmt.Printf("%d %s\n", pc.metric, pc.key)
+			}
+		}
+
+		labelsUncovered := map[string]uint64{}
+		labelpairsUncovered := map[string]uint64{}
+		labelpairsCount := map[string]uint64{}
+		entries := 0
+
+		var (
+			lset labels.Labels
+			chks []chunks.Meta
+		)
+		for _, id := range refs {
+			if err := indexr.LoadedSeries(id, &lset, &chks, nil); err != nil {
+				return err
+			}
+
+			// Amount of the block time range not covered by this series.
+			uncovered := uint64(meta.MaxTime-meta.MinTime) - uint64(chks[len(chks)-1].MaxTime-chks[0].MinTime)
+			for _, lbl := range lset {
+				key := lbl.Name + "=" + lbl.Value
+				labelsUncovered[lbl.Name] += uncovered
+				labelpairsUncovered[key] += uncovered
+				labelpairsCount[key]++
+				entries++
+			}
+		}
+
+		fmt.Printf("Postings (unique label pairs): %d\n", len(labelpairsUncovered))
+		fmt.Printf("Postings entries (total label pairs): %d\n", entries)
+
+		postingInfos = postingInfos[:0]
+		for k, m := range labelpairsUncovered {
+			postingInfos = append(postingInfos, postingInfo{k, uint64(float64(m) / float64(meta.MaxTime-meta.MinTime))})
+		}
+
+		fmt.Printf("\nLabel pairs most involved in churning:\n")
+		printInfo(postingInfos)
+
+		postingInfos = postingInfos[:0]
+		for k, m := range labelsUncovered {
+			postingInfos = append(postingInfos, postingInfo{k, uint64(float64(m) / float64(meta.MaxTime-meta.MinTime))})
+		}
+
+		fmt.Printf("\nLabel names most involved in churning:\n")
+		printInfo(postingInfos)
+
+		postingInfos = postingInfos[:0]
+		for k, m := range labelpairsCount {
+			postingInfos = append(postingInfos, postingInfo{k, m})
+		}
+
+		fmt.Printf("\nMost common label pairs:\n")
+		printInfo(postingInfos)
+
+		postingInfos = postingInfos[:0]
+		cardinalityLabels := make([]postingInfo, 0, len(allLabelNames))
+		for _, n := range allLabelNames {
+			values, err := ihr.LabelValues(n)
+			if err != nil {
+				return err
+			}
+			var cumulativeLength uint64
+			for _, str := range values {
+				cumulativeLength += uint64(len(str))
+			}
+			postingInfos = append(postingInfos, postingInfo{n, cumulativeLength})
+			cardinalityLabels = append(cardinalityLabels, postingInfo{n, uint64(len(values))})
+		}
+
+		fmt.Printf("\nLabel names with highest cumulative label value length:\n")
+		printInfo(postingInfos)
+
+		fmt.Printf("\nHighest cardinality labels:\n")
+		printInfo(cardinalityLabels)
+
+		postingInfos = postingInfos[:0]
+		lv, err := ihr.LabelValues("__name__")
+		if err != nil {
+			return err
+		}
+		for _, n := range lv {
+			refs, err = indexr.ExpandedPostings([]*labels.Matcher{{Name: "__name__", Value: n, Type: labels.MatchEqual}})
+			if err != nil {
+				return err
+			}
+			postingInfos = append(postingInfos, postingInfo{n, uint64(len(refs))})
+		}
+		fmt.Printf("\nHighest cardinality metric names:\n")
+		printInfo(postingInfos)
+
 		return nil
 	})
 }

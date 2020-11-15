@@ -65,6 +65,9 @@ Subcommands:
     is currently running compacting same block, this operation would be
     potentially a noop.
 
+  tools bucket analyze --id=ID [<flags>]
+    Analyze churn, label pair cardinality.
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -153,6 +156,9 @@ Subcommands:
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
     is currently running compacting same block, this operation would be
     potentially a noop.
+
+  tools bucket analyze --id=ID [<flags>]
+    Analyze churn, label pair cardinality.
 
 
 ```
