@@ -790,43 +790,46 @@ func registerBucketAnalyze(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		// TODO: Simplify this since we only need to fetch metadata file for one block.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		// TODO: Maybe simplify this since we only need to fetch metadata file for one block?
 		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
 		}
-		metas, _, err := fetcher.Fetch(context.TODO())
+		metas, _, err := fetcher.Fetch(ctx)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create meta fetcher")
 		}
 		if _, ok := metas[id]; !ok {
-			return errors.New("Failed to ")
+			return errors.New("no matched metadata file for block " + id.String())
 		}
 		meta := metas[id]
 
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		ihr, err := indexheader.NewBinaryReader(context.TODO(), logger, bkt, "", id, 32)
+		ihr, err := indexheader.NewBinaryReader(ctx, logger, bkt, "", id, 32)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create index header")
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "index header")
 
-		indexr, err := store.NewBucketIndexReaderForAnalysis(context.TODO(), bkt, meta, ihr, logger)
+		indexr, err := store.NewBucketIndexReaderForAnalysis(ctx, bkt, meta, ihr, logger)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create bucket index reader")
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket index reader")
 
 		name, value := index.AllPostingsKey()
 		refs, err := indexr.ExpandedPostings([]*labels.Matcher{{Name: name, Value: value, Type: labels.MatchEqual}})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "expand postings")
 		}
 
 		if err := indexr.PreloadSeries(refs); err != nil {
-			return err
+			return errors.Wrap(err, "preload series")
 		}
 
 		fmt.Printf("Block ID: %s\n", meta.ULID)
@@ -938,7 +941,7 @@ func registerBucketAnalyze(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		for _, n := range lv {
 			refs, err = indexr.ExpandedPostings([]*labels.Matcher{{Name: "__name__", Value: n, Type: labels.MatchEqual}})
 			if err != nil {
-				return err
+				return errors.Wrap(err, "expand postings")
 			}
 			postingInfos = append(postingInfos, postingInfo{n, uint64(len(refs))})
 		}
