@@ -83,14 +83,14 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 			Data:   lbls,
 		}, nil
 	case *ThanosSeriesResponse:
-		seriesData := make([]labelpb.LabelSet, 0)
+		seriesData := make([]labelpb.ZLabelSet, 0)
 
 		// seriesString is used in soring so we don't have to calculate the string of label sets again.
 		seriesString := make([]string, 0)
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
 			for _, series := range res.(*ThanosSeriesResponse).Data {
-				s := labelpb.LabelsToPromLabels(series.Labels).String()
+				s := series.PromLabels().String()
 				if _, ok := uniqueSeries[s]; !ok {
 					seriesData = append(seriesData, series)
 					seriesString = append(seriesString, s)
@@ -134,7 +134,8 @@ func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request) (queryran
 }
 
 func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*http.Request, error) {
-	var u *url.URL
+	var req *http.Request
+	var err error
 	switch thanosReq := r.(type) {
 	case *ThanosLabelsRequest:
 		var params = url.Values{
@@ -145,10 +146,28 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 		if len(thanosReq.StoreMatchers) > 0 {
 			params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 		}
-		u = &url.URL{
-			Path:     thanosReq.Path,
-			RawQuery: params.Encode(),
+
+		if strings.Contains(thanosReq.Path, "/api/v1/label/") {
+			u := &url.URL{
+				Path:     thanosReq.Path,
+				RawQuery: params.Encode(),
+			}
+
+			req = &http.Request{
+				Method:     http.MethodGet,
+				RequestURI: u.String(), // This is what the httpgrpc code looks at.
+				URL:        u,
+				Body:       http.NoBody,
+				Header:     http.Header{},
+			}
+		} else {
+			req, err = http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
+			if err != nil {
+				return nil, httpgrpc.Errorf(http.StatusBadRequest, "error creating request: %s", err.Error())
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
+
 	case *ThanosSeriesRequest:
 		var params = url.Values{
 			"start":                      []string{encodeTime(thanosReq.Start)},
@@ -163,20 +182,15 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 		if len(thanosReq.StoreMatchers) > 0 {
 			params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 		}
-		u = &url.URL{
-			Path:     thanosReq.Path,
-			RawQuery: params.Encode(),
+
+		req, err = http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
+		if err != nil {
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, "error creating request: %s", err.Error())
 		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	default:
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid request format")
-	}
-
-	req := &http.Request{
-		Method:     "GET",
-		RequestURI: u.String(), // This is what the httpgrpc code looks at.
-		URL:        u,
-		Body:       http.NoBody,
-		Header:     http.Header{},
 	}
 
 	return req.WithContext(ctx), nil

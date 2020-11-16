@@ -227,8 +227,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels names request",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/labels"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
 					r.URL.Path == "/api/v1/labels"
 			},
 		},
@@ -255,8 +255,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos series request with empty matchers",
 			req:  &ThanosSeriesRequest{Start: 123000, End: 456000, Path: "/api/v1/series"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -269,9 +269,9 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "cluster", "test")}},
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
-					r.URL.Query().Get(queryv1.MatcherParam) == `{cluster="test"}` &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
+					r.FormValue(queryv1.MatcherParam) == `{cluster="test"}` &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -284,9 +284,9 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Dedup: true,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
-					r.URL.Query().Get(queryv1.DedupParam) == "true" &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
+					r.FormValue(queryv1.DedupParam) == "true" &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -315,7 +315,7 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 
 	seriesResponse := &ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+		Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}},
 	}
 	seriesData, err := json.Marshal(seriesResponse)
 	testutil.Ok(t, err)
