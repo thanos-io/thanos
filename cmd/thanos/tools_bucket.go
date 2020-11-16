@@ -796,11 +796,11 @@ func registerBucketAnalyze(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// TODO: Maybe simplify this since we only need to fetch metadata file for one block?
 		fetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create meta fetcher")
 		}
 		metas, _, err := fetcher.Fetch(ctx)
 		if err != nil {
-			return errors.Wrap(err, "create meta fetcher")
+			return errors.Wrap(err, "fetch metas")
 		}
 		if _, ok := metas[id]; !ok {
 			return errors.New("no matched metadata file for block " + id.String())
