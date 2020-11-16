@@ -4,7 +4,6 @@
 package verifier
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -29,10 +28,10 @@ type IndexKnownIssues struct{}
 
 func (IndexKnownIssues) IssueID() string { return "index_known_issues" }
 
-func (IndexKnownIssues) VerifyRepair(ctx context.Context, conf Config, idMatcher func(ulid.ULID) bool, repair bool) error {
-	level.Info(conf.Logger).Log("msg", "started verifying issue", "with-repair", repair)
+func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error {
+	level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
-	metas, _, err := conf.Fetcher.Fetch(ctx)
+	metas, _, err := ctx.Fetcher.Fetch(ctx)
 	if err != nil {
 		return err
 	}
@@ -48,24 +47,25 @@ func (IndexKnownIssues) VerifyRepair(ctx context.Context, conf Config, idMatcher
 		}
 		defer func() {
 			if err := os.RemoveAll(tmpdir); err != nil {
-				level.Warn(conf.Logger).Log("msg", "failed to delete dir", "tmpdir", tmpdir, "err", err)
+				level.Warn(ctx.Logger).Log("msg", "failed to delete dir", "tmpdir", tmpdir, "err", err)
 			}
 		}()
 
-		if err = objstore.DownloadFile(ctx, conf.Logger, conf.Bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
+		if err = objstore.DownloadFile(ctx, ctx.Logger, ctx.Bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
-		stats, err := block.GatherIndexIssueStats(conf.Logger, filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexHealthStats(ctx.Logger, filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
 
+		level.Debug(ctx.Logger).Log("stats", fmt.Sprintf("%+v", stats), "id", id)
 		if err = stats.AnyErr(); err == nil {
 			return nil
 		}
 
-		level.Warn(conf.Logger).Log("msg", "detected issue", "id", id, "err", err)
+		level.Warn(ctx.Logger).Log("msg", "detected issue", "id", id, "err", err)
 
 		if !repair {
 			// Only verify.
@@ -73,26 +73,26 @@ func (IndexKnownIssues) VerifyRepair(ctx context.Context, conf Config, idMatcher
 		}
 
 		if stats.OutOfOrderChunks > stats.DuplicatedChunks {
-			level.Warn(conf.Logger).Log("msg", "detected overlaps are not entirely by duplicated chunks. We are able to repair only duplicates", "id", id)
+			level.Warn(ctx.Logger).Log("msg", "detected overlaps are not entirely by duplicated chunks. We are able to repair only duplicates", "id", id)
 		}
 
 		if stats.OutsideChunks > (stats.CompleteOutsideChunks + stats.Issue347OutsideChunks) {
-			level.Warn(conf.Logger).Log("msg", "detected outsiders are not all 'complete' outsiders or outsiders from https://github.com/prometheus/tsdb/issues/347. We can safely delete only these outsiders", "id", id)
+			level.Warn(ctx.Logger).Log("msg", "detected outsiders are not all 'complete' outsiders or outsiders from https://github.com/prometheus/tsdb/issues/347. We can safely delete only these outsiders", "id", id)
 		}
 
 		if meta.Thanos.Downsample.Resolution > 0 {
 			return errors.New("cannot repair downsampled blocks")
 		}
 
-		level.Info(conf.Logger).Log("msg", "downloading block for repair", "id", id)
-		if err = block.Download(ctx, conf.Logger, conf.Bkt, id, path.Join(tmpdir, id.String())); err != nil {
+		level.Info(ctx.Logger).Log("msg", "downloading block for repair", "id", id)
+		if err = block.Download(ctx, ctx.Logger, ctx.Bkt, id, path.Join(tmpdir, id.String())); err != nil {
 			return errors.Wrapf(err, "download block %s", id)
 		}
-		level.Info(conf.Logger).Log("msg", "downloaded block to be repaired", "id", id, "issue")
+		level.Info(ctx.Logger).Log("msg", "downloaded block to be repaired", "id", id, "issue")
 
-		level.Info(conf.Logger).Log("msg", "repairing block", "id", id, "issue")
+		level.Info(ctx.Logger).Log("msg", "repairing block", "id", id, "issue")
 		resid, err := block.Repair(
-			conf.Logger,
+			ctx.Logger,
 			tmpdir,
 			id,
 			metadata.BucketRepairSource,
@@ -103,26 +103,26 @@ func (IndexKnownIssues) VerifyRepair(ctx context.Context, conf Config, idMatcher
 		if err != nil {
 			return errors.Wrapf(err, "repair failed for block %s", id)
 		}
-		level.Info(conf.Logger).Log("msg", "verifying repaired block", "id", id, "newID", resid)
+		level.Info(ctx.Logger).Log("msg", "verifying repaired block", "id", id, "newID", resid)
 
 		// Verify repaired block before uploading it.
-		if err := block.VerifyIndex(conf.Logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+		if err := block.VerifyIndex(ctx.Logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
-		level.Info(conf.Logger).Log("msg", "uploading repaired block", "newID", resid)
-		if err = block.Upload(ctx, conf.Logger, conf.Bkt, filepath.Join(tmpdir, resid.String())); err != nil {
+		level.Info(ctx.Logger).Log("msg", "uploading repaired block", "newID", resid)
+		if err = block.Upload(ctx, ctx.Logger, ctx.Bkt, filepath.Join(tmpdir, resid.String())); err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
 
-		level.Info(conf.Logger).Log("msg", "safe deleting broken block", "id", id, "issue")
-		if err := BackupAndDeleteDownloaded(ctx, conf, filepath.Join(tmpdir, id.String()), id); err != nil {
+		level.Info(ctx.Logger).Log("msg", "safe deleting broken block", "id", id, "issue")
+		if err := BackupAndDeleteDownloaded(ctx, filepath.Join(tmpdir, id.String()), id); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
-		level.Info(conf.Logger).Log("msg", "all good, continuing", "id", id)
+		level.Info(ctx.Logger).Log("msg", "all good, continuing", "id", id)
 		return nil
 	}
 
-	level.Info(conf.Logger).Log("msg", "verified issue", "with-repair", repair)
+	level.Info(ctx.Logger).Log("msg", "verified issue", "with-repair", repair)
 	return nil
 }

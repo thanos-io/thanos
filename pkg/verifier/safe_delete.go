@@ -37,9 +37,9 @@ func TSDBBlockExistsInBucket(ctx context.Context, bkt objstore.Bucket, id ulid.U
 // It returns error if block dir already exists in
 // the backup bucket (blocks should be immutable) or if any of the operations
 // fail.
-func BackupAndDelete(ctx context.Context, conf Config, id ulid.ULID) error {
+func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	// Does this TSDB block exist in backupBkt already?
-	found, err := TSDBBlockExistsInBucket(ctx, conf.BackupBkt, id)
+	found, err := TSDBBlockExistsInBucket(ctx, ctx.BackupBkt, id)
 	if err != nil {
 		return err
 	}
@@ -54,31 +54,31 @@ func BackupAndDelete(ctx context.Context, conf Config, id ulid.ULID) error {
 	}
 	defer func() {
 		if err := os.RemoveAll(tempdir); err != nil {
-			level.Warn(conf.Logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
+			level.Warn(ctx.Logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
 		}
 	}()
 
 	// Download the TSDB block.
 	dir := filepath.Join(tempdir, id.String())
-	if err := block.Download(ctx, conf.Logger, conf.Bkt, id, dir); err != nil {
+	if err := block.Download(ctx, ctx.Logger, ctx.Bkt, id, dir); err != nil {
 		return errors.Wrap(err, "download from source")
 	}
 
 	// Backup the block.
-	if err := backupDownloaded(ctx, conf.Logger, dir, conf.BackupBkt, id); err != nil {
+	if err := backupDownloaded(ctx, ctx.Logger, dir, ctx.BackupBkt, id); err != nil {
 		return err
 	}
 
 	// Block uploaded, so we are ok to remove from src bucket.
-	if conf.DeleteDelay.Seconds() == 0 {
-		level.Info(conf.Logger).Log("msg", "Deleting block", "id", id.String())
-		if err := block.Delete(ctx, conf.Logger, conf.Bkt, id); err != nil {
+	if ctx.DeleteDelay.Seconds() == 0 {
+		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
+		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
 			return errors.Wrap(err, "delete from source")
 		}
 	}
 
-	level.Info(conf.Logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, "manual verify-repair", conf.metrics.blocksMarkedForDeletion); err != nil {
+	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
+	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
 	return nil
@@ -90,9 +90,9 @@ func BackupAndDelete(ctx context.Context, conf Config, id ulid.ULID) error {
 // points to the location on disk where the TSDB block was previously
 // downloaded allowing this function to avoid downloading the TSDB block from
 // the source bucket again. An error is returned if any operation fails.
-func BackupAndDeleteDownloaded(ctx context.Context, conf Config, bdir string, id ulid.ULID) error {
+func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 	// Does this TSDB block exist in backupBkt already?
-	found, err := TSDBBlockExistsInBucket(ctx, conf.BackupBkt, id)
+	found, err := TSDBBlockExistsInBucket(ctx, ctx.BackupBkt, id)
 	if err != nil {
 		return err
 	}
@@ -101,21 +101,21 @@ func BackupAndDeleteDownloaded(ctx context.Context, conf Config, bdir string, id
 	}
 
 	// Backup the block.
-	if err := backupDownloaded(ctx, conf.Logger, bdir, conf.BackupBkt, id); err != nil {
+	if err := backupDownloaded(ctx, ctx.Logger, bdir, ctx.BackupBkt, id); err != nil {
 		return err
 	}
 
 	// Block uploaded, so we are ok to remove from src bucket.
-	if conf.DeleteDelay.Seconds() == 0 {
-		level.Info(conf.Logger).Log("msg", "Deleting block", "id", id.String())
-		if err := block.Delete(ctx, conf.Logger, conf.Bkt, id); err != nil {
+	if ctx.DeleteDelay.Seconds() == 0 {
+		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
+		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
 			return errors.Wrap(err, "delete from source")
 		}
 		return nil
 	}
 
-	level.Info(conf.Logger).Log("msg", "Marking block as deleted", "id", id.String())
-	if err := block.MarkForDeletion(ctx, conf.Logger, conf.Bkt, id, "manual verify-repair", conf.metrics.blocksMarkedForDeletion); err != nil {
+	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
+	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
 	return nil
