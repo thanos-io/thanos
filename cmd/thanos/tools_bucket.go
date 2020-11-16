@@ -141,15 +141,6 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		ctx := context.Background()
-		v := verifier.NewManager(reg, verifier.Config{
-			Logger:      logger,
-			Bkt:         bkt,
-			BackupBkt:   backupBkt,
-			Fetcher:     fetcher,
-			DeleteDelay: time.Duration(*deleteDelay),
-		}, r)
-
 		var idMatcher func(ulid.ULID) bool = nil
 		if len(*ids) > 0 {
 			idsMap := map[string]struct{}{}
@@ -169,11 +160,12 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			}
 		}
 
+		v := verifier.NewManager(reg, logger, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), r)
 		if *repair {
-			return v.VerifyAndRepair(ctx, idMatcher)
+			return v.VerifyAndRepair(context.Background(), idMatcher)
 		}
 
-		return v.Verify(ctx, idMatcher)
+		return v.Verify(context.Background(), idMatcher)
 	})
 }
 
