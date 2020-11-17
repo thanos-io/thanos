@@ -161,6 +161,12 @@ Flags:
       --query-range.max-query-parallelism=14
                                  Maximum number of query range requests will be
                                  scheduled in parallel by the Frontend.
+      --query-range.max-query-lookback=0
+                                 Limit how long back data can be queried via
+                                 query range API. If the requested time range is
+                                 outside the allowed range, the request will not
+                                 fail but will be manipulated to only query data
+                                 within the allowed time range. 0 to disable.
       --query-range.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for query
                                  range requests, to prevent caching very recent
@@ -201,6 +207,13 @@ Flags:
                                  The default metadata time range duration for
                                  retrieving labels through Labels and Series API
                                  when the range parameters are not specified.
+      --labels.max-query-lookback=0
+                                 Limit how long back metadata can be queried via
+                                 series and labels API. If the requested time
+                                 range is outside the allowed range, the request
+                                 will not fail but will be manipulated to only
+                                 query data within the allowed time range. 0 to
+                                 disable.
       --labels.response-cache-config-file=<file-path>
                                  Path to YAML file that contains response cache
                                  configuration.

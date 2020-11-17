@@ -79,6 +79,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of query range requests will be scheduled in parallel by the Frontend.").
 		Default("14").IntVar(&cfg.QueryRangeConfig.Limits.MaxQueryParallelism)
 
+	cmd.Flag("query-range.max-query-lookback", "Limit how long back data can be queried via query range API. If the requested time range is outside the allowed range, the request will not fail but will be manipulated to only query data within the allowed time range. 0 to disable.").
+		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLookback)
+
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result for query range requests, to prevent caching very recent results that might still be in flux.").
 		Default("1m").DurationVar(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness)
 
@@ -105,6 +108,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
 		Default("24h").DurationVar(&cfg.DefaultTimeRange)
+
+	cmd.Flag("labels.max-query-lookback", "Limit how long back metadata can be queried via series and labels API. If the requested time range is outside the allowed range, the request will not fail but will be manipulated to only query data within the allowed time range. 0 to disable.").
+		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLookback)
 
 	cfg.LabelsConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "labels.response-cache-config", "YAML file that contains response cache configuration.", false)
 
