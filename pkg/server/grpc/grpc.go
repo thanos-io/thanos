@@ -80,12 +80,19 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 
 	tagsOption := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, _ interface{}) map[string]string {
+		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
+
+			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
+			// If a request-id exists for a given request.
+			if tagMap != nil {
+				if _, ok := tagMap["request-id"]; ok {
+					return tagMap
+				}
+			}
 
 			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
 			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-
-			tagMap := make(map[string]string)
+			tagMap = make(map[string]string)
 			tagMap["request-id"] = reqID.String()
 
 			return tagMap
