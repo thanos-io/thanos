@@ -117,7 +117,7 @@ func registerStore(app *extkingpin.App) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	reqLogDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
@@ -159,7 +159,7 @@ func registerStore(app *extkingpin.App) {
 			time.Duration(*ignoreDeletionMarksDelay),
 			*webExternalPrefix,
 			*webPrefixHeaderName,
-			*requestLoggingDecision,
+			*reqLogDecision,
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
 			getFlagsMap(cmd.Flags()),
@@ -194,7 +194,7 @@ func runStore(
 	advertiseCompatibilityLabel bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
-	externalPrefix, prefixHeader, requestLoggingDecision string,
+	externalPrefix, prefixHeader, reqLogDecision string,
 	postingOffsetsInMemSampling int,
 	cachingBucketConfig *extflag.PathOrContent,
 	flagsMap map[string]string,
@@ -363,7 +363,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, requestLoggingDecision, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogDecision, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),

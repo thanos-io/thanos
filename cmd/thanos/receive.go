@@ -463,8 +463,8 @@ func runReceive(
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 
-		// set the request logging to no logging
-		requestLoggingDecision := "NoLogCall"
+		// set the request logging to no logging.
+		reqLogDecision := "NoLogCall"
 
 		g.Add(func() error {
 			defer close(startGRPC)
@@ -489,7 +489,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, requestLoggingDecision, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogDecision, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),
