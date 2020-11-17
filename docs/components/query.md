@@ -360,10 +360,10 @@ Flags:
       --log.request.decision=LogFinishCall
                                  Request Logging for logging the start and end
                                  of requests. LogFinishCall is enabled by
-                                 default. LogFinishCall : Logs the finish call
-                                 of the requests. LogStartAndFinishCall : Logs
-                                 the start and finish call of the requests.
-                                 NoLogCall : Disable request logging.
+                                 default. LogFinishCall: Logs the finish call of
+                                 the requests. LogStartAndFinishCall: Logs the
+                                 start and finish call of the requests.
+                                 NoLogCall: Disable request logging.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
