@@ -11,7 +11,7 @@
     {
       "course_id": "2-lts",
       "title": "Intro: Downsampling and unlimited metric retention for Prometheus",
-      "description": "In progress. Stay Tuned!"
+      "description": "Learn how to extend your metric retention in a cheap and easy way with Thanos."
     },
     {
       "course_id": "3-meta-monitoring",
