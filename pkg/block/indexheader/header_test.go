@@ -76,7 +76,7 @@ func TestReaders(t *testing.T) {
 	   db.Close()
 	*/
 
-	m, err := metadata.Read("./testdata/index_format_v1")
+	m, err := metadata.ReadFromDir("./testdata/index_format_v1")
 	testutil.Ok(t, err)
 	e2eutil.Copy(t, "./testdata/index_format_v1", filepath.Join(tmpDir, m.ULID.String()))
 
@@ -312,7 +312,7 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 	}
 	*/
 
-	m, err := metadata.Read("./testdata/index_format_v2")
+	m, err := metadata.ReadFromDir("./testdata/index_format_v2")
 	testutil.Ok(t, err)
 	e2eutil.Copy(t, "./testdata/index_format_v2", filepath.Join(tmpDir, m.ULID.String()))
 

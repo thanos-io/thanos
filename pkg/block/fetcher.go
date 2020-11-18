@@ -228,7 +228,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 
 	// Best effort load from local dir.
 	if f.cacheDir != "" {
-		m, err := metadata.Read(cachedBlockDir)
+		m, err := metadata.ReadFromDir(cachedBlockDir)
 		if err == nil {
 			return m, nil
 		}
