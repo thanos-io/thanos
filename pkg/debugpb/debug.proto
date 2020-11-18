@@ -1,0 +1,24 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package debugpb;
+
+import "gogoproto/gogo.proto";
+import "isolation/usagepb/usage.proto";
+
+option go_package = "debugpb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+message DebugHints {
+    usagepb.Resources usage = 1 [(gogoproto.jsontag) = "usage" ];
+}

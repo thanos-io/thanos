@@ -222,12 +222,12 @@ func (m *InfoRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_InfoRequest proto.InternalMessageInfo
 
 type InfoResponse struct {
-	// Deprecated. Use label_sets instead.
+	/// Deprecated. Use label_sets instead.
 	Labels    []github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel" json:"labels"`
 	MinTime   int64                                                  `protobuf:"varint,2,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime   int64                                                  `protobuf:"varint,3,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
 	StoreType StoreType                                              `protobuf:"varint,4,opt,name=storeType,proto3,enum=thanos.StoreType" json:"storeType,omitempty"`
-	// label_sets is an unsorted list of `ZLabelSet`s.
+	/// label_sets is an unsorted list of `ZLabelSet`s.
 	LabelSets []labelpb.ZLabelSet `protobuf:"bytes,5,rep,name=label_sets,json=labelSets,proto3" json:"label_sets"`
 }
 
@@ -270,15 +270,15 @@ type SeriesRequest struct {
 	Matchers            []LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers"`
 	MaxResolutionWindow int64          `protobuf:"varint,4,opt,name=max_resolution_window,json=maxResolutionWindow,proto3" json:"max_resolution_window,omitempty"`
 	Aggregates          []Aggr         `protobuf:"varint,5,rep,packed,name=aggregates,proto3,enum=thanos.Aggr" json:"aggregates,omitempty"`
-	// Deprecated. Use partial_response_strategy instead.
+	/// Deprecated. Use partial_response_strategy instead.
 	PartialResponseDisabled bool `protobuf:"varint,6,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
-	// TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
+	/// TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
 	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,7,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
-	// skip_chunks controls whether sending chunks or not in series responses.
+	/// skip_chunks controls whether sending chunks or not in series responses.
 	SkipChunks bool `protobuf:"varint,8,opt,name=skip_chunks,json=skipChunks,proto3" json:"skip_chunks,omitempty"`
-	// hints is an opaque data structure that can be used to carry additional information.
-	// The content of this field and whether it's supported depends on the
-	// implementation of a specific store.
+	/// hints is an opaque data structure that can be used to carry additional information.
+	/// The content of this field and whether it's supported depends on the
+	/// implementation of a specific store.
 	Hints *types.Any `protobuf:"bytes,9,opt,name=hints,proto3" json:"hints,omitempty"`
 }
 
@@ -419,9 +419,9 @@ type LabelNamesRequest struct {
 	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,2,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
 	Start                   int64                   `protobuf:"varint,3,opt,name=start,proto3" json:"start,omitempty"`
 	End                     int64                   `protobuf:"varint,4,opt,name=end,proto3" json:"end,omitempty"`
-	// hints is an opaque data structure that can be used to carry additional information.
-	// The content of this field and whether it's supported depends on the
-	// implementation of a specific store.
+	/// hints is an opaque data structure that can be used to carry additional information.
+	/// The content of this field and whether it's supported depends on the
+	/// implementation of a specific store.
 	Hints *types.Any `protobuf:"bytes,5,opt,name=hints,proto3" json:"hints,omitempty"`
 }
 
@@ -507,9 +507,9 @@ type LabelValuesRequest struct {
 	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,3,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
 	Start                   int64                   `protobuf:"varint,4,opt,name=start,proto3" json:"start,omitempty"`
 	End                     int64                   `protobuf:"varint,5,opt,name=end,proto3" json:"end,omitempty"`
-	// hints is an opaque data structure that can be used to carry additional information.
-	// The content of this field and whether it's supported depends on the
-	// implementation of a specific store.
+	/// hints is an opaque data structure that can be used to carry additional information.
+	/// The content of this field and whether it's supported depends on the
+	/// implementation of a specific store.
 	Hints *types.Any `protobuf:"bytes,6,opt,name=hints,proto3" json:"hints,omitempty"`
 }
 
@@ -923,7 +923,7 @@ var _Store_serviceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type WriteableStoreClient interface {
-	// WriteRequest allows you to write metrics to this store via remote write
+	/// WriteRequest allows you to write metrics to this store via remote write
 	RemoteWrite(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
 }
 
@@ -946,7 +946,7 @@ func (c *writeableStoreClient) RemoteWrite(ctx context.Context, in *WriteRequest
 
 // WriteableStoreServer is the server API for WriteableStore service.
 type WriteableStoreServer interface {
-	// WriteRequest allows you to write metrics to this store via remote write
+	/// WriteRequest allows you to write metrics to this store via remote write
 	RemoteWrite(context.Context, *WriteRequest) (*WriteResponse, error)
 }
 

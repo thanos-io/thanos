@@ -1,0 +1,34 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package usagepb;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "usagepb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+/// Resources allows to report basic resource usage statistics for request.
+/// It's meant to be used as tags in tracing spans, logged on demand or for billing purposes.
+/// We hold all information that otherwise cannot be deduced from tracing.
+message Resources {
+    // Major allocations only, both heap and stack.
+    uint64 memory_alloc_bytes = 1 [(gogoproto.jsontag) = "memoryAllocBytes" ];
+
+    // From upsteam perspective.
+    uint64 network_sent_bytes = 2 [(gogoproto.jsontag) = "networkSentBytes" ];
+    uint64 network_recv_bytes = 3 [(gogoproto.jsontag) = "networkRecvBytes" ];
+
+    uint64 go_routines_spawned = 4 [(gogoproto.jsontag) = "goRoutinesSpawned" ];
+    uint64 go_routines_max_spawned = 5 [(gogoproto.jsontag) = "goRoutinesMaxSpawned" ];
+}

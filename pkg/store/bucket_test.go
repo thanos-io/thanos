@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -2214,4 +2215,8 @@ func labelNamesFromSeriesSet(series []*storepb.Series) []string {
 
 	sort.Strings(labels)
 	return labels
+}
+
+func TestSizeEstimations(t *testing.T) {
+	testutil.Equals(t, estBucketBlockSize, int(unsafe.Sizeof(bucketBlock{})))
 }

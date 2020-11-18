@@ -42,6 +42,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/isolation/usagepb"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/pool"
@@ -859,7 +860,12 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 // Series implements the storepb.StoreServer interface.
+// This RPC is memory sensitive and usagepb.Tracker orchestrated.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+	tr := usagepb.NewResourceTracker()
+	tr.MemoryBytesAllocated(req.Size()) // How to test? Benchmark error profiles???
+	// Tracks it on a method!
+
 	if s.queryGate != nil {
 		tracing.DoInSpan(srv.Context(), "store_query_gate_ismyturn", func(ctx context.Context) {
 			err = s.queryGate.Start(srv.Context())
@@ -867,7 +873,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if err != nil {
 			return errors.Wrapf(err, "failed to wait for turn")
 		}
-
 		defer s.queryGate.Done()
 	}
 
@@ -875,6 +880,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+
+	tr.MemoryBytesAllocated(len(matchers) * usagepb.EstLabelMatcherSize)
 	req.MinTime = s.limitMinTime(req.MinTime)
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
@@ -894,15 +901,16 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
+		tr.MemoryBytesAllocated(reqHints.Size())
 
 		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
 		if err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
+		tr.MemoryBytesAllocated(len(reqBlockMatchers) * usagepb.EstLabelMatcherSize)
 	}
 
 	s.mtx.RLock()
-
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -910,6 +918,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
+		tr.MemoryBytesAllocated(len(blocks))
 
 		if s.debugLogging {
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
@@ -1356,6 +1365,8 @@ func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.M
 	}
 	return res, true
 }
+
+const estBucketBlockSize = 192
 
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.

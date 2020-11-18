@@ -50,7 +50,7 @@ service Store {
 
 /// WriteableStore represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service WriteableStore {
-  // WriteRequest allows you to write metrics to this store via remote write
+  /// WriteRequest allows you to write metrics to this store via remote write
   rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
 }
 
@@ -77,12 +77,12 @@ enum StoreType {
 }
 
 message InfoResponse {
-  // Deprecated. Use label_sets instead.
+  /// Deprecated. Use label_sets instead.
   repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
   int64 min_time = 2;
   int64 max_time = 3;
   StoreType storeType  = 4;
-  // label_sets is an unsorted list of `ZLabelSet`s.
+  /// label_sets is an unsorted list of `ZLabelSet`s.
   repeated ZLabelSet label_sets = 5 [(gogoproto.nullable) = false];
 }
 
@@ -94,18 +94,18 @@ message SeriesRequest {
   int64 max_resolution_window = 4;
   repeated Aggr aggregates    = 5;
 
-  // Deprecated. Use partial_response_strategy instead.
+  /// Deprecated. Use partial_response_strategy instead.
   bool partial_response_disabled = 6;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
+  /// TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
 
-  // skip_chunks controls whether sending chunks or not in series responses.
+  /// skip_chunks controls whether sending chunks or not in series responses.
   bool skip_chunks = 8;
 
-  // hints is an opaque data structure that can be used to carry additional information.
-  // The content of this field and whether it's supported depends on the
-  // implementation of a specific store.
+  /// hints is an opaque data structure that can be used to carry additional information.
+  /// The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
   google.protobuf.Any hints = 9;
 }
 
@@ -146,9 +146,9 @@ message LabelNamesRequest {
 
   int64 end = 4;
 
-  // hints is an opaque data structure that can be used to carry additional information.
-  // The content of this field and whether it's supported depends on the
-  // implementation of a specific store.
+  /// hints is an opaque data structure that can be used to carry additional information.
+  /// The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
   google.protobuf.Any hints = 5;
 }
 
@@ -174,9 +174,9 @@ message LabelValuesRequest {
 
   int64 end = 5;
 
-  // hints is an opaque data structure that can be used to carry additional information.
-  // The content of this field and whether it's supported depends on the
-  // implementation of a specific store.
+  /// hints is an opaque data structure that can be used to carry additional information.
+  /// The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
   google.protobuf.Any hints = 6;
 }
 
