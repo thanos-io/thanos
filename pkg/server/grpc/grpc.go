@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -77,11 +78,11 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		grpc_logging.WithDecider(func(_ string) grpc_logging.Decision {
 			return LogDecision[requestLoggingDecision]
 		}),
+		grpc_logging.WithLevels(logging.DefaultCodeToLevelGRPC),
 	}
 
 	tagsOption := []tags.Option{
 		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
-
 			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
 			// If a request-id exists for a given request.
 			if tagMap != nil {
@@ -89,12 +90,10 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 					return tagMap
 				}
 			}
-
 			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
 			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
 			tagMap = make(map[string]string)
 			tagMap["request-id"] = reqID.String()
-
 			return tagMap
 		}),
 	}
