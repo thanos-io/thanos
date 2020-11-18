@@ -83,7 +83,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "not a block dir")
 	}
 
-	meta, err := metadata.Read(bdir)
+	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
 		// No meta or broken meta file.
 		return errors.Wrap(err, "read meta")

@@ -376,7 +376,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	resid = ulid.MustNew(ulid.Now(), entropy)
 
-	meta, err := metadata.Read(bdir)
+	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
 		return resid, errors.Wrap(err, "read meta file")
 	}

@@ -11,7 +11,6 @@ package metadata
 import (
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -57,6 +56,8 @@ type Thanos struct {
 	// Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version specified).
 	Version int `json:"version,omitempty"`
 
+	// Labels are the external labels identifying the producer as well as tenant.
+	// See https://thanos.io/tip/thanos/storage.md#external-labels for details.
 	Labels     map[string]string `json:"labels"`
 	Downsample ThanosDownsample  `json:"downsample"`
 
@@ -87,7 +88,7 @@ type ThanosDownsample struct {
 // InjectThanos sets Thanos meta to the block meta JSON and saves it to the disk.
 // NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
 func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
-	newMeta, err := Read(bdir)
+	newMeta, err := ReadFromDir(bdir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read new meta")
 	}
@@ -154,17 +155,23 @@ func renameFile(logger log.Logger, from, to string) error {
 	return pdir.Close()
 }
 
-// Read reads the given meta from <dir>/meta.json.
-func Read(dir string) (*Meta, error) {
-	b, err := ioutil.ReadFile(filepath.Join(dir, MetaFilename))
+// ReadFromDir reads the given meta from <dir>/meta.json.
+func ReadFromDir(dir string) (*Meta, error) {
+	f, err := os.Open(filepath.Join(dir, MetaFilename))
 	if err != nil {
 		return nil, err
 	}
-	var m Meta
+	return read(f)
+}
 
-	if err := json.Unmarshal(b, &m); err != nil {
+func read(rc io.ReadCloser) (_ *Meta, err error) {
+	defer runutil.ExhaustCloseWithErrCapture(&err, rc, "close meta JSON")
+
+	var m Meta
+	if err = json.NewDecoder(rc).Decode(&m); err != nil {
 		return nil, err
 	}
+
 	if m.Version != TSDBVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
@@ -177,6 +184,11 @@ func Read(dir string) (*Meta, error) {
 
 	if version != ThanosVersion1 {
 		return nil, errors.Errorf("unexpected meta file Thanos section version %d", m.Version)
+	}
+
+	if m.Thanos.Labels == nil {
+		// To avoid extra nil checks, allocate map here if empty.
+		m.Thanos.Labels = make(map[string]string)
 	}
 	return &m, nil
 }

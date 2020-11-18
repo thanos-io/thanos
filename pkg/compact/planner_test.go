@@ -48,7 +48,7 @@ func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.
 
 	var res []*metadata.Meta
 	for _, pdir := range plan {
-		meta, err := metadata.Read(pdir)
+		meta, err := metadata.ReadFromDir(pdir)
 		if err != nil {
 			return nil, errors.Wrapf(err, "read meta from %s", pdir)
 		}
@@ -340,6 +340,15 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			for _, e := range c.expected {
+				// Add here to avoid boilerplate.
+				e.Thanos.Labels = make(map[string]string)
+			}
+			for _, e := range c.metas {
+				// Add here to avoid boilerplate.
+				e.Thanos.Labels = make(map[string]string)
+			}
+
 			// For compatibility.
 			t.Run("tsdbPlannerAdapter", func(t *testing.T) {
 				dir, err := ioutil.TempDir("", "test-compact")
