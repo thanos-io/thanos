@@ -390,7 +390,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
 		if !fi.IsDir() {
 			continue
 		}
-		m, err := metadata.Read(dir)
+		m, err := metadata.ReadFromDir(dir)
 		if err != nil {
 			return nil, errors.Wrapf(err, "read metadata for block %v", dir)
 		}

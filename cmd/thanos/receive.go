@@ -101,6 +101,10 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
+		if len(lset) == 0 {
+			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		}
+
 		var cw *receive.ConfigWatcher
 		if *hashringsFile != "" {
 			cw, err = receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, *hashringsFile, *refreshInterval)

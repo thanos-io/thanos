@@ -417,7 +417,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		}
 		testutil.Ok(t, err)
 
-		meta, err := metadata.Read(filepath.Join(prepareDir, id.String()))
+		meta, err := metadata.ReadFromDir(filepath.Join(prepareDir, id.String()))
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 

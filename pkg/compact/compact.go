@@ -644,7 +644,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 		return retry(errors.Wrapf(err, "download block %s", ie.id))
 	}
 
-	meta, err := metadata.Read(bdir)
+	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
 		return errors.Wrapf(err, "read meta from %s", bdir)
 	}

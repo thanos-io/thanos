@@ -110,7 +110,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 
 		// Add labels to the meta of the second block.
-		meta, err := metadata.Read(dir2)
+		meta, err := metadata.ReadFromDir(dir2)
 		testutil.Ok(t, err)
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
 		testutil.Ok(t, meta.WriteToDir(logger, dir2))

@@ -383,7 +383,7 @@ func CreateBlockWithBlockDelay(
 		return ulid.ULID{}, errors.Wrap(err, "create block id")
 	}
 
-	m, err := metadata.Read(path.Join(dir, blockID.String()))
+	m, err := metadata.ReadFromDir(path.Join(dir, blockID.String()))
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "open meta file")
 	}

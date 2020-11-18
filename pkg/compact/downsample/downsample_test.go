@@ -455,7 +455,7 @@ func TestDownsample(t *testing.T) {
 			}
 			testutil.Ok(t, err)
 
-			_, err = metadata.Read(filepath.Join(dir, id.String()))
+			_, err = metadata.ReadFromDir(filepath.Join(dir, id.String()))
 			testutil.Ok(t, err)
 
 			indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
