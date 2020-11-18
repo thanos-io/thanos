@@ -29,7 +29,7 @@
       "courseData": "courseBase.sh",
       "credits": "https://thanos.io"
     },
-    "files": {
+    "finish": {
       "text": "finish.md",
       "credits": "test"
     }
