@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"google.golang.org/grpc/codes"
 )
 
 // Decision defines rules for enabling start and end of logging.
@@ -99,6 +101,17 @@ func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
 		return level.Debug(logger)
 	}
 	return level.Error(logger)
+}
+
+// DefaultCodeToLevelGRPC is the helper mapper that maps gRPC Response codes to log levels.
+func DefaultCodeToLevelGRPC(c codes.Code) grpc_logging.Level {
+	switch c {
+	case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
+		return grpc_logging.ERROR
+
+	default:
+		return grpc_logging.DEBUG
+	}
 }
 
 // DurationToTimeMillisFields converts the duration to milliseconds and uses the key `http.time_ms`.
