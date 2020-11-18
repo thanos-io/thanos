@@ -25,11 +25,15 @@ mkdir -p /root/prom-eu1 && docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 
 On successful block creation you should see following log lines:
 
 ```
-level=info ts=2020-10-20T18:28:42.625041939Z caller=block.go:87 msg="all blocks done" count=X
+level=info ts=2020-10-20T18:28:42.625041939Z caller=block.go:87 msg="all blocks done" count=13
 level=info ts=2020-10-20T18:28:42.625100758Z caller=main.go:118 msg=exiting cmd="block gen"
 ```
 
-Run `ls -lR /root/prom-eu1` to see dozens of generated TSDB blocks.
+Run below command to see dozens of generated TSDB blocks:
+
+```
+ls -lR /root/prom-eu1
+```{{execute}}
 
 ## Prometheus Configuration File
 
@@ -103,7 +107,7 @@ docker run -d --net=host --rm \
 
 Once started you should be able to reach the Prometheus instance here and query.. 1 year of data!
 
-* [Prometheus-0 EU1](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/)
+* [Prometheus-0 EU1](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.expr=continuous_app_metric0&g0.tab=0)
 
 ## Thanos Sidecar & Querier
 
@@ -140,6 +144,6 @@ Similar to previous course let's check if the Querier works as intended. Let's l
 
 This should list the sidecar, including the external labels.
 
-On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StorAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com).
+On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StorAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/https://2886795307-9091-ollie02.environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0).
 
 Click `Continue` to see how we can move this data to much cheaper and easier to operate object storage.

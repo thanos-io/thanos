@@ -1,6 +1,6 @@
 {
   "title": "Learn Thanos",
-  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities. Course version: v0.2",
+  "description": "Introduction, Tips and Advanced Tutorials for Thanos: the CNCF, Global, Scalable System for Prometheus Metrics with cheap, Long-term Storage Capabilities. Course version: v0.3",
   "icon": "fa-thanos",
   "courses": [
     {
@@ -14,29 +14,19 @@
       "description": "Learn how to extend your metric retention in a cheap and easy way with Thanos."
     },
     {
-      "course_id": "3-meta-monitoring",
-      "title": "Intro: Global and meta alerts with Thanos",
-      "description": "In progress. Stay Tuned!"
-    },
-    {
-      "course_id": "4-cross-cluster-comm",
-      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup",
-      "description": "In progress. Stay Tuned!"
-    },
-    {
-      "course_id": "5-remote-receiver",
-      "title": "Advanced: Using Prometheus remote write to stream metrics to Thanos",
-      "description": "In progress. Stay Tuned!"
-    },
-    {
-      "course_id": "6-caching",
-      "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
-      "description": "In progress. Stay Tuned!"
-    },
-    {
       "course_id": "7-multi-tenancy",
       "title": "Advanced: Achieving Multi-Tenancy with Thanos",
       "description": "Extend your Prometheus setup for Multiple Teams use with Thanos"
+    },
+    {
+      "course_id": "x-playground",
+      "title": "Playground: All-in, Interactive Thanos un-guided Demo",
+      "description": "Demo playground that spins all the components from previous courser together."
+    },
+    {
+      "course_id": "x-more-to-come",
+      "title": "<Your Tutorial>",
+      "description": "Anything you want to like to see? Or you want to help? Let us know!"
     }
   ]
 }
