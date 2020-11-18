@@ -1,6 +1,6 @@
-# In progress
+# Work in Progress
 
-🚧 This tutorial is in progress. 🚧
+🚧 More tutorials are in progress. 🚧
 
 Do you want to see this soon or you want to help us?
 

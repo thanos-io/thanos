@@ -41,19 +41,49 @@ docker run -d --net=host --rm \
 
 ## How to query Thanos store data?
 
-In this step, we will see how we can query Thanos store data which has access to historical data from the `thanos` bucket, and let's play with this setup a bit.
+In this step, we will see how we can query Thanos store data which has access to historical data from the `thanos` bucket, and play with this setup a bit.
 
-Click on the [Querier UI `Graph` page](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph) and try querying data for a year or two by inserting metrics [continuous_app_metric0](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
+Currently querier does not know about store yet. Let's change it by adding Store Gateway gRPC address `--store 127.0.0.1:19191` to Querier:
 
-![](https://github.com/soniasingla/thanos/raw/master/tutorials/katacoda/thanos/2-lts/query.png)
+```
+docker stop querier && \
+docker run -d --net=host --rm \
+   --name querier \
+   quay.io/thanos/thanos:v0.16.0 \
+   query \
+   --http-address 0.0.0.0:9091 \
+   --query.replica-label replica \
+   --store 127.0.0.1:19190 \
+   --store 127.0.0.1:19191
+```{{execute}}
+
+Click on the Querier UI `Graph` page and try querying data for a year or two by inserting metrics `continuous_app_metric0` ([Query UI](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0)). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
+
+![](https://github.com/thanos-io/thanos/raw/master/tutorials/katacoda/thanos/2-lts/query.png)
 
 Also, you can check all the active endpoints located by thanos-store by clicking on [Stores](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/stores).
 
-We've added Thanos Query, a web and API frontend that can query a Prometheus instance and Thanos Store at the same time, which gives transparent access to the archived blocks and real-time metrics. The vanilla PromQL Prometheus engine used for evaluating the query deduces what time series and for what time ranges we need to fetch the data. Also, StoreAPIs propagate external labels and the time range they have data for, so we can do basic filtering on this. However, if you don't specify any of these in the query (only "up" series) the querier concurrently asks all the StoreAPI servers. It might cause a duplication of results between sidecar and store data.
+### What we know so far?
 
-Now, another interesting question here is how to ensure if we query the data from bucket only?
+We've added Thanos Query, a component that can query a Prometheus instance and Thanos Store at the same time,
+which gives transparent access to the archived blocks and real-time metrics. The vanilla PromQL Prometheus engine used inside Query deduces
+what time series and for what time ranges we need to fetch the data for.
 
-We can check this by visitng the [New UI]((https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.expr=&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=[])), inserting `continuous_app_metric0` metrics again with 1 year time range of graph, and click on `Enable Store Filtering`. This allows us to filter stores and helps in debugging from where we are querying the data exactly.
+Also, StoreAPIs propagate external labels and the time range they have data for, so we can do basic filtering on this.
+However, if you don't specify any of these in the query (only "up" series) the querier concurrently asks all the StoreAPI servers.
+
+The potential duplication of data between Prometheus+sidecar results and store Gateway will be transparently handled and invisible in results.
+
+### Checking what StoreAPIs are involved in query
+
+Another interesting question here is how to ensure if we query the data from bucket only?
+
+We can check this by visitng the [New UI]((https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.expr=&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=[])), inserting `continuous_app_metric0` metrics again with 1 year time range of graph,
+and click on `Enable Store Filtering`.
+
+This allows us to filter stores and helps in debugging from where we are querying the data exactly.
+
+Let's chose only `127.0.0.1:19191`, so store gateway. This query will only hit that store to retrieve data, so we are sure that store works.
 
 ## Question Time? 🤔
 
