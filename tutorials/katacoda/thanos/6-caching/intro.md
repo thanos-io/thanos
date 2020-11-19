@@ -1,6 +1,17 @@
-# Advanced: Query low tail latency with low cost: Introducing caching to Thanos
+# Advanced: Querying with low tail-latency and low cost - Query caching with Thanos
 
-🚧 This tutorial is in progress. 🚧
+Welcome to the tutorial where you learn how to introduce query caching using Query Frontend with Thanos.
+
+In this tutorial you will learn:
+
+* Setup a simple observability stack using Prometheus
+* Deploy and configure Thanos Query Frontend in front of your Queriers so that we can cache query responses
+
+We aim to achieve:
+
+* Low cost query execution
+* Low latency query execution
+* Si reduce cost of infrastructure
 
 ### Feedback
 

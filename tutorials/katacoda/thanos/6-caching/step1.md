@@ -1,8 +1,18 @@
-## Prometheus 
+## Simple observability stack with Prometheus and Thanos
 
-Execute following commands:
+> NOTE: Click `Copy To Editor` for each config to propagate the configs to each file.
 
-### Prepare "persistent volumes"
+Let's imagine we have to deliver centralized metrics platform to multiple teams. For each team we will have a dedicated Prometheus. These could be in the same environment of in different environments (data centers, regions, clusters etc).
+
+And then we will try to provide low cost, fast global overview. Let's see how we achieve that with Thanos.
+
+## Laying the ground work
+
+Let's quickly deploy Prometheuses with sidecars and Querier.
+
+Execute following commands to setup Prometheus:
+
+### Prepare Prometheuses with "persistent volumes"
 
 ```
 mkdir -p prometheus_data
@@ -23,7 +33,7 @@ global:
   scrape_interval: 5s
   external_labels:
     cluster: eu0
-    replica: 0 
+    replica: 0
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -36,7 +46,7 @@ global:
   scrape_interval: 5s
   external_labels:
     cluster: eu1
-    replica: 0 
+    replica: 0
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -49,7 +59,7 @@ global:
   scrape_interval: 5s
   external_labels:
     cluster: eu2
-    replica: 0 
+    replica: 0
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -66,19 +76,19 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus_data:/prometheus"${i}" \
     -u root \
     --name prometheus"${i}" \
-    quay.io/prometheus/prometheus:v2.20.0 \
+    quay.io/prometheus/prometheus:v2.22.2 \
     --config.file=/etc/prometheus/prometheus.yml \
     --storage.tsdb.path=/prometheus \
     --web.listen-address=:909"${i}" \
     --web.external-url=https://[[HOST_SUBDOMAIN]]-909"${i}"-[[KATACODA_HOST]].environments.katacoda.com \
     --web.enable-lifecycle \
     --web.enable-admin-api && echo "Prometheus ${i} started!"
-    
+
 docker run -d --net=host --rm \
     -v $(pwd)/prometheus"${i}".yml:/etc/prometheus/prometheus.yml \
     --name prometheus-sidecar"${i}" \
     -u root \
-    quay.io/thanos/thanos:v0.16.0-rc.1 \
+    quay.io/thanos/thanos:v0.17.0 \
     sidecar \
     --http-address=0.0.0.0:1909"${i}" \
     --grpc-address=0.0.0.0:1919"${i}" \
@@ -89,22 +99,24 @@ done
 
 ### Verify
 
+Let's check if all of Prometheuses are running!
+
 ```
 docker ps
 ```{{execute}}
 
-## Thanos Global View
+## Prepare Thanos Global View
 
 And now, let's deploy Thanos Querier to have a global overview on our services.
 
 ### Deploy Querier
 
 <pre class="file" data-filename="nginx.conf" data-target="replace">
-server { 
+server {
  listen 10902;
  server_name proxy;
  location / {
-  echo_exec @default;   
+  echo_exec @default;
  }
  location ^~ /api/v1/query_range {
      echo_sleep 1;
@@ -121,10 +133,10 @@ docker run -d --net=host --rm \
     -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf \
     --name nginx \
     yannrobert/docker-nginx && echo "Started Querier Proxy!"
-    
+
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.16.0-rc.1 \
+    quay.io/thanos/thanos:v0.17.0 \
     query \
     --http-address 0.0.0.0:10912 \
     --grpc-address 0.0.0.0:10901 \
@@ -133,42 +145,3 @@ docker run -d --net=host --rm \
     --store 127.0.0.1:19191 \
     --store 127.0.0.1:19192 && echo "Started Thanos Querier!"
 ```{{execute}}
-
-### Deploy Thanos Query Frontend
-
-First, let's create necessary cache configuration for Frontend:
-
-<pre class="file" data-filename="frontend.yml" data-target="replace">
-type: IN-MEMORY
-config:
-  max_size: "0"
-  max_size_items: 2048
-  validity: "6h"
-</pre>
-
-And deploy Query Frontend:
-
-```
-docker run -d --net=host --rm \
-    -v $(pwd)/frontend.yml:/etc/thanos/frontend.yml \
-    --name query-frontend \
-    quay.io/thanos/thanos:v0.16.0-rc.1 \
-    query-frontend \
-    --http-address 0.0.0.0:20902 \
-    --query-frontend.compress-responses \
-    --query-frontend.downstream-url=http://127.0.0.1:10902 \
-    --query-frontend.log-queries-longer-than=5s \
-    --query-range.split-interval=1m \
-    --query-range.response-cache-max-freshness=1m \
-    --query-range.max-retries-per-request=5 \
-    --query-range.response-cache-config-file=/etc/thanos/frontend.yml \
-    --cache-compression-type="snappy" && echo "Started Thanos Query Frontend!"
-```{{execute}}
-
-### Setup Verification
-
-Once started you should be able to reach the Querier, Query Frontend and Prometheus.
-
-* [Prometheus](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/)
-* [Querier](https://[[HOST_SUBDOMAIN]]-10902-[[KATACODA_HOST]].environments.katacoda.com/)
-* [Query Frontend](https://[[HOST_SUBDOMAIN]]-20902-[[KATACODA_HOST]].environments.katacoda.com/)

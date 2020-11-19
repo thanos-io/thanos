@@ -1,11 +1,16 @@
 {
-  "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
-  "description": "In progress. Stay Tuned!",
+  "title": "Advanced: Querying with low tail-latency and low cost - Query caching with Thanos",
+  "description": "Learn how to introduce query caching using Query Frontend with Thanos",
+  "difficulty": "Advanced",
   "details": {
     "steps": [
       {
-        "title": "In progress",
+        "title": "Initial Prometheus and Thanos Setup",
         "text": "step1.md"
+      },
+      {
+        "title": "Thanos Query Frontend",
+        "text": "step2.md"
       }
     ],
     "intro": {
@@ -25,18 +30,9 @@
     "uisettings": "yaml",
     "showdashboard": true,
     "dashboards": [
-      {
-        "name": "Prometheus",
-        "port": 9090
-      },
-      {
-        "name": "Thanos Query",
-        "port": 10902
-      },
-      {
-        "name": "Thanos Query Frontend",
-        "port": 20902
-      }
+      { "name": "Prometheus", "port": 9090 },
+      { "name": "Thanos Query", "port": 10902 },
+      { "name": "Thanos Query Frontend", "port": 20902 }
     ]
   },
   "backend": {
