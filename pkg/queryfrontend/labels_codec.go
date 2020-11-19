@@ -147,7 +147,8 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 		}
 
-		if strings.Contains(thanosReq.Path, "/api/v1/label/") {
+		// If label is not empty, then it is a label values query.
+		if thanosReq.Label != "" {
 			u := &url.URL{
 				Path:     thanosReq.Path,
 				RawQuery: params.Encode(),

@@ -51,12 +51,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 				MaxBodySize: 10 * 1024 * 1024,
 			},
 			QueryRangeConfig: queryfrontend.QueryRangeConfig{
-				Limits:             &cortexvalidation.Limits{},
-				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+				Limits: &cortexvalidation.Limits{},
 			},
 			LabelsConfig: queryfrontend.LabelsConfig{
-				Limits:             &cortexvalidation.Limits{},
-				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+				Limits: &cortexvalidation.Limits{},
 			},
 		},
 	}
