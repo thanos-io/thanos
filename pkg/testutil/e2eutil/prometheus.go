@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"golang.org/x/sync/errgroup"
 
@@ -409,7 +410,7 @@ func createBlock(
 	tombstones bool,
 ) (id ulid.ULID, err error) {
 	chunksRootDir := filepath.Join(dir, "chunks")
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}

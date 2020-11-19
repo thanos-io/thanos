@@ -38,8 +38,6 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 	return p
 }
 
-const RemoteReadFrameLimit = 1048576
-
 type HeadGenOptions struct {
 	TSDBDir                  string
 	SamplesPerSeries, Series int
@@ -71,7 +69,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		testutil.Ok(t, os.MkdirAll(filepath.Join(opts.TSDBDir, "wal"), os.ModePerm))
 	}
 
-	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())
