@@ -3,7 +3,7 @@
 > NOTE: Click `Copy To Editor` for each config to propagate the configs to each file.
 
 Let's imagine we have to deliver centralized metrics platform to two teams **Team Fruit** and **Team Veggie**.
-We don't want each team to see each other data or even know about their existance. Let's see how we achieve that with Thanos.
+We don't want each team to see each other data or even know about their existence. Let's see how we achieve that with Thanos.
 
 ## Starting Fruit and Veggie Prometheus and Thanos Global View
 
