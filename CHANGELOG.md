@@ -31,6 +31,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3423](https://github.com/thanos-io/thanos/pull/3423) UI: Thanos Configurations file page: Display all available configuration for each component on the UI.
 - [#3431](https://github.com/thanos-io/thanos/pull/3431) Store: Added experimental support to lazy load index-headers at query time. When enabled via `--store.enable-index-header-lazy-reader` flag, the store-gateway will load into memory an index-header only once it's required at query time. Index-header will be automatically released after `--store.index-header-lazy-reader-idle-timeout` of inactivity.
   - This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
+- [#3437](https://github.com/thanos-io/thanos/pull/3437) StoreAPI: Added `hints` field to `LabelNamesResponse` and `LabelValuesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
 
 ### Fixed
 
@@ -38,6 +39,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3331](https://github.com/thanos-io/thanos/pull/3331) Disable Azure blob exception logging
 - [#3341](https://github.com/thanos-io/thanos/pull/3341) Disable Azure blob syslog exception logging
 - [#3414](https://github.com/thanos-io/thanos/pull/3414) Set CORS for Query Frontend
+- [#3437](https://github.com/thanos-io/thanos/pull/3437) Add external labels to Labels APIs.
 
 ### Changed
 

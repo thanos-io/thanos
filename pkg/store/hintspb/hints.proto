@@ -34,3 +34,13 @@ message SeriesResponseHints {
 message Block {
     string id = 1;
 }
+
+message LabelNamesResponseHints {
+    /// queried_blocks is the list of blocks that have been queried.
+    repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+}
+
+message LabelValuesResponseHints {
+    /// queried_blocks is the list of blocks that have been queried.
+    repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+}
