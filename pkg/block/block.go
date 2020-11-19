@@ -103,7 +103,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), bytes.NewReader(metaEncoded.Bytes())); err != nil {
+	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), &metaEncoded); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
 	}
 
