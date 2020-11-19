@@ -88,7 +88,8 @@ And then go and execute the same query on [Query Frontend](https://[[HOST_SUBDOM
 For the fist execution you will observe that the query execution takes longer than the query on Querier.
 That's because we have an nginx proxy between Query Frontend and Querier.
 
-Now if you execute the same query again on Query Frontend, see that it's much faster?
+Now if you execute the same query again on Query Frontend for the same time frame using time selector in graph section in the UI (time is always shifting).
+See that it's much faster?
 It's taking much less time because we are just serving the response from the cached results.
 
 Good! You've done it!
