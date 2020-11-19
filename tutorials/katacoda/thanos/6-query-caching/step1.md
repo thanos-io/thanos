@@ -1,3 +1,4 @@
+
 ## Simple observability stack with Prometheus and Thanos
 
 > NOTE: Click `Copy To Editor` for each config to propagate the configs to each file.
@@ -86,7 +87,7 @@ docker run -d --net=host --rm \
 done
 ```{{execute}}
 
-### Verify
+#### Verify
 
 Let's check if all of Prometheuses are running!
 
@@ -111,7 +112,7 @@ docker run -d --net=host --rm \
 done
 ```{{execute}}
 
-### Verify
+#### Verify
 
 Let's check if all of Thanos Sidecars are running!
 
@@ -123,7 +124,7 @@ docker ps
 
 And now, let's deploy Thanos Querier to have a global overview on our services.
 
-## Deploy Querier
+### Deploy Querier
 
 ```
 docker run -d --net=host --rm \
@@ -143,4 +144,4 @@ docker run -d --net=host --rm \
 Once started you should be able to reach the Querier and Prometheus.
 
 * [Prometheus](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/)
-* [Querier](https://[[HOST_SUBDOMAIN]]-10902-[[KATACODA_HOST]].environments.katacoda.com/)
+* [Querier](https://[[HOST_SUBDOMAIN]]-10912-[[KATACODA_HOST]].environments.katacoda.com/)
