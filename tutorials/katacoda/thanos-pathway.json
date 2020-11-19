@@ -14,9 +14,14 @@
       "description": "Learn how to extend your metric retention in a cheap and easy way with Thanos."
     },
     {
+      "course_id": "6-query-caching",
+      "title": "Advanced: Querying with low tail-latency and low cost - Query caching with Thanos",
+      "description": "Learn how to introduce query caching using Query Frontend with Thanos."
+    },
+    {
       "course_id": "7-multi-tenancy",
       "title": "Advanced: Achieving Multi-Tenancy with Thanos",
-      "description": "Extend your Prometheus setup for Multiple Teams use with Thanos"
+      "description": "Extend your Prometheus setup for Multiple Teams use with Thanos."
     },
     {
       "course_id": "x-playground",

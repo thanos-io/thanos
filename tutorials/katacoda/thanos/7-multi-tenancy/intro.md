@@ -9,7 +9,7 @@ impacting each other or accessing each other data.
 Thanos was built with this in mind and it in this tutorial you will learn:
 
 * Query Read **Hard-Tenancy**: How to setup it and what are the tradeoffs
-* How to support 🍅 (seriously!) and reduce cost of intra.
+* How to support 🍅 (seriously!) and reduce cost of infrastructure.
 * Query Read **Soft-Tenancy**: How to setup it and what are the tradeoffs (feat: [prom-label-proxy](https://github.com/prometheus-community/prom-label-proxy))
 
 ### Feedback
