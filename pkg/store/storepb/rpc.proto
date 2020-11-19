@@ -150,6 +150,11 @@ message LabelNamesRequest {
 message LabelNamesResponse {
   repeated string names    = 1;
   repeated string warnings = 2;
+
+  /// hints is an opaque data structure that can be used to carry additional information from
+  /// the store. The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
+  google.protobuf.Any hints = 3;
 }
 
 message LabelValuesRequest {
@@ -168,4 +173,9 @@ message LabelValuesRequest {
 message LabelValuesResponse {
   repeated string values   = 1;
   repeated string warnings = 2;
+
+  /// hints is an opaque data structure that can be used to carry additional information from
+  /// the store. The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
+  google.protobuf.Any hints = 3;
 }

@@ -1066,6 +1066,8 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	resHints := &hintspb.LabelNamesResponseHints{}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -1077,7 +1079,12 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
+
+		resHints.AddQueriedBlock(b.meta.ULID)
+
 		indexr := b.indexReader(gctx)
+		extLabels := b.meta.Thanos.Labels
+
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
@@ -1087,7 +1094,17 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				return errors.Wrap(err, "label names")
 			}
 
+			// Add  a set for the external labels as well.
+			// We're not adding them directly to res because there could be duplicates.
+			extRes := make([]string, 0, len(extLabels))
+			for lName := range extLabels {
+				extRes = append(extRes, lName)
+			}
+
 			sort.Strings(res)
+			sort.Strings(extRes)
+
+			res = strutil.MergeSlices(res, extRes)
 
 			mtx.Lock()
 			sets = append(sets, res)
@@ -1102,13 +1119,22 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	anyHints, err := types.MarshalAny(resHints)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
+	}
+
 	return &storepb.LabelNamesResponse{
 		Names: strutil.MergeSlices(sets...),
+		Hints: anyHints,
 	}, nil
 }
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	resHints := &hintspb.LabelValuesResponseHints{}
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -1120,7 +1146,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
+
+		resHints.AddQueriedBlock(b.meta.ULID)
+
 		indexr := b.indexReader(gctx)
+		extLabels := b.meta.Thanos.Labels
+
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
@@ -1128,6 +1159,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			res, err := indexr.block.indexHeaderReader.LabelValues(req.Label)
 			if err != nil {
 				return errors.Wrap(err, "index header label values")
+			}
+
+			// Add the external label value as well.
+			if extLabelValue, ok := extLabels[req.Label]; ok {
+				res = strutil.MergeSlices(res, []string{extLabelValue})
 			}
 
 			mtx.Lock()
@@ -1143,8 +1179,15 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
+
+	anyHints, err := types.MarshalAny(resHints)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
+	}
+
 	return &storepb.LabelValuesResponse{
 		Values: strutil.MergeSlices(sets...),
+		Hints:  anyHints,
 	}, nil
 }
 
