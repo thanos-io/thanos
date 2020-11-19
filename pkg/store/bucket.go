@@ -1074,9 +1074,26 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 	var mtx sync.Mutex
 	var sets [][]string
+	var reqBlockMatchers []*labels.Matcher
+
+	if req.Hints != nil {
+		reqHints := &hintspb.LabelNamesRequestHints{}
+		err := types.UnmarshalAny(req.Hints, reqHints)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
+		}
+
+		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
+		}
+	}
 
 	for _, b := range s.blocks {
 		if !b.overlapsClosedInterval(req.Start, req.End) {
+			continue
+		}
+		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
 
@@ -1141,9 +1158,26 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	var mtx sync.Mutex
 	var sets [][]string
+	var reqBlockMatchers []*labels.Matcher
+
+	if req.Hints != nil {
+		reqHints := &hintspb.LabelValuesRequestHints{}
+		err := types.UnmarshalAny(req.Hints, reqHints)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
+		}
+
+		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
+		}
+	}
 
 	for _, b := range s.blocks {
 		if !b.overlapsClosedInterval(req.Start, req.End) {
+			continue
+		}
+		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
 

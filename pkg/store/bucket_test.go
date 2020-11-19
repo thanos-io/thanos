@@ -2136,6 +2136,41 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 					{Id: block2.String()},
 				},
 			},
+		}, {
+			name: "querying a range containing multiple blocks but filtering a specific block should query only the requested block",
+
+			labelNamesReq: &storepb.LabelNamesRequest{
+				Start: 0,
+				End:   3,
+				Hints: mustMarshalAny(&hintspb.LabelNamesRequestHints{
+					BlockMatchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
+					},
+				}),
+			},
+			expectedNames: labelNamesFromSeriesSet(seriesSet1),
+			expectedNamesHints: hintspb.LabelNamesResponseHints{
+				QueriedBlocks: []hintspb.Block{
+					{Id: block1.String()},
+				},
+			},
+
+			labelValuesReq: &storepb.LabelValuesRequest{
+				Label: "ext1",
+				Start: 0,
+				End:   3,
+				Hints: mustMarshalAny(&hintspb.LabelValuesRequestHints{
+					BlockMatchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
+					},
+				}),
+			},
+			expectedValues: []string{"1"},
+			expectedValuesHints: hintspb.LabelValuesResponseHints{
+				QueriedBlocks: []hintspb.Block{
+					{Id: block1.String()},
+				},
+			},
 		},
 	}
 
