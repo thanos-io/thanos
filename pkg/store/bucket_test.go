@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
 
@@ -1024,7 +1025,7 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 }
 
 func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series int) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000, tmpDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, 1000, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -1399,7 +1400,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1438,7 +1439,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1684,7 +1685,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	// so that they will span across multiple chunks.
 	blkDir := filepath.Join(tmpDir, "block")
 
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, blkDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, blkDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1955,7 +1956,7 @@ func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, ra
 }
 
 func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples)*step, dir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples)*step, dir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
