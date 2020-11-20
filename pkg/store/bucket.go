@@ -247,6 +247,10 @@ type FilterConfig struct {
 
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
+//
+// NOTE: Bucket store reencodes postings using diff+varint+snappy when storing to cache.
+// This makes them smaller, but takes extra CPU and memory.
+// When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
 	logger          log.Logger
 	metrics         *bucketStoreMetrics
@@ -278,10 +282,6 @@ type BucketStore struct {
 	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
-	// Reencode postings using diff+varint+snappy when storing to cache.
-	// This makes them smaller, but takes extra CPU and memory.
-	// When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
-	enablePostingsCompression   bool
 	postingOffsetsInMemSampling int
 
 	// Enables hints in the Series() response.
@@ -304,7 +304,6 @@ func NewBucketStore(
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
-	enablePostingsCompression bool,
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
@@ -336,7 +335,6 @@ func NewBucketStore(
 		chunksLimiterFactory:        chunksLimiterFactory,
 		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 		enableCompatibilityLabel:    enableCompatibilityLabel,
-		enablePostingsCompression:   enablePostingsCompression,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		metrics:                     newBucketStoreMetrics(reg),
@@ -519,7 +517,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.chunkPool,
 		indexHeaderReader,
 		s.partitioner,
-		s.enablePostingsCompression,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -1379,8 +1376,6 @@ type bucketBlock struct {
 
 	partitioner partitioner
 
-	enablePostingsCompression bool
-
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
 	relabelLabels labels.Labels
@@ -1397,19 +1392,17 @@ func newBucketBlock(
 	chunkPool pool.BytesPool,
 	indexHeadReader indexheader.Reader,
 	p partitioner,
-	enablePostingsCompression bool,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
-		logger:                    logger,
-		metrics:                   metrics,
-		bkt:                       bkt,
-		indexCache:                indexCache,
-		chunkPool:                 chunkPool,
-		dir:                       dir,
-		partitioner:               p,
-		meta:                      meta,
-		indexHeaderReader:         indexHeadReader,
-		enablePostingsCompression: enablePostingsCompression,
+		logger:            logger,
+		metrics:           metrics,
+		bkt:               bkt,
+		indexCache:        indexCache,
+		chunkPool:         chunkPool,
+		dir:               dir,
+		partitioner:       p,
+		meta:              meta,
+		indexHeaderReader: indexHeadReader,
 	}
 
 	// Translate the block's labels and inject the block ID as a label
@@ -1849,22 +1842,20 @@ func (r *bucketIndexReader) fetchPostings(keys []labels.Label) ([]index.Postings
 				compressionTime := time.Duration(0)
 				compressions, compressionErrors, compressedSize := 0, 0, 0
 
-				if r.block.enablePostingsCompression {
-					// Reencode postings before storing to cache. If that fails, we store original bytes.
-					// This can only fail, if postings data was somehow corrupted,
-					// and there is nothing we can do about it.
-					// Errors from corrupted postings will be reported when postings are used.
-					compressions++
-					s := time.Now()
-					bep := newBigEndianPostings(pBytes[4:])
-					data, err := diffVarintSnappyEncode(bep, bep.length())
-					compressionTime = time.Since(s)
-					if err == nil {
-						dataToCache = data
-						compressedSize = len(data)
-					} else {
-						compressionErrors = 1
-					}
+				// Reencode postings before storing to cache. If that fails, we store original bytes.
+				// This can only fail, if postings data was somehow corrupted,
+				// and there is nothing we can do about it.
+				// Errors from corrupted postings will be reported when postings are used.
+				compressions++
+				s := time.Now()
+				bep := newBigEndianPostings(pBytes[4:])
+				data, err := diffVarintSnappyEncode(bep, bep.length())
+				compressionTime = time.Since(s)
+				if err == nil {
+					dataToCache = data
+					compressedSize = len(data)
+				} else {
+					compressionErrors = 1
 				}
 
 				r.mtx.Lock()

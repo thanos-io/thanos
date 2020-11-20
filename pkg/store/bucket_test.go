@@ -208,7 +208,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, true)
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -579,7 +579,6 @@ func TestBucketStore_Info(t *testing.T) {
 		20,
 		allowAllFilterConf,
 		true,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
@@ -830,7 +829,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				20,
 				allowAllFilterConf,
-				true,
 				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
@@ -1647,7 +1645,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		10,
 		nil,
 		false,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -1741,7 +1738,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		10,
 		nil,
 		false,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -1886,7 +1882,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		10,
 		nil,
 		false,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
