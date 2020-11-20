@@ -2042,7 +2042,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		10,
 		nil,
 		false,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
