@@ -95,9 +95,6 @@ func registerStore(app *extkingpin.App) {
 		"On the contrary, smaller value will increase baseline memory usage, but improve latency slightly. 1 will keep all in memory. Default value is the same as in Prometheus which gives a good balance.").
 		Hidden().Default(fmt.Sprintf("%v", store.DefaultPostingOffsetInMemorySampling)).Int()
 
-	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
-		Hidden().Default("false").Bool()
-
 	consistencyDelay := extkingpin.ModelDuration(cmd.Flag("consistency-delay", "Minimum age of all blocks before they are being read. Set it to safe value (e.g 30m) if your object storage is eventually consistent. GCS and S3 are (roughly) strongly consistent.").
 		Default("0s"))
 
@@ -151,7 +148,6 @@ func registerStore(app *extkingpin.App) {
 			},
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
-			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
 			time.Duration(*ignoreDeletionMarksDelay),
 			*webExternalPrefix,
@@ -186,7 +182,7 @@ func runStore(
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
-	advertiseCompatibilityLabel, enablePostingsCompression bool,
+	advertiseCompatibilityLabel bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
 	externalPrefix, prefixHeader string,
@@ -323,7 +319,6 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		advertiseCompatibilityLabel,
-		enablePostingsCompression,
 		postingOffsetsInMemSampling,
 		false,
 		lazyIndexReaderEnabled,
