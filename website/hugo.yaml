@@ -46,3 +46,7 @@ markup:
     endLevel: 4
     ordered: false
     startLevel: 1
+  goldmark:
+    renderer:
+      # We want to be able to put our own HTML.
+      unsafe: true
