@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -87,6 +88,9 @@ func registerReceive(app *extkingpin.App) {
 	tsdbMaxBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
+
+	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
+		Default("").Enum("SHA256", "")
 
 	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
@@ -168,6 +172,7 @@ func registerReceive(app *extkingpin.App) {
 			time.Duration(*forwardTimeout),
 			*allowOutOfOrderUpload,
 			component.Receive,
+			metadata.HashFunc(*hashFunc),
 		)
 	})
 }
@@ -207,6 +212,7 @@ func runReceive(
 	forwardTimeout time.Duration,
 	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
+	hashFunc metadata.HashFunc,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
@@ -258,6 +264,7 @@ func runReceive(
 		tenantLabelName,
 		bkt,
 		allowOutOfOrderUpload,
+		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{

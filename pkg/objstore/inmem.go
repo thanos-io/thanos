@@ -21,17 +21,19 @@ var errNotFound = errors.New("inmem: object not found")
 // InMemBucket implements the objstore.Bucket interfaces against local memory.
 // Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
 type InMemBucket struct {
-	mtx     sync.RWMutex
-	objects map[string][]byte
-	attrs   map[string]ObjectAttributes
+	mtx             sync.RWMutex
+	objects         map[string][]byte
+	attrs           map[string]ObjectAttributes
+	downloadedCount map[string]uint
 }
 
 // NewInMemBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
 func NewInMemBucket() *InMemBucket {
 	return &InMemBucket{
-		objects: map[string][]byte{},
-		attrs:   map[string]ObjectAttributes{},
+		objects:         map[string][]byte{},
+		attrs:           map[string]ObjectAttributes{},
+		downloadedCount: make(map[string]uint),
 	}
 }
 
@@ -39,6 +41,11 @@ func NewInMemBucket() *InMemBucket {
 // NOTE: For assert purposes.
 func (b *InMemBucket) Objects() map[string][]byte {
 	return b.objects
+}
+
+// GetDownloadedCount returns how many times a given object has been "downloaded".
+func (b *InMemBucket) GetDownloadedCount(obj string) int {
+	return int(b.downloadedCount[obj])
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -105,6 +112,8 @@ func (b *InMemBucket) Get(_ context.Context, name string) (io.ReadCloser, error)
 		return nil, errNotFound
 	}
 
+	b.downloadedCount[name]++
+
 	return ioutil.NopCloser(bytes.NewReader(file)), nil
 }
 
@@ -122,14 +131,20 @@ func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64
 	}
 
 	if int64(len(file)) < off {
+		b.downloadedCount[name]++
+
 		return ioutil.NopCloser(bytes.NewReader(nil)), nil
 	}
 
 	if length == -1 {
+		b.downloadedCount[name]++
+
 		return ioutil.NopCloser(bytes.NewReader(file[off:])), nil
 	}
 
 	if length <= 0 {
+		b.downloadedCount[name]++
+
 		return ioutil.NopCloser(bytes.NewReader(nil)), errors.New("length cannot be smaller or equal 0")
 	}
 
@@ -137,6 +152,8 @@ func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64
 		// Just return maximum of what we have.
 		length = int64(len(file)) - off
 	}
+
+	b.downloadedCount[name]++
 
 	return ioutil.NopCloser(bytes.NewReader(file[off : off+length])), nil
 }

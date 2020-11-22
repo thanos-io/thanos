@@ -92,6 +92,7 @@ func TestSnapshot_e2e(t *testing.T) {
 			timestamp.FromTime(now.Add(-4*time.Hour)),
 			nil,
 			0,
+			false,
 		)
 		testutil.Ok(t, err)
 
@@ -162,6 +163,7 @@ func TestQueryRange_e2e(t *testing.T) {
 			timestamp.FromTime(now),
 			nil,
 			0,
+			false,
 		)
 		testutil.Ok(t, err)
 

@@ -17,6 +17,7 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -42,9 +43,9 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
 			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
 			labels.Labels{{Name: "e1", Value: "1"}},
-			downsample.ResLevel0)
+			downsample.ResLevel0, false)
 		testutil.Ok(t, err)
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String())))
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))
 	}
 
 	meta, err := block.DownloadMeta(ctx, logger, bkt, id)
@@ -57,7 +58,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metas, _, err := metaFetcher.Fetch(ctx)
 	testutil.Ok(t, err)
-	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, dir))
+	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, dir, metadata.NoneFunc))
 	testutil.Equals(t, 1.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(meta.Thanos))))
 
 	_, err = os.Stat(dir)

@@ -45,12 +45,40 @@ const (
 
 // Download downloads directory that is mean to be block directory.
 func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
-	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), dst); err != nil {
+	if err := os.MkdirAll(dst, 0777); err != nil {
+		return errors.Wrap(err, "create dir")
+	}
+
+	if err := objstore.DownloadFile(ctx, logger, bucket, path.Join(id.String(), MetaFilename), path.Join(dst, MetaFilename)); err != nil {
+		return err
+	}
+	m, err := metadata.ReadFromDir(dst)
+	if err != nil {
+		return errors.Wrapf(err, "reading meta from %s", dst)
+	}
+
+	ignoredPaths := []string{MetaFilename}
+	for _, fl := range m.Thanos.Files {
+		if fl.Hash == nil || fl.RelPath == "" {
+			continue
+		}
+		actualHash, err := metadata.CalculateHash(filepath.Join(dst, fl.RelPath), fl.Hash.Func)
+		if err != nil {
+			logger.Log("failed to calculate hash of %s due to %v, continuing", fl.RelPath, err)
+			continue
+		}
+
+		if fl.Hash.Equal(&actualHash) {
+			ignoredPaths = append(ignoredPaths, fl.RelPath)
+		}
+	}
+
+	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), id.String(), dst, ignoredPaths); err != nil {
 		return err
 	}
 
 	chunksDir := filepath.Join(dst, ChunksDirname)
-	_, err := os.Stat(chunksDir)
+	_, err = os.Stat(chunksDir)
 	if os.IsNotExist(err) {
 		// This can happen if block is empty. We cannot easily upload empty directory, so create one here.
 		return os.Mkdir(chunksDir, os.ModePerm)
@@ -68,7 +96,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 // It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string) error {
+func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
@@ -93,7 +121,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
-	meta.Thanos.Files, err = gatherFileStats(bdir)
+	meta.Thanos.Files, err = gatherFileStats(bdir, hf)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
@@ -252,26 +280,42 @@ func GetSegmentFiles(blockDir string) []string {
 }
 
 // TODO(bwplotka): Gather stats when dirctly uploading files.
-func gatherFileStats(blockDir string) (res []metadata.File, _ error) {
+func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File, _ error) {
 	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
 	if err != nil {
 		return nil, errors.Wrapf(err, "read dir %v", filepath.Join(blockDir, ChunksDirname))
 	}
 	for _, f := range files {
-		res = append(res, metadata.File{
+		mf := metadata.File{
 			RelPath:   filepath.Join(ChunksDirname, f.Name()),
 			SizeBytes: f.Size(),
-		})
+		}
+		if hf != metadata.NoneFunc {
+			h, err := metadata.CalculateHash(filepath.Join(blockDir, ChunksDirname, f.Name()), hf)
+			if err != nil {
+				return nil, errors.Wrapf(err, "calculate hash %v", filepath.Join(ChunksDirname, f.Name()))
+			}
+			mf.Hash = &h
+		}
+		res = append(res, mf)
 	}
 
 	indexFile, err := os.Stat(filepath.Join(blockDir, IndexFilename))
 	if err != nil {
 		return nil, errors.Wrapf(err, "stat %v", filepath.Join(blockDir, IndexFilename))
 	}
-	res = append(res, metadata.File{
+	mf := metadata.File{
 		RelPath:   indexFile.Name(),
 		SizeBytes: indexFile.Size(),
-	})
+	}
+	if hf != metadata.NoneFunc {
+		h, err := metadata.CalculateHash(filepath.Join(blockDir, IndexFilename), hf)
+		if err != nil {
+			return nil, errors.Wrapf(err, "calculate hash %v", indexFile.Name())
+		}
+		mf.Hash = &h
+	}
+	res = append(res, mf)
 
 	metaFile, err := os.Stat(filepath.Join(blockDir, MetaFilename))
 	if err != nil {

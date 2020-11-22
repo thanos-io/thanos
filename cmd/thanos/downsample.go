@@ -61,6 +61,7 @@ func RunDownsample(
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
+	hashFunc metadata.HashFunc,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -112,7 +113,7 @@ func RunDownsample(
 				metrics.downsamples.WithLabelValues(groupKey)
 				metrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, hashFunc); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -121,7 +122,7 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, hashFunc); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -151,6 +152,18 @@ func RunDownsample(
 	return nil
 }
 
+// removeAllNonMetaDirs removes all subdirectories and all files under the given dir
+// that do not correspond to any metas. This is needed in the case when
+// the downsampling process resumes without restarting the whole process
+// but the blocks do not exist in the remote object storage anymore.
+func removeAllNonMetaDirs(metas map[ulid.ULID]*metadata.Meta, dir string) error {
+	ignoreDirs := []string{}
+	for ulid := range metas {
+		ignoreDirs = append(ignoreDirs, ulid.String())
+	}
+	return runutil.DeleteAllExceptDirs(dir, ignoreDirs)
+}
+
 func downsampleBucket(
 	ctx context.Context,
 	logger log.Logger,
@@ -158,15 +171,18 @@ func downsampleBucket(
 	bkt objstore.Bucket,
 	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
-) error {
-	if err := os.RemoveAll(dir); err != nil {
-		return errors.Wrap(err, "clean working directory")
-	}
+	hashFunc metadata.HashFunc,
+) (rerr error) {
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
 
 	defer func() {
+		// Leave the downsample directory for inspection if it is a halt error
+		// or if it is not then so that possibly we would not have to download everything again.
+		if rerr != nil {
+			return
+		}
 		if err := os.RemoveAll(dir); err != nil {
 			level.Error(logger).Log("msg", "failed to remove downsample cache directory", "path", dir, "err", err)
 		}
@@ -194,6 +210,10 @@ func downsampleBucket(
 		}
 	}
 
+	if err := removeAllNonMetaDirs(metas, dir); err != nil {
+		level.Warn(logger).Log("msg", "failed deleting potentially outdated directories/files, some disk space usage might have leaked. Continuing", "err", err, "dir", dir)
+	}
+
 	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
 		case downsample.ResLevel0:
@@ -213,7 +233,8 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1); err != nil {
+
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1, hashFunc); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
@@ -236,7 +257,7 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2, hashFunc); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
@@ -246,7 +267,7 @@ func downsampleBucket(
 	return nil
 }
 
-func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string, resolution int64) error {
+func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string, resolution int64, hashFunc metadata.HashFunc) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
@@ -290,7 +311,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	begin = time.Now()
 
-	err = block.Upload(ctx, logger, bkt, resdir)
+	err = block.Upload(ctx, logger, bkt, resdir, hashFunc)
 	if err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}

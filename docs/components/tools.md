@@ -557,6 +557,12 @@ Flags:
                               Server.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --hash-func=            Specify which hash function to use when
+                              calculating the hashes of produced files. If no
+                              function has been specified, it does not happen.
+                              This permits avoiding downloading some files twice
+                              albeit at some performance cost. Possible values
+                              are: "", "SHA256".
 
 ```
 

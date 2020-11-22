@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -42,6 +43,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -109,6 +111,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
