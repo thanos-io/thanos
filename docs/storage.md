@@ -427,25 +427,25 @@ At that point, anyone can use your provider by spec.
 ## Data in Object Storage
 
 Thanos supports writing and reading data in native Prometheus `TSDB blocks` in [TSDB format](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format).
-This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on local disk. With the efficient index and chunk binary formats,
+This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on the local disk. With the efficient index and chunk binary formats,
 it also fits well to be used directly from object storage using range GET API.
 
-Following sections explains this format in details with the additional files and entries that Thanos system supports.
+Following sections explain this format in details with the additional files and entries that Thanos system supports.
 
 ### TSDB Block
 
 Official docs for Prometheus TSDB format can be found [here](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format), but this section
-list the most important elements here.
+lists the most important elements here.
 
-TSDB Block, means particularly a set of Blobs (files) in a single directory (or `prefix` if we talk in Object Storage terms) named with
+TSDB Block means particularly a set of Blobs (files) in a single directory (or `prefix` if we talk in Object Storage terms) named with
 [ULID](https://github.com/ulid/spec) e.g `01ARZ3NDEKTSV4RRFFQ69G5FAV`.
 
-**Those files contains series (labels with compressed samples) for particular time duration (e.g 2h) from particular `Source` (e.g Prometheus or Thanos Receive)**
+**Those files contain series (labels with compressed samples) for particular time duration (e.g 2h) from particular `Source` (e.g Prometheus or Thanos Receive)**
 
-In Thanos system all files are **strictly immutable**. (NOTE: In Prometheus too, but with some caveats like tombstones). This means
-that any modification like `rewrite` `deletion` or `compaction` has to be done by creating new block and removing (with delay!) old one.
+In Thanos system, all files are **strictly immutable**. (NOTE: In Prometheus too, but with some caveats like tombstones). This means
+that any modification like `rewrite` `deletion` or `compaction` has to be done by creating a new block and removing (with delay!) old one.
 
-> NOTE: Any other not-known file present in this directory is ignored when reading the data. However those can be removed when block is being deleted from object storage / disk.
+> NOTE: Any other not-known file present in this directory is ignored when reading the data. However, those can be removed when the block is being deleted from object storage/disk.
 
 Example block file structure (on the local filesystem) can look like this:
 
@@ -478,7 +478,7 @@ total 8202452
 -rw-r--r-- 1 bwplotka bwplotka 346266827 Dec 10  2019 000016
 ```
 
-Let's look on each file one by one.
+Let's look at each file one by one.
 
 #### Metadata file (meta.json)
 
@@ -501,7 +501,7 @@ This file allows you to find for example:
    * What component created block (`thanos.source`)
    * Files and its sizes that are part of this block (`thanos.files`)
 
-> NOTE: In theory you can modify this data manually, however components like Compactor and Store Gateway currently infinitely cache those meta.json,
+> NOTE: In theory, you can modify this data manually. However, components like Compactor and Store Gateway currently infinitely cache that meta.json,
 > (sometimes on disk if configured), so manual cache removal and restart might be needed.
 
 Example meta.json file:
@@ -588,8 +588,8 @@ Format in Go code can be found [here](../pkg/block/metadata/meta.go).
 
 ##### External Labels
 
-External labels are the extremely important block metadata. They are stored in `meta.json` in `thanos.labels` section and allows
-to identify producer and owner of those blocks. This information will be used further by different Thanos components:
+External labels are extremely important block metadata. They are stored in `meta.json` in `thanos.labels` section and allows
+to identify the producer and owner of those blocks. This information will be used further by different Thanos components:
 
 * Those labels will be visible when data is queried. You can aggregate across those in PromQL etc.
 * [Querier](./components/query.md) to filter out store APIs to touch during query requests.
@@ -598,11 +598,11 @@ This grouping allows horizontal scalability like sharding or concurrency.
 * Some of those labels can be chosen as **replication** labels. Querier and Compactor will then deduplicate such blocks identified by same HA groups.
 * Some of those labels can be chosen as **tenancy** labels. This allows read, write and storage isolation mechanism.
 
-The `meta.json` `thanos.labels` labels are filled during block upload / creation. For example:
+The `meta.json` and `thanos.labels` labels are filled during block upload/creation. For example:
 
 * Each produced TSDB block by Prometheus is labelled with Prometheus [external labels](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#configuration-file)
 by `sidecar` before upload to object storage.
-* Each produced TSDB block by `compact` is labelled with whatever source blocks had. The exception is deduplication process that removes chosen replica flag(s).
+* Each produced TSDB block by `compact` is labelled with whatever source blocks had. The exception is the deduplication process that removes the chosen replica flag(s).
 * Each produced TSDB block by `receive` is labelled with labels given labels in repeated [receive](./components/receive.md) `--labels` flag.
 
 The recommended information that should be given in those labels:
@@ -613,7 +613,7 @@ Example Prometheus useful external labels:
 * Cluster, environment, zone, so target origin e.g `cluster="eu-1-production"` or `cluster="1",env="production",region="us-west1"`
 * Tenancy information e.g `tenant="organizationABC"`
 
-> NOTE: Be careful with receive external flags. Remote Write clients can stream any labels. If some label will duplicate with external label of receive, it will be masked
+> NOTE: Be careful with receive external flags. Remote Write clients can stream any labels. If some label will duplicate with the external label of receive, it will be masked
 > with what receiver has specified. This is why it's recommended to have `receive_` prefix to all receive labels. (e.g to not confuse with Prometheus replicas)
 
 Example Receive useful external labels:
