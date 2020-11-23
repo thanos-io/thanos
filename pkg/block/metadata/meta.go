@@ -10,6 +10,7 @@ package metadata
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,6 +50,10 @@ type Meta struct {
 	tsdb.BlockMeta
 
 	Thanos Thanos `json:"thanos"`
+}
+
+func (m *Meta) String() string {
+	return fmt.Sprintf("%s (min time: %d, max time: %d)", m.ULID, m.MinTime, m.MaxTime)
 }
 
 // Thanos holds block meta information specific to Thanos.
