@@ -5,6 +5,8 @@ package labelpb
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -103,4 +105,91 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 			testutil.Ok(b, (&zdest).Unmarshal(data))
 		}
 	})
+}
+
+func TestSortZLabelSets(t *testing.T) {
+	expectedResult := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+	}
+
+	list := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+	}
+
+	sort.Sort(list)
+	reflect.DeepEqual(expectedResult, list)
 }

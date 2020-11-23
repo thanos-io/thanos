@@ -49,20 +49,21 @@ func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Du
 	}
 }
 
+// MergeResponse merges multiple responses into a single Response. It needs to dedup the responses and ensure the order.
 func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
+		// Empty response for label_names, label_values and series API.
 		return &ThanosLabelsResponse{
 			Status: queryrange.StatusSuccess,
 			Data:   []string{},
 		}, nil
 	}
 
-	if len(responses) == 1 {
-		return responses[0], nil
-	}
-
 	switch responses[0].(type) {
 	case *ThanosLabelsResponse:
+		if len(responses) == 1 {
+			return responses[0], nil
+		}
 		set := make(map[string]struct{})
 
 		for _, res := range responses {
@@ -85,23 +86,18 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 	case *ThanosSeriesResponse:
 		seriesData := make([]labelpb.ZLabelSet, 0)
 
-		// seriesString is used in soring so we don't have to calculate the string of label sets again.
-		seriesString := make([]string, 0)
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
 			for _, series := range res.(*ThanosSeriesResponse).Data {
 				s := series.PromLabels().String()
 				if _, ok := uniqueSeries[s]; !ok {
 					seriesData = append(seriesData, series)
-					seriesString = append(seriesString, s)
 					uniqueSeries[s] = struct{}{}
 				}
 			}
 		}
 
-		sort.Slice(seriesData, func(i, j int) bool {
-			return seriesString[i] < seriesString[j]
-		})
+		sort.Sort(seriesData)
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
 			Data:   seriesData,
