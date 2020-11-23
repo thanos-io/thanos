@@ -295,3 +295,27 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 	}
 	return ret
 }
+
+// ZLabelSets is a sortable list of ZLabelSet. It assumes the label pairs in each ZLabelSet element are already sorted.
+type ZLabelSets []ZLabelSet
+
+func (z ZLabelSets) Len() int { return len(z) }
+
+func (z ZLabelSets) Swap(i, j int) { z[i], z[j] = z[j], z[i] }
+
+func (z ZLabelSets) Less(i, j int) bool {
+	l := 0
+	r := 0
+	var result int
+	for l < z[i].Size() && r < z[j].Size() {
+		result = z[i].Labels[l].Compare(z[j].Labels[r])
+		if result == 0 {
+			l++
+			r++
+			continue
+		}
+		return result < 0
+	}
+
+	return l == z[i].Size()
+}

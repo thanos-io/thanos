@@ -227,14 +227,14 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos labels names request",
 			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/labels"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
 					r.URL.Path == "/api/v1/labels"
 			},
 		},
 		{
 			name: "thanos labels values request",
-			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values"},
+			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values", Label: "__name__"},
 			checkFunc: func(r *http.Request) bool {
 				return r.URL.Query().Get(start) == startTime &&
 					r.URL.Query().Get(end) == endTime &&
@@ -243,7 +243,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 		},
 		{
 			name: "thanos labels values request, partial response set to true",
-			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values", PartialResponse: true},
+			req:  &ThanosLabelsRequest{Start: 123000, End: 456000, Path: "/api/v1/label/__name__/values", Label: "__name__", PartialResponse: true},
 			checkFunc: func(r *http.Request) bool {
 				return r.URL.Query().Get(start) == startTime &&
 					r.URL.Query().Get(end) == endTime &&
@@ -255,8 +255,8 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			name: "thanos series request with empty matchers",
 			req:  &ThanosSeriesRequest{Start: 123000, End: 456000, Path: "/api/v1/series"},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -269,9 +269,9 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "cluster", "test")}},
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
-					r.URL.Query().Get(queryv1.MatcherParam) == `{cluster="test"}` &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
+					r.FormValue(queryv1.MatcherParam) == `{cluster="test"}` &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -284,9 +284,9 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				Dedup: true,
 			},
 			checkFunc: func(r *http.Request) bool {
-				return r.URL.Query().Get(start) == startTime &&
-					r.URL.Query().Get(end) == endTime &&
-					r.URL.Query().Get(queryv1.DedupParam) == "true" &&
+				return r.FormValue(start) == startTime &&
+					r.FormValue(end) == endTime &&
+					r.FormValue(queryv1.DedupParam) == "true" &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -313,12 +313,29 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 	labelsData, err := json.Marshal(labelResponse)
 	testutil.Ok(t, err)
 
+	labelResponseWithHeaders := &ThanosLabelsResponse{
+		Status:  "success",
+		Data:    []string{"__name__"},
+		Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
+	}
+	labelsDataWithHeaders, err := json.Marshal(labelResponseWithHeaders)
+	testutil.Ok(t, err)
+
 	seriesResponse := &ThanosSeriesResponse{
 		Status: "success",
-		Data:   []labelpb.LabelSet{{Labels: []labelpb.Label{{Name: "foo", Value: "bar"}}}},
+		Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}},
 	}
 	seriesData, err := json.Marshal(seriesResponse)
 	testutil.Ok(t, err)
+
+	seriesResponseWithHeaders := &ThanosSeriesResponse{
+		Status:  "success",
+		Data:    []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}},
+		Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
+	}
+	seriesDataWithHeaders, err := json.Marshal(seriesResponseWithHeaders)
+	testutil.Ok(t, err)
+
 	for _, tc := range []struct {
 		name             string
 		expectedError    error
@@ -345,16 +362,152 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 			expectedResponse: labelResponse,
 		},
 		{
+			name: "thanos labels request with HTTP headers",
+			req:  &ThanosLabelsRequest{},
+			res: http.Response{
+				StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(labelsDataWithHeaders)),
+				Header: map[string][]string{
+					cacheControlHeader: {noStoreValue},
+				},
+			},
+			expectedResponse: labelResponseWithHeaders,
+		},
+		{
 			name:             "thanos series request",
 			req:              &ThanosSeriesRequest{},
 			res:              http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(seriesData))},
 			expectedResponse: seriesResponse,
+		},
+		{
+			name: "thanos series request with HTTP headers",
+			req:  &ThanosSeriesRequest{},
+			res: http.Response{
+				StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(seriesDataWithHeaders)),
+				Header: map[string][]string{
+					cacheControlHeader: {noStoreValue},
+				},
+			},
+			expectedResponse: seriesResponseWithHeaders,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Default partial response value doesn't matter when encoding requests.
 			codec := NewThanosLabelsCodec(false, time.Hour*2)
 			r, err := codec.DecodeResponse(context.TODO(), &tc.res, tc.req)
+			if tc.expectedError != nil {
+				testutil.Equals(t, err, tc.expectedError)
+			} else {
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expectedResponse, r)
+			}
+		})
+	}
+}
+
+func TestLabelsCodec_MergeResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		expectedError    error
+		responses        []queryrange.Response
+		expectedResponse queryrange.Response
+	}{
+		{
+			name: "Prometheus range query response format, not valid",
+			responses: []queryrange.Response{
+				&queryrange.PrometheusResponse{Status: "success"},
+			},
+			expectedError: httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format"),
+		},
+		{
+			name:             "Empty response",
+			responses:        nil,
+			expectedResponse: &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: []string{}},
+		},
+		{
+			name: "One label response",
+			responses: []queryrange.Response{
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9090", "localhost:9091"}},
+			},
+			expectedResponse: &ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9090", "localhost:9091"}},
+		},
+		{
+			name: "One label response and two empty responses",
+			responses: []queryrange.Response{
+				&ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: []string{}},
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9090", "localhost:9091"}},
+				&ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: []string{}},
+			},
+			expectedResponse: &ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9090", "localhost:9091"}},
+		},
+		{
+			name: "Multiple duplicate label responses",
+			responses: []queryrange.Response{
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9090", "localhost:9091"}},
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9091", "localhost:9092"}},
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9092", "localhost:9093"}},
+			},
+			expectedResponse: &ThanosLabelsResponse{Status: "success",
+				Data: []string{"localhost:9090", "localhost:9091", "localhost:9092", "localhost:9093"}},
+		},
+		// This case shouldn't happen because the responses from Querier are sorted.
+		{
+			name: "Multiple unordered label responses",
+			responses: []queryrange.Response{
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9093", "localhost:9092"}},
+				&ThanosLabelsResponse{Status: "success", Data: []string{"localhost:9091", "localhost:9090"}},
+			},
+			expectedResponse: &ThanosLabelsResponse{Status: "success",
+				Data: []string{"localhost:9090", "localhost:9091", "localhost:9092", "localhost:9093"}},
+		},
+		{
+			name: "One series response",
+			responses: []queryrange.Response{
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+			},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+		},
+		{
+			name: "One series response and two empty responses",
+			responses: []queryrange.Response{
+				&ThanosSeriesResponse{Status: queryrange.StatusSuccess},
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: queryrange.StatusSuccess},
+			},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+		},
+		{
+			name: "Multiple duplicate series responses",
+			responses: []queryrange.Response{
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+			},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}}},
+		},
+		{
+			name: "Multiple unordered series responses",
+			responses: []queryrange.Response{
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{
+					{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}},
+					{Labels: []labelpb.ZLabel{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
+				}},
+				&ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{
+					{Labels: []labelpb.ZLabel{{Name: "foo", Value: "aaa"}}},
+					{Labels: []labelpb.ZLabel{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
+				}},
+			},
+			expectedResponse: &ThanosSeriesResponse{Status: "success", Data: []labelpb.ZLabelSet{
+				{Labels: []labelpb.ZLabel{{Name: "foo", Value: "aaa"}}},
+				{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}},
+				{Labels: []labelpb.ZLabel{{Name: "test", Value: "aaa"}, {Name: "instance", Value: "localhost:9090"}}},
+				{Labels: []labelpb.ZLabel{{Name: "test", Value: "bbb"}, {Name: "instance", Value: "localhost:9091"}}},
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Default partial response value doesn't matter when encoding requests.
+			codec := NewThanosLabelsCodec(false, time.Hour*2)
+			r, err := codec.MergeResponse(tc.responses...)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
 			} else {

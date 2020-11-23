@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -262,7 +263,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	t.Run("query frontend splitting works for labels values API", func(t *testing.T) {
 		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			return len(res) > 0
+			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(1),
@@ -281,7 +282,7 @@ func TestQueryFrontend(t *testing.T) {
 		)
 
 		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			return len(res) > 0
+			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(3),
@@ -309,7 +310,16 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
-				return len(res) > 0
+				if len(res) != 1 {
+					return false
+				}
+
+				return reflect.DeepEqual(res[0], map[string]string{
+					"__name__":   "up",
+					"instance":   "localhost:9090",
+					"job":        "myself",
+					"prometheus": "test",
+				})
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -336,7 +346,16 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(-24*time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
-				return len(res) > 0
+				if len(res) != 1 {
+					return false
+				}
+
+				return reflect.DeepEqual(res[0], map[string]string{
+					"__name__":   "up",
+					"instance":   "localhost:9090",
+					"job":        "myself",
+					"prometheus": "test",
+				})
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
