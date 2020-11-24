@@ -309,7 +309,7 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
       source_labels:
       - message
     `
-	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml))
+	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml), SelectorSupportedRelabelActions)
 	testutil.Ok(t, err)
 
 	f := NewLabelShardedMetaFilter(relabelConfig)
@@ -375,7 +375,7 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 `
 	for i := 0; i < 3; i++ {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)))
+			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), SelectorSupportedRelabelActions)
 			testutil.Ok(t, err)
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
@@ -1203,13 +1203,13 @@ func Test_ParseRelabelConfig(t *testing.T) {
       regex: "A"
       source_labels:
       - cluster
-    `))
+    `), SelectorSupportedRelabelActions)
 	testutil.Ok(t, err)
 
 	_, err = ParseRelabelConfig([]byte(`
     - action: labelmap
       regex: "A"
-    `))
+    `), SelectorSupportedRelabelActions)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }

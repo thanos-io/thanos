@@ -92,6 +92,7 @@ var (
 	Bucket          = source{component: component{name: "bucket"}}
 	Cleanup         = source{component: component{name: "cleanup"}}
 	Mark            = source{component: component{name: "mark"}}
+	Rewrite         = source{component: component{name: "rewrite"}}
 	Compact         = source{component: component{name: "compact"}}
 	Downsample      = source{component: component{name: "downsample"}}
 	Replicate       = source{component: component{name: "replicate"}}

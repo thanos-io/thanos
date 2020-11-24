@@ -245,7 +245,7 @@ func runStore(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
 	if err != nil {
 		return err
 	}

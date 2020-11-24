@@ -559,9 +559,9 @@ func rewrite(
 		series   = []seriesRepair{}
 	)
 
+	var lset labels.Labels
+	var chks []chunks.Meta
 	for all.Next() {
-		var lset labels.Labels
-		var chks []chunks.Meta
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
