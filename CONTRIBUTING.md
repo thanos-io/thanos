@@ -84,6 +84,8 @@ component of the Thanos distributed system. We recommend:
 * Familiarizing yourself with our [coding style guidelines.](docs/contributing/coding-style-guide.md).
 * Familiarizing yourself with the [Makefile](Makefile) commands, for example `format`, `build`, `proto`, `docker` and `test`.
 `make help` will print most of available commands with details.
+* Spin up a prebuilt dev environment using Gitpod.io
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 
 ### Pull Request Process
 
