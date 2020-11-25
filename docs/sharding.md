@@ -1,3 +1,4 @@
+
 ---
 title: Sharding
 type: docs
@@ -6,7 +7,7 @@ menu: thanos
 
 # Background
 
-Currently all components that read from object store assume that all the operations and functionality should be done based
+Currently, all components that read from object store assume that all the operations and functionality should be done based
 on **all** the available blocks that are present in the certain bucket's root directory.
 
 This is in most cases totally fine, however with time and allowance of storing blocks from multiple `Sources` into the same bucket,
@@ -14,10 +15,13 @@ the number of objects in a bucket can grow drastically.
 
 This means that with time you might want to scale out certain components e.g:
 
-* Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network, disk, memory) with number of Sources pushing blocks to the object storage.
+## Compactor
 
-* Store Gateway: Queries against store gateway which are touching large number of Sources might be expensive, so it has to scale up with number of Sources if we assume those queries.
-    * Orthogonally we did not advertise any labels on Store Gateway's Info. This means that querier was not able to do any pre-filtering, so all store gateways in system are always touched for each query.
+Larger number of objects does not matter much, however compactor has to scale (CPU, network, disk, memory) with number of Sources pushing blocks to the object storage.
+
+## Store Gateway
+
+Queries against store gateway which are touching large number of blocks (no matter from what Sources) might be expensive, so it can scale with number of blocks.
 
 # Relabelling
 
