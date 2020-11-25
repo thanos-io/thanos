@@ -66,19 +66,19 @@ Subcommands:
     potentially a noop.
 
   tools bucket rewrite --id=ID [<flags>]
-    Rewrite chosen blocks in the bucket, while deleting or modifying
-    seriesResulted block has modified stats in meta.json. Additionally
-    compaction.sources are altered to not confuse readers of meta.json.Instead
+    Rewrite chosen blocks in the bucket, while deleting or modifying series
+    Resulted block has modified stats in meta.json. Additionally
+    compaction.sources are altered to not confuse readers of meta.json. Instead
     thanos.rewrite section is added with useful info like old sources and
-    deletion requestsNOTE: It's recommended to turn off compactor while doing
+    deletion requests. NOTE: It's recommended to turn off compactor while doing
     this operation. If the compactor is running and touching exactly same block
-    thatis being rewritten, the resulted rewritten block might only cause
-    overlap (mitigated by marking overlapping block manually for deletion)and
+    that is being rewritten, the resulted rewritten block might only cause
+    overlap (mitigated by marking overlapping block manually for deletion) and
     the data you wanted to rewrite could already part of bigger block.
 
     Use FILESYSTEM type of bucket to rewrite block on disk (suitable for vanilla
-    Prometheus)After rewrite, it's caller responsibility to delete or mark
-    source block for deletion to avoid overlaps.WARNING: This procedure is
+    Prometheus) After rewrite, it's caller responsibility to delete or mark
+    source block for deletion to avoid overlaps. WARNING: This procedure is
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
 
@@ -172,19 +172,19 @@ Subcommands:
     potentially a noop.
 
   tools bucket rewrite --id=ID [<flags>]
-    Rewrite chosen blocks in the bucket, while deleting or modifying
-    seriesResulted block has modified stats in meta.json. Additionally
-    compaction.sources are altered to not confuse readers of meta.json.Instead
+    Rewrite chosen blocks in the bucket, while deleting or modifying series
+    Resulted block has modified stats in meta.json. Additionally
+    compaction.sources are altered to not confuse readers of meta.json. Instead
     thanos.rewrite section is added with useful info like old sources and
-    deletion requestsNOTE: It's recommended to turn off compactor while doing
+    deletion requests. NOTE: It's recommended to turn off compactor while doing
     this operation. If the compactor is running and touching exactly same block
-    thatis being rewritten, the resulted rewritten block might only cause
-    overlap (mitigated by marking overlapping block manually for deletion)and
+    that is being rewritten, the resulted rewritten block might only cause
+    overlap (mitigated by marking overlapping block manually for deletion) and
     the data you wanted to rewrite could already part of bigger block.
 
     Use FILESYSTEM type of bucket to rewrite block on disk (suitable for vanilla
-    Prometheus)After rewrite, it's caller responsibility to delete or mark
-    source block for deletion to avoid overlaps.WARNING: This procedure is
+    Prometheus) After rewrite, it's caller responsibility to delete or mark
+    source block for deletion to avoid overlaps. WARNING: This procedure is
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
 
@@ -682,19 +682,19 @@ ts=2020-11-09T00:40:13.703322181Z caller=level.go:63 level=info msg="changelog w
 ```$
 usage: thanos tools bucket rewrite --id=ID [<flags>]
 
-Rewrite chosen blocks in the bucket, while deleting or modifying seriesResulted
+Rewrite chosen blocks in the bucket, while deleting or modifying series Resulted
 block has modified stats in meta.json. Additionally compaction.sources are
-altered to not confuse readers of meta.json.Instead thanos.rewrite section is
-added with useful info like old sources and deletion requestsNOTE: It's
+altered to not confuse readers of meta.json. Instead thanos.rewrite section is
+added with useful info like old sources and deletion requests. NOTE: It's
 recommended to turn off compactor while doing this operation. If the compactor
-is running and touching exactly same block thatis being rewritten, the resulted
+is running and touching exactly same block that is being rewritten, the resulted
 rewritten block might only cause overlap (mitigated by marking overlapping block
-manually for deletion)and the data you wanted to rewrite could already part of
+manually for deletion) and the data you wanted to rewrite could already part of
 bigger block.
 
 Use FILESYSTEM type of bucket to rewrite block on disk (suitable for vanilla
-Prometheus)After rewrite, it's caller responsibility to delete or mark source
-block for deletion to avoid overlaps.WARNING: This procedure is *IRREVERSIBLE*
+Prometheus) After rewrite, it's caller responsibility to delete or mark source
+block for deletion to avoid overlaps. WARNING: This procedure is *IRREVERSIBLE*
 after certain time (delete delay), so do backup your blocks first.
 
 Flags:
