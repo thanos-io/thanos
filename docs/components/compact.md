@@ -64,7 +64,7 @@ Refer to [Overlap Issue Troubleshooting](../operating/troubleshooting.md#overlap
 
 #### Warning: Only one Instance has to run against single stream of blocks in single Object Storage.
 
-:warning: :warning: :warning
+:warning: :warning: :warning:
 
 Because there is no safe locking mechanism for all object storage provides, currently, you need to ensure on your own that only
 single Compactor is running against single stream of blocks on single bucket. Running more can result with [Overlap Issues](../operating/troubleshooting.md#overlaps)
@@ -120,7 +120,7 @@ and potentially can merge together making such series useless.
 
 NOTE: See [risks](#vertical-compaction-risks) section to understand the implications and experimental nature of this feature.
 
-You can vertical compaction using hidden flag `--compact.enable-vertical-compaction`
+You can enable vertical compaction using a hidden flag `--compact.enable-vertical-compaction`
 
 If you want to "virtually" group blocks differently for deduplication use case, use hidden flag `deduplication.replica-label` to set one or many flags to be ignored during block loading.
 
@@ -150,7 +150,7 @@ By default, there is NO retention set for object storage data. This means that y
 You can set retention by different resolutions using `--retention.resolution-raw` `--retention.resolution-5m` and `--retention.resolution-1h` flag. Not setting
 them or setting to `0s` means no retention.
 
-**NOTE:** ⚠ ️Retention is applied at the end of compaction loop right after Compation and Downsamping loops. If those are failing, data will be never deleted.
+**NOTE:** ⚠ ️Retention is applied right after Compaction and Downsampling loops. If those are failing, data will be never deleted.
 
 ## Downsampling
 
@@ -192,7 +192,7 @@ Keep in mind, that the initial goal of downsampling is not saving disk or object
 it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is done by internal downsampling implementation
 which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), if you choose to store all resolutions (recommended and by default).
 
-The goal of downsampling is providing an opportunity to get fast results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less then `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" to your historical data.
+The goal of downsampling is to provide an opportunity to get fast results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less than `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" to your historical data.
 
 To avoid confusion - you might want to think about `raw` data as about "zoom in" opportunity. Considering the values for mentioned options - always think "Will I need to zoom in to the day 1 year ago?" if the answer "yes" - you most likely want to keep raw data for as long as 1h and 5m resolution, otherwise you'll be able to see only downsampled representation of how your raw data looked like.
 
@@ -216,7 +216,7 @@ This value has to be smaller than upload duration and [consistency delay](#consi
 
 ## Halting
 
-Because of very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data and downloading GBs of data, by default we halt Compator on certain data failures.
+Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures.
 This means that that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compactor_halted` set to 1.
 
 Reason is that we don't want to retry compaction and all the computations if we know that, for example, there is already overlapped state in the object storage for some reason.
@@ -240,16 +240,16 @@ Generally, the maximum memory utilization is exactly the same as for Prometheus 
   * 1/32 of all block's posting offsets
 * Single series with all labels and all chunks.
 
-You need to multiple this to X where X is `--compaction.concurrency` (by default 1).
+You need to multiply this with X where X is `--compaction.concurrency` (by default 1).
 
-**NOTE:** Don't check heap memory only. Prometheus and Thanos compaction laverages `mmap` heavily which is outside of `Go` `runtime` stats.
+**NOTE:** Don't check heap memory only. Prometheus and Thanos compaction leverages `mmap` heavily which is outside of `Go` `runtime` stats.
 Refer to process / OS memory used rather. On Linux/MacOS Go will also use as much as available, so utilization will be always near limit.
 
 Generally, for medium-sized bucket limit of 10GB of memory should be enough to keep it working.
 
 ### Network
 
-Overall Compactor is the component that might have the heaviest use of network against object storage, so place is near to bucket zone.
+Overall Compactor is the component that might have the heaviest use of network against object storage, so place it near the bucket's zone/location.
 
 It has to download each block needed for compaction / downsampling and it does that on every compaction / downsampling. It then uploads
 computed blocks. It also refreshes the state of bucket often.
@@ -261,7 +261,7 @@ for medium sized bucket about 100GB should be enough to keep working as the comp
 size of the blocks. In worst case scenario compactor has to have space adequate to 2 times 2 weeks (if your maximum compaction level is 2 weeks) worth of smaller blocks to
 perform compaction. First, to download all of those source blocks, second to build on disk output of 2 week block composed of those smaller ones.
 
-You need to multiple this to X where X is `--compaction.concurrency` (by default 1).
+You need to multiply this with X where X is `--compaction.concurrency` (by default 1).
 
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 However, it's recommended to give the Compactor persistent disk in order to effectively use bucket state cache between restarts.
