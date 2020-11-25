@@ -285,7 +285,7 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, fetcherConcurrency)
 	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
