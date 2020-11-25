@@ -50,7 +50,7 @@ func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *
 func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	bapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, nil)
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 }

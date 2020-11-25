@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/auth"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -54,6 +55,9 @@ func registerQuery(app *extkingpin.App) {
 
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
+
+	basicUser := cmd.Flag("api-basic-user", "Username for basic authentication. If not set, the feature is disabled.").Default("").String()
+	basicPass := cmd.Flag("api-basic-pass", "Password for basic authentication. If not set, the feature is disabled.").Default("").String()
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
@@ -172,6 +176,8 @@ func registerQuery(app *extkingpin.App) {
 			*secure,
 			*cert,
 			*key,
+			*basicUser,
+			*basicPass,
 			*caCert,
 			*serverName,
 			*httpBindAddr,
@@ -222,6 +228,8 @@ func runQuery(
 	secure bool,
 	cert string,
 	key string,
+	basicUser string,
+	basicPass string,
 	caCert string,
 	serverName string,
 	httpBindAddr string,
@@ -435,6 +443,7 @@ func runQuery(
 			return logging.LogDecision[requestLoggingDecision]
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		authMiddleware := auth.NewBasicAuthMiddleware(basicUser, basicPass)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
@@ -460,7 +469,7 @@ func runQuery(
 			),
 		)
 
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware, authMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),

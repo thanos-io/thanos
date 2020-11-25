@@ -323,6 +323,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
+      --api-basic-user=""        Username for basic authentication. If not set,
+                                 the feature is disabled.
+      --api-basic-pass=""        Password for basic authentication. If not set,
+                                 the feature is disabled.
       --grpc-client-tls-secure   Use TLS when talking to the gRPC server
       --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
                                  to the server
