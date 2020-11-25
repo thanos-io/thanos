@@ -66,7 +66,9 @@ func TestMeta_ReadWrite(t *testing.T) {
 				Labels:  map[string]string{"ext": "lset1"},
 				Source:  ReceiveSource,
 				Files: []File{
-					{RelPath: "index", SizeBytes: 1313},
+					{RelPath: "chunks/000001", SizeBytes: 3751},
+					{RelPath: "index", SizeBytes: 401},
+					{RelPath: "meta.json"},
 				},
 				Downsample: ThanosDownsample{
 					Resolution: 123144,
@@ -109,8 +111,15 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"source": "receive",
 		"files": [
 			{
+				"rel_path": "chunks/000001",
+				"size_bytes": 3751
+			},
+			{
 				"rel_path": "index",
-				"size_bytes": 1313
+				"size_bytes": 401
+			},
+			{
+				"rel_path": "meta.json"
 			}
 		]
 	}

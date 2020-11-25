@@ -10,20 +10,27 @@ package metadata
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/go-kit/kit/log"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/yaml.v3"
 )
 
 type SourceType string
 
 const (
+	// TODO(bwplotka): Merge with pkg/component package.
 	UnknownSource         SourceType = ""
 	SidecarSource         SourceType = "sidecar"
 	ReceiveSource         SourceType = "receive"
@@ -31,6 +38,7 @@ const (
 	CompactorRepairSource SourceType = "compactor.repair"
 	RulerSource           SourceType = "ruler"
 	BucketRepairSource    SourceType = "bucket.repair"
+	BucketRewriteSource   SourceType = "bucket.rewrite"
 	TestSource            SourceType = "test"
 )
 
@@ -49,6 +57,10 @@ type Meta struct {
 	tsdb.BlockMeta
 
 	Thanos Thanos `json:"thanos"`
+}
+
+func (m *Meta) String() string {
+	return fmt.Sprintf("%s (min time: %d, max time: %d)", m.ULID, m.MinTime, m.MaxTime)
 }
 
 // Thanos holds block meta information specific to Thanos.
@@ -73,6 +85,31 @@ type Thanos struct {
 	// Useful to avoid API call to get size of each file, as well as for debugging purposes.
 	// Optional, added in v0.17.0.
 	Files []File `json:"files,omitempty"`
+
+	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
+	Rewrites []Rewrite `json:"rewrites,omitempty"`
+}
+
+type Rewrite struct {
+	// ULIDs of all source head blocks that went into the block.
+	Sources []ulid.ULID `json:"sources,omitempty"`
+	// Deletions if applied (in order).
+	DeletionsApplied []DeletionRequest `json:"deletions_applied,omitempty"`
+}
+
+type Matchers []*labels.Matcher
+
+func (m *Matchers) UnmarshalYAML(value *yaml.Node) (err error) {
+	*m, err = parser.ParseMetricSelector(value.Value)
+	if err != nil {
+		return errors.Wrapf(err, "parse metric selector %v", value.Value)
+	}
+	return nil
+}
+
+type DeletionRequest struct {
+	Matchers  Matchers             `json:"matchers" yaml:"matchers"`
+	Intervals tombstones.Intervals `json:"intervals,omitempty" yaml:"intervals,omitempty"`
 }
 
 type File struct {

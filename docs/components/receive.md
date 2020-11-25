@@ -15,6 +15,8 @@ Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documen
 For more information please check out [initial design proposal](../proposals/201812_thanos-remote-receive.md).
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
 
+> NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
+
 # Example
 
 ```bash
@@ -24,6 +26,7 @@ thanos receive \
     --http-address 0.0.0.0:10909 \
     --receive.replication-factor 1 \
     --label "receive_replica=\"0\"" \
+    --label "receive_cluster=\"eu1\"" \
     --receive.local-endpoint 127.0.0.1:10907 \
     --receive.hashrings-file ./data/hashring.json \
     --remote-write.address 0.0.0.0:10908 \

@@ -80,6 +80,7 @@ tests:
         pod: thanos-sidecar-pod-0
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
@@ -87,6 +88,7 @@ tests:
         pod: thanos-sidecar-pod-1
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 11m
     alertname: ThanosSidecarUnhealthy
@@ -97,6 +99,7 @@ tests:
         pod: thanos-sidecar-pod-0
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
@@ -104,6 +107,7 @@ tests:
         pod: thanos-sidecar-pod-1
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 12m
     alertname: ThanosSidecarUnhealthy
@@ -114,6 +118,7 @@ tests:
         pod: thanos-sidecar-pod-0
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-0 is unhealthy for 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
         severity: critical
@@ -121,4 +126,5 @@ tests:
         pod: thanos-sidecar-pod-1
       exp_annotations:
         description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-pod-1 is unhealthy for 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
