@@ -69,7 +69,7 @@ of the community. Here are ways to get in touch with the community:
 
 ## Maintainers
 
-See [MAINTAINERS.md](/MAINTAINERS.md)
+See [MAINTAINERS.md](/MAINTAINERS.md).
 
 ## Community Thanos Kubernetes Applications
 
@@ -85,7 +85,7 @@ If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
-* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
+* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos/1-globalview)
 * [Quick Tutorial](./quick-tutorial.md) on Thanos website.
 
 ## Operating
@@ -130,7 +130,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 ## Integrations
 
-See [Integrations page](./integrations.md)
+See [Integrations page](./integrations.md).
 
 ## Testing Thanos on Single Host
 
@@ -157,4 +157,4 @@ on a single node, we recommend following the port layout:
 | Compact        | HTTP                    | 10912 |
 | Query Frontend | HTTP                    | 10913 |
 
-You can see example one-node setup [here](/scripts/quickstart.sh)
+You can see example one-node setup [here](/scripts/quickstart.sh).
