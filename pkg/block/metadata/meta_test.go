@@ -35,7 +35,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		_, err := read(ioutil.NopCloser(&b))
+		_, err := Read(ioutil.NopCloser(&b))
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "unexpected meta file version 0", err.Error())
 	})
@@ -125,7 +125,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		retMeta, err := read(ioutil.NopCloser(&b))
+		retMeta, err := Read(ioutil.NopCloser(&b))
 		testutil.Ok(t, err)
 		testutil.Equals(t, m1, *retMeta)
 	})
@@ -203,7 +203,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		retMeta, err := read(ioutil.NopCloser(&b))
+		retMeta, err := Read(ioutil.NopCloser(&b))
 		testutil.Ok(t, err)
 
 		// We expect map to be empty but allocated.
