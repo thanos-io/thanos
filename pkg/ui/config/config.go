@@ -88,26 +88,30 @@ type swiftConfig struct {
 	}
 }
 
-// Config Swift storage configuration.
 type s3Config struct {
 	Type client.ObjProvider
-	Config struct {
-		Bucket             string            `yaml:"bucket"`
-		Endpoint           string            `yaml:"endpoint"`
-		Region             string            `yaml:"region"`
-		AccessKey          string            `yaml:"access_key"`
-		Insecure           bool              `yaml:"insecure"`
-		SignatureV2        bool              `yaml:"signature_version2"`
-		SecretKey          config.Secret     `yaml:"secret_key"`
-		PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
-		HTTPConfig         s3.HTTPConfig     `yaml:"http_config"`
-		TraceConfig        s3.TraceConfig     `yaml:"trace"`
-		ListObjectsVersion string            `yaml:"list_objects_version"`
-		// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
-		PartSize  uint64    `yaml:"part_size"`
-		SSEConfig s3.SSEConfig `yaml:"sse_config"`
-	}
+	Config s3.Config
 }
+//Config S3 storage configuration.
+//type s3Config struct {
+//	Type   client.ObjProvider
+//	Config struct {
+//		Bucket             string            `yaml:"bucket"`
+//		Endpoint           string            `yaml:"endpoint"`
+//		Region             string            `yaml:"region"`
+//		AccessKey          string            `yaml:"access_key"`
+//		Insecure           bool              `yaml:"insecure"`
+//		SignatureV2        bool              `yaml:"signature_version2"`
+//		SecretKey          config.Secret     `yaml:"secret_key"`
+//		PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
+//		HTTPConfig         s3.HTTPConfig     `yaml:"http_config"`
+//		TraceConfig        s3.TraceConfig    `yaml:"trace"`
+//		ListObjectsVersion string            `yaml:"list_objects_version"`
+//		// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
+//		PartSize  uint64       `yaml:"part_size"`
+//		SSEConfig s3.SSEConfig `yaml:"sse_config"`
+//	}
+//}
 
 func ReplaceSecret(confContentYaml []byte) ([]byte, error) {
 	var str []byte
