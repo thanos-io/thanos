@@ -82,6 +82,7 @@ config:
   max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
+  tracing: false
   expiration: 0s
 ```
 
@@ -103,6 +104,7 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 10s
   expiration: 24h
+  tracing: false
 ```
 
 ### Slow Query Log

@@ -14,6 +14,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -114,6 +115,10 @@ type MemcachedClientConfig struct {
 
 	// DNSProviderUpdateInterval specifies the DNS discovery update interval.
 	DNSProviderUpdateInterval time.Duration `yaml:"dns_provider_update_interval"`
+
+	// Tracing enables detailed traces including spans for every memcached call.
+	// This is disabled by default as it may produce a very high volume of spans.
+	Tracing bool `yaml:"tracing"`
 }
 
 func (c *MemcachedClientConfig) validate() error {
@@ -331,9 +336,12 @@ func (c *memcachedClient) Stop() {
 }
 
 func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	span, ctx := tracing.StartSpan(ctx, "memcached_set_async")
-	span.LogKV("key", key)
-	defer span.Finish()
+	if c.config.Tracing {
+		var outerSpan opentracing.Span
+		outerSpan, ctx = tracing.StartSpan(ctx, "memcached_set_async")
+		outerSpan.LogKV("key", key)
+		defer outerSpan.Finish()
+	}
 
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
@@ -345,9 +353,12 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		start := time.Now()
 		c.operations.WithLabelValues(opSet).Inc()
 
-		span, _ := tracing.StartSpan(ctx, "memcached_client_set")
-		span.LogKV("key", key, "value_bytes", len(value))
-		defer span.Finish()
+		var innerSpan opentracing.Span
+		if c.config.Tracing {
+			innerSpan, _ := tracing.StartSpan(ctx, "memcached_client_set")
+			innerSpan.LogKV("key", key, "value_bytes", len(value))
+			defer innerSpan.Finish()
+		}
 
 		err := c.client.Set(&memcache.Item{
 			Key:        key,
@@ -366,7 +377,9 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 				"server", serverAddr,
 				"err", err,
 			)
-			span.LogKV("err", err)
+			if c.config.Tracing {
+				innerSpan.LogKV("err", err)
+			}
 			c.trackError(opSet, err)
 			return
 		}
@@ -384,9 +397,12 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 }
 
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
-	span, _ := tracing.StartSpan(ctx, "memcached_get_multi")
-	span.LogKV("keys", strings.Join(keys, ", "))
-	defer span.Finish()
+	var span opentracing.Span
+	if c.config.Tracing {
+		span, ctx = tracing.StartSpan(ctx, "memcached_get_multi")
+		span.LogKV("keys", strings.Join(keys, ", "))
+		defer span.Finish()
+	}
 
 	if len(keys) == 0 {
 		return nil
@@ -488,22 +504,29 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
 
-	span, _ := tracing.StartSpan(ctx, "memcached_client_get_multi")
-	span.LogKV("keys", strings.Join(keys, ", "))
-	defer span.Finish()
+	var span opentracing.Span
+	if c.config.Tracing {
+		span, _ := tracing.StartSpan(ctx, "memcached_client_get_multi")
+		span.LogKV("keys", strings.Join(keys, ", "))
+		defer span.Finish()
+	}
 
 	items, err = c.client.GetMulti(keys)
 
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
-		span.LogKV("err", err)
+		if c.config.Tracing {
+			span.LogKV("err", err)
+		}
 		c.trackError(opGetMulti, err)
 	} else {
 		var total int
 		for _, it := range items {
 			total += len(it.Value)
 		}
-		span.LogKV("value_bytes_total", len(items))
+		if c.config.Tracing {
+			span.LogKV("value_bytes_total", len(items))
+		}
 		c.dataSize.WithLabelValues(opGetMulti).Observe(float64(total))
 		c.duration.WithLabelValues(opGetMulti).Observe(time.Since(start).Seconds())
 	}

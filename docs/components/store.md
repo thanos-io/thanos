@@ -270,6 +270,7 @@ config:
   max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
+  tracing: false
 ```
 
 The **required** settings are:
@@ -286,6 +287,7 @@ While the remaining settings are **optional**:
 - `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
+- `tracing`: Enables detailed traces including spans for every memcached call. This is disabled by default as it may produce a very high volume of spans.
 
 ## Caching Bucket
 
