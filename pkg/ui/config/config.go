@@ -4,8 +4,9 @@
 package config
 
 import (
-	"github.com/pkg/errors"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -16,7 +17,7 @@ import (
 
 // Config stores the configuration for storing and accessing blobs in filesystem.
 type fileConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		Directory string `yaml:"directory"`
 	}
@@ -24,7 +25,7 @@ type fileConfig struct {
 
 // Config stores the configuration for oss bucket.
 type aliConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		Endpoint        string        `yaml:"endpoint"`
 		Bucket          string        `yaml:"bucket"`
@@ -35,7 +36,7 @@ type aliConfig struct {
 
 // Config stores the configuration for gcs bucket.
 type gcsConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		Bucket         string `yaml:"bucket"`
 		ServiceAccount string `yaml:"service_account"`
@@ -44,7 +45,7 @@ type gcsConfig struct {
 
 // Config encapsulates the necessary config values to instantiate an cos client.
 type cosConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		Bucket    string        `yaml:"bucket"`
 		Region    string        `yaml:"region"`
@@ -54,10 +55,9 @@ type cosConfig struct {
 	}
 }
 
-
 // Config Azure storage configuration.
 type azureConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		StorageAccountName string        `yaml:"storage_account"`
 		StorageAccountKey  config.Secret `yaml:"storage_account_key"`
@@ -69,7 +69,7 @@ type azureConfig struct {
 
 // Config Swift storage configuration.
 type swiftConfig struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config struct {
 		AuthUrl           string        `yaml:"auth_url"`
 		Username          string        `yaml:"username"`
@@ -89,9 +89,10 @@ type swiftConfig struct {
 }
 
 type s3Config struct {
-	Type client.ObjProvider
+	Type   client.ObjProvider
 	Config s3.Config
 }
+
 //Config S3 storage configuration.
 //type s3Config struct {
 //	Type   client.ObjProvider
@@ -123,29 +124,29 @@ func ReplaceSecret(confContentYaml []byte) ([]byte, error) {
 	}
 
 	switch strings.ToUpper(string(conf.Type)) {
-		case string(client.GCS):
-			gcsConf := &gcsConfig{}
-			str, _ = mashedYaml(confContentYaml, gcsConf)
-		case string(client.S3):
-			s3Conf := &s3Config{}
-			str, _ = mashedYaml(confContentYaml, s3Conf)
-		case string(client.AZURE):
-			azConf := &azureConfig{}
-			str, _ = mashedYaml(confContentYaml, azConf)
-		case string(client.SWIFT):
-			swiftConf := &swiftConfig{}
-			str, _ = mashedYaml(confContentYaml, swiftConf)
-		case string(client.COS):
-			cosConf := &cosConfig{}
-			str, _ = mashedYaml(confContentYaml, cosConf)
-		case string(client.ALIYUNOSS):
-			aliConf := &aliConfig{}
-			str, _ = mashedYaml(confContentYaml, aliConf)
-		case string(client.FILESYSTEM):
-			fileConf := &fileConfig{}
-			str, _ = mashedYaml(confContentYaml, fileConf)
-		default:
-			return nil, errors.Errorf("bucket with type %s is not supported", conf.Type)
+	case string(client.GCS):
+		gcsConf := &gcsConfig{}
+		str, _ = mashedYaml(confContentYaml, gcsConf)
+	case string(client.S3):
+		s3Conf := &s3Config{}
+		str, _ = mashedYaml(confContentYaml, s3Conf)
+	case string(client.AZURE):
+		azConf := &azureConfig{}
+		str, _ = mashedYaml(confContentYaml, azConf)
+	case string(client.SWIFT):
+		swiftConf := &swiftConfig{}
+		str, _ = mashedYaml(confContentYaml, swiftConf)
+	case string(client.COS):
+		cosConf := &cosConfig{}
+		str, _ = mashedYaml(confContentYaml, cosConf)
+	case string(client.ALIYUNOSS):
+		aliConf := &aliConfig{}
+		str, _ = mashedYaml(confContentYaml, aliConf)
+	case string(client.FILESYSTEM):
+		fileConf := &fileConfig{}
+		str, _ = mashedYaml(confContentYaml, fileConf)
+	default:
+		return nil, errors.Errorf("bucket with type %s is not supported", conf.Type)
 	}
 	return str, err
 }
@@ -157,7 +158,7 @@ func mashedYaml(confContent []byte, conf interface{}) ([]byte, error) {
 		return nil, err
 	}
 
-	mashedStr, _= yaml.Marshal(conf)
+	mashedStr, _ = yaml.Marshal(conf)
 
 	return mashedStr, err
 }

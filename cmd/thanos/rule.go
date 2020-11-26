@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/ui/config"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/ui/config"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

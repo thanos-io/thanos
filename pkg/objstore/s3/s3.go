@@ -25,9 +25,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
-	"github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/yaml.v2"
@@ -57,6 +57,7 @@ var DefaultConfig = Config{
 	// Set to 128 MiB as in the minio client.
 	PartSize: 1024 * 1024 * 128,
 }
+
 // Config stores the configuration for s3 bucket.
 type Config struct {
 	Bucket             string            `yaml:"bucket"`

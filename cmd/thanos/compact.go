@@ -6,13 +6,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/ui/config"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/ui/config"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/kit/log"
@@ -195,7 +196,7 @@ func runCompact(
 
 	// Add config content to configs map.
 	configFilesMap := map[string]string{
-		"Object Store Configuration":     string(confContentYamlStr),
+		"Object Store Configuration":      string(confContentYamlStr),
 		"Selector Reliable Configuration": string(relabelContentYaml),
 	}
 
