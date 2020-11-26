@@ -29,11 +29,13 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -382,7 +384,7 @@ func CreateBlockWithBlockDelay(
 		return ulid.ULID{}, errors.Wrap(err, "create block id")
 	}
 
-	m, err := metadata.Read(path.Join(dir, blockID.String()))
+	m, err := metadata.ReadFromDir(path.Join(dir, blockID.String()))
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "open meta file")
 	}
@@ -390,7 +392,7 @@ func CreateBlockWithBlockDelay(
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
 
-	if err := metadata.Write(log.NewNopLogger(), path.Join(dir, blockID.String()), m); err != nil {
+	if err := m.WriteToDir(log.NewNopLogger(), path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}
 
@@ -408,7 +410,7 @@ func createBlock(
 	tombstones bool,
 ) (id ulid.ULID, err error) {
 	chunksRootDir := filepath.Join(dir, "chunks")
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
@@ -472,7 +474,8 @@ func createBlock(
 		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
 	}
 
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, id.String()), metadata.Thanos{
+	blockDir := filepath.Join(dir, id.String())
+	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
 		Labels:     extLset.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,

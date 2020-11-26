@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,15 +24,17 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -49,8 +52,8 @@ func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
+	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
@@ -64,13 +67,14 @@ func registerQuery(app *extkingpin.App) {
 
 	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
-	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
+	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
 	lookbackDelta := cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").Duration()
+	dynamicLookbackDelta := cmd.Flag("query.dynamic-lookback-delta", "Allow for larger lookback duration for queries based on resolution.").Hidden().Default("true").Bool()
 
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
@@ -78,7 +82,9 @@ func registerQuery(app *extkingpin.App) {
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
 
-	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
+	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
+
+	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -96,17 +102,17 @@ func registerQuery(app *extkingpin.App) {
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
-	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
+	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
 	// TODO(bwplotka): Grab this from TTL at some point.
-	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
+	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
 	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
 		Default(string(dns.GolangResolverType)).Hidden().String()
 
-	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
@@ -117,9 +123,9 @@ func registerQuery(app *extkingpin.App) {
 	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
+	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
-	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -177,6 +183,7 @@ func registerQuery(app *extkingpin.App) {
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
 			*lookbackDelta,
+			*dynamicLookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
 			*queryReplicaLabels,
@@ -192,6 +199,7 @@ func registerQuery(app *extkingpin.App) {
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			*defaultMetadataTimeRange,
 			*strictStores,
 			component.Query,
 		)
@@ -225,6 +233,7 @@ func runQuery(
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
 	lookbackDelta time.Duration,
+	dynamicLookbackDelta bool,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
 	queryReplicaLabels []string,
@@ -240,6 +249,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	comp component.Component,
 ) error {
@@ -257,7 +267,7 @@ func runQuery(
 	fileSDCache := cache.New()
 	dnsStoreProvider := dns.NewProvider(
 		logger,
-		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
+		extprom.WrapRegistererWithPrefix("thanos_query_store_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 
@@ -269,7 +279,7 @@ func runQuery(
 
 	dnsRuleProvider := dns.NewProvider(
 		logger,
-		extprom.WrapRegistererWithPrefix("thanos_querier_rule_apis_", reg),
+		extprom.WrapRegistererWithPrefix("thanos_query_rule_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 
@@ -304,21 +314,26 @@ func runQuery(
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		queryableCreator = query.NewQueryableCreator(logger, reg, proxy, maxConcurrentSelects, queryTimeout)
-		engine           = promql.NewEngine(
-			promql.EngineOpts{
-				Logger: logger,
-				Reg:    reg,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
-				NoStepSubqueryIntervalFn: func(rangeMillis int64) int64 {
-					return defaultEvaluationInterval.Milliseconds()
-				},
-				LookbackDelta: lookbackDelta,
-			},
+		queryableCreator = query.NewQueryableCreator(
+			logger,
+			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
+			proxy,
+			maxConcurrentSelects,
+			queryTimeout,
 		)
+		engineOpts = promql.EngineOpts{
+			Logger: logger,
+			Reg:    reg,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return defaultEvaluationInterval.Milliseconds()
+			},
+		}
 	)
+
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -407,7 +422,10 @@ func runQuery(
 		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+				http.Redirect(w, r, webRoutePrefix+"/graph", http.StatusFound)
+			})
+			router.Get(webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, webRoutePrefix+"/graph", http.StatusFound)
 			})
 			router = router.WithPrefix(webRoutePrefix)
 		}
@@ -420,13 +438,12 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, reg, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewQueryAPI(
 			logger,
-			reg,
 			stores,
-			engine,
+			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -436,7 +453,11 @@ func runQuery(
 			queryReplicaLabels,
 			flagsMap,
 			instantDefaultMaxSourceResolution,
-			maxConcurrentQueries,
+			defaultMetadataTimeRange,
+			gate.New(
+				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
+				maxConcurrentQueries,
+			),
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
@@ -465,7 +486,9 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, proxy, rulesProxy,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
+			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -515,4 +538,56 @@ func firstDuplicate(ss []string) string {
 	}
 
 	return ""
+}
+
+// engineFactory creates from 1 to 3 promql.Engines depending on
+// dynamicLookbackDelta and eo.LookbackDelta and returns a function
+// that returns appropriate engine for given maxSourceResolutionMillis.
+//
+// TODO: it seems like a good idea to tweak Prometheus itself
+// instead of creating several Engines here.
+func engineFactory(
+	newEngine func(promql.EngineOpts) *promql.Engine,
+	eo promql.EngineOpts,
+	dynamicLookbackDelta bool,
+) func(int64) *promql.Engine {
+	resolutions := []int64{downsample.ResLevel0}
+	if dynamicLookbackDelta {
+		resolutions = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
+	}
+	var (
+		engines = make([]*promql.Engine, len(resolutions))
+		ld      = eo.LookbackDelta.Milliseconds()
+	)
+	wrapReg := func(engineNum int) prometheus.Registerer {
+		return extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(engineNum)}, eo.Reg)
+	}
+
+	lookbackDelta := eo.LookbackDelta
+	for i, r := range resolutions {
+		if ld < r {
+			lookbackDelta = time.Duration(r) * time.Millisecond
+		}
+		engines[i] = newEngine(promql.EngineOpts{
+			Logger:                   eo.Logger,
+			Reg:                      wrapReg(i),
+			MaxSamples:               eo.MaxSamples,
+			Timeout:                  eo.Timeout,
+			ActiveQueryTracker:       eo.ActiveQueryTracker,
+			LookbackDelta:            lookbackDelta,
+			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+		})
+	}
+	return func(maxSourceResolutionMillis int64) *promql.Engine {
+		for i := len(resolutions) - 1; i >= 1; i-- {
+			left := resolutions[i-1]
+			if resolutions[i-1] < ld {
+				left = ld
+			}
+			if left < maxSourceResolutionMillis {
+				return engines[i]
+			}
+		}
+		return engines[0]
+	}
 }

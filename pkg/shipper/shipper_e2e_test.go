@@ -141,12 +141,16 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			// The external labels must be attached to the meta file on upload.
 			meta.Thanos.Labels = extLset.Map()
+			meta.Thanos.SegmentFiles = []string{"0001", "0002"}
+			meta.Thanos.Files = []metadata.File{
+				{RelPath: "chunks/0001", SizeBytes: 14},
+				{RelPath: "chunks/0002", SizeBytes: 14},
+				{RelPath: "index", SizeBytes: 13},
+				{RelPath: "meta.json"},
+			}
 
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.SetIndent("", "\t")
-
-			testutil.Ok(t, enc.Encode(&meta))
+			buf := bytes.Buffer{}
+			testutil.Ok(t, meta.Write(&buf))
 
 			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 && i != 5 {
@@ -293,12 +297,16 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 			// The external labels must be attached to the meta file on upload.
 			meta.Thanos.Labels = extLset.Map()
+			meta.Thanos.SegmentFiles = []string{"0001", "0002"}
+			meta.Thanos.Files = []metadata.File{
+				{RelPath: "chunks/0001", SizeBytes: 14},
+				{RelPath: "chunks/0002", SizeBytes: 14},
+				{RelPath: "index", SizeBytes: 13},
+				{RelPath: "meta.json"},
+			}
 
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.SetIndent("", "\t")
-
-			testutil.Ok(t, enc.Encode(&meta))
+			buf := bytes.Buffer{}
+			testutil.Ok(t, meta.Write(&buf))
 
 			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 {

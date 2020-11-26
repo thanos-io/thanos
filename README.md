@@ -12,6 +12,7 @@
 [![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago)
 [![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact)
 [![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs)
+[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 
 ## Overview
 
@@ -19,7 +20,7 @@ Thanos is a set of components that can be composed into a highly available metri
 system with unlimited storage capacity, which can be added seamlessly on top of existing
 Prometheus deployments.
 
-Thanos is a [CNCF](https://www.cncf.io/) Incubation project.
+Thanos is a [CNCF](https://www.cncf.io/) Incubating project.
 
 Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides

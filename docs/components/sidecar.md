@@ -17,15 +17,10 @@ In details:
 
 * Optionally Thanos sidecar is able to watch Prometheus rules and configuration, decompress and substitute environment variables if needed and ping Prometheus to reload them. Read more about this in [here](./sidecar.md#reloader-configuration)
 
-
 Prometheus servers connected to the Thanos cluster via the sidecar are subject to a few limitations and recommendations for safe operations:
 
 * The recommended Prometheus version is 2.2.1 or greater (including newest releases). This is due to Prometheus instability in previous versions as well as lack of `flags` endpoint.
-* (!) The Prometheus `external_labels` section of the Prometheus configuration file has unique labels in the overall Thanos system. Those external labels will be used by the sidecar and then Thanos in many places:
-
-  * [Querier](./query.md) to filter out store APIs to touch during query requests.
-  * Many object storage readers like [compactor](./compact.md) and [store gateway](./store.md) which groups the blocks by Prometheus source. Each produced TSDB block by Prometheus is labelled with external label by sidecar before upload to object storage.
-
+* (!) The Prometheus `external_labels` section of the Prometheus configuration file has unique labels in the overall Thanos system. Those external labels will be used by the sidecar and then Thanos in many places. See [external labels](../storage.md#external-labels) docs.
 * The `--web.enable-admin-api` flag is enabled to support sidecar to get metadata from Prometheus like external labels.
 * The `--web.enable-lifecycle` flag is enabled if you want to use sidecar reloading features (`--reload.*` flags).
 
@@ -44,7 +39,6 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
 Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, replace environment variables found in there in `$(VARIABLE)` format, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
-
 
 ## Example basic deployment
 
@@ -97,12 +91,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for

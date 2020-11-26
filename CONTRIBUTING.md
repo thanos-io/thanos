@@ -2,17 +2,17 @@
 
 This document explain the process of contributing to the Thanos project.
 
-First of all please follow the [CODE_OF_CONDUCT](https://github.com/thanos-io/thanos/blob/master/CODE_OF_CONDUCT.md) in all your interactions with the project.
+First of all please follow the [CODE_OF_CONDUCT](/CODE_OF_CONDUCT.md) in all your interactions within the project.
 
 ## Thanos Philosophy
 
-The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
+The philosophy of Thanos and our community borrows heavily from UNIX philosophy and the Golang programming language.
 
-* Each sub command should do one thing and do it well
+* Each sub command should do one thing and do it well.
   * eg. thanos query proxies incoming calls to known store API endpoints merging the result
-* Write components that work together
+* Write components that work together.
   * e.g. blocks should be stored in native prometheus format
-* Make it easy to read, write, and, run components
+* Make it easy to read, write, and run components.
   * e.g. reduce complexity in system design and implementation
 
 ## Feedback / Issues
@@ -20,21 +20,21 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 If you encounter any issue or you have an idea to improve, please:
 
 * Search through Google and [existing open and closed GitHub Issues](https://github.com/thanos-io/thanos/issues) for the
-answer first. If you find relevant topic, please comment on the issue.
-* If not found, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide
-all relevant information as template suggest.
+answer first. If you find a relevant topic, please comment on the issue.
+* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide
+any relevant information as suggested by the Pull Request template.
 * If you have a quick question you might want to also ask on #thanos or #thanos-dev slack channel in the CNCF workspace.
-We are recommending, using GitHub issues for issues and feedback, because GitHub issues are track-able.
+We recommend using GitHub issues for issues and feedback, because GitHub issues are trackable.
 
-If you encounter security vulnerability, please refer to [Reporting a Vulnerability process](SECURITY.md)
+If you encounter a security vulnerability, please refer to [Reporting a Vulnerability process](/SECURITY.md#reporting-a-vulnerability)
 
 ## Adding New Features / Components
 
-When contributing not obvious change to Thanos repository, please first
-discuss the change you wish to make via issue or slack, or any other
-method with the owners of this repository before making a change.
+When contributing a complex change to Thanos repository, please
+discuss the change you wish to make within a Github issue, in Slack, or by another
+method with the owners of this repository before making the change.
 
-Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](/docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
 ## General Naming
 
@@ -46,9 +46,9 @@ In the code and documentation prefer non-offensive terminology, for example:
 
 ## Components Naming
 
-Thanos is a distributed system composed with several services and CLI tools as listed [here](cmd/thanos).
+Thanos is a distributed system comprised of several services and CLI tools as listed [here](/cmd/thanos).
 
-When we refer to them as technical reference we use verb form: `store`, `compact`, `rule`, `query`. This includes:
+When we refer to them in a technical capacity we use the verbal form: `store`, `compact`, `rule`, `query`, `query_frontend`. This includes:
 
 * Code
 * Metrics
@@ -59,7 +59,7 @@ When we refer to them as technical reference we use verb form: `store`, `compact
 * Package names
 * Log messages, traces
 
-However, when speaking about those or explaining we use `actor` noun form: `store gateway, compactor, ruler, querier`. This includes areas like:
+However, when discussing these components in a more general manner we use the `actor` noun form: `store gateway`, `compactor`, `ruler`, `querier`, `query frontend`. This includes areas like:
 
 * Public communication
 * Documentation
@@ -73,17 +73,19 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
 * Go 1.13.9 or newer installed.
-* For React UI, you will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets
+* For React UI, you will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets.
 
 ### First Steps
 
-It's key to get familiarized with style guide and mechanics of Thanos, especially if your contribution touches more than one
+It's key to get familiarized with the style guide and mechanics of Thanos, especially if your contribution touches more than one
 component of the Thanos distributed system. We recommend:
 
 * Reading the [getting started docs](docs/getting-started.md) and working through them, or alternatively working through the [Thanos tutorial](https://katacoda.com/thanos).
 * Familiarizing yourself with our [coding style guidelines.](docs/contributing/coding-style-guide.md).
 * Familiarizing yourself with the [Makefile](Makefile) commands, for example `format`, `build`, `proto`, `docker` and `test`.
-`make help` will print most of available commands with details.
+`make help` will print most of available commands with relevant details.
+* Spin up a prebuilt dev environment using Gitpod.io
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 
 ### Pull Request Process
 
@@ -140,7 +142,7 @@ Not specifying these variables will result in auth errors against GCS, AWS, Azur
 1. If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
 1. You may merge the Pull Request once you have the sign-off of at least one developer with write access, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
-1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-prs`](https://slack.cncf.io/) channel on our slack for a review!
+1. If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 
 ### Dependency management
 

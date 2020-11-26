@@ -118,13 +118,13 @@ Now that we have setup the Sidecar for one or more Prometheus instances, we want
 
 The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
-Query also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores status.
+Thanos Querier also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores status.
 
-Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI.
+Below, we will set up a Thanos Querier to connect to our Sidecars, and expose its HTTP UI.
 
 ```bash
 thanos query \
-    --http-address 0.0.0.0:19192 \                                # HTTP Endpoint for Query UI
+    --http-address 0.0.0.0:19192 \                                # HTTP Endpoint for Thanos Querier UI
     --store        1.2.3.4:19090 \                                # Static gRPC Store API Address for the query node to query
     --store        1.2.3.5:19090 \                                # Also repeatable
     --store        dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
@@ -149,7 +149,7 @@ global:
 
 In a Kubernetes stateful deployment, the replica label can also be the pod name.
 
-Reload your Prometheus instances, and then, in Query, we will define `replica` as the label we want to enable deduplication to occur on:
+Reload your Prometheus instances, and then, in Thanos Querier, we will define `replica` as the label we want to enable deduplication to occur on:
 
 ```bash
 thanos query \
@@ -170,11 +170,11 @@ The only required communication between nodes is for Thanos Querier to be able t
 The metadata includes the information about time windows and external labels for each node.
 
 There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query.
-These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns+` or `dnssrv+` to have Thanos Query do an `A` or `SRV` lookup to get all required IPs to communicate with.
+These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns+` or `dnssrv+` to have Thanos Querier do an `A` or `SRV` lookup to get all required IPs to communicate with.
 
 ```bash
 thanos query \
-    --http-address 0.0.0.0:19192 \              # Endpoint for Query UI
+    --http-address 0.0.0.0:19192 \              # Endpoint for Thanos Querier UI
     --grpc-address 0.0.0.0:19092 \              # gRPC endpoint for Store API
     --store        1.2.3.4:19090 \              # Static gRPC Store API Address for the query node to query
     --store        1.2.3.5:19090 \              # Also repeatable

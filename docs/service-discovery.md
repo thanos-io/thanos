@@ -10,9 +10,9 @@ Service Discovery (SD) is a vital part of several Thanos components. It allows T
 
 SD is currently used in the following places within Thanos:
 
-* `Thanos Query` needs to know about [StoreAPI](https://github.com/thanos-io/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
-* `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
-* `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts.
+* `Thanos Querier` needs to know about [StoreAPI](https://github.com/thanos-io/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
+* `Thanos Ruler` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
+* `Thanos Ruler` needs to know about `Alertmanagers` HA replicas in order to send alerts.
 
 There are currently several ways to configure SD, described below in more detail:
 
@@ -24,15 +24,15 @@ There are currently several ways to configure SD, described below in more detail
 
 The simplest way to tell a component about a peer is to use a static flag.
 
-### Thanos Query
+### Thanos Querier
 
-The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `Thanos Query` should use.
+The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `Thanos Querier` should use.
 
-### Thanos Rule
+### Thanos Ruler
 
-`Thanos Rule` supports the configuration of `QueryAPI` endpoints using YAML with the `--query.config=<content>` and `--query.config-file=<path>` flags in the `static_configs` section.
+`Thanos Ruler` supports the configuration of `QueryAPI` endpoints using YAML with the `--query.config=<content>` and `--query.config-file=<path>` flags in the `static_configs` section.
 
-`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `static_configs` section.
+`Thanos Ruler` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `static_configs` section.
 
 ## File Service Discovery
 
@@ -62,18 +62,18 @@ Both YAML and JSON files can be used. The format of the files is as follows:
 As a fallback, the file contents are periodically re-read at an interval that can be set using a flag specific to the component as shown below.
 The default value for all File SD re-read intervals is 5 minutes.
 
-### Thanos Query
+### Thanos Querier
 
 The repeatable flag `--store.sd-files=<path>` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
 The `<path>` can be a glob pattern so you can specify several files using a single flag.
 
 The flag `--store.sd-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
 
-### Thanos Rule
+### Thanos Ruler
 
-`Thanos Rule` supports the configuration of `QueryAPI` endpoints using YAML with the `--query.config=<content>` and `--query.config-file=<path>` flags in the `file_sd_configs` section.
+`Thanos Ruler` supports the configuration of `QueryAPI` endpoints using YAML with the `--query.config=<content>` and `--query.config-file=<path>` flags in the `file_sd_configs` section.
 
-`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `file_sd_configs` section.
+`Thanos Ruler` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `file_sd_configs` section.
 
 ## DNS Service Discovery
 
@@ -109,7 +109,7 @@ This configuration will instruct Thanos to discover all endpoints within the `th
 ```
 
 The default interval between DNS lookups is 30s. This interval can be changed using the `store.sd-dns-interval` flag for `StoreAPI`
-configuration in `Thanos Query`, or `query.sd-dns-interval` for `QueryAPI` configuration in `Thanos Rule`.
+configuration in `Thanos Querier`, or `query.sd-dns-interval` for `QueryAPI` configuration in `Thanos Ruler`.
 
 ## Other
 

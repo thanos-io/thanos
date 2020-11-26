@@ -27,7 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	"github.com/thanos-io/thanos/pkg/query"
-	responsecache "github.com/thanos-io/thanos/pkg/queryfrontend/cache"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -58,8 +58,10 @@ var (
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
 	}
-	responseCacheConfigs = map[responsecache.ResponseCacheProvider]interface{}{
-		responsecache.INMEMORY: responsecache.InMemoryResponseCacheConfig{},
+
+	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]interface{}{
+		queryfrontend.INMEMORY:  queryfrontend.InMemoryResponseCacheConfig{},
+		queryfrontend.MEMCACHED: queryfrontend.MemcachedResponseCacheConfig{},
 	}
 )
 
@@ -95,8 +97,8 @@ func main() {
 		}
 	}
 
-	for typ, config := range responseCacheConfigs {
-		if err := generate(responsecache.ResponseCacheConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
+	for typ, config := range queryfrontendCacheConfigs {
+		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
@@ -115,6 +117,7 @@ func main() {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)
 	}
+
 	logger.Log("msg", "success")
 }
 

@@ -59,16 +59,17 @@ var DefaultConfig = Config{
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket          string            `yaml:"bucket"`
-	Endpoint        string            `yaml:"endpoint"`
-	Region          string            `yaml:"region"`
-	AccessKey       string            `yaml:"access_key"`
-	Insecure        bool              `yaml:"insecure"`
-	SignatureV2     bool              `yaml:"signature_version2"`
-	SecretKey       string            `yaml:"secret_key"`
-	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
-	HTTPConfig      HTTPConfig        `yaml:"http_config"`
-	TraceConfig     TraceConfig       `yaml:"trace"`
+	Bucket             string            `yaml:"bucket"`
+	Endpoint           string            `yaml:"endpoint"`
+	Region             string            `yaml:"region"`
+	AccessKey          string            `yaml:"access_key"`
+	Insecure           bool              `yaml:"insecure"`
+	SignatureV2        bool              `yaml:"signature_version2"`
+	SecretKey          string            `yaml:"secret_key"`
+	PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
+	HTTPConfig         HTTPConfig        `yaml:"http_config"`
+	TraceConfig        TraceConfig       `yaml:"trace"`
+	ListObjectsVersion string            `yaml:"list_objects_version"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	PartSize  uint64    `yaml:"part_size"`
 	SSEConfig SSEConfig `yaml:"sse_config"`
@@ -92,6 +93,41 @@ type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
 	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	// Allow upstream callers to inject a round tripper
+	Transport http.RoundTripper `yaml:"-"`
+}
+
+// DefaultTransport - this default transport is based on the Minio
+// DefaultTransport up until the following commit:
+// https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
+// The values have since diverged.
+func DefaultTransport(config Config) *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// A custom ResponseHeaderTimeout was introduced
+		// to cover cases where the tcp connection works but
+		// the server never answers. Defaults to 2 minutes.
+		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
+		// Set this value so that the underlying transport round-tripper
+		// doesn't try to auto decode the body of objects with
+		// content-encoding set to `gzip`.
+		//
+		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
+		DisableCompression: true,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
+	}
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -102,6 +138,7 @@ type Bucket struct {
 	sse             encrypt.ServerSide
 	putUserMetadata map[string]string
 	partSize        uint64
+	listObjectsV1   bool
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -124,69 +161,71 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	return NewBucketWithConfig(logger, config, component)
 }
 
+type overrideSignerType struct {
+	credentials.Provider
+	signerType credentials.SignatureType
+}
+
+func (s *overrideSignerType) Retrieve() (credentials.Value, error) {
+	v, err := s.Provider.Retrieve()
+	if err != nil {
+		return v, err
+	}
+	if !v.SignerType.IsAnonymous() {
+		v.SignerType = s.signerType
+	}
+	return v, nil
+}
+
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	var chain []credentials.Provider
+
+	// TODO(bwplotka): Don't do flags as they won't scale, use actual params like v2, v4 instead
+	wrapCredentialsProvider := func(p credentials.Provider) credentials.Provider { return p }
+	if config.SignatureV2 {
+		wrapCredentialsProvider = func(p credentials.Provider) credentials.Provider {
+			return &overrideSignerType{Provider: p, signerType: credentials.SignatureV2}
+		}
+	}
 
 	if err := validate(config); err != nil {
 		return nil, err
 	}
 	if config.AccessKey != "" {
-		signature := credentials.SignatureV4
-		// TODO(bwplotka): Don't do flags, use actual v2, v4 params.
-		if config.SignatureV2 {
-			signature = credentials.SignatureV2
-		}
-
-		chain = []credentials.Provider{&credentials.Static{
+		chain = []credentials.Provider{wrapCredentialsProvider(&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
 				SecretAccessKey: config.SecretKey,
-				SignerType:      signature,
+				SignerType:      credentials.SignatureV4,
 			},
-		}}
+		})}
 	} else {
 		chain = []credentials.Provider{
-			&credentials.EnvAWS{},
-			&credentials.FileAWSCredentials{},
-			&credentials.IAM{
+			wrapCredentialsProvider(&credentials.EnvAWS{}),
+			wrapCredentialsProvider(&credentials.FileAWSCredentials{}),
+			wrapCredentialsProvider(&credentials.IAM{
 				Client: &http.Client{
 					Transport: http.DefaultTransport,
 				},
-			},
+			}),
 		}
 	}
 
-	client, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:  credentials.NewChainCredentials(chain),
-		Secure: !config.Insecure,
-		Region: config.Region,
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+	// Check if a roundtripper has been set in the config
+	// otherwise build the default transport.
+	var rt http.RoundTripper
+	if config.HTTPConfig.Transport != nil {
+		rt = config.HTTPConfig.Transport
+	} else {
+		rt = DefaultTransport(config)
+	}
 
-			MaxIdleConns:          100,
-			MaxIdleConnsPerHost:   100,
-			IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			// The ResponseHeaderTimeout here is the only change
-			// from the default minio transport, it was introduced
-			// to cover cases where the tcp connection works but
-			// the server never answers. Defaults to 2 minutes.
-			ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-			// Set this value so that the underlying transport round-tripper
-			// doesn't try to auto decode the body of objects with
-			// content-encoding set to `gzip`.
-			//
-			// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-			DisableCompression: true,
-			TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-		},
+	client, err := minio.New(config.Endpoint, &minio.Options{
+		Creds:     credentials.NewChainCredentials(chain),
+		Secure:    !config.Insecure,
+		Region:    config.Region,
+		Transport: rt,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
@@ -227,6 +266,10 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		client.TraceOn(logWriter)
 	}
 
+	if config.ListObjectsVersion != "" && config.ListObjectsVersion != "v1" && config.ListObjectsVersion != "v2" {
+		return nil, errors.Errorf("Initialize s3 client list objects version: Unsupported version %q was provided. Supported values are v1, v2", config.ListObjectsVersion)
+	}
+
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
@@ -234,6 +277,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
 		partSize:        config.PartSize,
+		listObjectsV1:   config.ListObjectsVersion == "v1",
 	}
 	return bkt, nil
 }
@@ -290,6 +334,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	opts := minio.ListObjectsOptions{
 		Prefix:    dir,
 		Recursive: false,
+		UseV1:     b.listObjectsV1,
 	}
 
 	for object := range b.client.ListObjects(ctx, b.name, opts) {

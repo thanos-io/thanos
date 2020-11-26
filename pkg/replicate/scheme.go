@@ -117,10 +117,6 @@ type replicationScheme struct {
 }
 
 type replicationMetrics struct {
-	originIterations  prometheus.Counter
-	originMetaLoads   prometheus.Counter
-	originPartialMeta prometheus.Counter
-
 	blocksAlreadyReplicated prometheus.Counter
 	blocksReplicated        prometheus.Counter
 	objectsReplicated       prometheus.Counter
@@ -128,18 +124,6 @@ type replicationMetrics struct {
 
 func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 	m := &replicationMetrics{
-		originIterations: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_replicate_origin_iterations_total",
-			Help: "Total number of objects iterated over in the origin bucket.",
-		}),
-		originMetaLoads: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_replicate_origin_meta_loads_total",
-			Help: "Total number of meta.json reads in the origin bucket.",
-		}),
-		originPartialMeta: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_replicate_origin_partial_meta_reads_total",
-			Help: "Total number of partial meta reads encountered.",
-		}),
 		blocksAlreadyReplicated: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_replicate_blocks_already_replicated_total",
 			Help: "Total number of blocks skipped due to already being replicated.",
@@ -183,45 +167,20 @@ func newReplicationScheme(
 func (rs *replicationScheme) execute(ctx context.Context) error {
 	availableBlocks := []*metadata.Meta{}
 
-	level.Debug(rs.logger).Log("msg", "scanning blocks available blocks for replication")
+	metas, partials, err := rs.fetcher.Fetch(ctx)
+	if err != nil {
+		return err
+	}
 
-	if err := rs.fromBkt.Iter(ctx, "", func(name string) error {
-		rs.metrics.originIterations.Inc()
+	for id := range partials {
+		level.Info(rs.logger).Log("msg", "block meta not uploaded yet. Skipping.", "block_uuid", id.String())
+	}
 
-		id, ok := thanosblock.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		rs.metrics.originMetaLoads.Inc()
-
-		meta, metaNonExistentOrPartial, err := loadMeta(ctx, rs, id)
-		if metaNonExistentOrPartial {
-			// meta.json is the last file uploaded by a Thanos shipper,
-			// therefore a block may be partially present, but no meta.json
-			// file yet. If this is the case we skip that block for now.
-			rs.metrics.originPartialMeta.Inc()
-			level.Info(rs.logger).Log("msg", "block meta not uploaded yet. Skipping.", "block_uuid", id.String())
-			return nil
-		}
-		if err != nil {
-			return errors.Wrapf(err, "load meta for block %v from origin bucket", id.String())
-		}
-
-		if len(meta.Thanos.Labels) == 0 {
-			// TODO(bwplotka): Allow injecting custom labels as shipper does.
-			level.Info(rs.logger).Log("msg", "block meta without Thanos external labels set. This is not allowed. Skipping.", "block_uuid", id.String())
-			return nil
-		}
-
+	for id, meta := range metas {
 		if rs.blockFilter(meta) {
 			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
 			availableBlocks = append(availableBlocks, meta)
 		}
-
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "iterate over origin bucket")
 	}
 
 	// In order to prevent races in compactions by the target environment, we
@@ -266,6 +225,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 		return errors.Wrap(err, "get meta file from target bucket")
 	}
 
+	// TODO(bwplotka): Allow injecting custom labels as shipper does.
 	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
 	if err != nil {
 		return errors.Wrap(err, "read origin meta file")
@@ -281,7 +241,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 			// If the origin meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
-			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", id.String())
+			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
 			rs.metrics.blocksAlreadyReplicated.Inc()
 
 			return nil
@@ -347,28 +307,4 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 	rs.metrics.objectsReplicated.Inc()
 
 	return nil
-}
-
-// loadMeta loads the meta.json from the origin bucket and returns the meta
-// struct as well as if failed, whether the failure was due to the meta.json
-// not being present or partial. The distinction is important, as if missing or
-// partial, this is just a temporary failure, as the block is still being
-// uploaded to the origin bucket.
-func loadMeta(ctx context.Context, rs *replicationScheme, id ulid.ULID) (*metadata.Meta, bool, error) {
-	metas, _, err := rs.fetcher.Fetch(ctx)
-	if err != nil {
-		switch errors.Cause(err) {
-		default:
-			return nil, false, errors.Wrap(err, "fetch meta")
-		case thanosblock.ErrorSyncMetaNotFound:
-			return nil, true, errors.Wrap(err, "fetch meta")
-		}
-	}
-
-	m, ok := metas[id]
-	if !ok {
-		return nil, true, errors.Wrap(err, "fetch meta")
-	}
-
-	return m, false, nil
 }

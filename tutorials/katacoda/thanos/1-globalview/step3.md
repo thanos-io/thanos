@@ -10,7 +10,7 @@ But before that, let's take a closer look at what the Querier component does:
 ## Querier
 
 The Querier component (also called "Query") is essentially a vanilla PromQL Prometheus engine that fetches the data from any service
-that implements Thanos [StoreAPI](https://thanos.io/tip/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
+that implements Thanos [StoreAPI](https://thanos.io/tip/thanos/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
 This allows compatibility with Grafana or other consumers of Prometheus' API.
 
 Additionally, Querier is capable of deduplicating StoreAPIs that are in the same HA group. We will see how it
@@ -28,7 +28,7 @@ Click below snippet to start the Querier.
 ```
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.13.0 \
+    quay.io/thanos/thanos:v0.17.0 \
     query \
     --http-address 0.0.0.0:29090 \
     --query.replica-label replica \

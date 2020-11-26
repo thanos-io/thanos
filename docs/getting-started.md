@@ -45,7 +45,7 @@ See [release process docs](release-process.md) for details.
 
 Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.14+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+If you want to build Thanos from source you would need a working installation of the Go 1.15+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 
@@ -69,7 +69,7 @@ of the community. Here are ways to get in touch with the community:
 
 ## Maintainers
 
-See [MAINTAINERS.md](/MAINTAINERS.md)
+See [MAINTAINERS.md](/MAINTAINERS.md).
 
 ## Community Thanos Kubernetes Applications
 
@@ -79,13 +79,13 @@ Our friendly community maintains a few different ways of installing Thanos on Ku
 
 * [prometheus-operator](https://github.com/coreos/prometheus-operator): Prometheus operator has support for deploying Prometheus with Thanos
 * [kube-thanos](https://github.com/thanos-io/kube-thanos): Jsonnet based Kubernetes templates.
-* [Community Helm charts](https://hub.helm.sh/charts?q=thanos)
+* [Community Helm charts](https://artifacthub.io/packages/search?ts_query_web=thanos)
 
 If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
-* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
+* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos/1-globalview)
 * [Quick Tutorial](./quick-tutorial.md) on Thanos website.
 
 ## Operating
@@ -130,7 +130,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 ## Integrations
 
-See [Integrations page](./integrations.md)
+See [Integrations page](./integrations.md).
 
 ## Testing Thanos on Single Host
 
@@ -157,4 +157,4 @@ on a single node, we recommend following the port layout:
 | Compact        | HTTP                    | 10912 |
 | Query Frontend | HTTP                    | 10913 |
 
-You can see example one-node setup [here](/scripts/quickstart.sh)
+You can see example one-node setup [here](/scripts/quickstart.sh).

@@ -84,13 +84,13 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
               );
 
             return (
-              <UncontrolledDropdown nav inNavbar>
+              <UncontrolledDropdown key={config.name} nav inNavbar>
                 <DropdownToggle nav caret>
                   {config.name}
                 </DropdownToggle>
                 <DropdownMenu>
                   {config.children.map(c => (
-                    <DropdownItem tag={Link} to={`${pathPrefix}${c.uri}`}>
+                    <DropdownItem key={c.uri} tag={Link} to={`${pathPrefix}${c.uri}`}>
                       {c.name}
                     </DropdownItem>
                   ))}

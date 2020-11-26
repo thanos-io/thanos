@@ -15,6 +15,8 @@ Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documen
 For more information please check out [initial design proposal](../proposals/201812_thanos-remote-receive.md).
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
 
+> NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
+
 # Example
 
 ```bash
@@ -24,6 +26,7 @@ thanos receive \
     --http-address 0.0.0.0:10909 \
     --receive.replication-factor 1 \
     --label "receive_replica=\"0\"" \
+    --label "receive_cluster=\"eu1\"" \
     --receive.local-endpoint 127.0.0.1:10907 \
     --receive.hashrings-file ./data/hashring.json \
     --remote-write.address 0.0.0.0:10908 \
@@ -60,6 +63,8 @@ The example content of `hashring.json`:
     }
 ]
 ```
+With such configuration any receive is listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
+for tenancy and replication.
 
 ## Flags
 
@@ -79,12 +84,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for

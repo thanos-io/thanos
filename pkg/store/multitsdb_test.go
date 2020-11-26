@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -194,7 +195,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 		for s.Next() {
 			l, c := s.At()
 
-			testutil.Equals(t, resps[i].GetSeries().Labels, l)
+			testutil.Equals(t, labelpb.ZLabelsToPromLabels(resps[i].GetSeries().Labels), l)
 			testutil.Equals(t, resps[i].GetSeries().Chunks, c)
 
 			i++

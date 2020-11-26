@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 )
@@ -41,14 +42,14 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error)
+	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, err error)
 }
 
 type StoreStatus struct {
 	Name      string
 	LastCheck time.Time
 	LastError error
-	LabelSets []storepb.LabelSet
+	LabelSets []labels.Labels
 	StoreType component.StoreAPI
 	MinTime   int64
 	MaxTime   int64
@@ -71,16 +72,16 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+		resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 	}
 
-	return resp.LabelSets, resp.MinTime, resp.MaxTime, nil
+	return labelpb.ZLabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime, nil
 }
 
 // StoreSet maintains a set of active stores. It is backed up by Store Specifications that are dynamically fetched on
@@ -172,7 +173,7 @@ type storeRef struct {
 	addr string
 
 	// Meta (can change during runtime).
-	labelSets []storepb.LabelSet
+	labelSets []labels.Labels
 	storeType component.StoreAPI
 	minTime   int64
 	maxTime   int64
@@ -180,7 +181,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime int64) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -189,7 +190,7 @@ func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime i
 	s.maxTime = maxTime
 }
 
-func (s *storeRef) LabelSets() []storepb.LabelSet {
+func (s *storeRef) LabelSets() []labels.Labels {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	return s.labelSets
@@ -204,7 +205,7 @@ func (s *storeRef) TimeRange() (int64, int64) {
 
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, storepb.LabelSetsToString(s.LabelSets()), mint, maxt)
+	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt)
 }
 
 func (s *storeRef) Addr() string {
@@ -327,10 +328,10 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					return
 				}
 				if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-					resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+					resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 				}
 				store.storeType = component.FromProto(resp.StoreType)
-				store.Update(resp.LabelSets, resp.MinTime, resp.MaxTime)
+				store.Update(labelpb.ZLabelSetsToPromLabelSets(resp.LabelSets...), resp.MinTime, resp.MaxTime)
 			}
 
 			mtx.Lock()
@@ -348,15 +349,8 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 func externalLabelsFromStore(store *storeRef) string {
 	tsdbLabelSetStrings := make([]string, 0, len(store.labelSets))
 	for _, ls := range store.labelSets {
-		tsdbLabels := labels.Labels(make([]labels.Label, 0, len(ls.Labels)))
-		for _, l := range ls.Labels {
-			tsdbLabels = append(tsdbLabels, labels.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		sort.Sort(tsdbLabels)
-		tsdbLabelSetStrings = append(tsdbLabelSetStrings, tsdbLabels.String())
+		sort.Sort(ls)
+		tsdbLabelSetStrings = append(tsdbLabelSetStrings, ls.String())
 	}
 	sort.Strings(tsdbLabelSetStrings)
 	return strings.Join(tsdbLabelSetStrings, ",")

@@ -21,7 +21,7 @@ in GitHub as markdown just fine:
 ```md
 
 ---
-title: <titke>
+title: <title>
 type: ...
 weight: <weight>
 menu: <where to link files in>  # This also is referred in permalinks.
@@ -50,7 +50,7 @@ Why?
 * Links works on GitHub
 * Links works on website
 * Markdown plugins works as expected (e.g IDE integrations)
-* We use liche to test links.
+* We use markdown-link-check to test links
 
 ## Sections/Menu
 

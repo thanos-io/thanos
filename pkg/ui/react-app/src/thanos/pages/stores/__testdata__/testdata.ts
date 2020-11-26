@@ -7,24 +7,10 @@ export const sampleAPIResponse: { status: string; data: StoreListProps } = {
       {
         labelSets: [
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_one',
-              },
-            ],
+            monitor: 'prometheus_one',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_one',
-              },
-              {
-                name: 'source',
-                value: 'Thanos',
-              },
-            ],
+            monitor: 'prometheus_two',
           },
         ],
         lastCheck: '2020-06-14T15:17:38.588378384Z',
@@ -46,68 +32,26 @@ export const sampleAPIResponse: { status: string; data: StoreListProps } = {
       {
         labelSets: [
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_one',
-              },
-            ],
+            monitor: 'prometheus_one',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_one',
-              },
-              {
-                name: 'source',
-                value: 'Thanos',
-              },
-            ],
+            monitor: 'prometheus_one',
+            source: 'Thanos',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_one',
-              },
-              {
-                name: 'source',
-                value: 'Thanos1',
-              },
-            ],
+            monitor: 'prometheus_one',
+            source: 'Thanos1',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_two',
-              },
-            ],
+            monitor: 'prometheus_two',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_two',
-              },
-              {
-                name: 'source',
-                value: 'Thanos',
-              },
-            ],
+            monitor: 'prometheus_two',
+            source: 'Thanos',
           },
           {
-            labels: [
-              {
-                name: 'monitor',
-                value: 'prometheus_two',
-              },
-              {
-                name: 'source',
-                value: 'Thanos2',
-              },
-            ],
+            monitor: 'prometheus_two',
+            source: 'Thanos2',
           },
         ],
         lastCheck: '2020-06-14T15:17:38.588246826Z',

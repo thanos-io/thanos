@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 
@@ -55,7 +57,7 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 }
 
 type testStoreMeta struct {
-	extlsetFn func(addr string) []storepb.LabelSet
+	extlsetFn func(addr string) []labelpb.ZLabelSet
 	storeType component.StoreAPI
 }
 
@@ -130,10 +132,10 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	st, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -143,17 +145,17 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		},
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							// This is the labelset exposed by store when having only one sidecar's data.
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},
@@ -161,16 +163,16 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		// We expect this to be duplicated.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},
@@ -195,19 +197,16 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	testutil.Assert(t, len(storeSet.stores) == 2, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 5, len(storeSet.stores)))
 
 	// Sort result to be able to compare.
-	var existingStoreLabels [][][]storepb.Label
+	var existingStoreLabels [][]labels.Labels
 	for _, store := range storeSet.stores {
-		lset := [][]storepb.Label{}
-		for _, ls := range store.LabelSets() {
-			lset = append(lset, ls.Labels)
-		}
+		lset := append([]labels.Labels{}, store.LabelSets()...)
 		existingStoreLabels = append(existingStoreLabels, lset)
 	}
 	sort.Slice(existingStoreLabels, func(i, j int) bool {
 		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])
 	})
 
-	testutil.Equals(t, [][][]storepb.Label{
+	testutil.Equals(t, [][]labels.Labels{
 		{
 			{
 				{Name: "l1", Value: "v2"},

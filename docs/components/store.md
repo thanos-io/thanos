@@ -44,12 +44,12 @@ Flags:
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
-                                 https://thanos.io/tip/tracing.md/#configuration
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -127,7 +127,7 @@ Flags:
                                  Valid duration units are ms, s, m, h, d, w, y.
       --max-time=9999-12-31T23:59:59Z
                                  End of time range limit to serve. Thanos Store
-                                 will serve only blocks, which happened eariler
+                                 will serve only blocks, which happened earlier
                                  than this value. Option can be a constant time
                                  in RFC3339 format or time duration relative to
                                  current time, such as -1d or 2h45m. Valid
@@ -171,6 +171,10 @@ Flags:
                                  before being deleted from bucket. Default is
                                  24h, half of the default value for
                                  --delete-delay on compactor.
+      --store.enable-index-header-lazy-reader
+                                 If true, Store Gateway will lazy memory map
+                                 index-header only once the block is required by
+                                 a query.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
                                  URLs in the bucket web UI interface. Actual
                                  endpoints are still served on / or the
@@ -210,6 +214,10 @@ We recommend having overlapping time ranges with Thanos Sidecar and other Thanos
 Thanos Querier deals with overlapping time series by merging them together.
 
 Filtering is done on a Chunk level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
+
+### External Label Partitioning (Sharding)
+
+Check more [here](https://thanos.io/tip/thanos/sharding.md/).
 
 ## Probes
 

@@ -13,9 +13,9 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 )
 
@@ -57,7 +57,7 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 // If empty resolver type is net.DefaultResolver.
 func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
 	p := &Provider{
-		resolver: NewResolver(resolverType.ToResolver(logger)),
+		resolver: NewResolver(resolverType.ToResolver(logger), logger),
 		resolved: make(map[string][]string),
 		logger:   logger,
 		resolverAddrs: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
@@ -111,7 +111,7 @@ func GetQTypeName(addr string) (qtype string, name string) {
 // defaultPort is used for non-SRV records when a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	resolvedAddrs := map[string][]string{}
-	errs := tsdberrors.MultiError{}
+	errs := errutil.MultiError{}
 
 	for _, addr := range addrs {
 		var resolved []string

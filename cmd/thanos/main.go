@@ -13,8 +13,6 @@ import (
 	"runtime"
 	"syscall"
 
-	gmetrics "github.com/armon/go-metrics"
-	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -23,41 +21,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
 	"go.uber.org/automaxprocs/maxprocs"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
-
-const (
-	logFormatLogfmt = "logfmt"
-	logFormatJson   = "json"
-)
-
-func setupLogger(logLevel, logFormat, debugName string) log.Logger {
-	var lvl level.Option
-	switch logLevel {
-	case "error":
-		lvl = level.AllowError()
-	case "warn":
-		lvl = level.AllowWarn()
-	case "info":
-		lvl = level.AllowInfo()
-	case "debug":
-		lvl = level.AllowDebug()
-	default:
-		panic("unexpected log level")
-	}
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	if logFormat == logFormatJson {
-		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
-	}
-	logger = level.NewFilter(logger, lvl)
-
-	if debugName != "" {
-		logger = log.With(logger, "name", debugName)
-	}
-	return log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-}
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -70,8 +38,8 @@ func main() {
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
 	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
-		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
-	tracingConfig := regCommonTracingFlags(app)
+		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON)
+	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
 
 	registerSidecar(app)
 	registerStore(app)
@@ -83,7 +51,7 @@ func main() {
 	registerQueryFrontend(app)
 
 	cmd, setup := app.Parse()
-	logger := setupLogger(*logLevel, *logFormat, *debugName)
+	logger := logging.NewLogger(*logLevel, *logFormat, *debugName)
 
 	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
 	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
@@ -105,19 +73,6 @@ func main() {
 	// Some packages still use default Register. Replace to have those metrics.
 	prometheus.DefaultRegisterer = metrics
 
-	// Memberlist uses go-metrics.
-	sink, err := gprom.NewPrometheusSink()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
-		os.Exit(1)
-	}
-	gmetricsConfig := gmetrics.DefaultConfig("thanos_" + cmd)
-	gmetricsConfig.EnableRuntimeMetrics = false
-	if _, err = gmetrics.NewGlobal(gmetricsConfig, sink); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
-		os.Exit(1)
-	}
-
 	var g run.Group
 	var tracer opentracing.Tracer
 	// Setup optional tracing.
@@ -135,7 +90,6 @@ func main() {
 		}
 
 		if len(confContentYaml) == 0 {
-			level.Info(logger).Log("msg", "Tracing will be disabled")
 			tracer = client.NoopTracer()
 		} else {
 			tracer, closer, err = client.NewTracer(ctx, logger, metrics, confContentYaml)

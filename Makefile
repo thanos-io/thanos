@@ -5,6 +5,20 @@ DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
+SHA=''
+arch = $(shell uname -m)
+# Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA
+# Update at 2020.07.06
+ifeq ($(arch), x86_64)
+    # amd64
+    SHA="248b7ec76e03e6b4fbb796fc3cdd2f91dad45546a6d7dee61c322475e0e8a08f"
+else ifeq ($(arch), armv8)
+    # arm64
+    SHA="69508e8fdc516eacbacc0379c03c971e3043706cc8211e6bddb35d903edc3628"
+else
+    echo >&2 "only support amd64 or arm64 arch" && exit 1
+endif
+
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
 GOPATH            ?= $(shell go env GOPATH)
@@ -131,7 +145,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" .
+	@docker build -t "thanos" --build-arg SHA=$(SHA) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage
@@ -141,7 +155,7 @@ endif
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
 docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "thanos" .
+	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg SHA=$(SHA) .
 
 .PHONY: docker-push
 docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
@@ -160,13 +174,10 @@ docs: $(EMBEDMD) build
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) $(LICHE) build
+check-docs: $(EMBEDMD) build
 	@echo ">> checking docs generation"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
 	@echo ">> checking links (DISABLED for now)"
-	# TODO(bwplotka): Fix it!
-	#@time $(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com|zoom.us)" --document-root .
-	#@time $(LICHE) --exclude "goreportcard.com|github.com" --document-root . *.md # We have to block checking GitHub as we are often rate-limited from GitHub Actions.
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
@@ -228,6 +239,18 @@ test-e2e: docker
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
 	@go test $(GOTEST_OPTS) ./test/e2e/...
+
+.PHONY: test-e2e-local
+test-e2e-local: ## Runs all thanos e2e tests locally.
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
+test-e2e-local:
+	$(MAKE) test-e2e
+
+.PHONY: quickstart
+quickstart: ## Installs and runs a quickstart example of thanos.
+quickstart: build install-deps
+quickstart:
+	scripts/quickstart.sh
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
@@ -375,3 +398,4 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
+

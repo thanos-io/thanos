@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -211,7 +212,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
+	querierURL := mustURLParse(t, "http://"+q.HTTPEndpoint()+"/"+externalPrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
@@ -240,7 +241,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	querierURL := urlParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
+	querierURL := mustURLParse(t, "http://"+q.HTTPEndpoint()+"/"+routePrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
@@ -367,7 +368,7 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	testutil.Ok(t, err)
 }
 
-func urlParse(t *testing.T, addr string) *url.URL {
+func mustURLParse(t *testing.T, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
 
@@ -383,7 +384,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q, time.Now(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts)
 		if err != nil {
 			return err
 		}
@@ -428,7 +429,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), start, end)
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, mustURLParse(t, "http://"+addr), start, end)
 		if err != nil {
 			return err
 		}
@@ -440,13 +441,14 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 	}))
 }
 
+//nolint:unparam
 func labelValues(t *testing.T, ctx context.Context, addr, label string, start, end int64, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, start, end)
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, mustURLParse(t, "http://"+addr), label, start, end)
 		if err != nil {
 			return err
 		}
@@ -458,13 +460,32 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 	}))
 }
 
+func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, mustURLParse(t, "http://"+addr), matchers, start, end)
+		if err != nil {
+			return err
+		}
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
+}
+
+//nolint:unparam
 func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q, start, end, step, opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q, start, end, step, opts)
 		if err != nil {
 			return err
 		}

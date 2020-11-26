@@ -251,3 +251,12 @@ button.execute-btn {
   display: block;
   font-family: monospace;
 }
+
+.store-filter-wrapper {
+  display: flex;
+}
+
+.store-filter-label {
+  width: 100px;
+  padding: 5px;
+}

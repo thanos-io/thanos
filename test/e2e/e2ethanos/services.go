@@ -23,7 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/queryfrontend/cache"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
 
@@ -406,10 +406,10 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 	return compactor, nil
 }
 
-func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.ResponseCacheConfig) (*e2e.HTTPService, error) {
-	respCacheConfigBytes, err := yaml.Marshal(respCacheConf)
+func NewQueryFrontend(name string, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) (*e2e.HTTPService, error) {
+	cacheConfigBytes, err := yaml.Marshal(cacheConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "generate response cache config file: %v", respCacheConf)
+		return nil, errors.Wrapf(err, "marshal response cache config file: %v", cacheConfig)
 	}
 
 	args := e2e.BuildArgs(map[string]string{
@@ -417,7 +417,7 @@ func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.Res
 		"--http-address":                      ":8080",
 		"--query-frontend.downstream-url":     downstreamURL,
 		"--log.level":                         logLevel,
-		"--query-range.response-cache-config": string(respCacheConfigBytes),
+		"--query-range.response-cache-config": string(cacheConfigBytes),
 	})
 
 	queryFrontend := e2e.NewHTTPService(
@@ -431,4 +431,18 @@ func NewQueryFrontend(name string, downstreamURL string, respCacheConf cache.Res
 	queryFrontend.SetBackoff(defaultBackoffConfig)
 
 	return queryFrontend, nil
+}
+
+func NewMemcached(name string) *e2e.ConcreteService {
+	memcached := e2e.NewConcreteService(
+		fmt.Sprintf("memcached-%s", name),
+		"docker.io/memcached:1.6.3-alpine",
+		e2e.NewCommand("memcached", []string{"-m 1024", "-I 1m", "-c 1024", "-v"}...),
+		nil,
+		11211,
+	)
+	memcached.SetUser(strconv.Itoa(os.Getuid()))
+	memcached.SetBackoff(defaultBackoffConfig)
+
+	return memcached
 }

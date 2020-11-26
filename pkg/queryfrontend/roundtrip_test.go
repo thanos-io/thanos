@@ -16,12 +16,13 @@ import (
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/ingester/client"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -31,19 +32,10 @@ const (
 	day     = 24 * time.Hour
 )
 
-// fakeLimits implements the Cortex queryrange.Limits interface.
-type fakeLimits struct{}
-
-func (l *fakeLimits) MaxQueryLength(_ string) time.Duration {
-	return 7 * 24 * time.Hour
-}
-
-func (l *fakeLimits) MaxQueryParallelism(_ string) int {
-	return 14
-}
-
-func (l *fakeLimits) MaxCacheFreshness(_ string) time.Duration {
-	return time.Minute
+var defaultLimits = &cortexvalidation.Limits{
+	MaxQueryLength:      7 * 24 * time.Hour,
+	MaxQueryParallelism: 14,
+	MaxCacheFreshness:   time.Minute,
 }
 
 // fakeRoundTripper implements the RoundTripper interface.
@@ -77,79 +69,153 @@ func (r *fakeRoundTripper) RoundTrip(h *http.Request) (*http.Response, error) {
 
 // TestRoundTripRetryMiddleware tests the retry middleware.
 func TestRoundTripRetryMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+	testRequest := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
 
-	codec := NewThanosCodec(true)
+	testLabelsRequest := &ThanosLabelsRequest{Path: "/api/v1/labels", Start: 0, End: 2 * hour}
+	testSeriesRequest := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	queryRangeCodec := NewThanosQueryRangeCodec(true)
+	labelsCodec := NewThanosLabelsCodec(true, 2*time.Hour)
 
 	for _, tc := range []struct {
-		name       string
-		maxRetries int
-		req        queryrange.Request
-		fail       bool
-		expected   int
+		name        string
+		maxRetries  int
+		req         queryrange.Request
+		codec       queryrange.Codec
+		handlerFunc func(fail bool) (*int, http.Handler)
+		fail        bool
+		expected    int
 	}{
 		{
 			name:       "not query range, retry won't be triggered 1.",
 			maxRetries: 100,
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query",
 				Start: 0,
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			expected: 1,
+			codec:       queryRangeCodec,
+			handlerFunc: promqlResults,
+			expected:    1,
 		},
 		{
-			name:       "not query range, retry won't be triggered 2.",
-			maxRetries: 100,
-			req: &ThanosRequest{
-				Path:  "/api/v1/labels",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
-			expected: 1,
+			name:        "no retry, get counter value 1",
+			maxRetries:  0,
+			req:         testRequest,
+			codec:       queryRangeCodec,
+			handlerFunc: promqlResults,
+			fail:        true,
+			expected:    1,
 		},
 		{
-			name:       "no retry, get counter value 1",
-			maxRetries: 0,
-			req:        testRequest,
-			fail:       true,
-			expected:   1,
+			name:        "retry set to 1",
+			maxRetries:  1,
+			req:         testRequest,
+			codec:       queryRangeCodec,
+			handlerFunc: promqlResults,
+			fail:        true,
+			expected:    1,
 		},
 		{
-			name:       "retry set to 1",
-			maxRetries: 1,
-			req:        testRequest,
-			fail:       true,
-			expected:   1,
+			name:        "retry set to 3",
+			maxRetries:  3,
+			fail:        true,
+			req:         testRequest,
+			codec:       queryRangeCodec,
+			handlerFunc: promqlResults,
+			expected:    3,
 		},
 		{
-			name:       "retry set to 3",
-			maxRetries: 3,
-			fail:       true,
-			req:        testRequest,
-			expected:   3,
+			name:        "labels requests: no retry, get counter value 1",
+			maxRetries:  0,
+			req:         testLabelsRequest,
+			codec:       labelsCodec,
+			handlerFunc: labelsResults,
+			fail:        true,
+			expected:    1,
+		},
+		{
+			name:        "labels requests: retry set to 1",
+			maxRetries:  1,
+			req:         testLabelsRequest,
+			codec:       labelsCodec,
+			handlerFunc: labelsResults,
+			fail:        true,
+			expected:    1,
+		},
+		{
+			name:        "labels requests: retry set to 3",
+			maxRetries:  3,
+			fail:        true,
+			req:         testLabelsRequest,
+			codec:       labelsCodec,
+			handlerFunc: labelsResults,
+			expected:    3,
+		},
+		{
+			name:        "series requests: no retry, get counter value 1",
+			maxRetries:  0,
+			req:         testSeriesRequest,
+			codec:       labelsCodec,
+			handlerFunc: seriesResults,
+			fail:        true,
+			expected:    1,
+		},
+		{
+			name:        "series requests: retry set to 1",
+			maxRetries:  1,
+			req:         testSeriesRequest,
+			codec:       labelsCodec,
+			handlerFunc: seriesResults,
+			fail:        true,
+			expected:    1,
+		},
+		{
+			name:        "series requests: retry set to 3",
+			maxRetries:  3,
+			fail:        true,
+			req:         testSeriesRequest,
+			codec:       labelsCodec,
+			handlerFunc: seriesResults,
+			expected:    3,
 		},
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
-				day, tc.maxRetries, nil, log.NewNopLogger())
+			tpw, err := NewTripperware(
+				Config{
+					QueryRangeConfig: QueryRangeConfig{
+						MaxRetries:             tc.maxRetries,
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: day,
+					},
+					LabelsConfig: LabelsConfig{
+						MaxRetries:             tc.maxRetries,
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: day,
+					},
+				}, nil, log.NewNopLogger(),
+			)
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
 			testutil.Ok(t, err)
-			res, handler := promqlResults(tc.fail)
+			res, handler := tc.handlerFunc(tc.fail)
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := codec.EncodeRequest(ctx, tc.req)
+			httpReq, err := tc.codec.EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -163,82 +229,139 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 
 // TestRoundTripSplitIntervalMiddleware tests the split interval middleware.
 func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+	testRequest := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query_range",
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
 	}
 
-	codec := NewThanosCodec(true)
+	testLabelsRequest := &ThanosLabelsRequest{
+		Path:  "/api/v1/labels",
+		Start: 0,
+		End:   2 * hour,
+	}
+
+	testSeriesRequest := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	queryRangeCodec := NewThanosQueryRangeCodec(true)
+	labelsCodec := NewThanosLabelsCodec(true, 2*time.Hour)
 
 	for _, tc := range []struct {
 		name          string
 		splitInterval time.Duration
 		req           queryrange.Request
+		codec         queryrange.Codec
+		handlerFunc   func(bool) (*int, http.Handler)
 		expected      int
 	}{
 		{
 			name: "non query range request won't be split 1",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query",
 				Start: 0,
 				End:   2 * hour,
 				Step:  10 * seconds,
 			},
-			splitInterval: time.Hour,
-			expected:      1,
-		},
-		{
-			name: "non query range request won't be split 2",
-			req: &ThanosRequest{
-				Path:  "/api/v1/labels",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
+			handlerFunc:   promqlResults,
+			codec:         queryRangeCodec,
 			splitInterval: time.Hour,
 			expected:      1,
 		},
 		{
 			name:          "split interval == 0, disable split",
 			req:           testRequest,
+			handlerFunc:   promqlResults,
+			codec:         queryRangeCodec,
 			splitInterval: 0,
 			expected:      1,
 		},
 		{
 			name:          "won't be split. Interval == time range",
 			req:           testRequest,
+			handlerFunc:   promqlResults,
+			codec:         queryRangeCodec,
 			splitInterval: 2 * time.Hour,
 			expected:      1,
 		},
 		{
 			name:          "won't be split. Interval > time range",
 			req:           testRequest,
+			handlerFunc:   promqlResults,
+			codec:         queryRangeCodec,
 			splitInterval: day,
 			expected:      1,
 		},
 		{
 			name:          "split to 2 requests",
 			req:           testRequest,
+			handlerFunc:   promqlResults,
+			codec:         queryRangeCodec,
+			splitInterval: 1 * time.Hour,
+			expected:      2,
+		},
+		{
+			name:          "labels request won't be split",
+			req:           testLabelsRequest,
+			handlerFunc:   labelsResults,
+			codec:         labelsCodec,
+			splitInterval: day,
+			expected:      1,
+		},
+		{
+			name:          "labels request split to 2",
+			req:           testLabelsRequest,
+			handlerFunc:   labelsResults,
+			codec:         labelsCodec,
+			splitInterval: 1 * time.Hour,
+			expected:      2,
+		},
+		{
+			name:          "series request won't be split",
+			req:           testSeriesRequest,
+			handlerFunc:   seriesResults,
+			codec:         labelsCodec,
+			splitInterval: day,
+			expected:      1,
+		},
+		{
+			name:          "series request split to 2",
+			req:           testSeriesRequest,
+			handlerFunc:   seriesResults,
+			codec:         labelsCodec,
 			splitInterval: 1 * time.Hour,
 			expected:      2,
 		},
 	} {
 
 		t.Run(tc.name, func(t *testing.T) {
-			tpw, err := NewTripperWare(&fakeLimits{}, nil, codec, nil,
-				tc.splitInterval, 0, nil, log.NewNopLogger())
+			tpw, err := NewTripperware(
+				Config{
+					QueryRangeConfig: QueryRangeConfig{
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: tc.splitInterval,
+					},
+					LabelsConfig: LabelsConfig{
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: tc.splitInterval,
+					},
+				}, nil, log.NewNopLogger(),
+			)
 			testutil.Ok(t, err)
 
 			rt, err := newFakeRoundTripper()
 			testutil.Ok(t, err)
 			defer rt.Close()
-			res, handler := promqlResults(false)
+			res, handler := tc.handlerFunc(false)
 			rt.setHandler(handler)
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := codec.EncodeRequest(ctx, tc.req)
+			httpReq, err := tc.codec.EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -246,13 +369,12 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 
 			testutil.Equals(t, tc.expected, *res)
 		})
-
 	}
 }
 
-// TestRoundTripCacheMiddleware tests the cache middleware.
-func TestRoundTripCacheMiddleware(t *testing.T) {
-	testRequest := &ThanosRequest{
+// TestRoundTripQueryRangeCacheMiddleware tests the cache middleware.
+func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
+	testRequest := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -261,7 +383,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Non query range request, won't be cached.
-	testRequestInstant := &ThanosRequest{
+	testRequestInstant := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query",
 		Start: 0,
 		End:   2 * hour,
@@ -270,7 +392,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// but still in the same downsampling level, so it will be cached in this case.
-	testRequestSameLevelDownsampling := &ThanosRequest{
+	testRequestSameLevelDownsampling := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -280,7 +402,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 
 	// Same query params as testRequest, different maxSourceResolution
 	// and downsampling level so it won't be cached in this case.
-	testRequestHigherLevelDownsampling := &ThanosRequest{
+	testRequestHigherLevelDownsampling := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
@@ -289,13 +411,13 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 
 	// Same query params as testRequest, but with storeMatchers
-	testRequestWithStoreMatchers := &ThanosRequest{
+	testRequestWithStoreMatchers := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * seconds,
-		StoreMatchers:       [][]storepb.LabelMatcher{{storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}}},
+		StoreMatchers:       [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{
@@ -309,11 +431,15 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		},
 	}
 
-	codec := NewThanosCodec(true)
-
-	now := time.Now()
-	tpw, err := NewTripperWare(&fakeLimits{}, cacheConf, codec, queryrange.PrometheusResponseExtractor{},
-		day, 0, nil, log.NewNopLogger())
+	tpw, err := NewTripperware(
+		Config{
+			QueryRangeConfig: QueryRangeConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
+		}, nil, log.NewNopLogger(),
+	)
 	testutil.Ok(t, err)
 
 	rt, err := newFakeRoundTripper()
@@ -337,20 +463,20 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 5},
 		{
 			name: "request but will be partitioned",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 				Step:  10 * seconds,
 			},
-			expected: 6,
+			expected: 7,
 		},
 		{
 			name: "same query as the previous one",
-			req: &ThanosRequest{
+			req: &ThanosQueryRangeRequest{
 				Path:  "/api/v1/query_range",
-				Start: timestamp.FromTime(now.Add(-time.Hour)),
-				End:   timestamp.FromTime(now.Add(time.Hour)),
+				Start: 0,
+				End:   25 * hour,
 				Step:  10 * seconds,
 			},
 			expected: 7,
@@ -360,7 +486,7 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := codec.EncodeRequest(ctx, tc.req)
+			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
 
 			_, err = tpw(rt).RoundTrip(httpReq)
@@ -372,7 +498,192 @@ func TestRoundTripCacheMiddleware(t *testing.T) {
 	}
 }
 
-// promqlResults is a mock handler used to test cache middleware.
+// TestRoundTripLabelsCacheMiddleware tests the cache middleware for labels requests.
+func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
+	testRequest := &ThanosLabelsRequest{
+		Path:  "/api/v1/labels",
+		Start: 0,
+		End:   2 * hour,
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosLabelsRequest{
+		Path:          "/api/v1/labels",
+		Start:         0,
+		End:           2 * hour,
+		StoreMatchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	testLabelValuesRequestFoo := &ThanosLabelsRequest{
+		Path:  "/api/v1/label/foo/values",
+		Start: 0,
+		End:   2 * hour,
+		Label: "foo",
+	}
+
+	testLabelValuesRequestBar := &ThanosLabelsRequest{
+		Path:  "/api/v1/label/bar/values",
+		Start: 0,
+		End:   2 * hour,
+		Label: "bar",
+	}
+
+	cacheConf := &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: "1MiB",
+				MaxSizeItems: 1000,
+				Validity:     time.Hour,
+			},
+		},
+	}
+
+	tpw, err := NewTripperware(
+		Config{
+			LabelsConfig: LabelsConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
+		}, nil, log.NewNopLogger(),
+	)
+	testutil.Ok(t, err)
+
+	rt, err := newFakeRoundTripper()
+	testutil.Ok(t, err)
+	defer rt.Close()
+	res, handler := labelsResults(false)
+	rt.setHandler(handler)
+
+	for _, tc := range []struct {
+		name             string
+		req              queryrange.Request
+		handlerAndResult func() (*int, http.Handler)
+		expected         int
+	}{
+		{name: "first request", req: testRequest, expected: 1},
+		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 2},
+		{name: "label values request label name foo", req: testLabelValuesRequestFoo, expected: 3},
+		{name: "same label values query, use cache", req: testLabelValuesRequestFoo, expected: 3},
+		{name: "label values request different label", req: testLabelValuesRequestBar, expected: 4},
+		{
+			name: "request but will be partitioned",
+			req: &ThanosLabelsRequest{
+				Path:  "/api/v1/labels",
+				Start: 0,
+				End:   25 * hour,
+			},
+			expected: 6,
+		},
+		{
+			name: "same query as the previous one",
+			req: &ThanosLabelsRequest{
+				Path:  "/api/v1/labels",
+				Start: 0,
+				End:   25 * hour,
+			},
+			expected: 6,
+		},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
+			testutil.Ok(t, err)
+
+			_, err = tpw(rt).RoundTrip(httpReq)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expected, *res)
+		})
+
+	}
+}
+
+// TestRoundTripSeriesCacheMiddleware tests the cache middleware for series requests.
+func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
+	testRequest := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	// Different matchers set with the first request.
+	testRequest2 := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "baz")}},
+	}
+
+	// Same query params as testRequest, but with storeMatchers
+	testRequestWithStoreMatchers := &ThanosLabelsRequest{
+		Path:          "/api/v1/series",
+		Start:         0,
+		End:           2 * hour,
+		StoreMatchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
+	cacheConf := &queryrange.ResultsCacheConfig{
+		CacheConfig: cortexcache.Config{
+			EnableFifoCache: true,
+			Fifocache: cortexcache.FifoCacheConfig{
+				MaxSizeBytes: "1MiB",
+				MaxSizeItems: 1000,
+				Validity:     time.Hour,
+			},
+		},
+	}
+
+	tpw, err := NewTripperware(
+		Config{
+			LabelsConfig: LabelsConfig{
+				Limits:                 defaultLimits,
+				ResultsCacheConfig:     cacheConf,
+				SplitQueriesByInterval: day,
+			},
+		}, nil, log.NewNopLogger(),
+	)
+	testutil.Ok(t, err)
+
+	rt, err := newFakeRoundTripper()
+	testutil.Ok(t, err)
+	defer rt.Close()
+	res, handler := seriesResults(false)
+	rt.setHandler(handler)
+
+	for _, tc := range []struct {
+		name             string
+		req              queryrange.Request
+		handlerAndResult func() (*int, http.Handler)
+		expected         int
+	}{
+		{name: "first request", req: testRequest, expected: 1},
+		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
+		{name: "different series request, not use cache", req: testRequest2, expected: 2},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 3},
+	} {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
+			testutil.Ok(t, err)
+
+			_, err = tpw(rt).RoundTrip(httpReq)
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expected, *res)
+		})
+
+	}
+}
+
+// promqlResults is a mock handler used to test split and cache middleware.
 // Modified from Loki https://github.com/grafana/loki/blob/master/pkg/querier/queryrange/roundtrip_test.go#L547.
 func promqlResults(fail bool) (*int, http.Handler) {
 	count := 0
@@ -391,6 +702,54 @@ func promqlResults(fail bool) (*int, http.Handler) {
 				},
 			},
 		},
+	}
+
+	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+		defer lock.Unlock()
+
+		// Set fail in the response code to test retry.
+		if fail {
+			w.WriteHeader(500)
+		}
+		if err := json.NewEncoder(w).Encode(q); err != nil {
+			panic(err)
+		}
+		count++
+	})
+}
+
+//labelsResults is a mock handler used to test split and cache middleware for label names and label values requests.
+func labelsResults(fail bool) (*int, http.Handler) {
+	count := 0
+	var lock sync.Mutex
+	q := ThanosLabelsResponse{
+		Status: "success",
+		Data:   []string{"__name__", "job"},
+	}
+
+	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+		defer lock.Unlock()
+
+		// Set fail in the response code to test retry.
+		if fail {
+			w.WriteHeader(500)
+		}
+		if err := json.NewEncoder(w).Encode(q); err != nil {
+			panic(err)
+		}
+		count++
+	})
+}
+
+// seriesResults is a mock handler used to test split and cache middleware for series requests.
+func seriesResults(fail bool) (*int, http.Handler) {
+	count := 0
+	var lock sync.Mutex
+	q := ThanosSeriesResponse{
+		Status: "success",
+		Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
 
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

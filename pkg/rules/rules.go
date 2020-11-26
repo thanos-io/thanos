@@ -8,9 +8,9 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 var _ UnaryClient = &GRPCClient{}
@@ -113,14 +113,13 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
-	labels := r.GetLabels()
-	newLabels := make([]storepb.Label, 0, len(labels))
-	for _, l := range labels {
+	lbls := r.GetLabels()
+	newLabels := make(labels.Labels, 0, len(lbls))
+	for _, l := range lbls {
 		if _, ok := replicaLabels[l.Name]; !ok {
 			newLabels = append(newLabels, l)
 		}
 	}
-
 	r.SetLabels(newLabels)
 }
 

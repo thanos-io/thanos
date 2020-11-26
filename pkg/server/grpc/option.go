@@ -6,16 +6,22 @@ package grpc
 import (
 	"crypto/tls"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 const UnixSocket = "/tmp/test.sock"
 
 type options struct {
+	registerServerFuncs []registerServerFunc
+
 	gracePeriod time.Duration
 	listen      string
 	network     string
 
 	tlsConfig *tls.Config
+
+	grpcOpts []grpc.ServerOption
 }
 
 // Option overrides behavior of Server.
@@ -27,6 +33,24 @@ type optionFunc func(*options)
 
 func (f optionFunc) apply(o *options) {
 	f(o)
+}
+
+type registerServerFunc func(s *grpc.Server)
+
+// WithGRPCServer calls the passed gRPC registration functions on the created
+// grpc.Server.
+func WithServer(f registerServerFunc) Option {
+	return optionFunc(func(o *options) {
+		o.registerServerFuncs = append(o.registerServerFuncs, f)
+	})
+}
+
+// WithGRPCServerOption allows adding raw grpc.ServerOption's to the
+// instantiated gRPC server.
+func WithGRPCServerOption(opt grpc.ServerOption) Option {
+	return optionFunc(func(o *options) {
+		o.grpcOpts = append(o.grpcOpts, opt)
+	})
 }
 
 // WithGracePeriod sets shutdown grace period for gRPC server.

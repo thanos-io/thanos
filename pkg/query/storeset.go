@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -38,7 +38,7 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
+	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, storeType component.StoreAPI, err error)
 
 	// StrictStatic returns true if the StoreAPI has been statically defined and it is under a strict mode.
 	StrictStatic() bool
@@ -69,7 +69,7 @@ type StoreStatus struct {
 	Name      string             `json:"name"`
 	LastCheck time.Time          `json:"lastCheck"`
 	LastError *stringError       `json:"lastError"`
-	LabelSets []storepb.LabelSet `json:"labelSets"`
+	LabelSets []labels.Labels    `json:"labelSets"`
 	StoreType component.StoreAPI `json:"-"`
 	MinTime   int64              `json:"minTime"`
 	MaxTime   int64              `json:"maxTime"`
@@ -98,16 +98,20 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, Type component.StoreAPI, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, Type component.StoreAPI, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+		resp.LabelSets = []labelpb.ZLabelSet{{Labels: resp.Labels}}
 	}
 
-	return resp.LabelSets, resp.MinTime, resp.MaxTime, component.FromProto(resp.StoreType), nil
+	labelSets = make([]labels.Labels, 0, len(resp.LabelSets))
+	for _, ls := range resp.LabelSets {
+		labelSets = append(labelSets, ls.PromLabels())
+	}
+	return labelSets, resp.MinTime, resp.MaxTime, component.FromProto(resp.StoreType), nil
 }
 
 // storeSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
@@ -242,7 +246,7 @@ type storeRef struct {
 	rule rulespb.RulesClient
 
 	// Meta (can change during runtime).
-	labelSets []storepb.LabelSet
+	labelSets []labels.Labels
 	storeType component.StoreAPI
 	minTime   int64
 	maxTime   int64
@@ -250,7 +254,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime int64, storeType component.StoreAPI) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -258,6 +262,7 @@ func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime i
 	s.labelSets = labelSets
 	s.minTime = minTime
 	s.maxTime = maxTime
+	s.rule = rule
 }
 
 func (s *storeRef) StoreType() component.StoreAPI {
@@ -274,58 +279,22 @@ func (s *storeRef) HasRulesAPI() bool {
 	return s.rule != nil
 }
 
-func (s *storeRef) LabelSets() []storepb.LabelSet {
+func (s *storeRef) LabelSets() []labels.Labels {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	labelSet := make([]storepb.LabelSet, 0, len(s.labelSets))
+	labelSet := make([]labels.Labels, 0, len(s.labelSets))
 	for _, ls := range s.labelSets {
-		if len(ls.Labels) == 0 {
+		if len(ls) == 0 {
 			continue
 		}
 		// Compatibility label for Queriers pre 0.8.1. Filter it out now.
-		if ls.Labels[0].Name == store.CompatibilityTypeLabelName {
+		if ls[0].Name == store.CompatibilityTypeLabelName {
 			continue
 		}
-
-		lbls := make([]storepb.Label, 0, len(ls.Labels))
-		for _, l := range ls.Labels {
-			lbls = append(lbls, storepb.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		labelSet = append(labelSet, storepb.LabelSet{Labels: lbls})
+		labelSet = append(labelSet, ls.Copy())
 	}
 	return labelSet
-}
-
-func (s *storeRef) LabelSetsString() string {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	labelSet := make([]string, 0, len(s.labelSets))
-	for _, ls := range s.labelSets {
-		if len(ls.Labels) == 0 {
-			continue
-		}
-		// Compatibility label for Queriers pre 0.8.1. Filter it out now.
-		if ls.Labels[0].Name == store.CompatibilityTypeLabelName {
-			continue
-		}
-
-		lbls := labels.Labels(make([]labels.Label, 0, len(ls.Labels)))
-		for _, l := range ls.Labels {
-			lbls = append(lbls, labels.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		sort.Sort(lbls)
-		labelSet = append(labelSet, lbls.String())
-	}
-	sort.Strings(labelSet)
-	return strings.Join(labelSet, ",")
 }
 
 func (s *storeRef) TimeRange() (mint int64, maxt int64) {
@@ -337,7 +306,7 @@ func (s *storeRef) TimeRange() (mint int64, maxt int64) {
 
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, storepb.LabelSetsToString(s.LabelSets()), mint, maxt)
+	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt)
 }
 
 func (s *storeRef) Addr() string {
@@ -379,14 +348,14 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// Close stores that where not active this time (are not in active stores map).
 	for addr, st := range stores {
 		if _, ok := activeStores[addr]; ok {
-			stats[st.StoreType()][st.LabelSetsString()]++
+			stats[st.StoreType()][labelpb.PromLabelSetsToString(st.LabelSets())]++
 			continue
 		}
 
 		st.Close()
 		delete(stores, addr)
 		s.updateStoreStatus(st, errors.New(unhealthyStoreMessage))
-		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr, "extLset", st.LabelSetsString())
+		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr, "extLset", labelpb.PromLabelSetsToString(st.LabelSets()))
 	}
 
 	// Add stores that are not yet in stores.
@@ -395,7 +364,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 			continue
 		}
 
-		extLset := st.LabelSetsString()
+		extLset := labelpb.PromLabelSetsToString(st.LabelSets())
 
 		// All producers should have unique external labels. While this does not check only StoreAPIs connected to
 		// this querier this allows to notify early user about misconfiguration. Warn only. This is also detectable from metric.
@@ -406,7 +375,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 			level.Warn(s.logger).Log("msg", "found duplicate storeAPI producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
 		}
-		stats[st.StoreType()][st.LabelSetsString()]++
+		stats[st.StoreType()][extLset]++
 
 		stores[addr] = st
 		s.updateStoreStatus(st, nil)
@@ -468,12 +437,13 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				var rule rulespb.RulesClient
-				if _, ok := ruleAddrSet[addr]; ok {
-					rule = rulespb.NewRulesClient(conn)
-				}
 
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, rule: rule, cc: conn, addr: addr, logger: s.logger}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
+			}
+
+			var rule rulespb.RulesClient
+			if _, ok := ruleAddrSet[addr]; ok {
+				rule = rulespb.NewRulesClient(st.cc)
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
@@ -500,7 +470,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			s.updateStoreStatus(st, nil)
-			st.Update(labelSets, minTime, maxTime, storeType)
+			st.Update(labelSets, minTime, maxTime, storeType, rule)
 
 			mtx.Lock()
 			defer mtx.Unlock()

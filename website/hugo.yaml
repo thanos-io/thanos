@@ -16,7 +16,6 @@ uglyURLs: false
 canonifyURLs: true
 relativeURL: true
 
-
 # NOTE: Hugo is expected to run from `website`
 contentDir: "docs-pre-processed"
 archetypeDir: "archetypes"
@@ -27,6 +26,8 @@ staticDir: "static"
 permalinks:
   # Generate those for every file.
   tip: "/:sections/:filename.md"
+  v0.16: "/:sections/:filename.md"
+  v0.17: "/:sections/:filename.md"
 
 params:
   SlackInvite: "https://slack.cncf.io"
@@ -38,3 +39,14 @@ params:
   DockerHubRepository: "thanos"
   TwitterHandle: "ThanosMetrics"
   Description: "Highly available Prometheus setup with long term storage capabilities."
+
+# TOC to include h1 - h4
+markup:
+  tableOfContents:
+    endLevel: 4
+    ordered: false
+    startLevel: 1
+  goldmark:
+    renderer:
+      # We want to be able to put our own HTML.
+      unsafe: true

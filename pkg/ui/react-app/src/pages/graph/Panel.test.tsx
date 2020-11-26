@@ -21,6 +21,7 @@ const defaultProps = {
     maxSourceResolution: 'auto',
     useDeduplication: true,
     usePartialResponse: false,
+    storeMatches: [],
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -37,6 +38,8 @@ const defaultProps = {
   onExecuteQuery: (): void => {
     // Do nothing.
   },
+  stores: [],
+  enableMetricAutocomplete: true,
 };
 
 describe('Panel', () => {
@@ -96,6 +99,7 @@ describe('Panel', () => {
       maxSourceResolution: 'auto',
       useDeduplication: true,
       usePartialResponse: false,
+      storeMatches: [],
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

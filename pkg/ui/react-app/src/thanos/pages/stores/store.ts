@@ -1,11 +1,4 @@
-export interface Label {
-  name: string;
-  value: string;
-}
-
-export interface Labels {
-  labels: Label[];
-}
+export type Labels = Record<string, string>;
 
 export interface Store {
   name: string;
