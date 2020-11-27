@@ -105,6 +105,7 @@ type bucketStoreMetrics struct {
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
 	queriesDropped        prometheus.Counter
+	queriesSeriesDropped  prometheus.Counter
 	seriesRefetches       prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -189,6 +190,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.queriesDropped = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_queries_dropped_total",
 		Help: "Number of queries that were dropped due to the sample limit.",
+	})
+	m.queriesSeriesDropped = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_queries_series_dropped_total",
+		Help: "Number of queries that were dropped due to the series limit.",
 	})
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
@@ -276,6 +281,8 @@ type BucketStore struct {
 
 	// chunksLimiterFactory creates a new limiter used to limit the number of chunks fetched by each Series() call.
 	chunksLimiterFactory ChunksLimiterFactory
+	// seriesLimiterFactory creates a new limiter used to limit the number of touch series by each Series() call.
+	seriesLimiterFactory SeriesLimiterFactory
 	partitioner          partitioner
 
 	filterConfig             *FilterConfig
@@ -300,6 +307,7 @@ func NewBucketStore(
 	queryGate gate.Gate,
 	maxChunkPoolBytes uint64,
 	chunksLimiterFactory ChunksLimiterFactory,
+	seriesLimiterFactory SeriesLimiterFactory,
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
@@ -333,6 +341,7 @@ func NewBucketStore(
 		filterConfig:                filterConfig,
 		queryGate:                   queryGate,
 		chunksLimiterFactory:        chunksLimiterFactory,
+		seriesLimiterFactory:        seriesLimiterFactory,
 		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
@@ -683,6 +692,7 @@ func blockSeries(
 	matchers []*labels.Matcher,
 	req *storepb.SeriesRequest,
 	chunksLimiter ChunksLimiter,
+	seriesLimiter SeriesLimiter,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -691,6 +701,11 @@ func blockSeries(
 
 	if len(ps) == 0 {
 		return storepb.EmptySeriesSet(), indexr.stats, nil
+	}
+
+	// Reserve seriesLimiter
+	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
+		return nil, nil, errors.Wrap(err, "exceeded series limit")
 	}
 
 	// Preload all series index data.
@@ -887,6 +902,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		resHints         = &hintspb.SeriesResponseHints{}
 		reqBlockMatchers []*labels.Matcher
 		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped)
+		seriesLimiter    = s.seriesLimiterFactory(s.metrics.queriesSeriesDropped)
 	)
 
 	if req.Hints != nil {
@@ -942,6 +958,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					chunksLimiter,
+					seriesLimiter,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

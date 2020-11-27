@@ -67,6 +67,9 @@ func registerStore(app *extkingpin.App) {
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
+	maxTouchSeriesCount := cmd.Flag("store.grpc.touch-series-limit",
+		"Maximum amount of touch series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
 
@@ -136,6 +139,7 @@ func registerStore(app *extkingpin.App) {
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
+			uint64(*maxTouchSeriesCount),
 			*maxConcurrent,
 			component.Store,
 			debugLogging,
@@ -173,7 +177,7 @@ func runStore(
 	grpcGracePeriod time.Duration,
 	grpcCert, grpcKey, grpcClientCA, httpBindAddr string,
 	httpGracePeriod time.Duration,
-	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount uint64,
+	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount, maxSeriesCount uint64,
 	maxConcurrency int,
 	component component.Component,
 	verbose bool,
@@ -303,6 +307,7 @@ func runStore(
 		queriesGate,
 		chunkPoolSizeBytes,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
+		store.NewSeriesLimiterFactory(maxSeriesCount),
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
