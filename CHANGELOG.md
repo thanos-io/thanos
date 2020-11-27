@@ -16,7 +16,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
 - [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
-
+- [#3509](https://github.com/thanos-io/thanos/pull/3509) Store: Added touch series limit
 ### Fixed
 
 -
