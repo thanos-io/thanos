@@ -257,14 +257,6 @@ install-deps: ## Installs dependencies for integration tests. It installs suppor
 install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
 
-.PHONY: docker-ci
-docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
-docker-ci: install-deps
-	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
-	@echo ">> pushing thanos-ci image"
-	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
-	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
-
 .PHONY: check-git
 check-git:
 ifneq ($(GIT),)
