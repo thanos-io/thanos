@@ -703,7 +703,7 @@ func blockSeries(
 		return storepb.EmptySeriesSet(), indexr.stats, nil
 	}
 
-	// Reserve seriesLimiter
+	// Reserve series seriesLimiter
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
 		return nil, nil, errors.Wrap(err, "exceeded series limit")
 	}

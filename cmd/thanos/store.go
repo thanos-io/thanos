@@ -67,7 +67,7 @@ func registerStore(app *extkingpin.App) {
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
-	maxTouchSeriesCount := cmd.Flag("store.grpc.touch-series-limit",
+	maxTouchedSeriesCount := cmd.Flag("store.grpc.touched-series-limit",
 		"Maximum amount of touch series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").Uint()
 
@@ -139,7 +139,7 @@ func registerStore(app *extkingpin.App) {
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
-			uint64(*maxTouchSeriesCount),
+			uint64(*maxTouchedSeriesCount),
 			*maxConcurrent,
 			component.Store,
 			debugLogging,
