@@ -45,15 +45,16 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 Current object storage client implementations:
 
-| Provider             | Maturity | Aimed For | Auto-tested on CI | Maintainers |
-|----------------------|-------------------|-----------|---------------|
-| [Google Cloud Storage](./storage.md#gcs) | Stable | Production Usage | yes | @bwplotka   |
-| [AWS/S3](./storage.md#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable | Production Usage | yes | @bwplotka  |
-| [Azure Storage Account](./storage.md#azure) | Stable| Production Usage | no | @vglafirov   |
-| [OpenStack Swift](./storage.md#openstack-swift) | Beta (working PoC) | Production Usage  | yes  | @sudhi-vm |
-| [Tencent COS](./storage.md#tencent-cos) | Beta | Production Usage  | no | @jojohappy |
-| [AliYun OSS](./storage.md#aliyun-oss) | Beta | Production Usage | no  | @shaulboozhiao,@wujinhu |
-| [Local Filesystem](./storage.md#filesystem) | Stable | Testing and Demo only | yes | @bwplotka |
+| Provider                                                                                           | Maturity           | Aimed For             | Auto-tested on CI | Maintainers             |
+| -------------------------------------------------------------------------------------------------- | ------------------ | --------------------- | ----------------- | ----------------------- |
+| [Google Cloud Storage](./storage.md#gcs)                                                           | Stable             | Production Usage      | yes               | @bwplotka               |
+| [AWS/S3](./storage.md#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
+| [Azure Storage Account](./storage.md#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
+| [OpenStack Swift](./storage.md#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @sudhi-vm               |
+| [Tencent COS](./storage.md#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
+| [AliYun OSS](./storage.md#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
+| [Local Filesystem](./storage.md#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
+
 
 **Missing support to some object storage?** Check out [how to add your client section](#how-to-add-a-new-client-to-thanos)
 
