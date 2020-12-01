@@ -29,6 +29,7 @@ type SeriesLimiter interface {
 // projects depending on Thanos (eg. Cortex) which have dynamic limits.
 type ChunksLimiterFactory func(failedCounter prometheus.Counter) ChunksLimiter
 
+// SeriesLimiterFactory is used to create a new SeriesLimiter.
 type SeriesLimiterFactory func(failedCounter prometheus.Counter) SeriesLimiter
 
 // Limiter is a simple mechanism for checking if something has passed a certain threshold.
