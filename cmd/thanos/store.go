@@ -68,7 +68,7 @@ func registerStore(app *extkingpin.App) {
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
 	maxTouchedSeriesCount := cmd.Flag("store.grpc.touched-series-limit",
-		"Maximum amount of touch series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()

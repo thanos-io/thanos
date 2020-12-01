@@ -281,7 +281,7 @@ type BucketStore struct {
 
 	// chunksLimiterFactory creates a new limiter used to limit the number of chunks fetched by each Series() call.
 	chunksLimiterFactory ChunksLimiterFactory
-	// seriesLimiterFactory creates a new limiter used to limit the number of touch series by each Series() call.
+	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call.
 	seriesLimiterFactory SeriesLimiterFactory
 	partitioner          partitioner
 

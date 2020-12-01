@@ -102,7 +102,7 @@ Flags:
                                  number of samples might be lower, even though
                                  the maximum could be hit.
       --store.grpc.touched-series-limit=0
-                                 Maximum amount of touch series returned via a
+                                 Maximum amount of touched series returned via a
                                  single Series call. The Series call fails if
                                  this limit is exceeded. 0 means no limit.
       --store.grpc.series-max-concurrency=20
