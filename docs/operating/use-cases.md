@@ -8,7 +8,7 @@ menu: operating
 
 There are many great use cases of [Thanos](thanos.io), we collect them here for others to refer to.
 
-## Horizontal scaleable Prometheus with Thanos + Kvass
+## Horizontal scaleable Prometheus Scraping with Kvass
 
 *Case add by* [@RayHuangCN](https://github.com/RayHuangCN)
 
