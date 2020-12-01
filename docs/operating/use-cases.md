@@ -6,7 +6,7 @@ menu: operating
 
 # Overview 
 
-There are many great use cases of  [Thanos](https://github.com/thanos-io/thanos), we collect them here for others to refer to.
+There are many great use cases of [Thanos](thanos.io), we collect them here for others to refer to.
 
 ## Horizontal scaleable Prometheus with Thanos + Kvass
 
@@ -22,4 +22,3 @@ If your want to build a horizontal scaleable Prometheus for large kubernetes clu
 - 1k+ Nodes
 - 60k+ Pods
 - 100k+ Containers
-
