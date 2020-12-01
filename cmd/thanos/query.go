@@ -391,12 +391,12 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				ctx, cancel = context.WithTimeout(ctx, dnsSDInterval)
-				defer cancel()
-				if err := dnsStoreProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+				resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)
+				defer resolveCancel()
+				if err := dnsStoreProvider.Resolve(resolveCtx, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 				}
-				if err := dnsRuleProvider.Resolve(ctx, ruleAddrs); err != nil {
+				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}
 				return nil
