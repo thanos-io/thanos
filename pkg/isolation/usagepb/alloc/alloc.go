@@ -80,7 +80,7 @@ func ValidateTracking(skip int, toleranceBytes uint64, f func(tr Tracker)) (err 
 		toleratedBytes  uint64
 	)
 
-	records, err := recordMemoryProfiles(skip, func() { f(tracked) })
+	records, err := recordMemoryProfiles(func() { f(tracked) })
 	if err != nil {
 		return err
 	}
@@ -100,6 +100,10 @@ RecordsLoop:
 			}
 			framed.frames = append(framed.frames, fr)
 		}
+
+		// Skip unrelated frames further + 2 for 2 anonymous functions we create.
+		framed.frames = framed.frames[:len(framed.frames)-skip-2]
+
 		for _, fr := range framed.frames {
 			// Hacky: Assume for now tracker is right after allocation.
 			fcodeRef := codeRef{file: fr.File, line: fr.Line + 1}
@@ -140,9 +144,10 @@ RecordsLoop:
 		problems = append(problems, Problem{TrackedBytes: 0, Allocated: MemProfileFramedRecords{AllocatedBytes: uint64(u.AllocBytes), records: []memProfileFramedRecord{u}}})
 	}
 
-	if toleratedBytes > toleranceBytes {
+	// Only care about small things if they accumulate above 1MB.
+	if toleratedBytes > 1024*1024 {
 		// Untracked tiny allocations accumulated above tolerance.
-		problems = append(problems, Problem{TrackedBytes: 0, Allocated: MemProfileFramedRecords{AllocatedBytes: toleratedBytes, records: untrackedAllocs}})
+		problems = append(problems, Problem{TrackedBytes: 0, Allocated: MemProfileFramedRecords{AllocatedBytes: toleratedBytes, records: toleratedAllocs}})
 	}
 	if len(problems) > 0 {
 		return ValidationFailedError{Problems: problems}
@@ -181,7 +186,7 @@ type memProfileRecord struct {
 	relevantPCs []uintptr
 }
 
-func recordMemoryProfiles(skip int, fn func()) (ret []memProfileRecord, err error) {
+func recordMemoryProfiles(fn func()) (ret []memProfileRecord, err error) {
 	// Setting 1 to include every allocated block in the profile. (512 * 1024 by default).
 	oldProfileRate := runtime.MemProfileRate
 	runtime.MemProfileRate = 1
@@ -228,13 +233,9 @@ func recordMemoryProfiles(skip int, fn func()) (ret []memProfileRecord, err erro
 			}
 
 			if pc == funcPC+1 {
-				if i-skip <= 0 {
-					break
-				}
-
 				// Copy as runtime reuse all arrays.
-				relevantPCs := make([]uintptr, i-skip)
-				copy(relevantPCs, s[:i-skip])
+				relevantPCs := make([]uintptr, i)
+				copy(relevantPCs, s[:i])
 				ret = append(ret, memProfileRecord{
 					MemProfileRecord: r,
 					relevantPCs:      relevantPCs,
