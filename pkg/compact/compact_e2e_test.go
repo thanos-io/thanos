@@ -31,6 +31,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
+const fetcherConcurrency = 32
+
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -97,7 +99,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
 		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
 		testutil.Ok(t, err)
 
@@ -179,7 +181,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 		duplicateBlocksFilter := block.NewDeduplicateFilter()
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
@@ -467,7 +469,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
 
 		duplicateBlocksFilter := block.NewDeduplicateFilter()
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{

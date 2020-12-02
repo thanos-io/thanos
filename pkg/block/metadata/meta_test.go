@@ -35,7 +35,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		_, err := read(ioutil.NopCloser(&b))
+		_, err := Read(ioutil.NopCloser(&b))
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "unexpected meta file version 0", err.Error())
 	})
@@ -66,7 +66,9 @@ func TestMeta_ReadWrite(t *testing.T) {
 				Labels:  map[string]string{"ext": "lset1"},
 				Source:  ReceiveSource,
 				Files: []File{
-					{RelPath: "index", SizeBytes: 1313},
+					{RelPath: "chunks/000001", SizeBytes: 3751},
+					{RelPath: "index", SizeBytes: 401},
+					{RelPath: "meta.json"},
 				},
 				Downsample: ThanosDownsample{
 					Resolution: 123144,
@@ -109,14 +111,21 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"source": "receive",
 		"files": [
 			{
+				"rel_path": "chunks/000001",
+				"size_bytes": 3751
+			},
+			{
 				"rel_path": "index",
-				"size_bytes": 1313
+				"size_bytes": 401
+			},
+			{
+				"rel_path": "meta.json"
 			}
 		]
 	}
 }
 `, b.String())
-		retMeta, err := read(ioutil.NopCloser(&b))
+		retMeta, err := Read(ioutil.NopCloser(&b))
 		testutil.Ok(t, err)
 		testutil.Equals(t, m1, *retMeta)
 	})
@@ -194,7 +203,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		retMeta, err := read(ioutil.NopCloser(&b))
+		retMeta, err := Read(ioutil.NopCloser(&b))
 		testutil.Ok(t, err)
 
 		// We expect map to be empty but allocated.

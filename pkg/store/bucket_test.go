@@ -806,7 +806,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 			}
-			relabelConf, err := block.ParseRelabelConfig([]byte(sc.relabel))
+			relabelConf, err := block.ParseRelabelConfig([]byte(sc.relabel), block.SelectorSupportedRelabelActions)
 			testutil.Ok(t, err)
 
 			rec := &recorder{Bucket: bkt}

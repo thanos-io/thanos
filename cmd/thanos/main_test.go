@@ -53,7 +53,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(meta.Thanos))))
-	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil, nil, nil)
+	metaFetcher, err := block.NewMetaFetcher(nil, fetcherConcurrency, bkt, "", nil, nil, nil)
 	testutil.Ok(t, err)
 
 	metas, _, err := metaFetcher.Fetch(ctx)

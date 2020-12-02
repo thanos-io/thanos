@@ -47,7 +47,7 @@ for x in "${toolsCommands[@]}"; do
   ${THANOS_BIN} tools "${x}" --help &>"docs/components/flags/tools_${x}.txt"
 done
 
-toolsBucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample" "cleanup" "mark")
+toolsBucketCommands=("verify" "ls" "inspect" "web" "replicate" "downsample" "cleanup" "mark" "rewrite")
 for x in "${toolsBucketCommands[@]}"; do
   ${THANOS_BIN} tools bucket "${x}" --help &>"docs/components/flags/tools_bucket_${x}.txt"
 done
