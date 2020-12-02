@@ -703,51 +703,59 @@ func blockSeries(
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
 	var (
-		res  []seriesEntry
-		lset labels.Labels
-		chks []chunks.Meta
+		res            []seriesEntry
+		symbolizedLset []symbolizedLabel
+		lset           labels.Labels
+		chks           []chunks.Meta
 	)
 	for _, id := range ps {
-		if err := indexr.LoadedSeries(id, &lset, &chks, req); err != nil {
+		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, req.SkipChunks, req.MinTime, req.MaxTime)
+		if err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
-		if len(chks) > 0 {
-			s := seriesEntry{lset: make(labels.Labels, 0, len(lset)+len(extLset))}
-			if !req.SkipChunks {
-				s.refs = make([]uint64, 0, len(chks))
-				s.chks = make([]storepb.AggrChunk, 0, len(chks))
-				for _, meta := range chks {
-					if err := chunkr.addPreload(meta.Ref); err != nil {
-						return nil, nil, errors.Wrap(err, "add chunk preload")
-					}
-					s.chks = append(s.chks, storepb.AggrChunk{
-						MinTime: meta.MinTime,
-						MaxTime: meta.MaxTime,
-					})
-					s.refs = append(s.refs, meta.Ref)
-				}
-
-				// Reserve chunksLimiter if we save chunks.
-				if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-					return nil, nil, errors.Wrap(err, "exceeded chunks limit")
-				}
-			}
-
-			for _, l := range lset {
-				// Skip if the external labels of the block overrule the series' label.
-				// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-				if extLset[l.Name] != "" {
-					continue
-				}
-				s.lset = append(s.lset, l)
-			}
-			for ln, lv := range extLset {
-				s.lset = append(s.lset, labels.Label{Name: ln, Value: lv})
-			}
-			sort.Sort(s.lset)
-
-			res = append(res, s)
+		if !ok {
+			// No matching chunks for this time duration, skip series.
+			continue
 		}
+
+		s := seriesEntry{lset: make(labels.Labels, 0, len(symbolizedLset)+len(extLset))}
+		if !req.SkipChunks {
+			// Schedule loading chunks.
+			s.refs = make([]uint64, 0, len(chks))
+			s.chks = make([]storepb.AggrChunk, 0, len(chks))
+			for _, meta := range chks {
+				if err := chunkr.addPreload(meta.Ref); err != nil {
+					return nil, nil, errors.Wrap(err, "add chunk preload")
+				}
+				s.chks = append(s.chks, storepb.AggrChunk{
+					MinTime: meta.MinTime,
+					MaxTime: meta.MaxTime,
+				})
+				s.refs = append(s.refs, meta.Ref)
+			}
+
+			// Ensure sample limit through chunksLimiter if we return chunks.
+			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
+				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+			}
+		}
+		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
+			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
+		}
+
+		for _, l := range lset {
+			// Skip if the external labels of the block overrule the series' label.
+			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
+			if extLset[l.Name] != "" {
+				continue
+			}
+			s.lset = append(s.lset, l)
+		}
+		for ln, lv := range extLset {
+			s.lset = append(s.lset, labels.Label{Name: ln, Value: lv})
+		}
+		sort.Sort(s.lset)
+		res = append(res, s)
 	}
 
 	if req.SkipChunks {
@@ -771,7 +779,6 @@ func blockSeries(
 			}
 		}
 	}
-
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
@@ -2070,20 +2077,25 @@ func (g gapBasedPartitioner) Partition(length int, rng func(int) (uint64, uint64
 	return parts
 }
 
-// LoadedSeries populates the given labels and chunk metas for the series identified
-// by the reference.
-// Returns ErrNotFound if the ref does not resolve to a known series.
-func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *[]chunks.Meta,
-	req *storepb.SeriesRequest) error {
+type symbolizedLabel struct {
+	name, value uint32
+}
+
+// LoadSeriesForTime populates the given symbolized labels for the series identified by the reference if at least one chunk is within
+// time selection.
+// LoadSeriesForTime also populates chunk metas slices if skipChunks if set to false. Chunks are also limited by the given time selection.
+// LoadSeriesForTime returns false, when there are no series data for given time range.
+//
+// Error is returned on decoding error or if the reference does not resolve to a known series.
+func (r *bucketIndexReader) LoadSeriesForTime(ref uint64, lset *[]symbolizedLabel, chks *[]chunks.Meta, skipChunks bool, mint, maxt int64) (ok bool, err error) {
 	b, ok := r.loadedSeries[ref]
 	if !ok {
-		return errors.Errorf("series %d not found", ref)
+		return false, errors.Errorf("series %d not found", ref)
 	}
 
 	r.stats.seriesTouched++
 	r.stats.seriesTouchedSizeSum += len(b)
-
-	return r.decodeSeriesWithReq(b, lset, chks, req)
+	return decodeSeriesForTime(b, lset, chks, skipChunks, mint, maxt)
 }
 
 // Close released the underlying resources of the reader.
@@ -2092,93 +2104,84 @@ func (r *bucketIndexReader) Close() error {
 	return nil
 }
 
-// decodeSeriesWithReq decodes a series entry from the given byte slice based on the SeriesRequest.
-func (r *bucketIndexReader) decodeSeriesWithReq(b []byte, lbls *labels.Labels, chks *[]chunks.Meta,
-	req *storepb.SeriesRequest) error {
+// LookupLabelsSymbols allows populates label set strings from symbolized label set.
+func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lbls *labels.Labels) error {
 	*lbls = (*lbls)[:0]
-	*chks = (*chks)[:0]
-
-	d := encoding.Decbuf{B: b}
-
-	k := d.Uvarint()
-
-	for i := 0; i < k; i++ {
-		lno := uint32(d.Uvarint())
-		lvo := uint32(d.Uvarint())
-
-		if d.Err() != nil {
-			return errors.Wrap(d.Err(), "read series label offsets")
-		}
-
-		ln, err := r.dec.LookupSymbol(lno)
+	for _, s := range symbolized {
+		// TODO(bwplotka): Cache, it takes majority of query time.
+		ln, err := r.dec.LookupSymbol(s.name)
 		if err != nil {
 			return errors.Wrap(err, "lookup label name")
 		}
-		lv, err := r.dec.LookupSymbol(lvo)
+		lv, err := r.dec.LookupSymbol(s.value)
 		if err != nil {
 			return errors.Wrap(err, "lookup label value")
 		}
-
 		*lbls = append(*lbls, labels.Label{Name: ln, Value: lv})
 	}
+	return nil
+}
 
+// decodeSeriesForTime decodes a series entry from the given byte slice decoding only chunk metas that are within given min and max time.
+// If skipChunks is specified decodeSeriesForTime does not return any chunks, but only labels and only if at least single chunk is within time range.
+// decodeSeriesForTime returns false, when there are no series data for given time range.
+func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta, skipChunks bool, selectMint, selectMaxt int64) (ok bool, err error) {
+	*lset = (*lset)[:0]
+
+	if !skipChunks {
+		*chks = (*chks)[:0]
+	}
+
+	d := encoding.Decbuf{B: b}
+
+	// Read labels without looking up symbols.
+	k := d.Uvarint()
+	for i := 0; i < k; i++ {
+		lno := uint32(d.Uvarint())
+		lvo := uint32(d.Uvarint())
+		*lset = append(*lset, symbolizedLabel{name: lno, value: lvo})
+	}
 	// Read the chunks meta data.
 	k = d.Uvarint()
-
 	if k == 0 {
-		return nil
+		return false, d.Err()
 	}
 
-	t0 := d.Varint64()
-	maxt := int64(d.Uvarint64()) + t0
-	ref0 := int64(d.Uvarint64())
+	// First t0 is absolute, rest is just diff so different type is used (Uvarint64).
+	mint := d.Varint64()
+	maxt := int64(d.Uvarint64()) + mint
+	// Similar for first ref.
+	ref := int64(d.Uvarint64())
 
-	// No chunk in the required time range.
-	if t0 > req.MaxTime {
-		return nil
-	}
-
-	if req.MinTime <= maxt {
-		*chks = append(*chks, chunks.Meta{
-			Ref:     uint64(ref0),
-			MinTime: t0,
-			MaxTime: maxt,
-		})
-		// Get a valid chunk, return if it is a skip chunk request.
-		if req.SkipChunks {
-			return nil
+	for i := 0; i < k; i++ {
+		if i > 0 {
+			mint += int64(d.Uvarint64())
+			maxt = int64(d.Uvarint64()) + mint
+			ref += d.Varint64()
 		}
-	}
-	t0 = maxt
-
-	for i := 1; i < k; i++ {
-		mint := int64(d.Uvarint64()) + t0
-		maxt := int64(d.Uvarint64()) + mint
-		ref0 += d.Varint64()
-		t0 = maxt
-
-		if maxt < req.MinTime {
+		mint = maxt
+		if maxt < selectMint {
 			continue
 		}
-		if mint > req.MaxTime {
+		if mint > selectMaxt {
 			break
 		}
 
-		if d.Err() != nil {
-			return errors.Wrapf(d.Err(), "read meta for chunk %d", i)
+		// Found chunk.
+
+		if skipChunks {
+			// We are not interested in chunks and we know there is at least one, that's enough to return series.
+			return true, nil
 		}
 
 		*chks = append(*chks, chunks.Meta{
-			Ref:     uint64(ref0),
+			Ref:     uint64(ref),
 			MinTime: mint,
 			MaxTime: maxt,
 		})
-
-		if req.SkipChunks {
-			return nil
-		}
 	}
-	return d.Err()
+
+	return len(*chks) > 0, d.Err()
 }
 
 type bucketChunkReader struct {
