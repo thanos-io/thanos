@@ -68,13 +68,17 @@ func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryran
 func splitQuery(r queryrange.Request, interval time.Duration) []queryrange.Request {
 	var reqs []queryrange.Request
 	if _, ok := r.(*ThanosQueryRangeRequest); ok {
-		for start := r.GetStart(); start < r.GetEnd(); start = nextIntervalBoundary(start, r.GetStep(), interval) + r.GetStep() {
-			end := nextIntervalBoundary(start, r.GetStep(), interval)
-			if end+r.GetStep() >= r.GetEnd() {
-				end = r.GetEnd()
-			}
+		if start := r.GetStart(); start == r.GetEnd() {
+			reqs = append(reqs, r.WithStartEnd(start, start))
+		} else {
+			for ; start < r.GetEnd(); start = nextIntervalBoundary(start, r.GetStep(), interval) + r.GetStep() {
+				end := nextIntervalBoundary(start, r.GetStep(), interval)
+				if end+r.GetStep() >= r.GetEnd() {
+					end = r.GetEnd()
+				}
 
-			reqs = append(reqs, r.WithStartEnd(start, end))
+				reqs = append(reqs, r.WithStartEnd(start, end))
+			}
 		}
 	} else {
 		dur := int64(interval / time.Millisecond)

@@ -19,7 +19,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Fixed
 
--
+- [#3527](https://github.com/thanos-io/thanos/pull/3527) Query Frontend: Fix query_range behavior when start/end times are the same
 
 ### Changed
 
