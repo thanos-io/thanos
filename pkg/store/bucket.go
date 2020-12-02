@@ -2159,26 +2159,26 @@ func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta,
 			maxt = int64(d.Uvarint64()) + mint
 			ref += d.Varint64()
 		}
-		mint = maxt
-		if maxt < selectMint {
-			continue
-		}
+
 		if mint > selectMaxt {
 			break
 		}
 
-		// Found chunk.
+		if maxt >= selectMint {
+			// Found a chunk.
+			if skipChunks {
+				// We are not interested in chunks and we know there is at least one, that's enough to return series.
+				return true, nil
+			}
 
-		if skipChunks {
-			// We are not interested in chunks and we know there is at least one, that's enough to return series.
-			return true, nil
+			*chks = append(*chks, chunks.Meta{
+				Ref:     uint64(ref),
+				MinTime: mint,
+				MaxTime: maxt,
+			})
 		}
 
-		*chks = append(*chks, chunks.Meta{
-			Ref:     uint64(ref),
-			MinTime: mint,
-			MaxTime: maxt,
-		})
+		mint = maxt
 	}
 
 	return len(*chks) > 0, d.Err()
