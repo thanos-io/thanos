@@ -307,7 +307,8 @@ func (z ZLabelSets) Less(i, j int) bool {
 	l := 0
 	r := 0
 	var result int
-	for l < z[i].Size() && r < z[j].Size() {
+	lenI, lenJ := len(z[i].Labels), len(z[j].Labels)
+	for l < lenI && r < lenJ {
 		result = z[i].Labels[l].Compare(z[j].Labels[r])
 		if result == 0 {
 			l++
@@ -317,5 +318,5 @@ func (z ZLabelSets) Less(i, j int) bool {
 		return result < 0
 	}
 
-	return l == z[i].Size()
+	return l == lenI
 }

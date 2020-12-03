@@ -111,7 +111,7 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request) (quer
 		result.ReplicaLabels = r.Form[queryv1.ReplicaLabelsParam]
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -221,12 +221,12 @@ func parsePartialResponseParam(s string, defaultEnablePartialResponse bool) (boo
 	return defaultEnablePartialResponse, nil
 }
 
-func parseMatchersParam(ss []string) ([][]*labels.Matcher, error) {
-	matchers := make([][]*labels.Matcher, 0, len(ss))
-	for _, s := range ss {
+func parseMatchersParam(ss url.Values, matcherParam string) ([][]*labels.Matcher, error) {
+	matchers := make([][]*labels.Matcher, 0, len(ss[matcherParam]))
+	for _, s := range ss[matcherParam] {
 		ms, err := parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.StoreMatcherParam)
+			return nil, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, matcherParam)
 		}
 		matchers = append(matchers, ms)
 	}
