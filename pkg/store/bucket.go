@@ -2127,10 +2127,7 @@ func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lb
 // decodeSeriesForTime returns false, when there are no series data for given time range.
 func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta, skipChunks bool, selectMint, selectMaxt int64) (ok bool, err error) {
 	*lset = (*lset)[:0]
-
-	if !skipChunks {
-		*chks = (*chks)[:0]
-	}
+	*chks = (*chks)[:0]
 
 	d := encoding.Decbuf{B: b}
 
@@ -2180,7 +2177,6 @@ func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta,
 
 		mint = maxt
 	}
-
 	return len(*chks) > 0, d.Err()
 }
 
