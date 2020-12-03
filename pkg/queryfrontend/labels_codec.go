@@ -88,23 +88,6 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 			return responses[0], nil
 		}
 
-		i := 0
-		var resp queryrange.Response
-		for _, response := range responses {
-			if len(response.(*ThanosSeriesResponse).Data) > 0 {
-				i++
-				resp = response
-			}
-			if i > 1 {
-				break
-			}
-		}
-		// Fast path for the case that only one response contains series data and other responses are empty.
-		// We can just return that response to avoid deduplication and sorting.
-		if i == 1 {
-			return resp, nil
-		}
-
 		seriesData := make(labelpb.ZLabelSets, 0)
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
@@ -304,7 +287,7 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.
 		return nil, err
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam], queryv1.StoreMatcherParam)
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +321,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		return nil, err
 	}
 
-	result.Matchers, err = parseMatchersParam(r.Form[queryv1.MatcherParam], queryv1.MatcherParam)
+	result.Matchers, err = parseMatchersParam(r.Form, queryv1.MatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +340,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		result.ReplicaLabels = r.Form[queryv1.ReplicaLabelsParam]
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam], queryv1.StoreMatcherParam)
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
