@@ -87,8 +87,8 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 		if len(responses) == 1 {
 			return responses[0], nil
 		}
-		seriesData := make(labelpb.ZLabelSets, 0)
 
+		seriesData := make(labelpb.ZLabelSets, 0)
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
 			for _, series := range res.(*ThanosSeriesResponse).Data {
@@ -287,7 +287,7 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.
 		return nil, err
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		return nil, err
 	}
 
-	result.Matchers, err = parseMatchersParam(r.Form[queryv1.MatcherParam])
+	result.Matchers, err = parseMatchersParam(r.Form, queryv1.MatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		result.ReplicaLabels = r.Form[queryv1.ReplicaLabelsParam]
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}

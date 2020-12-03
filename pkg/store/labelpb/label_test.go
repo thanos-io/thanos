@@ -132,6 +132,34 @@ func TestSortZLabelSets(t *testing.T) {
 		{
 			Labels: ZLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
 					"__name__":    "grpc_server_handled_total",
 					"cluster":     "test",
 					"grpc_code":   "OK",
@@ -185,6 +213,35 @@ func TestSortZLabelSets(t *testing.T) {
 					"cluster":     "test",
 					"grpc_code":   "OK",
 					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		// This label set is the same as the previous one, which should correctly return 0 in Less() function.
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"cluster":   "test",
+					"__name__":  "grpc_client_handled_total",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
 				}),
 			),
 		},
