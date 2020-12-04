@@ -1,6 +1,9 @@
 # NOTE: Current plan gives 1500 build minutes per month.
 version: 2.1
 
+orbs:
+  go: circleci/go@1.5.0
+
 executors:
   golang:
     docker:
@@ -17,6 +20,7 @@ jobs:
       GO111MODULE: 'on'
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - run:
@@ -68,6 +72,7 @@ jobs:
     executor: golang
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - attach_workspace:
@@ -85,6 +90,7 @@ jobs:
     executor: golang
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - attach_workspace:
