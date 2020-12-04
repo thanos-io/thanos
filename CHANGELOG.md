@@ -24,6 +24,9 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3496](https://github.com/thanos-io/thanos/pull/3496) s3: Respect SignatureV2 flag for all credential providers.
+- [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support.
+   By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`.
+   To change the defaults see [the docs](./docs/storage.md#openstack-swift).
 
 ## [v0.17.0](https://github.com/thanos-io/thanos/releases/tag/v0.17.0) - 2020.11.18
 
@@ -68,9 +71,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
   - `thanos_replicate_origin_meta_loads_total` can be replaced by `blocks_meta_synced{state="loaded"}`.
   - `thanos_replicate_origin_partial_meta_reads_total` can be replaced by `blocks_meta_synced{state="failed"}`.
 - [#3309](https://github.com/thanos-io/thanos/pull/3309) Compact: _breaking :warning:_ Rename metrics to match naming convention. This includes metrics starting with `thanos_compactor` to `thanos_compact`, `thanos_querier` to `thanos_query` and `thanos_ruler` to `thanos_rule`.
-- [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support.
-   By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`.
-   To change the defaults see [the docs](./docs/storage.md#openstack-swift).
 
 ## [v0.16.0](https://github.com/thanos-io/thanos/releases) - 2020.10.26
 
