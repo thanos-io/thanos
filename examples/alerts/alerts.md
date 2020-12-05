@@ -6,7 +6,7 @@ Here are some example alerts configured for Kubernetes environment.
 
 [embedmd]:# (../tmp/thanos-compact.yaml yaml)
 ```yaml
-name: thanos-compact.rules
+name: thanos-compact
 rules:
 - alert: ThanosCompactMultipleRunning
   annotations:
@@ -76,7 +76,7 @@ For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thano
 
 [embedmd]:# (../tmp/thanos-rule.yaml yaml)
 ```yaml
-name: thanos-rule.rules
+name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
   annotations:
@@ -231,7 +231,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-store.yaml yaml)
 ```yaml
-name: thanos-store.rules
+name: thanos-store
 rules:
 - alert: ThanosStoreGrpcErrorRate
   annotations:
@@ -301,7 +301,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-sidecar.yaml yaml)
 ```yaml
-name: thanos-sidecar.rules
+name: thanos-sidecar
 rules:
 - alert: ThanosSidecarPrometheusDown
   annotations:
@@ -330,7 +330,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-query.yaml yaml)
 ```yaml
-name: thanos-query.rules
+name: thanos-query
 rules:
 - alert: ThanosQueryHttpRequestQueryErrorRateHigh
   annotations:
@@ -444,7 +444,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-receive.yaml yaml)
 ```yaml
-name: thanos-receive.rules
+name: thanos-receive
 rules:
 - alert: ThanosReceiveHttpRequestErrorRateHigh
   annotations:
@@ -562,7 +562,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-bucket-replicate.yaml yaml)
 ```yaml
-name: thanos-bucket-replicate.rules
+name: thanos-bucket-replicate
 rules:
 - alert: ThanosBucketReplicateIsDown
   annotations:
@@ -612,7 +612,7 @@ rules:
 
 [embedmd]:# (../tmp/thanos-component-absent.yaml yaml)
 ```yaml
-name: thanos-component-absent.rules
+name: thanos-component-absent
 rules:
 - alert: ThanosBucketReplicateIsDown
   annotations:
