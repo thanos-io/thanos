@@ -4,7 +4,7 @@ Here are some example alerts configured for Kubernetes environment.
 
 ## Compaction
 
-[embedmd]:# (../tmp/thanos-compact.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-compact.yaml yaml)
 ```yaml
 name: thanos-compact.rules
 rules:
@@ -74,7 +74,7 @@ rules:
 
 For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thanos Ruler is working:
 
-[embedmd]:# (../tmp/thanos-rule.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-rule.yaml yaml)
 ```yaml
 name: thanos-rule.rules
 rules:
@@ -229,7 +229,7 @@ rules:
 
 ## Store Gateway
 
-[embedmd]:# (../tmp/thanos-store.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-store.yaml yaml)
 ```yaml
 name: thanos-store.rules
 rules:
@@ -299,7 +299,7 @@ rules:
 
 ## Sidecar
 
-[embedmd]:# (../tmp/thanos-sidecar.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-sidecar.yaml yaml)
 ```yaml
 name: thanos-sidecar.rules
 rules:
@@ -328,7 +328,7 @@ rules:
 
 ## Query
 
-[embedmd]:# (../tmp/thanos-query.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-query.yaml yaml)
 ```yaml
 name: thanos-query.rules
 rules:
@@ -442,7 +442,7 @@ rules:
 
 ## Receive
 
-[embedmd]:# (../tmp/thanos-receive.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-receive.yaml yaml)
 ```yaml
 name: thanos-receive.rules
 rules:
@@ -560,7 +560,7 @@ rules:
 
 ## Replicate
 
-[embedmd]:# (../tmp/thanos-bucket-replicate.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-bucket-replicate.yaml yaml)
 ```yaml
 name: thanos-bucket-replicate.rules
 rules:
@@ -610,7 +610,7 @@ rules:
 
 ### Absent Rules
 
-[embedmd]:# (../tmp/thanos-component-absent.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-component-absent.yaml yaml)
 ```yaml
 name: thanos-component-absent.rules
 rules:
