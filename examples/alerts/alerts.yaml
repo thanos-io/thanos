@@ -1,5 +1,5 @@
 groups:
-- name: thanos-compact.rules
+- name: thanos-compact
   rules:
   - alert: ThanosCompactMultipleRunning
     annotations:
@@ -62,7 +62,7 @@ groups:
       / 60 / 60 > 24
     labels:
       severity: warning
-- name: thanos-query.rules
+- name: thanos-query
   rules:
   - alert: ThanosQueryHttpRequestQueryErrorRateHigh
     annotations:
@@ -170,7 +170,7 @@ groups:
     for: 10m
     labels:
       severity: critical
-- name: thanos-receive.rules
+- name: thanos-receive
   rules:
   - alert: ThanosReceiveHttpRequestErrorRateHigh
     annotations:
@@ -282,7 +282,7 @@ groups:
     for: 3h
     labels:
       severity: critical
-- name: thanos-sidecar.rules
+- name: thanos-sidecar
   rules:
   - alert: ThanosSidecarPrometheusDown
     annotations:
@@ -305,7 +305,7 @@ groups:
       time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, pod) >= 600
     labels:
       severity: critical
-- name: thanos-store.rules
+- name: thanos-store
   rules:
   - alert: ThanosStoreGrpcErrorRate
     annotations:
@@ -369,7 +369,7 @@ groups:
     for: 10m
     labels:
       severity: warning
-- name: thanos-rule.rules
+- name: thanos-rule
   rules:
   - alert: ThanosRuleQueueIsDroppingAlerts
     annotations:
@@ -519,7 +519,7 @@ groups:
     for: 3m
     labels:
       severity: critical
-- name: thanos-bucket-replicate.rules
+- name: thanos-bucket-replicate
   rules:
   - alert: ThanosBucketReplicateIsDown
     annotations:
@@ -561,7 +561,7 @@ groups:
     for: 5m
     labels:
       severity: critical
-- name: thanos-component-absent.rules
+- name: thanos-component-absent
   rules:
   - alert: ThanosBucketReplicateIsDown
     annotations:

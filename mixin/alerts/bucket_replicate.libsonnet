@@ -8,7 +8,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-bucket-replicate.rules',
+        name: 'thanos-bucket-replicate',
         rules: [
           {
             alert: 'ThanosBucketReplicateIsDown',

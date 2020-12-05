@@ -13,7 +13,7 @@ local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-component-absent.rules',
+        name: 'thanos-component-absent',
         rules: [
           {
             alert: '%sIsDown' % name,
