@@ -71,7 +71,7 @@ metadata:
             optional: false
       containers:
         - name: querier
-          image: 'thanosio/thanos:v0.17.1'
+          image: 'thanosio/thanos:v0.17.2'
           args:
             - query
             - '--log.level=info'
