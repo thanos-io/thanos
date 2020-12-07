@@ -245,11 +245,25 @@ func (c *Container) deleteContainer(name string) error {
 	return containers.Delete(c.client, name).Err
 }
 
-func configFromEnv() SwiftConfig {
-	c := SwiftConfig{
+type testSwiftConfig struct {
+	AuthUrl            string      `yaml:"auth_url"`
+	Username           string      `yaml:"username"`
+	Password           string      `yaml:"password"`
+	RegionName         string      `yaml:"region_name"`
+	ContainerName      string      `yaml:"container_name"`
+	ProjectID          string      `yaml:"project_id"`
+	ProjectName        string      `yaml:"project_name"`
+	UserDomainID       string      `yaml:"user_domain_id"`
+	UserDomainName     string      `yaml:"user_domain_name"`
+	ProjectDomainID    string      `yaml:"project_domain_id"`
+	ProjectDomainName  string      `yaml:"project_domain_name"`
+}
+
+func configFromEnv() testSwiftConfig {
+	c := testSwiftConfig{
 		AuthUrl:           os.Getenv("OS_AUTH_URL"),
 		Username:          os.Getenv("OS_USERNAME"),
-		Password:          config.Secret(os.Getenv("OS_PASSWORD")),
+		Password:          os.Getenv("OS_PASSWORD"),
 		RegionName:        os.Getenv("OS_REGION_NAME"),
 		ContainerName:     os.Getenv("OS_CONTAINER_NAME"),
 		ProjectID:         os.Getenv("OS_PROJECT_ID"),
@@ -264,7 +278,7 @@ func configFromEnv() SwiftConfig {
 }
 
 // validateForTests checks to see the config options for tests are set.
-func validateForTests(conf SwiftConfig) error {
+func validateForTests(conf testSwiftConfig) error {
 	if conf.AuthUrl == "" ||
 		conf.Username == "" ||
 		conf.Password == "" ||
