@@ -646,11 +646,6 @@ func runRule(
 		})
 	}
 
-	confContentYaml, err = objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
-
 	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.

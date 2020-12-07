@@ -184,12 +184,12 @@ func runCompact(
 		return err
 	}
 
-	relabelContentYaml, err := conf.selectorRelabelConf.Content()
+	reliabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+	relabelConfig, err := block.ParseRelabelConfig(reliabelContentYaml, block.SelectorSupportedRelabelActions)
 	if err != nil {
 		return err
 	}
@@ -197,7 +197,7 @@ func runCompact(
 	// Add config content to configs map.
 	configFilesMap := map[string]string{
 		"Object Store Configuration":      string(confContentYamlStr),
-		"Selector Reliable Configuration": string(relabelContentYaml),
+		"Selector Reliable Configuration": string(reliabelContentYaml),
 	}
 
 	// Ensure we close up everything properly.
