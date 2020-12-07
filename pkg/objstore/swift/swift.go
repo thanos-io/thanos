@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
+	"github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -28,20 +29,20 @@ import (
 const DirDelim = "/"
 
 type SwiftConfig struct {
-	AuthUrl           string `yaml:"auth_url"`
-	Username          string `yaml:"username"`
-	UserDomainName    string `yaml:"user_domain_name"`
-	UserDomainID      string `yaml:"user_domain_id"`
-	UserId            string `yaml:"user_id"`
-	Password          string `yaml:"password"`
-	DomainId          string `yaml:"domain_id"`
-	DomainName        string `yaml:"domain_name"`
-	ProjectID         string `yaml:"project_id"`
-	ProjectName       string `yaml:"project_name"`
-	ProjectDomainID   string `yaml:"project_domain_id"`
-	ProjectDomainName string `yaml:"project_domain_name"`
-	RegionName        string `yaml:"region_name"`
-	ContainerName     string `yaml:"container_name"`
+	AuthUrl           string        `yaml:"auth_url"`
+	Username          string        `yaml:"username"`
+	UserDomainName    string        `yaml:"user_domain_name"`
+	UserDomainID      string        `yaml:"user_domain_id"`
+	UserId            string        `yaml:"user_id"`
+	Password          config.Secret `yaml:"password"`
+	DomainId          string        `yaml:"domain_id"`
+	DomainName        string        `yaml:"domain_name"`
+	ProjectID         string        `yaml:"project_id"`
+	ProjectName       string        `yaml:"project_name"`
+	ProjectDomainID   string        `yaml:"project_domain_id"`
+	ProjectDomainName string        `yaml:"project_domain_name"`
+	RegionName        string        `yaml:"region_name"`
+	ContainerName     string        `yaml:"container_name"`
 }
 
 type Container struct {
@@ -194,7 +195,7 @@ func authOptsFromConfig(sc *SwiftConfig) gophercloud.AuthOptions {
 		IdentityEndpoint: sc.AuthUrl,
 		Username:         sc.Username,
 		UserID:           sc.UserId,
-		Password:         sc.Password,
+		Password:         string(sc.Password),
 		DomainID:         sc.DomainId,
 		DomainName:       sc.DomainName,
 		TenantID:         sc.ProjectID,
@@ -248,7 +249,7 @@ func configFromEnv() SwiftConfig {
 	c := SwiftConfig{
 		AuthUrl:           os.Getenv("OS_AUTH_URL"),
 		Username:          os.Getenv("OS_USERNAME"),
-		Password:          os.Getenv("OS_PASSWORD"),
+		Password:          config.Secret(os.Getenv("OS_PASSWORD")),
 		RegionName:        os.Getenv("OS_REGION_NAME"),
 		ContainerName:     os.Getenv("OS_CONTAINER_NAME"),
 		ProjectID:         os.Getenv("OS_PROJECT_ID"),

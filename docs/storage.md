@@ -77,7 +77,7 @@ config:
   access_key: ""
   insecure: false
   signature_version2: false
-  secret_key: ""
+  secret_key: null
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 1m30s
@@ -322,7 +322,7 @@ Config file format is the following:
 type: AZURE
 config:
   storage_account: ""
-  storage_account_key: ""
+  storage_account_key: null
   container: ""
   endpoint: ""
   max_retries: 0
@@ -345,7 +345,7 @@ config:
   user_domain_name: ""
   user_domain_id: ""
   user_id: ""
-  password: ""
+  password: null
   domain_id: ""
   domain_name: ""
   project_id: ""
@@ -369,7 +369,7 @@ config:
   bucket: ""
   region: ""
   app_id: ""
-  secret_key: ""
+  secret_key: null
   secret_id: ""
 ```
 
@@ -388,7 +388,7 @@ config:
   endpoint: ""
   bucket: ""
   access_key_id: ""
-  access_key_secret: ""
+  access_key_secret: null
 ```
 
 Use --objstore.config-file to reference to this configuration file.
