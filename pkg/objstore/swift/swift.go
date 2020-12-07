@@ -246,17 +246,17 @@ func (c *Container) deleteContainer(name string) error {
 }
 
 type testSwiftConfig struct {
-	AuthUrl            string      `yaml:"auth_url"`
-	Username           string      `yaml:"username"`
-	Password           string      `yaml:"password"`
-	RegionName         string      `yaml:"region_name"`
-	ContainerName      string      `yaml:"container_name"`
-	ProjectID          string      `yaml:"project_id"`
-	ProjectName        string      `yaml:"project_name"`
-	UserDomainID       string      `yaml:"user_domain_id"`
-	UserDomainName     string      `yaml:"user_domain_name"`
-	ProjectDomainID    string      `yaml:"project_domain_id"`
-	ProjectDomainName  string      `yaml:"project_domain_name"`
+	AuthUrl           string `yaml:"auth_url"`
+	Username          string `yaml:"username"`
+	Password          string `yaml:"password"`
+	RegionName        string `yaml:"region_name"`
+	ContainerName     string `yaml:"container_name"`
+	ProjectID         string `yaml:"project_id"`
+	ProjectName       string `yaml:"project_name"`
+	UserDomainID      string `yaml:"user_domain_id"`
+	UserDomainName    string `yaml:"user_domain_name"`
+	ProjectDomainID   string `yaml:"project_domain_id"`
+	ProjectDomainName string `yaml:"project_domain_name"`
 }
 
 func configFromEnv() testSwiftConfig {
