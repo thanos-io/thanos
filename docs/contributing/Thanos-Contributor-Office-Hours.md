@@ -30,8 +30,6 @@ Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maint
 
 ## Meeting Notes Template
 
-### 2020-12-03
-
 ### Participants:
 
  github handle1, github handle2, github handle3
@@ -44,6 +42,8 @@ Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maint
 ***Any Questions? Email Thanos Team or ask on slack [#thanos-dev](https://slack.cncf.io/)***
 
 ## Past Meeting Notes
+
+### 2020-12-03
 
 ### Participants:
 
