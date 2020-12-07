@@ -14,12 +14,12 @@ We conduct weekly meeting on every Thursday 11:00-12:00 UTC,you can join the [Zo
 
 Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maintainers.md/)
 
-## Rules 
+## Rules
 
 1. The [CNCF Code of Conduct Applies](https://github.com/cncf/foundation/blob/master/code-of-conduct.md)
 2. The meeting will happen in a form of a public and a **recorded Zoom Webinar**.
 3. Anyone can join as a viewer
-4. People that we know and those who have a ***registered*** agenda item will be added as panelists when the meeting starts (if they are present). 
+4. People that we know and those who have a ***registered*** agenda item will be added as panelists when the meeting starts (if they are present).
 5. Try to timebox discussions to max 20min, unless there are no other agenda items.
 6. No announcements and marketing, just pure discussions wiil be done over pending features/bugs/PRs especially the one which are contributed by other contributors than maintainers.
 7. Focus on inclusiveness and friendliness:
@@ -38,7 +38,7 @@ Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maint
 
 * [github handle] topic
      * Related to (List of maintainers)
-     
+
 ***Any Questions? Email Thanos Team or ask on slack [#thanos-dev](https://slack.cncf.io/)***
 
 ## Past Meeting Notes
@@ -66,7 +66,7 @@ Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maint
 
 
 
-  
+
 
 
 
