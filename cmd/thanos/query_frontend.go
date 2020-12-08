@@ -128,8 +128,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
+		return runQueryFrontend(g, logger, reg, tracer, reqLogYAML, cfg, comp)
 	})
 }
 
@@ -138,6 +138,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	reqLogYAML []byte,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -208,7 +209,7 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+	opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 		return logging.LogDecision[cfg.RequestLoggingDecision]
 	})}
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)

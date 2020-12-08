@@ -97,7 +97,7 @@ func registerReceive(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -132,6 +132,7 @@ func registerReceive(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
+			reqLogYAML,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -173,6 +174,7 @@ func runReceive(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	reqLogYAML []byte,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -463,9 +465,6 @@ func runReceive(
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 
-		// set the request logging to no logging.
-		reqLogDecision := "NoLogCall"
-
 		g.Add(func() error {
 			defer close(startGRPC)
 
@@ -489,7 +488,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogDecision, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogYAML, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),

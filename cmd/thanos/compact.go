@@ -85,8 +85,8 @@ func registerCompact(app *extkingpin.App) {
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
+		return runCompact(g, logger, tracer, reqLogYAML, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
 	})
 }
 
@@ -94,6 +94,7 @@ func runCompact(
 	g *run.Group,
 	logger log.Logger,
 	tracer opentracing.Tracer,
+	reqLogYAML []byte,
 	reg *prometheus.Registry,
 	component component.Component,
 	conf compactConfig,
@@ -456,10 +457,14 @@ func runCompact(
 		global.Register(r, false, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.NoLogCall
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+
+		logOpts, err := logging.NewHTTPLoggingOption(reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
+
+		}
+
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		// Separate fetcher for global view.

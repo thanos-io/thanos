@@ -119,7 +119,7 @@ func registerStore(app *extkingpin.App) {
 
 	reqLogDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				minTime, maxTime)
@@ -129,6 +129,8 @@ func registerStore(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
+			reqLogYAML,
+			*reqLogDecision,
 			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
@@ -159,7 +161,6 @@ func registerStore(app *extkingpin.App) {
 			time.Duration(*ignoreDeletionMarksDelay),
 			*webExternalPrefix,
 			*webPrefixHeaderName,
-			*reqLogDecision,
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
 			getFlagsMap(cmd.Flags()),
@@ -175,6 +176,8 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	reqLogYAML []byte,
+	reqLogDecision string,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
@@ -194,7 +197,7 @@ func runStore(
 	advertiseCompatibilityLabel bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
-	externalPrefix, prefixHeader, reqLogDecision string,
+	externalPrefix, prefixHeader string,
 	postingOffsetsInMemSampling int,
 	cachingBucketConfig *extflag.PathOrContent,
 	flagsMap map[string]string,
@@ -363,7 +366,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, reqLogDecision, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogYAML, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
@@ -388,7 +391,7 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)

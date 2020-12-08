@@ -127,7 +127,7 @@ func registerQuery(app *extkingpin.App) {
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -164,6 +164,7 @@ func registerQuery(app *extkingpin.App) {
 			reg,
 			tracer,
 			*reqLogDecision,
+			reqLogYAML,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -214,6 +215,7 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogDecision string,
+	reqLogYAML []byte,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -433,7 +435,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.LogDecision[reqLogDecision]
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
@@ -488,7 +490,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogYAML, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),

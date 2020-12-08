@@ -129,7 +129,7 @@ func registerRule(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -182,6 +182,7 @@ func registerRule(app *extkingpin.App) {
 			reg,
 			tracer,
 			*reqLogDecision,
+			reqLogYAML,
 			reload,
 			lset,
 			*alertmgrs,
@@ -272,6 +273,7 @@ func runRule(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogDecision string,
+	reqLogYAML []byte,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
@@ -556,7 +558,7 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogYAML, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
@@ -598,7 +600,7 @@ func runRule(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.LogDecision[reqLogDecision]
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
