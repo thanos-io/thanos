@@ -68,6 +68,17 @@ func RegisterCommonTracingFlags(app FlagClause) *extflag.PathOrContent {
 	)
 }
 
+// RegisterRequestLoggingFlags registers flags to pass a request logging configuration to be used.
+func RegisterRequestLoggingFlags(app FlagClause) *extflag.PathOrContent {
+	return extflag.RegisterPathOrContent(
+		app,
+		"request.logging",
+		// TODO @yashrsharma44: Change the link with the documented link for yaml configuration
+		"YAML file with request logging configuration. See format details: https://gist.github.com/yashrsharma44/d7db9121f59c0d3b54f3c42f485abf6a",
+		false,
+	)
+}
+
 // RegisterSelectorRelabelFlags register flags to specify relabeling configuration selecting blocks to process.
 func RegisterSelectorRelabelFlags(cmd FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(

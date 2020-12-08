@@ -45,6 +45,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
 		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON)
 	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
+	reqLogConfig := extkingpin.RegisterCommonTracingFlags(app)
 
 	registerSidecar(app)
 	registerStore(app)
@@ -122,10 +123,20 @@ func main() {
 			cancel()
 		})
 	}
+	// Get the reqLogConfigYAML.
+	reqLogYAML, err := reqLogConfig.Content()
+	if err != nil {
+		level.Error(logger).Log("msg", "getting request logging config failed", "err", err)
+	}
+
+	if len(reqLogYAML) == 0 {
+		level.Info(logger).Log("msg", "request logging is disabled, empty config file.")
+	}
+
 	// Create a signal channel to dispatch reload events to sub-commands.
 	reloadCh := make(chan struct{}, 1)
 
-	if err := setup(&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
+	if err := setup(&g, logger, metrics, tracer, reqLogYAML, reloadCh, *logLevel == "debug"); err != nil {
 		// Use %+v for github.com/pkg/errors error to print with stack.
 		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "preparing %s command failed", cmd)))
 		os.Exit(1)

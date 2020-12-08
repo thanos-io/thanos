@@ -20,7 +20,7 @@ type FlagClause interface {
 }
 
 // TODO(bwplotka): Consider some extkingpin package that will not depend on those. Needed: Generics!
-type SetupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, <-chan struct{}, bool) error
+type SetupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, []byte, <-chan struct{}, bool) error
 
 type AppClause interface {
 	FlagClause
