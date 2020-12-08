@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"google.golang.org/grpc"
 )
 
@@ -80,11 +79,4 @@ func WithTLSConfig(cfg *tls.Config) Option {
 	return optionFunc(func(o *options) {
 		o.tlsConfig = cfg
 	})
-}
-
-// LogDecision defines mapping of flag options to the logging decision.
-var LogDecision = map[string]grpc_logging.Decision{
-	"NoLogCall":             grpc_logging.NoLogCall,
-	"LogFinishCall":         grpc_logging.LogFinishCall,
-	"LogStartAndFinishCall": grpc_logging.LogStartAndFinishCall,
 }

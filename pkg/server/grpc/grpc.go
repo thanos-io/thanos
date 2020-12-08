@@ -6,10 +6,8 @@ package grpc
 import (
 	"context"
 	"math"
-	"math/rand"
 	"net"
 	"runtime/debug"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -19,7 +17,6 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,7 +47,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, requestLoggingDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogYAML []byte, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -74,45 +71,29 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-	loggingOpts := []grpc_logging.Option{
-		grpc_logging.WithDecider(func(_ string) grpc_logging.Decision {
-			return LogDecision[requestLoggingDecision]
-		}),
-		grpc_logging.WithLevels(logging.DefaultCodeToLevelGRPC),
-	}
+	tagsOpts, logOpts, err := logging.NewGRPCLoggingOption(reqLogYAML)
 
-	tagsOption := []tags.Option{
-		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
-			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
-			// If a request-id exists for a given request.
-			if tagMap != nil {
-				if _, ok := tagMap["request-id"]; ok {
-					return tagMap
-				}
-			}
-			entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
-			reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-			tagMap = make(map[string]string)
-			tagMap["request-id"] = reqID.String()
-			return tagMap
-		}),
+	if err != nil {
+		level.Error(logger).Log("msg", "config YAML for request logging not recognised", "error", err)
+		tagsOpts = []tags.Option{}
+		logOpts = []grpc_logging.Option{}
 	}
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
-			tags.UnaryServerInterceptor(tagsOption...),
+			tags.UnaryServerInterceptor(tagsOpts...),
 			tracing.UnaryServerInterceptor(tracer),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
+			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
-			tags.StreamServerInterceptor(tagsOption...),
+			tags.StreamServerInterceptor(tagsOpts...),
 			tracing.StreamServerInterceptor(tracer),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), loggingOpts...),
+			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 	}...)
 

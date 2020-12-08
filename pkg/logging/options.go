@@ -30,6 +30,7 @@ var defaultOptions = &options{
 	codeFunc:          DefaultErrorToCode,
 	levelFunc:         DefaultCodeToLevel,
 	durationFieldFunc: DurationToTimeMillisFields,
+	filterLog:         DefaultFilterLogging,
 }
 
 func evaluateOpt(opts []Option) *options {
@@ -56,6 +57,12 @@ func WithLevels(f CodeToLevel) Option {
 	}
 }
 
+func WithFilter(f FilterLogging) Option {
+	return func(o *options) {
+		o.filterLog = f
+	}
+}
+
 // Interface for the additional methods.
 
 // Types for the Options.
@@ -74,11 +81,11 @@ func DefaultErrorToCode(_ error) int {
 
 // Decider function defines rules for suppressing the logging.
 // TODO : Add the method name as a parameter in case we want to log based on method names.
-type Decider func() Decision
+type Decider func(methodName string, err error) Decision
 
 // DefaultDeciderMethod is the default implementation of decider to see if you should log the call
 // by default this is set to LogStartAndFinishCall.
-func DefaultDeciderMethod() Decision {
+func DefaultDeciderMethod(_ string, _ error) Decision {
 	return LogStartAndFinishCall
 }
 
@@ -88,11 +95,20 @@ type CodeToLevel func(logger log.Logger, code int) log.Logger
 // DurationToFields function defines how to produce duration fields for logging.
 type DurationToFields func(duration time.Duration) Fields
 
+// FilterLogging makes sure only the logs with level=lvl gets logged, or filtered.
+type FilterLogging func(logger log.Logger) log.Logger
+
+// DefaultFilterLogging allows logs from all levels to be logged in output.
+func DefaultFilterLogging(logger log.Logger) log.Logger {
+	return level.NewFilter(logger, level.AllowAll())
+}
+
 type options struct {
 	levelFunc         CodeToLevel
 	shouldLog         Decider
 	codeFunc          ErrorToCode
 	durationFieldFunc DurationToFields
+	filterLog         FilterLogging
 }
 
 // DefaultCodeToLevel is the helper mapper that maps HTTP Response codes to log levels.
