@@ -5,6 +5,8 @@ package labelpb
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -103,4 +105,148 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 			testutil.Ok(b, (&zdest).Unmarshal(data))
 		}
 	})
+}
+
+func TestSortZLabelSets(t *testing.T) {
+	expectedResult := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+	}
+
+	list := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		// This label set is the same as the previous one, which should correctly return 0 in Less() function.
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"cluster":   "test",
+					"__name__":  "grpc_client_handled_total",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+	}
+
+	sort.Sort(list)
+	reflect.DeepEqual(expectedResult, list)
 }

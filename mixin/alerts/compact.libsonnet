@@ -8,7 +8,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-compact.rules',
+        name: 'thanos-compact',
         rules: [
           {
             alert: 'ThanosCompactMultipleRunning',

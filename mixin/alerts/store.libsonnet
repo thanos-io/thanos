@@ -11,7 +11,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-store.rules',
+        name: 'thanos-store',
         rules: [
           {
             alert: 'ThanosStoreGrpcErrorRate',

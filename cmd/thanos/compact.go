@@ -113,6 +113,10 @@ func runCompact(
 		Name: "thanos_compact_iterations_total",
 		Help: "Total number of iterations that were executed successfully.",
 	})
+	cleanups := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_block_cleanup_loops_total",
+		Help: "Total number of concurrent cleanup loops of partially uploaded blocks and marked blocks that were executed successfully.",
+	})
 	partialUploadDeleteAttempts := promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_aborted_partial_uploads_deletion_attempts_total",
 		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
@@ -356,25 +360,18 @@ func runCompact(
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
 
-		// No need to resync before partial uploads and delete marked blocks. Last sync should be valid.
+		if err := sy.SyncMetas(ctx); err != nil {
+			cancel()
+			return errors.Wrap(err, "syncing metas")
+		}
+
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, partialUploadDeleteAttempts, blocksCleaned, blockCleanupFailures)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "cleaning marked blocks")
 		}
+		cleanups.Inc()
 
-		if err := sy.SyncMetas(ctx); err != nil {
-			level.Error(logger).Log("msg", "failed to sync metas", "err", err)
-		}
 		return nil
-	}
-
-	// Do it once at the beginning to ensure that it runs at least once before
-	// the main loop.
-	if err := sy.SyncMetas(ctx); err != nil {
-		return errors.Wrap(err, "syncing metas")
-	}
-	if err := cleanPartialMarked(); err != nil {
-		return errors.Wrap(err, "cleaning partial and marked blocks")
 	}
 
 	compactMainFn := func() error {
@@ -496,11 +493,6 @@ func runCompact(
 		// since one iteration potentially could take a long time.
 		if conf.cleanupBlocksInterval > 0 {
 			g.Add(func() error {
-				// Wait the whole period at the beginning because we've executed this on boot.
-				select {
-				case <-time.After(conf.cleanupBlocksInterval):
-				case <-ctx.Done():
-				}
 				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), cleanPartialMarked)
 			}, func(error) {
 				cancel()
