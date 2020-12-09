@@ -10,6 +10,23 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use _breaking :warning:_ to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+### Added
+
+- [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
+- [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
+
+### Fixed
+
+- [#3527](https://github.com/thanos-io/thanos/pull/3527) Query Frontend: Fix query_range behavior when start/end times are the same
+
+### Changed
+
+- [#3496](https://github.com/thanos-io/thanos/pull/3496) s3: Respect SignatureV2 flag for all credential providers.
+
+
+
 ## [v0.17.2](https://github.com/thanos-io/thanos/releases/tag/v0.17.2) - 2020.12.07
 
 ### Fixed
@@ -26,21 +43,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3498](https://github.com/thanos-io/thanos/pull/3498) Enabled debug.SetPanicOnFault(true) which allow us to recover on queries causing SEG FAULTs (e.g unmmaped memory access).
-
-## [v0.17.0](https://github.com/thanos-io/thanos/releases/tag/v0.17.0) - 2020.11.18
-
-### Added
-
-- [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
-- [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
-
-### Fixed
-
-- [#3527](https://github.com/thanos-io/thanos/pull/3527) Query Frontend: Fix query_range behavior when start/end times are the same
-
-### Changed
-
-- [#3496](https://github.com/thanos-io/thanos/pull/3496) s3: Respect SignatureV2 flag for all credential providers.
 
 ## [v0.17.0](https://github.com/thanos-io/thanos/releases/tag/v0.17.0) - 2020.11.18
 
