@@ -72,7 +72,8 @@ func (p *PathOrContent) Content() ([]byte, error) {
 }
 
 // Path returns the path of the file. Flag that specifies path has priority.
-// It returns error if the required flag is set to true.
+// It returns error if the required flag is set to true and content is empty.
+// It also returns errors if both a path and content are given.
 func (p *PathOrContent) Path() (string, error) {
 	fileFlagName := fmt.Sprintf("%s-file", p.flagName)
 
