@@ -106,14 +106,6 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		var cw *receive.ConfigWatcher
-		if *hashringsFile != "" {
-			cw, err = receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, *hashringsFile, *refreshInterval)
-			if err != nil {
-				return err
-			}
-		}
-
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
@@ -376,8 +368,8 @@ func runReceive(
 		// watcher, we close the chan ourselves.
 		updates := make(chan receive.Hashring, 1)
 
-		// The Hashrings config file path given initializing config watcher.
-		if configPath, err := hashringsFile.Path(); err != nil {
+		// The Hashrings config file path is given initializing config watcher.
+		if configPath, err := hashringsFile.Path(); err == nil && configPath != "" {
 			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, configPath, *refreshInterval)
 			if err != nil {
 				return errors.Wrap(err, "failed to initialize config watcher")
@@ -397,6 +389,7 @@ func runReceive(
 				cancel()
 			})
 		} else {
+			// The Hashrings config file path is not given, so initialize using content..
 			configContent, err := hashringsFile.Content()
 			if err != nil {
 				return errors.Wrap(err, "failed to read hashrings configuration file")

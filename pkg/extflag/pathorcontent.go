@@ -44,7 +44,8 @@ func RegisterPathOrContent(cmd FlagClause, flagName string, help string, require
 	}
 }
 
-// Content returns the content of the file. Flag that specifies path has priority.
+// Content returns the content of the file when given or directly the content that has passed to the flag.
+// Flag that specifies path has priority.
 // It returns error if the content is empty and required flag is set to true.
 func (p *PathOrContent) Content() ([]byte, error) {
 	fileFlagName := fmt.Sprintf("%s-file", p.flagName)
@@ -71,9 +72,9 @@ func (p *PathOrContent) Content() ([]byte, error) {
 	return content, nil
 }
 
-// Path returns the path of the file. Flag that specifies path has priority.
-// It returns error if the required flag is set to true and content is empty.
-// It also returns errors if both a path and content are given.
+// Path returns the path of the given file that has passed to the flag.
+// It returns error if both a path and content are given.
+// It returns error if the required flag is set to true and path is empty.
 func (p *PathOrContent) Path() (string, error) {
 	fileFlagName := fmt.Sprintf("%s-file", p.flagName)
 

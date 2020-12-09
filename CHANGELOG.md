@@ -111,13 +111,8 @@ Highlights:
 
 ### Added
 
-<<<<<<< HEAD
-- [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memacached cache.
-  - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
-=======
 - [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memcached cache.
     - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
->>>>>>> dedc7164 (Add ability to consume content of the hashring directly)
 - [#3166](https://github.com/thanos-io/thanos/pull/3166) UIs: Added UI for passing a `storeMatch[]` parameter to queries.
 - [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Added debug level logging for responses between 300-399
 - [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allowed passing a `storeMatch[]` to Labels APIs; Time range metadata based store filtering is supported on Labels APIs.
