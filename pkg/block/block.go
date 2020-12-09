@@ -121,7 +121,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
-	meta.Thanos.Files, err = gatherFileStats(bdir, hf)
+	meta.Thanos.Files, err = GatherFileStats(bdir, hf)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
@@ -279,8 +279,9 @@ func GetSegmentFiles(blockDir string) []string {
 	return result
 }
 
+// GatherFileStats returns an array with data about all files in a given block dir.
 // TODO(bwplotka): Gather stats when dirctly uploading files.
-func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File, _ error) {
+func GatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File, _ error) {
 	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
 	if err != nil {
 		return nil, errors.Wrapf(err, "read dir %v", filepath.Join(blockDir, ChunksDirname))
@@ -290,7 +291,7 @@ func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File
 			RelPath:   filepath.Join(ChunksDirname, f.Name()),
 			SizeBytes: f.Size(),
 		}
-		if hf != metadata.NoneFunc {
+		if hf != metadata.NoneFunc && !f.IsDir() {
 			h, err := metadata.CalculateHash(filepath.Join(blockDir, ChunksDirname, f.Name()), hf)
 			if err != nil {
 				return nil, errors.Wrapf(err, "calculate hash %v", filepath.Join(ChunksDirname, f.Name()))

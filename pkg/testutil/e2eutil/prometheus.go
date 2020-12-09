@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -482,29 +483,10 @@ func createBlock(
 
 	files := []metadata.File{}
 	if addHashes {
-		paths := []string{}
-		err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			paths = append(paths, path)
-			return nil
-		})
+		files, err = block.GatherFileStats(blockDir, metadata.SHA256Func)
 		if err != nil {
-			return id, errors.Wrapf(err, "walking %s", dir)
+			return id, errors.Wrapf(err, "gathering %s file stats", blockDir)
 		}
-
-		for _, p := range paths {
-			pHash, err := metadata.CalculateHash(blockDir+p, metadata.SHA256Func)
-			if err != nil {
-				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
-			}
-			files = append(files, metadata.File{
-				RelPath: p,
-				Hash:    &pHash,
-			})
-		}
-
 	}
 
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
