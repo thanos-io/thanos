@@ -328,7 +328,7 @@ func TestQueryLabelValues(t *testing.T) {
 
 	now := time.Now()
 	labelValues(t, ctx, q.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-		return len(res) > 0
+		return len(res) == 1 && res[0] == "localhost:9090"
 	})
 
 	// Outside time range.
@@ -428,7 +428,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, mustURLParse(t, "http://"+addr), start, end)
 		if err != nil {
 			return err
@@ -437,7 +437,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 			return nil
 		}
 
-		return errors.Errorf("unexpected results size %d", len(res))
+		return errors.Errorf("unexpected results %v", res)
 	}))
 }
 
@@ -447,7 +447,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, mustURLParse(t, "http://"+addr), label, start, end)
 		if err != nil {
 			return err
@@ -456,7 +456,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 			return nil
 		}
 
-		return errors.Errorf("unexpected results size %d", len(res))
+		return errors.Errorf("unexpected results %v", res)
 	}))
 }
 
@@ -465,7 +465,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.L
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, mustURLParse(t, "http://"+addr), matchers, start, end)
 		if err != nil {
 			return err
@@ -474,7 +474,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.L
 			return nil
 		}
 
-		return errors.Errorf("unexpected results size %d", len(res))
+		return errors.Errorf("unexpected results %v", res)
 	}))
 }
 

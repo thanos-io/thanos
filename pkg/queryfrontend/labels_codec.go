@@ -49,20 +49,21 @@ func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Du
 	}
 }
 
+// MergeResponse merges multiple responses into a single Response. It needs to dedup the responses and ensure the order.
 func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
+		// Empty response for label_names, label_values and series API.
 		return &ThanosLabelsResponse{
 			Status: queryrange.StatusSuccess,
 			Data:   []string{},
 		}, nil
 	}
 
-	if len(responses) == 1 {
-		return responses[0], nil
-	}
-
 	switch responses[0].(type) {
 	case *ThanosLabelsResponse:
+		if len(responses) == 1 {
+			return responses[0], nil
+		}
 		set := make(map[string]struct{})
 
 		for _, res := range responses {
@@ -83,25 +84,20 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 			Data:   lbls,
 		}, nil
 	case *ThanosSeriesResponse:
-		seriesData := make([]labelpb.ZLabelSet, 0)
+		seriesData := make(labelpb.ZLabelSets, 0)
 
-		// seriesString is used in soring so we don't have to calculate the string of label sets again.
-		seriesString := make([]string, 0)
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
 			for _, series := range res.(*ThanosSeriesResponse).Data {
 				s := series.PromLabels().String()
 				if _, ok := uniqueSeries[s]; !ok {
 					seriesData = append(seriesData, series)
-					seriesString = append(seriesString, s)
 					uniqueSeries[s] = struct{}{}
 				}
 			}
 		}
 
-		sort.Slice(seriesData, func(i, j int) bool {
-			return seriesString[i] < seriesString[j]
-		})
+		sort.Sort(seriesData)
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
 			Data:   seriesData,
@@ -287,7 +283,7 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.
 		return nil, err
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +317,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		return nil, err
 	}
 
-	result.Matchers, err = parseMatchersParam(r.Form[queryv1.MatcherParam])
+	result.Matchers, err = parseMatchersParam(r.Form, queryv1.MatcherParam)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +336,7 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		result.ReplicaLabels = r.Form[queryv1.ReplicaLabelsParam]
 	}
 
-	result.StoreMatchers, err = parseMatchersParam(r.Form[queryv1.StoreMatcherParam])
+	result.StoreMatchers, err = parseMatchersParam(r.Form, queryv1.StoreMatcherParam)
 	if err != nil {
 		return nil, err
 	}
