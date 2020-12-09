@@ -43,7 +43,7 @@ var (
 		client.AZURE:      azure.Config{},
 		client.GCS:        gcs.Config{},
 		client.S3:         s3.DefaultConfig,
-		client.SWIFT:      swift.SwiftConfig{},
+		client.SWIFT:      swift.DefaultConfig,
 		client.COS:        cos.Config{},
 		client.ALIYUNOSS:  oss.Config{},
 		client.FILESYSTEM: filesystem.Config{},
