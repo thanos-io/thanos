@@ -101,7 +101,7 @@ func getLevel(lvl string) level.Option {
 func NewHTTPLoggingOption(configYAML []byte) ([]Option, error) {
 
 	// Define a black config option.
-	logOpts := []Option{}
+	var logOpts []Option
 
 	// If req logging is disabled.
 	if len(configYAML) == 0 {

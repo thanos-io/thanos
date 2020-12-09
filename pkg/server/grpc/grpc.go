@@ -74,7 +74,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	tagsOpts, logOpts, err := logging.NewGRPCLoggingOption(reqLogYAML)
 
 	if err != nil {
-		level.Error(logger).Log("msg", "config YAML for request logging not recognised", "error", err)
+		level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
 		tagsOpts = []tags.Option{}
 		logOpts = []grpc_logging.Option{}
 	}
