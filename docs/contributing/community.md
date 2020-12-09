@@ -27,6 +27,10 @@ Everyone is welcome to join & add items to the agenda. The meeting happens in Zo
 
 If you have any suggestions, how we can run the meeting better, please let `@povilasv` or `@metalmatze` know in the CNCF slack.
 
+### Thanos Contributor Office Hours
+
+Thanos Contributor Office Hours are public weekly meetings focused on Thanos development and contributions. It’s meant for developers and maintainers to meet, get unblocked, pair review, and discuss development aspects of Thanos and related projects. Read more [here](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#heading=h.oy8b2jtupl8m).
+
 ### Slack
 
 * General channel: [#thanos](https://slack.cncf.io/)
