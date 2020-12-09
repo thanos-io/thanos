@@ -29,7 +29,7 @@ If you have any suggestions, how we can run the meeting better, please let `@pov
 
 ### Thanos Contributor Office Hours
 
-Thanos Contributor Office Hours are public weekly meetings focused on Thanos development and contributions. It’s meant for developers and maintainers to meet and get unblocked, pair review, and discuss development aspects of the Thanos and related projects. Read more [here](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#heading=h.oy8b2jtupl8m)
+Thanos Contributor Office Hours are public weekly meetings focused on Thanos development and contributions. It’s meant for developers and maintainers to meet, get unblocked, pair review, and discuss development aspects of Thanos and related projects. Read more [here](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#heading=h.oy8b2jtupl8m).
 
 ### Slack
 
