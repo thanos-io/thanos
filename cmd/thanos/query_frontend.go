@@ -126,7 +126,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"If multiple headers match the request, the first matching arg specified will take precedence. "+
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
-	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with request.logging. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with request.logging. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
 		return runQueryFrontend(g, logger, reg, tracer, reqLogYAML, cfg, comp)

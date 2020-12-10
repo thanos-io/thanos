@@ -50,6 +50,16 @@ Flags:
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
+      --request.logging-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/d7db9121f59c0d3b54f3c42f485abf6a
+      --request.logging=<content>
+                                 Alternative to 'request.logging-file' flag
+                                 (lower priority). Content of YAML file with
+                                 request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/d7db9121f59c0d3b54f3c42f485abf6a
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -201,13 +211,14 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --log.request.decision=LogFinishCall
+      --log.request.decision=    Deprecation Warning - This flag would be soon
+                                 deprecated, and replaced with request.logging.
                                  Request Logging for logging the start and end
-                                 of requests. LogFinishCall is enabled by
-                                 default. LogFinishCall: Logs the finish call of
-                                 the requests. LogStartAndFinishCall: Logs the
-                                 start and finish call of the requests.
-                                 NoLogCall: Disable request logging.
+                                 of requests. By default this flag is disabled.
+                                 LogFinishCall: Logs the finish call of the
+                                 requests. LogStartAndFinishCall: Logs the start
+                                 and finish call of the requests. NoLogCall:
+                                 Disable request logging.
 
 ```
 
