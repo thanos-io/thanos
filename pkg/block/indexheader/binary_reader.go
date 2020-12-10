@@ -431,12 +431,11 @@ type BinaryReader struct {
 	// For the v1 format, labelname -> labelvalue -> offset.
 	postingsV1 map[string]map[string]index.Range
 
-	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
-	symbols     *index.Symbols
-	nameSymbols map[uint32]string // Cache of the label name symbol lookups,
-	// as there are not many and they are half of all lookups.
+	symbols *Symbols
 
-	dec *index.Decoder
+	// Cache of the label name symbol lookups as there are not many and they are half of all lookups.
+	nameSymbols map[uint32]string
+	dec         *index.Decoder
 
 	version             int
 	indexVersion        int
@@ -504,7 +503,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 	}
 
 	// TODO(bwplotka): Consider contributing to Prometheus to allow specifying custom number for symbolsFactor.
-	r.symbols, err = index.NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
+	r.symbols, err = NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
 	if err != nil {
 		return nil, errors.Wrap(err, "read symbols")
 	}
