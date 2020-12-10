@@ -158,7 +158,7 @@ func runQueryFrontend(
 		return err
 	}
 	if len(labelsCacheConfContentYaml) > 0 {
-		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, labelsCacheConfContentYaml)
 		if err != nil {
 			return errors.Wrap(err, "initializing the labels cache config")
 		}
