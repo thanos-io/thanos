@@ -822,6 +822,27 @@ func TestMetadataEndpoints(t *testing.T) {
 		{
 			endpoint: api.labelValues,
 			query: url.Values{
+				"match[]": []string{`{foo="bar"}`, `{foo="boo"}`},
+			},
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{"test_metric1", "test_metric2", "test_metric_replica1", "test_metric_replica2"},
+		},
+		// No matched series.
+		{
+			endpoint: api.labelValues,
+			query: url.Values{
+				"match[]": []string{`{foo="yolo"}`},
+			},
+			params: map[string]string{
+				"name": "__name__",
+			},
+			response: []string{},
+		},
+		{
+			endpoint: api.labelValues,
+			query: url.Values{
 				"match[]": []string{`test_metric_replica2`},
 			},
 			params: map[string]string{
