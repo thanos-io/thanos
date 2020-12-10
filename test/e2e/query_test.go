@@ -302,7 +302,6 @@ func TestQueryLabelNames(t *testing.T) {
 	// There is no matched series.
 	labelNames(t, ctx, q.HTTPEndpoint(), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "foobar"}},
 		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			// Expected result: [__name__, instance, job, prometheus, replica]
 			return len(res) == 0
 		},
 	)
