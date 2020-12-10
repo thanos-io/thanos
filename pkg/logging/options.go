@@ -152,7 +152,7 @@ var LogDecision = map[string]Decision{
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
 	// Check if the user enables request logging through flags and YAML
-	if len(configYAML) != 0 || len(flagDecision) != 0 {
+	if len(configYAML) != 0 && len(flagDecision) != 0 {
 		return []Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
 	}
 
@@ -175,7 +175,7 @@ func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func DecideGRPCFlag(flagDecision string, configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
 	// Check if the user enables request logging through flags and YAML
-	if len(configYAML) != 0 || len(flagDecision) != 0 {
+	if len(configYAML) != 0 && len(flagDecision) != 0 {
 		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
 	}
 
