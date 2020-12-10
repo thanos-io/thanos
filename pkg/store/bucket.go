@@ -2108,6 +2108,7 @@ func (r *bucketIndexReader) Close() error {
 func (r *bucketIndexReader) LookupLabelsSymbols(symbolized []symbolizedLabel, lbls *labels.Labels) error {
 	*lbls = (*lbls)[:0]
 	for _, s := range symbolized {
+		// TODO(bwplotka): Cache, it takes majority of query time.
 		ln, err := r.dec.LookupSymbol(s.name)
 		if err != nil {
 			return errors.Wrap(err, "lookup label name")
