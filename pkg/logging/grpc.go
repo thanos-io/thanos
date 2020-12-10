@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package logging
 
 import (
@@ -141,8 +144,7 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 			return tagMap
 		}),
 	}
-
-	logOpts := []grpc_logging.Option{}
+	var logOpts []grpc_logging.Option
 
 	// Unmarshal YAML
 	// if req logging is disabled.
@@ -161,18 +163,18 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 
 	// If global options have invalid entries.
 	if err != nil {
-		return tagOpts, logOpts, err
+		return []tags.Option{}, []grpc_logging.Option{}, err
 	}
 
 	// If the level entry does not matches our entries.
 	if err := validateLevel(globalLevel); err != nil {
-		return tagOpts, logOpts, err
+		return []tags.Option{}, []grpc_logging.Option{}, err
 	}
 
 	// If the combination is valid, use them, otherwise return error.
 	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
 	if err != nil {
-		return tagOpts, logOpts, err
+		return []tags.Option{}, []grpc_logging.Option{}, err
 	}
 
 	if len(reqLogConfig.GRPC.Config) == 0 {
@@ -188,7 +190,6 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 			}),
 			grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
 		}
-
 		return tagOpts, logOpts, nil
 	}
 
@@ -201,14 +202,12 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 
 		logOpts = append(logOpts, []grpc_logging.Option{
 			grpc_logging.WithDecider(func(runtimeMethodName string, err error) grpc_logging.Decision {
-
 				if runtimeMethodName == eachConfigMethodName {
 					runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
 
 					if string(runtimeLevel) == strings.ToLower(globalLevel) {
 						return reqLogDecision
 					}
-
 				}
 				return grpc_logging.NoLogCall
 			}),

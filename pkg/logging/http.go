@@ -26,12 +26,9 @@ func (m *HTTPServerMiddleware) preCall(start time.Time) {
 
 func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *httputil.ResponseWriterWithStatus, r *http.Request) {
 	status := wrapped.Status()
-	logger := log.With(m.logger, "http.method", name, "http.request.id", r.Header.Get("X-Request-ID"), "http.code", fmt.Sprintf("%d", status),
-		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))))
+	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
+		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
 
-	if status >= 500 && status < 600 {
-		logger = log.With(logger, "http.error", fmt.Sprintf("%v", status))
-	}
 	logger = m.opts.filterLog(logger)
 	m.opts.levelFunc(logger, status).Log("msg", "finished call")
 }
@@ -59,6 +56,7 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 }
 
 func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddleware {
+
 	o := evaluateOpt(opts)
 	return &HTTPServerMiddleware{
 		logger: log.With(logger, "protocol", "http", "http.component", "server"),

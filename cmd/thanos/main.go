@@ -45,7 +45,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
 		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON)
 	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
-	reqLogConfig := extkingpin.RegisterCommonTracingFlags(app)
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(app)
 
 	registerSidecar(app)
 	registerStore(app)

@@ -5,11 +5,14 @@ package logging
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
+	"github.com/oklog/ulid"
 	"google.golang.org/grpc/codes"
 )
 
@@ -144,4 +147,74 @@ var LogDecision = map[string]Decision{
 	"NoLogCall":             NoLogCall,
 	"LogFinishCall":         LogFinishCall,
 	"LogStartAndFinishCall": LogStartAndFinishCall,
+}
+
+// TODO: @yashrsharma44 - To be deprecated in the next release.
+func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
+	// Check if the user enables request logging through flags and YAML
+	if len(configYAML) != 0 || len(flagDecision) != 0 {
+		return []Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+	}
+
+	// If old flag is enabled.
+	if len(flagDecision) > 0 {
+		logOpts := []Option{WithDecider(func(_ string, _ error) Decision {
+			return LogDecision[flagDecision]
+		})}
+		return logOpts, nil
+	}
+
+	logOpts, err := NewHTTPLoggingOption(configYAML)
+	if err != nil {
+		return []Option{}, err
+	}
+
+	return logOpts, nil
+}
+
+// TODO: @yashrsharma44 - To be deprecated in the next release.
+func DecideGRPCFlag(flagDecision string, configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+	// Check if the user enables request logging through flags and YAML
+	if len(configYAML) != 0 || len(flagDecision) != 0 {
+		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+	}
+
+	if len(flagDecision) > 0 {
+		tagOpts := []tags.Option{
+			tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
+				tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
+				// If a request-id exists for a given request.
+				if tagMap != nil {
+					if _, ok := tagMap["request-id"]; ok {
+						return tagMap
+					}
+				}
+				entropy := ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)
+				reqID := ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
+				tagMap = make(map[string]string)
+				tagMap["request-id"] = reqID.String()
+				return tagMap
+			}),
+		}
+		logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
+			switch flagDecision {
+			case "NoLogCall":
+				return grpc_logging.NoLogCall
+			case "LogFinishCall":
+				return grpc_logging.LogFinishCall
+			case "LogStartAndFinishCall":
+				return grpc_logging.LogStartAndFinishCall
+			default:
+				return grpc_logging.NoLogCall
+			}
+		})}
+		return tagOpts, logOpts, nil
+	}
+
+	tagOpts, logOpts, err := NewGRPCLoggingOption(configYAML)
+	if err != nil {
+		return []tags.Option{}, []grpc_logging.Option{}, err
+	}
+
+	return tagOpts, logOpts, nil
 }

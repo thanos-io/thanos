@@ -464,7 +464,7 @@ func runReceive(
 	{
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
-
+		reqLogDecision := ""
 		g.Add(func() error {
 			defer close(startGRPC)
 
@@ -488,7 +488,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogYAML, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),

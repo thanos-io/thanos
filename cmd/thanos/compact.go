@@ -457,11 +457,9 @@ func runCompact(
 		global.Register(r, false, ins)
 
 		// Configure Request Logging for HTTP calls.
-
 		logOpts, err := logging.NewHTTPLoggingOption(reqLogYAML)
 		if err != nil {
 			level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
-
 		}
 
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)

@@ -47,7 +47,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogYAML []byte, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogYAML []byte, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -71,10 +71,10 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-	tagsOpts, logOpts, err := logging.NewGRPCLoggingOption(reqLogYAML)
+	tagsOpts, logOpts, err := logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
 
 	if err != nil {
-		level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
+		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 		tagsOpts = []tags.Option{}
 		logOpts = []grpc_logging.Option{}
 	}
