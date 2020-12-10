@@ -677,7 +677,7 @@ func (s *bucketSeriesSet) Err() error {
 }
 
 func blockSeries(
-	extLset map[string]string,
+	extLset labels.Labels,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
 	matchers []*labels.Matcher,
@@ -718,7 +718,7 @@ func blockSeries(
 			continue
 		}
 
-		s := seriesEntry{lset: make(labels.Labels, 0, len(symbolizedLset)+len(extLset))}
+		s := seriesEntry{}
 		if !req.SkipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]uint64, 0, len(chks))
@@ -743,18 +743,7 @@ func blockSeries(
 			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		for _, l := range lset {
-			// Skip if the external labels of the block overrule the series' label.
-			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-			if extLset[l.Name] != "" {
-				continue
-			}
-			s.lset = append(s.lset, l)
-		}
-		for ln, lv := range extLset {
-			s.lset = append(s.lset, labels.Label{Name: ln, Value: lv})
-		}
-		sort.Sort(s.lset)
+		s.lset = injectLabels(lset, extLset)
 		res = append(res, s)
 	}
 
@@ -780,6 +769,31 @@ func blockSeries(
 		}
 	}
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
+}
+
+func injectLabels(in labels.Labels, extLset labels.Labels) labels.Labels {
+	out := make(labels.Labels, 0, len(in)+len(extLset))
+
+	// Inject external labels in place.
+	for len(in) > 0 && len(extLset) > 0 {
+		d := strings.Compare(in[0].Name, extLset[0].Name)
+		if d == 0 {
+			// Duplicate, prefer external labels.
+			// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
+			out = append(out, extLset[0])
+			in, extLset = in[1:], extLset[1:]
+		} else if d < 0 {
+			out = append(out, in[0])
+			in = in[1:]
+		} else if d > 0 {
+			out = append(out, extLset[0])
+			extLset = extLset[1:]
+		}
+	}
+	// Append all remaining elements.
+	out = append(out, in...)
+	out = append(out, extLset...)
+	return out
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
@@ -943,7 +957,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			g.Go(func() error {
 				part, pstats, err := blockSeries(
-					b.meta.Thanos.Labels,
+					b.extLset,
 					indexr,
 					chunkr,
 					blockMatchers,
@@ -1374,6 +1388,7 @@ type bucketBlock struct {
 	dir        string
 	indexCache storecache.IndexCache
 	chunkPool  pool.BytesPool
+	extLset    labels.Labels
 
 	indexHeaderReader indexheader.Reader
 
@@ -1410,6 +1425,7 @@ func newBucketBlock(
 		partitioner:       p,
 		meta:              meta,
 		indexHeaderReader: indexHeadReader,
+		extLset:           labels.FromMap(meta.Thanos.Labels),
 	}
 
 	// Translate the block's labels and inject the block ID as a label
