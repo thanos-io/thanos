@@ -743,7 +743,7 @@ func blockSeries(
 			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		s.lset = injectLabels(lset, extLset)
+		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
 		res = append(res, s)
 	}
 
@@ -769,31 +769,6 @@ func blockSeries(
 		}
 	}
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
-}
-
-func injectLabels(in labels.Labels, extLset labels.Labels) labels.Labels {
-	out := make(labels.Labels, 0, len(in)+len(extLset))
-
-	// Inject external labels in place.
-	for len(in) > 0 && len(extLset) > 0 {
-		d := strings.Compare(in[0].Name, extLset[0].Name)
-		if d == 0 {
-			// Duplicate, prefer external labels.
-			// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
-			out = append(out, extLset[0])
-			in, extLset = in[1:], extLset[1:]
-		} else if d < 0 {
-			out = append(out, in[0])
-			in = in[1:]
-		} else if d > 0 {
-			out = append(out, extLset[0])
-			extLset = extLset[1:]
-		}
-	}
-	// Append all remaining elements.
-	out = append(out, in...)
-	out = append(out, extLset...)
-	return out
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
@@ -1426,14 +1401,14 @@ func newBucketBlock(
 		meta:              meta,
 		indexHeaderReader: indexHeadReader,
 		extLset:           labels.FromMap(meta.Thanos.Labels),
+		// Translate the block's labels and inject the block ID as a label
+		// to allow to match blocks also by ID.
+		relabelLabels: append(labels.FromMap(meta.Thanos.Labels), labels.Label{
+			Name:  block.BlockIDLabel,
+			Value: meta.ULID.String(),
+		}),
 	}
-
-	// Translate the block's labels and inject the block ID as a label
-	// to allow to match blocks also by ID.
-	b.relabelLabels = append(labels.FromMap(meta.Thanos.Labels), labels.Label{
-		Name:  block.BlockIDLabel,
-		Value: meta.ULID.String(),
-	})
+	sort.Sort(b.extLset)
 	sort.Sort(b.relabelLabels)
 
 	// Get object handles for all chunk files (segment files) from meta.json, if available.
