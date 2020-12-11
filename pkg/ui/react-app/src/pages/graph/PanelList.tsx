@@ -133,7 +133,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
-  const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-metric-autocomplete', true);
+  const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-autocomplete', true);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
@@ -188,7 +188,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         defaultChecked={enableAutocomplete}
         onChange={({ target }) => setEnableAutocomplete(target.checked)}
       >
-        Enable metric autocomplete
+        Enable autocomplete
       </Checkbox>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">
