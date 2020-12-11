@@ -152,7 +152,7 @@ func IsWALDirAccessible(dir string) error {
 	return nil
 }
 
-// ExternalLabels returns external labels from /api/v1/status/config Prometheus endpoint.
+// ExternalLabels returns sorted external labels from /api/v1/status/config Prometheus endpoint.
 // Note that configuration can be hot reloadable on Prometheus, so this config might change in runtime.
 func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
 	u := *base
@@ -181,7 +181,10 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
 		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
-	return labels.FromMap(cfg.Global.ExternalLabels), nil
+
+	lset := labels.FromMap(cfg.Global.ExternalLabels)
+	sort.Sort(lset)
+	return lset, nil
 }
 
 type Flags struct {
