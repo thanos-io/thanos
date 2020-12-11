@@ -1463,13 +1463,13 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
+	if seq < 0 || seq >= len(b.chunkObjs) {
+		return nil, errors.Errorf("unknown segment file for index %d", seq)
+	}
+
 	c, err := b.chunkPool.Get(int(length))
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
-	}
-
-	if seq < 0 || seq >= len(b.chunkObjs) {
-		return nil, errors.Errorf("unknown segment file for index %d", seq)
 	}
 
 	buf := bytes.NewBuffer(*c)
