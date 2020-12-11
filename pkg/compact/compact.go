@@ -305,7 +305,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 			groups[groupKey] = group
 			res = append(res, group)
 		}
-		if err := group.AddMeta(m); err != nil {
+		if err := group.AppendMeta(m); err != nil {
 			return nil, errors.Wrap(err, "add compaction group")
 		}
 	}
@@ -380,8 +380,8 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
-// AddMeta the block with the given meta to the group.
-func (cg *Group) AddMeta(meta *metadata.Meta) error {
+// AppendMeta add the block with the given meta to the compaction group.
+func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
