@@ -530,7 +530,7 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
-// Special label that will have an ULID of the meta.json being referenced to.
+// BlockIDLabel Special label that will have an ULID of the meta.json being referenced to.
 const BlockIDLabel = "__block_id"
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
@@ -854,7 +854,11 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 }
 
 var (
-	SelectorSupportedRelabelActions = map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}}
+	SelectorSupportedRelabelActions = map[relabel.Action]struct{}{
+		relabel.Keep:    {},
+		relabel.Drop:    {},
+		relabel.HashMod: {},
+	}
 )
 
 // ParseRelabelConfig parses relabel configuration.

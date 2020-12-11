@@ -222,6 +222,9 @@ func runCompact(
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, fetcherConcurrency)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
+	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
+	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
@@ -241,33 +244,36 @@ func runCompact(
 		)
 	}
 
-	compactorView := ui.NewBucketUI(
-		logger,
-		conf.label,
-		conf.webConf.externalPrefix,
-		conf.webConf.prefixHeaderName,
-		"/loaded",
-		component,
+	var (
+		compactorView = ui.NewBucketUI(
+			logger,
+			conf.label,
+			conf.webConf.externalPrefix,
+			conf.webConf.prefixHeaderName,
+			"/loaded",
+			component,
+		)
+		api    = blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+		syncer *compact.Syncer
 	)
-	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
-	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
-	var sy *compact.Syncer
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
-			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-				block.NewLabelShardedMetaFilter(relabelConfig),
-				block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+			extprom.WrapRegistererWithPrefix("thanos_", reg),
+			[]block.MetadataFilter{
+				labelShardedMetaFilter,
+				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
-			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
+			},
+			[]block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			compactorView.Set(blocks, err)
 			api.SetLoaded(blocks, err)
 		})
-		sy, err = compact.NewMetaSyncer(
+		syncer, err = compact.NewMetaSyncer(
 			logger,
 			reg,
 			bkt,
@@ -276,7 +282,8 @@ func runCompact(
 			ignoreDeletionMarkFilter,
 			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
 			compactMetrics.garbageCollectedBlocks,
-			conf.blockSyncConcurrency)
+			conf.blockSyncConcurrency,
+		)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}
@@ -321,16 +328,17 @@ func runCompact(
 	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay,
 		compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
+	planner := compact.WithLargeTotalIndexSizeFilter(
+		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+		bkt,
+		int64(conf.maxBlockIndexSize),
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename),
+	)
 	compactor, err := compact.NewBucketCompactor(
 		logger,
-		sy,
+		syncer,
 		grouper,
-		compact.WithLargeTotalIndexSizeFilter(
-			compact.NewPlanner(logger, levels, noCompactMarkerFilter),
-			bkt,
-			int64(conf.maxBlockIndexSize),
-			compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename),
-		),
+		planner,
 		comp,
 		compactDir,
 		bkt,
@@ -363,12 +371,12 @@ func runCompact(
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
 
-		if err := sy.SyncMetas(ctx); err != nil {
+		if err := syncer.SyncMetas(ctx); err != nil {
 			cancel()
 			return errors.Wrap(err, "syncing metas")
 		}
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt,
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, syncer.Partial(), bkt,
 			compactMetrics.partialUploadDeleteAttempts,
 			compactMetrics.blocksCleaned,
 			compactMetrics.blockCleanupFailures,
@@ -391,24 +399,24 @@ func runCompact(
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
-			if err := sy.SyncMetas(ctx); err != nil {
+			if err := syncer.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before first pass of downsampling")
 			}
 
-			for _, meta := range sy.Metas() {
+			for _, meta := range syncer.Metas() {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, syncer.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
-			if err := sy.SyncMetas(ctx); err != nil {
+			if err := syncer.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, syncer.Metas(), downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -417,11 +425,11 @@ func runCompact(
 		}
 
 		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
-		if err := sy.SyncMetas(ctx); err != nil {
+		if err := syncer.SyncMetas(ctx); err != nil {
 			return errors.Wrap(err, "sync before first pass of downsampling")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(),
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, syncer.Metas(),
 			retentionByResolution,
 			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)); err != nil {
 			return errors.Wrap(err, "retention failed")
