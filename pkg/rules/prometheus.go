@@ -52,10 +52,11 @@ func (p *Prometheus) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer)
 	return nil
 }
 
+// extLset has to be sorted.
 func enrichRulesWithExtLabels(groups []*rulespb.RuleGroup, extLset labels.Labels) {
 	for _, g := range groups {
 		for _, r := range g.Rules {
-			r.SetLabels(labelpb.ExtendLabels(r.GetLabels(), extLset))
+			r.SetLabels(labelpb.ExtendSortedLabels(r.GetLabels(), extLset))
 		}
 	}
 }

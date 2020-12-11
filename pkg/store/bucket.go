@@ -677,7 +677,7 @@ func (s *bucketSeriesSet) Err() error {
 }
 
 func blockSeries(
-	extLset map[string]string,
+	extLset labels.Labels,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
 	matchers []*labels.Matcher,
@@ -718,7 +718,7 @@ func blockSeries(
 			continue
 		}
 
-		s := seriesEntry{lset: make(labels.Labels, 0, len(symbolizedLset)+len(extLset))}
+		s := seriesEntry{}
 		if !req.SkipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]uint64, 0, len(chks))
@@ -743,18 +743,7 @@ func blockSeries(
 			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		for _, l := range lset {
-			// Skip if the external labels of the block overrule the series' label.
-			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-			if extLset[l.Name] != "" {
-				continue
-			}
-			s.lset = append(s.lset, l)
-		}
-		for ln, lv := range extLset {
-			s.lset = append(s.lset, labels.Label{Name: ln, Value: lv})
-		}
-		sort.Sort(s.lset)
+		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
 		res = append(res, s)
 	}
 
@@ -943,7 +932,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			g.Go(func() error {
 				part, pstats, err := blockSeries(
-					b.meta.Thanos.Labels,
+					b.extLset,
 					indexr,
 					chunkr,
 					blockMatchers,
@@ -1374,6 +1363,7 @@ type bucketBlock struct {
 	dir        string
 	indexCache storecache.IndexCache
 	chunkPool  pool.BytesPool
+	extLset    labels.Labels
 
 	indexHeaderReader indexheader.Reader
 
@@ -1410,14 +1400,15 @@ func newBucketBlock(
 		partitioner:       p,
 		meta:              meta,
 		indexHeaderReader: indexHeadReader,
+		extLset:           labels.FromMap(meta.Thanos.Labels),
+		// Translate the block's labels and inject the block ID as a label
+		// to allow to match blocks also by ID.
+		relabelLabels: append(labels.FromMap(meta.Thanos.Labels), labels.Label{
+			Name:  block.BlockIDLabel,
+			Value: meta.ULID.String(),
+		}),
 	}
-
-	// Translate the block's labels and inject the block ID as a label
-	// to allow to match blocks also by ID.
-	b.relabelLabels = append(labels.FromMap(meta.Thanos.Labels), labels.Label{
-		Name:  block.BlockIDLabel,
-		Value: meta.ULID.String(),
-	})
+	sort.Sort(b.extLset)
 	sort.Sort(b.relabelLabels)
 
 	// Get object handles for all chunk files (segment files) from meta.json, if available.
