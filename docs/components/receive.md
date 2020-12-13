@@ -108,29 +108,6 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --remote-write.address="0.0.0.0:19291"
-                                 Address to listen on for remote write requests.
-      --remote-write.server-tls-cert=""
-                                 TLS Certificate for HTTP server, leave blank to
-                                 disable TLS.
-      --remote-write.server-tls-key=""
-                                 TLS Key for the HTTP server, leave blank to
-                                 disable TLS.
-      --remote-write.server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
-                                 verification on server side. (tls.NoClientCert)
-      --remote-write.client-tls-cert=""
-                                 TLS Certificates to use to identify this client
-                                 to the server.
-      --remote-write.client-tls-key=""
-                                 TLS Key for the client's certificate.
-      --remote-write.client-tls-ca=""
-                                 TLS CA Certificates to use to verify servers.
-      --remote-write.client-server-name=""
-                                 Server name to verify the hostname on the
-                                 returned gRPC certificates. See
-                                 https://tools.ietf.org/html/rfc4366#section-3.1
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
@@ -147,37 +124,12 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
-      --receive.hashrings-file=<path>
-                                 Path to file that contains the hashring
-                                 configuration. A watcher is initialized to
-                                 watch changes and update the hashring
-                                 dynamically.
-      --receive.hashrings=<content>
-                                 Alternative to 'receive.hashrings-file' flag
-                                 (lower priority). Content of file that contains
-                                 the hashring configuration.
-      --receive.hashrings-file-refresh-interval=5m
-                                 Refresh interval to re-read the hashring
-                                 configuration file. (used as a fallback)
-      --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
-                                 Endpoint of local receive node. Used to
-                                 identify the local node in the hashring
-                                 configuration.
-      --receive.tenant-header="THANOS-TENANT"
-                                 HTTP header to determine tenant for write
-                                 requests.
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
       --receive.tenant-label-name="tenant_id"
                                  Label name through which the tenant will be
                                  announced.
-      --receive.replica-header="THANOS-REPLICA"
-                                 HTTP header specifying the replica number of a
-                                 write request.
-      --receive.replication-factor=1
-                                 How many times to replicate incoming write
-                                 requests.
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.

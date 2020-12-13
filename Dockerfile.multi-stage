@@ -22,3 +22,4 @@ LABEL maintainer="The Thanos Authors"
 COPY --from=builder /go/bin/thanos /bin/thanos
 
 ENTRYPOINT [ "/bin/thanos" ]
+
