@@ -24,7 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
@@ -44,8 +43,6 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 }
 
-// NewMultiTSDB creates new MultiTSDB.
-// NOTE: Passed labels has to be sorted by name.
 func NewMultiTSDB(
 	dataDir string,
 	l log.Logger,
@@ -265,7 +262,7 @@ func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+	lbls := append(t.labels, labels.Label{Name: t.tenantLabelName, Value: tenantID})
 	dataDir := t.defaultTenantDataDir(tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
@@ -289,13 +286,13 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			reg,
 			dataDir,
 			t.bucket,
-			func() labels.Labels { return lset },
+			func() labels.Labels { return lbls },
 			metadata.ReceiveSource,
 			false,
 			t.allowOutOfOrderUpload,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lset), s, ship)
+	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lbls), s, ship)
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }

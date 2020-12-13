@@ -5,11 +5,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -18,14 +16,12 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -44,15 +40,9 @@ func registerReceive(app *extkingpin.App) {
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
-	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
-		Default("0.0.0.0:19291").String()
 	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS.").Default("").String()
 	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS.").Default("").String()
 	rwServerClientCA := cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").String()
-	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").String()
-	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").String()
-	rwClientServerName := cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -63,25 +53,9 @@ func registerReceive(app *extkingpin.App) {
 
 	retention := extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
-	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
-		PlaceHolder("<path>").String()
-
-	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
-		Default("5m"))
-
-	localEndpoint := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
-
-	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).String()
-
 	defaultTenantID := cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).String()
 
 	tenantLabelName := cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(receive.DefaultTenantLabel).String()
-
-	replicaHeader := cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).String()
-
-	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
-
-	forwardTimeout := extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
 	tsdbMinBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
@@ -101,36 +75,12 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
-		if len(lset) == 0 {
-			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
-		}
-
-		var cw *receive.ConfigWatcher
-		if *hashringsFile != "" {
-			cw, err = receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, *hashringsFile, *refreshInterval)
-			if err != nil {
-				return err
-			}
-		}
-
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
 			NoLockfile:        *noLockFile,
 			WALCompression:    *walCompression,
-		}
-
-		// Local is empty, so try to generate a local endpoint
-		// based on the hostname and the listening port.
-		if *localEndpoint == "" {
-			hostname, err := os.Hostname()
-			if hostname == "" || err != nil {
-				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
-			}
-			parts := strings.Split(*grpcBindAddr, ":")
-			port := parts[len(parts)-1]
-			*localEndpoint = fmt.Sprintf("%s:%s", hostname, port)
 		}
 
 		return runReceive(
@@ -145,27 +95,16 @@ func registerReceive(app *extkingpin.App) {
 			*grpcClientCA,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
-			*rwAddress,
 			*rwServerCert,
 			*rwServerKey,
 			*rwServerClientCA,
-			*rwClientCert,
-			*rwClientKey,
-			*rwClientServerCA,
-			*rwClientServerName,
 			*dataDir,
 			objStoreConfig,
 			tsdbOpts,
 			*ignoreBlockSize,
 			lset,
-			cw,
-			*localEndpoint,
-			*tenantHeader,
 			*defaultTenantID,
 			*tenantLabelName,
-			*replicaHeader,
-			*replicationFactor,
-			time.Duration(*forwardTimeout),
 			*allowOutOfOrderUpload,
 			component.Receive,
 		)
@@ -184,41 +123,21 @@ func runReceive(
 	grpcClientCA string,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
-	rwAddress string,
 	rwServerCert string,
 	rwServerKey string,
 	rwServerClientCA string,
-	rwClientCert string,
-	rwClientKey string,
-	rwClientServerCA string,
-	rwClientServerName string,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	tsdbOpts *tsdb.Options,
 	ignoreBlockSize bool,
 	lset labels.Labels,
-	cw *receive.ConfigWatcher,
-	endpoint string,
-	tenantHeader string,
 	defaultTenantID string,
 	tenantLabelName string,
-	replicaHeader string,
-	replicationFactor uint64,
-	forwardTimeout time.Duration,
 	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
-	if err != nil {
-		return err
-	}
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, rwServerCert != "", rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
-	if err != nil {
-		return err
-	}
-
 	var bkt objstore.Bucket
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -260,21 +179,7 @@ func runReceive(
 		allowOutOfOrderUpload,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
-	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     rwAddress,
-		Registry:          reg,
-		Endpoint:          endpoint,
-		TenantHeader:      tenantHeader,
-		DefaultTenantID:   defaultTenantID,
-		ReplicaHeader:     replicaHeader,
-		ReplicationFactor: replicationFactor,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    forwardTimeout,
-	})
-
+	webHandler := receive.NewHandler(writer, reg, defaultTenantID,tracer,log.With(logger, "component", "receive-handler"))
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
@@ -286,141 +191,14 @@ func runReceive(
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
 
-	// dbReady signals when TSDB is ready and the Store gRPC server can start.
-	dbReady := make(chan struct{}, 1)
-	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
-	hashringChangedChan := make(chan struct{}, 1)
-	// uploadC signals when new blocks should be uploaded.
-	uploadC := make(chan struct{}, 1)
-	// uploadDone signals when uploading has finished.
-	uploadDone := make(chan struct{}, 1)
-
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
 		log.With(logger, "component", "storage")
-		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_receive_multi_db_updates_attempted_total",
-			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
-		})
-		dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_receive_multi_db_updates_completed_total",
-			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
-		})
 
 		level.Debug(logger).Log("msg", "removing storage lock files if any")
 		if err := dbs.RemoveLockFilesIfAny(); err != nil {
 			return errors.Wrap(err, "remove storage lock files")
 		}
-
-		// TSDBs reload logic, listening on hashring changes.
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			defer close(dbReady)
-			defer close(uploadC)
-
-			// Before quitting, ensure the WAL is flushed and the DBs are closed.
-			defer func() {
-				level.Info(logger).Log("msg", "shutting down storage")
-				if err := dbs.Flush(); err != nil {
-					level.Error(logger).Log("err", err, "msg", "failed to flush storage")
-				} else {
-					level.Info(logger).Log("msg", "storage is flushed successfully")
-				}
-				if err := dbs.Close(); err != nil {
-					level.Error(logger).Log("err", err, "msg", "failed to close storage")
-					return
-				}
-				level.Info(logger).Log("msg", "storage is closed")
-			}()
-
-			for {
-				select {
-				case <-cancel:
-					return nil
-				case _, ok := <-hashringChangedChan:
-					if !ok {
-						return nil
-					}
-					dbUpdatesStarted.Inc()
-					level.Info(logger).Log("msg", "updating storage")
-
-					if err := dbs.Flush(); err != nil {
-						return errors.Wrap(err, "flushing storage")
-					}
-					if err := dbs.Open(); err != nil {
-						return errors.Wrap(err, "opening storage")
-					}
-					if upload {
-						uploadC <- struct{}{}
-						<-uploadDone
-					}
-					statusProber.Ready()
-					level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-					dbUpdatesCompleted.Inc()
-					dbReady <- struct{}{}
-				}
-			}
-		}, func(err error) {
-			close(cancel)
-		})
-	}
-
-	level.Debug(logger).Log("msg", "setting up hashring")
-	{
-		// Note: the hashring configuration watcher
-		// is the sender and thus closes the chan.
-		// In the single-node case, which has no configuration
-		// watcher, we close the chan ourselves.
-		updates := make(chan receive.Hashring, 1)
-
-		if cw != nil {
-			// Check the hashring configuration on before running the watcher.
-			if err := cw.ValidateConfig(); err != nil {
-				cw.Stop()
-				close(updates)
-				return errors.Wrap(err, "failed to validate hashring configuration file")
-			}
-
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				return receive.HashringFromConfig(ctx, updates, cw)
-			}, func(error) {
-				cancel()
-			})
-		} else {
-			cancel := make(chan struct{})
-			g.Add(func() error {
-				defer close(updates)
-				updates <- receive.SingleNodeHashring(endpoint)
-				<-cancel
-				return nil
-			}, func(error) {
-				close(cancel)
-			})
-		}
-
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			defer close(hashringChangedChan)
-			for {
-				select {
-				case h, ok := <-updates:
-					if !ok {
-						return nil
-					}
-					webHandler.Hashring(h)
-					msg := "hashring has changed; server is not ready to receive web requests"
-					statusProber.NotReady(errors.New(msg))
-					level.Info(logger).Log("msg", msg)
-					hashringChangedChan <- struct{}{}
-				case <-cancel:
-					return nil
-				}
-			}
-		}, func(err error) {
-			close(cancel)
-		},
-		)
 	}
 
 	level.Debug(logger).Log("msg", "setting up http server")
@@ -451,11 +229,6 @@ func runReceive(
 				return errors.Wrap(err, "setup gRPC server")
 			}
 
-			for range dbReady {
-				if s != nil {
-					s.Shutdown(errors.New("reload hashrings"))
-				}
-
 				rw := store.ReadWriteTSDBStore{
 					StoreServer: store.NewMultiTSDBStore(
 						logger,
@@ -473,37 +246,21 @@ func runReceive(
 					grpcserver.WithGracePeriod(grpcGracePeriod),
 					grpcserver.WithTLSConfig(tlsCfg),
 				)
-				startGRPC <- struct{}{}
-			}
-			if s != nil {
-				s.Shutdown(err)
+
+			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", grpcBindAddr)
+			if err := s.ListenAndServe(); err != nil {
+				return errors.Wrap(err, "serve gRPC")
 			}
 			return nil
 		}, func(error) {})
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
-			for range startGRPC {
-				level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", grpcBindAddr)
-				if err := s.ListenAndServe(); err != nil {
-					return errors.Wrap(err, "serve gRPC")
-				}
-			}
 			return nil
 		}, func(error) {})
 	}
 
-	level.Debug(logger).Log("msg", "setting up receive http handler")
-	{
-		g.Add(
-			func() error {
-				return errors.Wrap(webHandler.Run(), "error starting web server")
-			},
-			func(err error) {
-				webHandler.Close()
-			},
-		)
-	}
+
 
 	if upload {
 		logger := log.With(logger, "component", "uploader")
@@ -536,7 +293,7 @@ func runReceive(
 
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
-					<-uploadC // Closed by storage routine when it's done.
+
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
 					uploaded, err := dbs.Sync(ctx)
@@ -549,7 +306,6 @@ func runReceive(
 					level.Info(logger).Log("msg", "the final cut block was uploaded", "uploaded", uploaded)
 				}()
 
-				defer close(uploadDone)
 
 				// Run the uploader in a loop.
 				tick := time.NewTicker(30 * time.Second)
@@ -559,12 +315,6 @@ func runReceive(
 					select {
 					case <-ctx.Done():
 						return nil
-					case <-uploadC:
-						// Upload on demand.
-						if err := upload(ctx); err != nil {
-							level.Warn(logger).Log("msg", "on demand upload failed", "err", err)
-						}
-						uploadDone <- struct{}{}
 					case <-tick.C:
 						if err := upload(ctx); err != nil {
 							level.Warn(logger).Log("msg", "recurring upload failed", "err", err)
@@ -615,3 +365,4 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 
 	return nil
 }
+
