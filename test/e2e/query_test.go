@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/route"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -93,13 +94,23 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(receiver))
+
+	h := route.HashringConfig{
+		Endpoints: []string{
+			receiver.GRPCNetworkEndpointFor(s.NetworkName()),
+		},
+	}
+
+	// Create a router.
+	route1, err := e2ethanos.NewReceiveRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(receiver, route1))
 
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
@@ -264,7 +275,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 
@@ -304,7 +315,7 @@ func TestQueryLabelNames(t *testing.T) {
 	labelNames(t, ctx, q.HTTPEndpoint(), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
 		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			// Expected result: [__name__, instance, job, prometheus, replica]
-			return len(res) == 7
+			return len(res) == 5
 		},
 	)
 
@@ -323,7 +334,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 

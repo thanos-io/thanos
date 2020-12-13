@@ -97,6 +97,7 @@ var (
 	Downsample      = source{component: component{name: "downsample"}}
 	Replicate       = source{component: component{name: "replicate"}}
 	QueryFrontend   = source{component: component{name: "query-frontend"}}
+	ReceiveRoute    = source{component: component{name: "receive-route"}}
 	Debug           = sourceStoreAPI{component: component{name: "debug"}}
 	Receive         = sourceStoreAPI{component: component{name: "receive"}}
 	Rule            = sourceStoreAPI{component: component{name: "rule"}}

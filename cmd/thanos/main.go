@@ -53,6 +53,7 @@ func main() {
 	registerCompact(app)
 	registerTools(app)
 	registerReceive(app)
+	registerReceiveRoute(app)
 	registerQueryFrontend(app)
 
 	cmd, setup := app.Parse()
