@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -450,6 +451,10 @@ func NewPrefixedBucket(bkt Bucket, prefix string) *prefixedBucket {
 	}
 }
 
+func (pbkt *prefixedBucket) nameWithPrefix(name string) string {
+	return path.Join(pbkt.prefix, name)
+}
+
 func (pbkt *prefixedBucket) WithExpectedErrs(expectedFunc IsOpFailureExpectedFunc) Bucket {
 	if ib, ok := pbkt.bkt.(InstrumentedBucket); ok {
 		return &prefixedBucket{
@@ -469,13 +474,13 @@ func (pbkt *prefixedBucket) Name() string {
 }
 
 func (pbkt *prefixedBucket) Upload(ctx context.Context, name string, r io.Reader) (err error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	err = pbkt.bkt.Upload(ctx, pname, r)
 	return
 }
 
 func (pbkt *prefixedBucket) Delete(ctx context.Context, name string) (err error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	err = pbkt.bkt.Delete(ctx, pname)
 	return
 }
@@ -485,7 +490,7 @@ func (pbkt *prefixedBucket) Close() error {
 }
 
 func (pbkt *prefixedBucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	pdir := filepath.Join(pbkt.prefix, dir)
+	pdir := pbkt.nameWithPrefix(dir)
 	if pbkt.prefix != "" {
 		return pbkt.bkt.Iter(ctx, pdir, func(s string) error {
 			return f(strings.Join(strings.Split(s, pbkt.prefix)[1:], "/"))
@@ -495,17 +500,17 @@ func (pbkt *prefixedBucket) Iter(ctx context.Context, dir string, f func(string)
 }
 
 func (pbkt *prefixedBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	return pbkt.bkt.Get(ctx, pname)
 }
 
 func (pbkt *prefixedBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	return pbkt.bkt.GetRange(ctx, pname, off, length)
 }
 
 func (pbkt *prefixedBucket) Exists(ctx context.Context, name string) (bool, error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	return pbkt.bkt.Exists(ctx, pname)
 }
 
@@ -514,7 +519,7 @@ func (pbkt *prefixedBucket) IsObjNotFoundErr(err error) bool {
 }
 
 func (pbkt *prefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
-	pname := filepath.Join(pbkt.prefix, name)
+	pname := pbkt.nameWithPrefix(name)
 	return pbkt.bkt.Attributes(ctx, pname)
 }
 

@@ -421,12 +421,12 @@ prefix: ""
 ## Prefix
 
 Prefix field allows adding an optional prefix to block (`/<ulid>`) and block files which are uploaded by any block "producer" (e.g sidecar, ruler, receiver).
-The sample config below ensures that all the bucket operations e.g: upload, delete, list, etc are performed on `/tenant-0` path pf the object store only.
+The sample config below ensures that all the bucket operations e.g: upload, delete, list, etc are performed on `/tenant-0/prefix0/` path of the object store only. The prefix shall start and end with '/'.
 Sample object store config:
 ```yaml
 type: S3
 config:
   <provider specific config/s>
-prefix: tenant-0
+prefix: /tenant-0/prefix0/
 ```
 It is worth mentioning that this feature can be used to store data of different tenants in different paths of the same bucket. However, for such use-cases, putting data on different paths WILL REQUIRE totally separate Store Gateway / Compactor by design.
