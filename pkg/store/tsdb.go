@@ -37,7 +37,7 @@ type TSDBStore struct {
 	logger           log.Logger
 	db               TSDBReader
 	component        component.StoreAPI
-	externalLabels   labels.Labels
+	extLset          labels.Labels
 	maxBytesPerFrame int
 }
 
@@ -54,7 +54,8 @@ type ReadWriteTSDBStore struct {
 }
 
 // NewTSDBStore creates a new TSDBStore.
-func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, component component.StoreAPI, externalLabels labels.Labels) *TSDBStore {
+// NOTE: Given lset has to be sorted.
+func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -62,7 +63,7 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, com
 		logger:           logger,
 		db:               db,
 		component:        component,
-		externalLabels:   externalLabels,
+		extLset:          extLset,
 		maxBytesPerFrame: RemoteReadFrameLimit,
 	}
 }
@@ -75,7 +76,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.externalLabels),
+		Labels:    labelpb.ZLabelsFromPromLabels(s.extLset),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -101,7 +102,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.externalLabels)
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -135,7 +136,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		seriesLabels := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendLabels(series.Labels(), s.externalLabels))}
+		seriesLabels := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&seriesLabels)); err != nil {
 				return status.Error(codes.Aborted, err.Error())

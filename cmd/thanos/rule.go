@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -701,6 +702,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		}
 		lset = append(lset, labels.Label{Name: parts[0], Value: val})
 	}
+	sort.Sort(lset)
 	return lset, nil
 }
 

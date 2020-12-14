@@ -145,7 +145,7 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	labelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
-			mergedLabelSet := labelpb.ExtendLabels(lset, s.selectorLabels)
+			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
 			labelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
