@@ -369,16 +369,13 @@ config:
   project_domain_name: ""
   region_name: ""
   container_name: ""
-<<<<<<< HEAD
-prefix: ""
-=======
   large_object_chunk_size: 1073741824
   large_object_segments_container_name: ""
   retries: 3
   connect_timeout: 10s
   timeout: 5m
   use_dynamic_large_objects: false
->>>>>>> upstream/master
+prefix: ""
 ```
 
 #### Tencent COS
