@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package storepb
 
 import (
@@ -41,8 +44,8 @@ func (s serverAsClient) Series(ctx context.Context, in *SeriesRequest, _ ...grpc
 	return &inProcessClientStream{srv: inSrv}, nil
 }
 
-// TODO(bwplotka): Streams attributes, metadata etc are disconnected. Follow up on https://github.com/grpc/grpc-go/issues/906 to
-// have solid solution.
+// TODO(bwplotka): Add streaming attributes, metadata etc. Currently those are disconnected. Follow up on https://github.com/grpc/grpc-go/issues/906.
+// TODO(bwplotka): Use this in proxy.go and receiver multi tenant proxy.
 type inProcessStream struct {
 	grpc.ServerStream
 

@@ -185,6 +185,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 			for _, c := range s.chunks {
 				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
+			// TODO(bwplotka): This breaks resets function. See https://github.com/thanos-io/thanos/issues/3644
 			sit = downsample.NewApplyCounterResetsIterator(its...)
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
