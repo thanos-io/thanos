@@ -166,7 +166,7 @@ func runSidecar(
 			}
 
 			if len(m.Labels()) == 0 {
-				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
+				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 			}
 
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating

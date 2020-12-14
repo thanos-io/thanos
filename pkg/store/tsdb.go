@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,6 +22,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
+
+const RemoteReadFrameLimit = 1048576
 
 type TSDBReader interface {
 	storage.ChunkQueryable
@@ -36,7 +37,7 @@ type TSDBStore struct {
 	logger           log.Logger
 	db               TSDBReader
 	component        component.StoreAPI
-	externalLabels   labels.Labels
+	extLset          labels.Labels
 	maxBytesPerFrame int
 }
 
@@ -53,7 +54,8 @@ type ReadWriteTSDBStore struct {
 }
 
 // NewTSDBStore creates a new TSDBStore.
-func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, component component.StoreAPI, externalLabels labels.Labels) *TSDBStore {
+// NOTE: Given lset has to be sorted.
+func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -61,8 +63,8 @@ func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db TSDBReader, com
 		logger:           logger,
 		db:               db,
 		component:        component,
-		externalLabels:   externalLabels,
-		maxBytesPerFrame: storetestutil.RemoteReadFrameLimit,
+		extLset:          extLset,
+		maxBytesPerFrame: RemoteReadFrameLimit,
 	}
 }
 
@@ -74,7 +76,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.LabelsFromPromLabels(s.externalLabels),
+		Labels:    labelpb.ZLabelsFromPromLabels(s.extLset),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -82,9 +84,9 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []storepb.LabelSet{}
+	res.LabelSets = []labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, storepb.LabelSet{
+		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
@@ -100,7 +102,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.externalLabels)
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -134,7 +136,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		seriesLabels := storepb.Series{Labels: labelpb.LabelsFromPromLabels(labelpb.ExtendLabels(series.Labels(), s.externalLabels))}
+		seriesLabels := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&seriesLabels)); err != nil {
 				return status.Error(codes.Aborted, err.Error())

@@ -94,9 +94,6 @@ func registerStore(app *extkingpin.App) {
 		"On the contrary, smaller value will increase baseline memory usage, but improve latency slightly. 1 will keep all in memory. Default value is the same as in Prometheus which gives a good balance.").
 		Hidden().Default(fmt.Sprintf("%v", store.DefaultPostingOffsetInMemorySampling)).Int()
 
-	enablePostingsCompression := cmd.Flag("experimental.enable-index-cache-postings-compression", "If true, Store Gateway will reencode and compress postings before storing them into cache. Compressed postings take about 10% of the original size.").
-		Hidden().Default("false").Bool()
-
 	consistencyDelay := extkingpin.ModelDuration(cmd.Flag("consistency-delay", "Minimum age of all blocks before they are being read. Set it to safe value (e.g 30m) if your object storage is eventually consistent. GCS and S3 are (roughly) strongly consistent.").
 		Default("0s"))
 
@@ -106,6 +103,12 @@ func registerStore(app *extkingpin.App) {
 		"If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. "+
 		"Default is 24h, half of the default value for --delete-delay on compactor.").
 		Default("24h"))
+
+	lazyIndexReaderEnabled := cmd.Flag("store.enable-index-header-lazy-reader", "If true, Store Gateway will lazy memory map index-header only once the block is required by a query.").
+		Default("false").Bool()
+
+	lazyIndexReaderIdleTimeout := cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
+		Hidden().Default("5m").Duration()
 
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
@@ -144,7 +147,6 @@ func registerStore(app *extkingpin.App) {
 			},
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
-			*enablePostingsCompression,
 			time.Duration(*consistencyDelay),
 			time.Duration(*ignoreDeletionMarksDelay),
 			*webExternalPrefix,
@@ -152,6 +154,8 @@ func registerStore(app *extkingpin.App) {
 			*postingOffsetsInMemSampling,
 			cachingBucketConfig,
 			getFlagsMap(cmd.Flags()),
+			*lazyIndexReaderEnabled,
+			*lazyIndexReaderIdleTimeout,
 		)
 	})
 }
@@ -177,13 +181,15 @@ func runStore(
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
-	advertiseCompatibilityLabel, enablePostingsCompression bool,
+	advertiseCompatibilityLabel bool,
 	consistencyDelay time.Duration,
 	ignoreDeletionMarksDelay time.Duration,
 	externalPrefix, prefixHeader string,
 	postingOffsetsInMemSampling int,
 	cachingBucketConfig *extflag.PathOrContent,
 	flagsMap map[string]string,
+	lazyIndexReaderEnabled bool,
+	lazyIndexReaderIdleTimeout time.Duration,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -235,7 +241,7 @@ func runStore(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
-	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml)
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
 	if err != nil {
 		return err
 	}
@@ -267,7 +273,7 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, fetcherConcurrency)
 	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
@@ -301,9 +307,10 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		advertiseCompatibilityLabel,
-		enablePostingsCompression,
 		postingOffsetsInMemSampling,
 		false,
+		lazyIndexReaderEnabled,
+		lazyIndexReaderIdleTimeout,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

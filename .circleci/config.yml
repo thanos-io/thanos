@@ -1,21 +1,26 @@
 # NOTE: Current plan gives 1500 build minutes per month.
-version: 2
-# https://circleci.com/blog/circleci-hacks-reuse-yaml-in-your-circleci-config-with-yaml/
-defaults: &defaults
-  docker:
-    # Built by Thanos make docker-ci
-    - image: &default-docker-image quay.io/thanos/thanos-ci:v1.2-go1.15-node
+version: 2.1
+
+orbs:
+  go: circleci/go@1.5.0
+
+executors:
+  golang:
+    docker:
+      - image: cimg/go:1.15-node
+  golang-test:
+    docker:
+      - image: cimg/go:1.15-node
+      - image: beaukode/docker-swift-onlyone-authv2-keystone
 
 jobs:
   test:
-    docker:
-      - image: *default-docker-image
-      - image: beaukode/docker-swift-onlyone-authv2-keystone
-    working_directory: /go/src/github.com/thanos-io/thanos
+    executor: golang-test
     environment:
       GO111MODULE: 'on'
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - run:
@@ -30,7 +35,6 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            GOBIN: "/go/bin"
             THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
@@ -65,12 +69,10 @@ jobs:
             - .build
 
   publish_master:
-    <<: *defaults
-    working_directory: /go/src/github.com/thanos-io/thanos
-    environment:
-      GOBIN: "/go/bin"
+    executor: golang
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - attach_workspace:
@@ -85,12 +87,10 @@ jobs:
       - run: make docker-push
 
   publish_release:
-    <<: *defaults
-    working_directory: /go/src/github.com/thanos-io/thanos
-    environment:
-      GOBIN: "/go/bin"
+    executor: golang
     steps:
       - checkout
+      - go/mod-download-cached
       - setup_remote_docker:
           version: 17.07.0-ce
       - attach_workspace:

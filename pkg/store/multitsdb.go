@@ -15,14 +15,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -82,7 +82,7 @@ func (s *MultiTSDBStore) Info(ctx context.Context, req *storepb.InfoRequest) (*s
 
 	// We can rely on every underlying TSDB to only have one labelset, so this
 	// will always allocate the correct length immediately.
-	resp.LabelSets = make([]storepb.LabelSet, 0, len(infos))
+	resp.LabelSets = make([]labelpb.ZLabelSet, 0, len(infos))
 	for _, info := range infos {
 		resp.LabelSets = append(resp.LabelSets, info.LabelSets...)
 	}
@@ -168,7 +168,7 @@ func (s *tenantSeriesSetServer) Delegate(closer io.Closer) {
 }
 
 func (s *tenantSeriesSetServer) Close() error {
-	var merr tsdb_errors.MultiError
+	var merr errutil.MultiError
 	for _, c := range s.closers {
 		merr.Add(c.Close())
 	}
@@ -245,7 +245,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 		for mergedSet.Next() {
 			lset, chks := mergedSet.At()
 			respSender.send(storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.LabelsFromPromLabels(lset),
+				Labels: labelpb.ZLabelsFromPromLabels(lset),
 				Chunks: chks,
 			}))
 		}

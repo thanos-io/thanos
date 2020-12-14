@@ -305,15 +305,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_replicate_origin_iterations_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
-                     "format": "time_series",
-                     "intervalFactor": 2,
-                     "legendFormat": "iterations",
-                     "legendLink": null,
-                     "step": 10
-                  },
-                  {
-                     "expr": "sum(rate(thanos_replicate_origin_meta_loads_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum(rate(blocks_meta_synced{state=\"loaded\",namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "meta loads",
@@ -321,7 +313,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_replicate_origin_partial_meta_reads_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum(rate(blocks_meta_synced{state=\"failed\",namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "partial meta reads",

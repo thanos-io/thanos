@@ -55,17 +55,19 @@ const (
 	PartialResponseParam     = "partial_response"
 	MaxSourceResolutionParam = "max_source_resolution"
 	ReplicaLabelsParam       = "replicaLabels[]"
+	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
 )
 
-// QueryAPI is an API used by Thanos Query.
+// QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
 	baseAPI         *api.BaseAPI
 	logger          log.Logger
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
-	queryEngine     *promql.Engine
-	ruleGroups      rules.UnaryClient
+	// queryEngine returns appropriate promql.Engine for a query with a given step.
+	queryEngine func(int64) *promql.Engine
+	ruleGroups  rules.UnaryClient
 
 	enableAutodownsampling     bool
 	enableQueryPartialResponse bool
@@ -82,7 +84,7 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 	storeSet *query.StoreSet,
-	qe *promql.Engine,
+	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
 	enableAutodownsampling bool,
@@ -265,11 +267,13 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
+	qe := qapi.queryEngine(maxSourceResolution)
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
+	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -370,11 +374,13 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
+	qe := qapi.queryEngine(maxSourceResolution)
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
-	qry, err := qapi.queryEngine.NewRangeQuery(
+	qry, err := qe.NewRangeQuery(
 		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false),
 		r.FormValue("query"),
 		start,
@@ -459,7 +465,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
 	}
 
-	if len(r.Form["match[]"]) == 0 {
+	if len(r.Form[MatcherParam]) == 0 {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
 	}
 
@@ -469,7 +475,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 	}
 
 	var matcherSets [][]*labels.Matcher
-	for _, s := range r.Form["match[]"] {
+	for _, s := range r.Form[MatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -548,6 +554,9 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	names, warnings, err := q.LabelNames()
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+	}
+	if names == nil {
+		names = make([]string, 0)
 	}
 
 	return names, warnings, nil

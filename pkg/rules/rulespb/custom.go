@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	storepb "github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 const (
@@ -84,10 +83,10 @@ func (r *Rule) GetLabels() labels.Labels {
 }
 
 func (r *Rule) SetLabels(ls labels.Labels) {
-	var result storepb.LabelSet
+	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = storepb.LabelSet{Labels: labelpb.LabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
 	}
 
 	switch {

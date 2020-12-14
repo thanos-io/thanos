@@ -6,7 +6,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-sidecar.rules',
+        name: 'thanos-sidecar',
         rules: [
           {
             alert: 'ThanosSidecarPrometheusDown',

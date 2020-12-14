@@ -101,6 +101,10 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
+		if len(lset) == 0 {
+			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+		}
+
 		var cw *receive.ConfigWatcher
 		if *hashringsFile != "" {
 			cw, err = receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, *hashringsFile, *refreshInterval)
@@ -504,14 +508,15 @@ func runReceive(
 	if upload {
 		logger := log.With(logger, "component", "uploader")
 		upload := func(ctx context.Context) error {
-			level.Debug(logger).Log("msg", "upload starting")
+			level.Debug(logger).Log("msg", "upload phase starting")
 			start := time.Now()
 
-			if err := dbs.Sync(ctx); err != nil {
+			uploaded, err := dbs.Sync(ctx)
+			if err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
 				return err
 			}
-			level.Debug(logger).Log("msg", "upload done", "elapsed", time.Since(start))
+			level.Debug(logger).Log("msg", "upload phase done", "uploaded", uploaded, "elapsed", time.Since(start))
 			return nil
 		}
 		{
@@ -534,13 +539,14 @@ func runReceive(
 					<-uploadC // Closed by storage routine when it's done.
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
-					if err := dbs.Sync(ctx); err != nil {
+					uploaded, err := dbs.Sync(ctx)
+					if err != nil {
 						cancel()
 						level.Error(logger).Log("msg", "the final upload failed", "err", err)
 						return
 					}
 					cancel()
-					level.Info(logger).Log("msg", "the final cut block was uploaded")
+					level.Info(logger).Log("msg", "the final cut block was uploaded", "uploaded", uploaded)
 				}()
 
 				defer close(uploadDone)

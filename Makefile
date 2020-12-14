@@ -5,6 +5,20 @@ DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
+SHA=''
+arch = $(shell uname -m)
+# Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA
+# Update at 2020.12.11
+ifeq ($(arch), x86_64)
+    # amd64
+    SHA="fca3819d670cdaee0d785499fda202ea01c0640ca0803d26ae6dbf2a1c8c041c"
+else ifeq ($(arch), armv8)
+    # arm64
+    SHA="5478a46f1eb37ebe414c399766f8088bc8353345602053485dd429b9a87097e5"
+else
+    echo >&2 "only support amd64 or arm64 arch" && exit 1
+endif
+
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
 GOPATH            ?= $(shell go env GOPATH)
@@ -131,7 +145,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" .
+	@docker build -t "thanos" --build-arg SHA=$(SHA) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage
@@ -141,7 +155,7 @@ endif
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
 docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "thanos" .
+	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg SHA=$(SHA) .
 
 .PHONY: docker-push
 docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
@@ -226,18 +240,22 @@ test-e2e: docker
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
 	@go test $(GOTEST_OPTS) ./test/e2e/...
 
+.PHONY: test-e2e-local
+test-e2e-local: ## Runs all thanos e2e tests locally.
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
+test-e2e-local:
+	$(MAKE) test-e2e
+
+.PHONY: quickstart
+quickstart: ## Installs and runs a quickstart example of thanos.
+quickstart: build install-deps
+quickstart:
+	scripts/quickstart.sh
+
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
 install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
-
-.PHONY: docker-ci
-docker-ci: ## Builds and pushes docker image used by our CI. This is done to cache our tools and dependencies. To be run by Thanos maintainer.
-docker-ci: install-deps
-	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
-	@echo ">> pushing thanos-ci image"
-	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
-	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
 
 .PHONY: check-git
 check-git:
@@ -372,3 +390,4 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
+

@@ -2,6 +2,8 @@ import React, { FC } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
+import { Button } from 'reactstrap';
+import { download } from './helpers';
 
 export interface BlockDetailsProps {
   block: Block | undefined;
@@ -62,6 +64,12 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
                 </li>
               ))}
             </ul>
+          </div>
+          <hr />
+          <div data-testid="download">
+            <a href={download(block)} download="meta.json">
+              <Button>Download meta.json</Button>
+            </a>
           </div>
         </>
       )}

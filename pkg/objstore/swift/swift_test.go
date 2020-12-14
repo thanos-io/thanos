@@ -34,20 +34,3 @@ tenant_name: something`)
 	// Must result in unmarshal error as there's no `tenant_name` in SwiftConfig.
 	testutil.NotOk(t, err)
 }
-
-func TestAuthOptsFromConfig(t *testing.T) {
-	input := &SwiftConfig{
-		AuthUrl:           "http://identity.something.com/v3",
-		Username:          "thanos",
-		UserDomainName:    "userDomain",
-		ProjectName:       "thanosProject",
-		ProjectDomainName: "projectDomain",
-	}
-
-	authOpts := authOptsFromConfig(input)
-	testutil.Equals(t, "http://identity.something.com/v3", authOpts.IdentityEndpoint)
-	testutil.Equals(t, "thanos", authOpts.Username)
-	testutil.Equals(t, "userDomain", authOpts.DomainName)
-	testutil.Equals(t, "projectDomain", authOpts.Scope.DomainName)
-	testutil.Equals(t, "thanosProject", authOpts.Scope.ProjectName)
-}

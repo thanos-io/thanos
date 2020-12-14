@@ -65,7 +65,7 @@ defer f.Close() // What if an error occurs here?
 Unchecked errors like this can lead to major bugs. Consider the above example: the `*os.File` `Close` method can be responsible
 for actually flushing to the file, so if an error occurs at that point, the whole **write might be aborted!** 😱
 
-Always check errors! To make it consistent and not distracting, use our [runutil](https://pkg.go.dev/github.com/thanos-io/thanos@v0.11.0/pkg/runutil?tab=doc)
+Always check errors! To make it consistent and not distracting, use our [runutil](https://pkg.go.dev/github.com/thanos-io/thanos@v0.17.0/pkg/runutil?tab=doc)
 helper package, e.g.:
 
 ```go
@@ -122,7 +122,7 @@ func writeToFile(...) (err error) {
 #### Exhaust Readers
 
 One of the most common bugs is forgetting to close or fully read the bodies of HTTP requests and responses, especially on
-error. If you read the body of such structures, you can use the [runutil](https://pkg.go.dev/github.com/thanos-io/thanos@v0.11.0/pkg/runutil?tab=doc)
+error. If you read the body of such structures, you can use the [runutil](https://pkg.go.dev/github.com/thanos-io/thanos@v0.17.0/pkg/runutil?tab=doc)
 helper as well:
 
 ```go

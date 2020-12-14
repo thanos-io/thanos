@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 
@@ -56,7 +57,7 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 }
 
 type testStoreMeta struct {
-	extlsetFn func(addr string) []storepb.LabelSet
+	extlsetFn func(addr string) []labelpb.ZLabelSet
 	storeType component.StoreAPI
 }
 
@@ -131,10 +132,10 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 	st, err := startTestStores([]testStoreMeta{
 		{
 			storeType: component.Sidecar,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
@@ -144,17 +145,17 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		},
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							// This is the labelset exposed by store when having only one sidecar's data.
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},
@@ -162,16 +163,16 @@ func TestPre0_8_0_StoreSet_AgainstNewStoreGW(t *testing.T) {
 		// We expect this to be duplicated.
 		{
 			storeType: component.Store,
-			extlsetFn: func(addr string) []storepb.LabelSet {
-				return []storepb.LabelSet{
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
 					{
-						Labels: []storepb.Label{
+						Labels: []labelpb.ZLabel{
 							{Name: "l1", Value: "v2"},
 							{Name: "l2", Value: "v3"},
 						},
 					},
 					{
-						Labels: []storepb.Label{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
+						Labels: []labelpb.ZLabel{{Name: store.CompatibilityTypeLabelName, Value: "store"}},
 					},
 				}
 			},

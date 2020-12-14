@@ -138,7 +138,7 @@ The compactor also does additional batch processing such as down-sampling and ap
 
 ## Scaling
 
-None of the Thanos components provides any means of sharding. The only explicitly scalable component are query nodes, which are stateless and can be scaled up arbitrarily. Scaling of storage capacity is ensured by relying on an external object storage system.
+None of the Thanos components provides any means of sharding. The only explicitly scalable component are query nodes, which are stateless and can be scaled out arbitrarily. Scaling of storage capacity is ensured by relying on an external object storage system.
 
 Store, rule, and compactor nodes are all expected to scale significantly within a single instance or high availability pair. Similar to Prometheus, functional sharding can be applied for rare cases in which this does not hold true.
 
@@ -150,7 +150,7 @@ Overall, first-class horizontal sharding is possible but will not be considered 
 
 The only extra cost Thanos adds to an existing Prometheus setup is essentially the price of storing and querying data from the object storage and running of the store node.
 
-Queriers, compactors and rule nodes require as approximately as many compute resources as they save by not doing the same work directly on Prometheus servers.
+Queriers, compactors and rule nodes require approximately as many compute resources as they save by not doing the same work directly on Prometheus servers.
 
 Data that is just accessed locally in conventional Prometheus setups has to be transferred over the network in Thanos. We generally expect this data shuffling to typically happen in unmetered networks and thus not causing any additional cost.
 

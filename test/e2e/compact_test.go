@@ -56,6 +56,8 @@ type blockDesc struct {
 	extLset labels.Labels
 	mint    int64
 	maxt    int64
+
+	markedForNoCompact bool
 }
 
 func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration) (ulid.ULID, error) {
@@ -128,6 +130,39 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		blockDesc{
 			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
 			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
+		},
+		// Non overlapping blocks, ready for compaction, with one blocked marked for no-compact (no-compact-mark.json)
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("case", "compaction-ready-one-block-marked-for-no-compact", "replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
+			extLset: labels.FromStrings("case", "compaction-ready-one-block-marked-for-no-compact", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "4")},
+			extLset: labels.FromStrings("case", "compaction-ready-one-block-marked-for-no-compact", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+
+			markedForNoCompact: true,
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "5")},
+			extLset: labels.FromStrings("case", "compaction-ready-one-block-marked-for-no-compact", "replica", "1"),
+			mint:    timestamp.FromTime(now.Add(6 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(8 * time.Hour)),
+		},
+		blockDesc{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
+			extLset: labels.FromStrings("case", "compaction-ready-one-block-marked-for-no-compact", "replica", "1"),
 			mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
 			maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
 		},
@@ -314,6 +349,9 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 		rawBlockIDs[id] = struct{}{}
+		if b.markedForNoCompact {
+			testutil.Ok(t, block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		}
 	}
 	{
 		// On top of that, add couple of other tricky cases with different meta.
@@ -334,7 +372,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, 0*time.Second)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay.
@@ -347,7 +385,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + old deletion mark ready to be deleted.
@@ -374,7 +412,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		id, err = malformedBase.Create(ctx, dir, 50*time.Hour)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 	}
 
@@ -415,6 +453,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-after-dedup", "replica": "1"}},
@@ -455,6 +498,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready", "replica": "1"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-one-block-marked-for-no-compact"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-one-block-marked-for-no-compact"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-after-dedup"}},
@@ -480,16 +528,21 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
 	}
 
-	t.Run("no replica label with overlaps should halt compactor", func(t *testing.T) {
+	// No replica label with overlaps should halt compactor. This test is sequential
+	// because we do not want two Thanos Compact instances deleting the same partially
+	// uploaded blocks and blocks with deletion marks.
+	{
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7)), "thanos_blocks_meta_synced"))
+
+		// Expect compactor halted and for one cleanup iteration to happen.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_block_cleanup_loops_total"))
+
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+5)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
-
-		// Expect compactor halted.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compactor_halted"))
 
 		// The compact directory is still there.
 		dataDir := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt")
@@ -498,23 +551,26 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Equals(t, false, empty, "directory %s should not be empty", dataDir)
 
 		// We expect no ops.
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_marked_for_deletion_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_marked_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_group_compactions_failures_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_compaction_runs_started_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_group_compaction_runs_completed_total"))
 
+		// However, the blocks have been cleaned because that happens concurrently.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_blocks_cleaned_total"))
+
 		// Ensure bucket UI.
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "global"))
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "loaded"))
 
 		testutil.Ok(t, s.Stop(c))
-	})
+	}
+
 	t.Run("dedup enabled; compactor should work as expected", func(t *testing.T) {
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
@@ -523,28 +579,28 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2*4+2+2*3), "thanos_compactor_blocks_marked_for_deletion_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(5), "thanos_compact_group_compactions_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2*4+2+2*3+2), "thanos_compact_blocks_marked_total")) // 18.
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(6), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(12), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(12), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(14), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(14), "thanos_compact_group_compaction_runs_completed_total"))
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
 
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(
 			len(rawBlockIDs)+7+
-				5+ // 5 compactions, 5 newly added blocks.
+				6+ // 6 compactions, 6 newly added blocks.
 				-2, // Partial block removed.
 		)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, s.Stop(c))
 
@@ -560,7 +616,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 			expectedEndVector,
 		)
 		// Store view:
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+5-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	})
@@ -572,24 +628,24 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compactor_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(16), "thanos_compactor_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_blocks_marked_for_deletion_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compact_iterations_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(18), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_marked_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(6), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(6), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(7), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(7), "thanos_compact_group_compaction_runs_completed_total"))
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
 
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+5-16-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-18-2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compactor_halted"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, s.Stop(c))
 
@@ -606,7 +662,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		)
 
 		// Store view:
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7-16+5-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7-18+6-2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	})

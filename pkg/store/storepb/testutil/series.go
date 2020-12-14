@@ -38,8 +38,6 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 	return p
 }
 
-const RemoteReadFrameLimit = 1048576
-
 type HeadGenOptions struct {
 	TSDBDir                  string
 	SamplesPerSeries, Series int
@@ -71,7 +69,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		testutil.Ok(t, os.MkdirAll(filepath.Join(opts.TSDBDir, "wal"), os.ModePerm))
 	}
 
-	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())
@@ -104,7 +102,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	all := allPostings(t, ir)
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &lset, &chunkMetas))
-		expected = append(expected, &storepb.Series{Labels: labelpb.LabelsFromPromLabels(append(opts.PrependLabels.Copy(), lset...))})
+		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(opts.PrependLabels.Copy(), lset...))})
 
 		if opts.SkipChunks {
 			continue
@@ -235,10 +233,14 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
 							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
-							if len(c.ExpectedSeries[j].Chunks) > 20 {
-								testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
+
+							// Check chunks when it is not a skip chunk query
+							if !c.Req.SkipChunks {
+								if len(c.ExpectedSeries[j].Chunks) > 20 {
+									testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
+								}
+								testutil.Equals(t, c.ExpectedSeries[j].Chunks, srv.SeriesSet[j].Chunks, "%v series chunks mismatch", j)
 							}
-							testutil.Equals(t, c.ExpectedSeries[j].Chunks, srv.SeriesSet[j].Chunks, "%v series chunks mismatch", j)
 						}
 					} else {
 						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)

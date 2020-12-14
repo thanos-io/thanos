@@ -101,11 +101,11 @@ enum AlertState {
 }
 
 message AlertInstance {
-    LabelSet labels                     = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    LabelSet annotations                = 2 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
-    AlertState state                    = 3 [(gogoproto.jsontag) = "state" ];
-    google.protobuf.Timestamp active_at = 4 [(gogoproto.jsontag) = "activeAt,omitempty", (gogoproto.stdtime) = true];
-    string value                        = 5 [(gogoproto.jsontag) = "value" ];
+    ZLabelSet labels                     = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
+    ZLabelSet annotations                = 2 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
+    AlertState state                     = 3 [(gogoproto.jsontag) = "state" ];
+    google.protobuf.Timestamp active_at  = 4 [(gogoproto.jsontag) = "activeAt,omitempty", (gogoproto.stdtime) = true];
+    string value                         = 5 [(gogoproto.jsontag) = "value" ];
 
     // Thanos specific. Used mainly for alert API purposes.
     PartialResponseStrategy PartialResponseStrategy = 6 [(gogoproto.jsontag) = "partialResponseStrategy" ];
@@ -117,8 +117,8 @@ message Alert {
     string name                               = 2 [(gogoproto.jsontag) = "name" ];
     string query                              = 3 [(gogoproto.jsontag) = "query" ];
     double duration_seconds                   = 4 [(gogoproto.jsontag) = "duration" ];
-    LabelSet labels                           = 5 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    LabelSet annotations                      = 6 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
+    ZLabelSet labels                          = 5 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
+    ZLabelSet annotations                     = 6 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
     repeated AlertInstance alerts             = 7 [(gogoproto.jsontag) = "alerts" ];
     string health                             = 8 [(gogoproto.jsontag) = "health" ];
     string last_error                         = 9 [(gogoproto.jsontag) = "lastError,omitempty" ];
@@ -129,7 +129,7 @@ message Alert {
 message RecordingRule {
     string name                               = 1 [(gogoproto.jsontag) = "name" ];
     string query                              = 2 [(gogoproto.jsontag) = "query" ];
-    LabelSet labels                           = 3 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
+    ZLabelSet labels                          = 3 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
     string health                             = 4 [(gogoproto.jsontag) = "health" ];
     string last_error                         = 5 [(gogoproto.jsontag) = "lastError,omitempty" ];
     double evaluation_duration_seconds        = 6 [(gogoproto.jsontag) = "evaluationTime" ];
