@@ -6,6 +6,7 @@ package logging
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -50,7 +51,7 @@ func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 // This function configures all the method to have global config for logging.
 func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bool, bool, error) {
 
-	var globalLevel string
+	globalLevel := "ERROR"
 	globalStart, globalEnd := false, false
 
 	globalOptionConfig := reqLogConfig.Options
@@ -71,7 +72,7 @@ func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bo
 		// gRPC config overrides the global config.
 		protocolOptionConfig = reqLogConfig.GRPC.Options
 	} else {
-		// gRPC config overrides the global config.
+		// HTTP config overrides the global config.
 		protocolOptionConfig = reqLogConfig.HTTP.Options
 	}
 
@@ -87,7 +88,6 @@ func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bo
 		globalStart = protocolOptionConfig.Decision.LogStart
 		globalEnd = protocolOptionConfig.Decision.LogEnd
 	}
-
 	return globalLevel, globalStart, globalEnd, nil
 
 }
@@ -103,7 +103,7 @@ func getGRPCLoggingOption(logStart bool, logEnd bool) (grpc_logging.Decision, er
 	}
 
 	if logStart && logEnd {
-		return grpc_logging.LogFinishCall, nil
+		return grpc_logging.LogStartAndFinishCall, nil
 	}
 
 	return -1, fmt.Errorf("log start call is not supported.")
@@ -144,37 +144,41 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 			return tagMap
 		}),
 	}
-	var logOpts []grpc_logging.Option
+	logOpts := []grpc_logging.Option{
+		grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
+			return grpc_logging.NoLogCall
+		}),
+		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
+	}
 
 	// Unmarshal YAML
 	// if req logging is disabled.
 	if len(configYAML) == 0 {
-		return []tags.Option{}, []grpc_logging.Option{}, nil
+		return tagOpts, logOpts, nil
 	}
 
 	reqLogConfig, err := NewReqLogConfig(configYAML)
-
 	// If unmarshalling is an issue.
 	if err != nil {
-		return []tags.Option{}, []grpc_logging.Option{}, err
+		return tagOpts, logOpts, err
 	}
 
 	globalLevel, globalStart, globalEnd, err := fillGlobalOptionConfig(reqLogConfig, true)
 
 	// If global options have invalid entries.
 	if err != nil {
-		return []tags.Option{}, []grpc_logging.Option{}, err
+		return tagOpts, logOpts, err
 	}
 
 	// If the level entry does not matches our entries.
 	if err := validateLevel(globalLevel); err != nil {
-		return []tags.Option{}, []grpc_logging.Option{}, err
+		return tagOpts, logOpts, err
 	}
 
 	// If the combination is valid, use them, otherwise return error.
 	reqLogDecision, err := getGRPCLoggingOption(globalStart, globalEnd)
 	if err != nil {
-		return []tags.Option{}, []grpc_logging.Option{}, err
+		return tagOpts, logOpts, err
 	}
 
 	if len(reqLogConfig.GRPC.Config) == 0 {
@@ -182,10 +186,11 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 			grpc_logging.WithDecider(func(_ string, err error) grpc_logging.Decision {
 
 				runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
-				if string(runtimeLevel) == strings.ToLower(globalLevel) {
-					return reqLogDecision
+				for _, lvl := range MapAllowedLevels[globalLevel] {
+					if string(runtimeLevel) == strings.ToLower(lvl) {
+						return reqLogDecision
+					}
 				}
-
 				return grpc_logging.NoLogCall
 			}),
 			grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
@@ -197,21 +202,27 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
 	}
 
+	methodNameSlice := []string{}
+
 	for _, eachConfig := range reqLogConfig.GRPC.Config {
 		eachConfigMethodName := interceptors.FullMethod(eachConfig.Service, eachConfig.Method)
+		methodNameSlice = append(methodNameSlice, eachConfigMethodName)
+	}
 
-		logOpts = append(logOpts, []grpc_logging.Option{
-			grpc_logging.WithDecider(func(runtimeMethodName string, err error) grpc_logging.Decision {
-				if runtimeMethodName == eachConfigMethodName {
-					runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
+	logOpts = append(logOpts, []grpc_logging.Option{
+		grpc_logging.WithDecider(func(runtimeMethodName string, err error) grpc_logging.Decision {
 
-					if string(runtimeLevel) == strings.ToLower(globalLevel) {
+			idx := sort.SearchStrings(methodNameSlice, runtimeMethodName)
+			if idx < len(methodNameSlice) && methodNameSlice[idx] == runtimeMethodName {
+				runtimeLevel := grpc_logging.DefaultServerCodeToLevel(status.Code(err))
+				for _, lvl := range MapAllowedLevels[globalLevel] {
+					if string(runtimeLevel) == strings.ToLower(lvl) {
 						return reqLogDecision
 					}
 				}
-				return grpc_logging.NoLogCall
-			}),
-		}...)
-	}
+			}
+			return grpc_logging.NoLogCall
+		}),
+	}...)
 	return tagOpts, logOpts, nil
 }

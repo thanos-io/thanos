@@ -128,10 +128,7 @@ func main() {
 	if err != nil {
 		level.Error(logger).Log("msg", "getting request logging config failed", "err", err)
 	}
-
-	if len(reqLogYAML) == 0 {
-		level.Info(logger).Log("msg", "request logging is disabled, empty config file.")
-	}
+	level.Warn(logger).Log("msg", "log.request.decision flag would be soon deprecated in the next release. Use request.logging instead.")
 
 	// Create a signal channel to dispatch reload events to sub-commands.
 	reloadCh := make(chan struct{}, 1)

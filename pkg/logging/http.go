@@ -5,6 +5,8 @@ package logging
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"net/http"
 	"time"
@@ -37,7 +39,9 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		wrapped := httputil.WrapResponseWriterWithStatus(w)
 		start := time.Now()
-		decision := m.opts.shouldLog(name, nil)
+		port := strings.Split(r.Host, ":")[1]
+
+		decision := m.opts.shouldLog(fmt.Sprintf("%s:%s", r.URL, port), nil)
 
 		switch decision {
 		case NoLogCall:
@@ -75,7 +79,7 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	}
 
 	if logStart && logEnd {
-		return LogFinishCall, nil
+		return LogStartAndFinishCall, nil
 	}
 
 	return -1, fmt.Errorf("log start call is not supported.")
@@ -99,36 +103,39 @@ func getLevel(lvl string) level.Option {
 func NewHTTPLoggingOption(configYAML []byte) ([]Option, error) {
 
 	// Define a black config option.
-	var logOpts []Option
+	logOpts := []Option{
+		WithDecider(func(_ string, err error) Decision {
+			return NoLogCall
+		}),
+	}
 
 	// If req logging is disabled.
 	if len(configYAML) == 0 {
-		return []Option{}, nil
+		return logOpts, nil
 	}
 
 	reqLogConfig, err := NewReqLogConfig(configYAML)
-
 	// If unmarshalling is an issue.
 	if err != nil {
-		return []Option{}, err
+		return logOpts, err
 	}
 
 	globalLevel, globalStart, globalEnd, err := fillGlobalOptionConfig(reqLogConfig, false)
 
 	// If global options have invalid entries.
 	if err != nil {
-		return []Option{}, err
+		return logOpts, err
 	}
-
 	// If the level entry does not matches our entries.
 	if err := validateLevel(globalLevel); err != nil {
-		return []Option{}, err
+		// fmt.Printf("HTTP")
+		return logOpts, err
 	}
 
 	// If the combination is valid, use them, otherwise return error.
 	reqLogDecision, err := getHTTPLoggingOption(globalStart, globalEnd)
 	if err != nil {
-		return []Option{}, err
+		return logOpts, err
 	}
 
 	logOpts = []Option{
@@ -146,20 +153,25 @@ func NewHTTPLoggingOption(configYAML []byte) ([]Option, error) {
 		return logOpts, nil
 	}
 
+	methodNameSlice := []string{}
+
 	for _, eachConfig := range reqLogConfig.HTTP.Config {
-		eachConfigName := fmt.Sprintf("%v:%v", eachConfig.Method, eachConfig.Port)
-
-		logOpts = append(logOpts, []Option{
-			WithDecider(func(runtimeMethodName string, err error) Decision {
-				if eachConfigName == runtimeMethodName {
-					return reqLogDecision
-				}
-				return NoLogCall
-			}),
-		}...)
-
+		eachConfigName := fmt.Sprintf("%v:%v", eachConfig.Path, eachConfig.Port)
+		methodNameSlice = append(methodNameSlice, eachConfigName)
 	}
 
+	sort.Strings(methodNameSlice)
+
+	logOpts = append(logOpts, []Option{
+		WithDecider(func(runtimeMethodName string, err error) Decision {
+			idx := sort.SearchStrings(methodNameSlice, runtimeMethodName)
+			if idx < len(methodNameSlice) && methodNameSlice[idx] == runtimeMethodName {
+				return reqLogDecision
+			}
+
+			return NoLogCall
+		}),
+	}...)
 	return logOpts, nil
 
 }

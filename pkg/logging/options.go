@@ -149,6 +149,15 @@ var LogDecision = map[string]Decision{
 	"LogStartAndFinishCall": LogStartAndFinishCall,
 }
 
+// MapAllowedLevels allows to map a given level to a list of allowed level.
+// Convention taken from go-kit/level v0.10.0 https://godoc.org/github.com/go-kit/kit/log/level#AllowAll.
+var MapAllowedLevels = map[string][]string{
+	"DEBUG": {"INFO", "DEBUG", "WARN", "ERROR"},
+	"ERROR": {"ERROR"},
+	"INFO":  {"INFO", "WARN", "ERROR"},
+	"WARN":  {"WARN", "ERROR"},
+}
+
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
 	// Check if the user enables request logging through flags and YAML
