@@ -28,7 +28,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support.
    By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`.
    To change the defaults see [the docs](./docs/storage.md#openstack-swift).
-
+- [#3626](https://github.com/thanos-io/thanos/pull/3626) Failed upload of `meta.json` file doesn't cause block cleanup anymore. This has a potential to generate corrupted blocks under specific conditions. Partial block is left in bucket for later cleanup.
 
 
 ## [v0.17.2](https://github.com/thanos-io/thanos/releases/tag/v0.17.2) - 2020.12.07
