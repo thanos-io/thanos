@@ -391,10 +391,14 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
-			return logging.NoLogCall
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogYAML)
+
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "err", err)
+			logOpts = []logging.Option{}
+		}
+
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 

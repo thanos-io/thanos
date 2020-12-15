@@ -21,16 +21,10 @@ import (
 // NewReqLogConfig parses the string into a req logging config structure.
 // Raise an error if unmarshalling is not possible, or values are not valid.
 func NewReqLogConfig(configYAML []byte) (*ReqLogConfig, error) {
-
 	reqLogConfig := &ReqLogConfig{}
-
 	if err := yaml.UnmarshalStrict(configYAML, reqLogConfig); err != nil {
 		return nil, err
 	}
-	// Lets assume all values are correct. Some datatypes are enforced by ummarshal,
-	// while methods/services/path are assumed to be correct.
-
-	// TODO: @yashrsharma44 - discuss if more checks are required
 	return reqLogConfig, nil
 }
 
