@@ -532,7 +532,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	// because we do not want two Thanos Compact instances deleting the same partially
 	// uploaded blocks and blocks with deletion marks.
 	{
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil, "--consistency-delay=1s")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 
@@ -573,7 +573,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	t.Run("dedup enabled; compactor should work as expected", func(t *testing.T) {
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--consistency-delay=1s", "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 
@@ -622,7 +622,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	})
 
 	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s")
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--consistency-delay=1s", "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 

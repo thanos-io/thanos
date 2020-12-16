@@ -269,7 +269,6 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	}
 
 	// meta.json from Prometheus block doesn't have lastModified time.
-	// We can set lastModified field in tests to mock block delay.
 	if m.Thanos.LastModified.IsZero() {
 		attributes, err := bucketReaderWithExpectedErrs.Attributes(ctx, metaFile)
 		if f.bkt.IsObjNotFoundErr(err) {
