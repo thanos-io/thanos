@@ -191,6 +191,12 @@ func runCompact(
 		return err
 	}
 
+	// Add config content to configs map.
+	configFilesMap := map[string]string{
+		"Object Store Configuration":     string(confContentYaml),
+		"Selector Relable Configuration": string(relabelContentYaml),
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -230,7 +236,7 @@ func runCompact(
 		"/loaded",
 		component,
 	)
-	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap, configFilesMap)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
 	var sy *compact.Syncer
 	{

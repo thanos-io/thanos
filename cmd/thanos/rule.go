@@ -572,6 +572,12 @@ func runRule(
 			s.Shutdown(err)
 		})
 	}
+
+	configFilesMap := map[string]string{
+		"Query Config":          string(queryConfigYAML),
+		"Alert Managers Config": string(alertmgrsConfigYAML),
+	}
+
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
@@ -606,7 +612,7 @@ func runRule(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap)
+		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap, configFilesMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
