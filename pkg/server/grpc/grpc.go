@@ -5,15 +5,19 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"runtime/debug"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_ratelimit "github.com/grpc-ecosystem/go-grpc-middleware/ratelimit"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/juju/ratelimit"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,6 +45,31 @@ type Server struct {
 	opts options
 }
 
+const (
+	gatherTime    = 30 * time.Second
+	port          = ":50051"
+	tokenCapacity = 6
+)
+
+type rateLimiterInterceptor struct {
+	TokenBucket *ratelimit.Bucket
+}
+
+func (r *rateLimiterInterceptor) Limit() bool {
+	// debug
+	fmt.Printf("Token Avail %d \n", r.TokenBucket.Available())
+
+	// if zero we reached rate limit, so return true ( report error to Grpc)
+	tokenRes := r.TokenBucket.TakeAvailable(1)
+	if tokenRes == 0 {
+		fmt.Printf("Reached Rate-Limiting %d \n", r.TokenBucket.Available())
+		return true
+	}
+
+	// if tokenRes is not zero, means gRpc request can continue to flow without rate limiting :)
+	return false
+}
+
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
 func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
@@ -66,17 +95,21 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
 	}
+	limiter := &rateLimiterInterceptor{}
+	limiter.TokenBucket = ratelimit.NewBucket(gatherTime, int64(tokenCapacity))
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
+			grpc_ratelimit.UnaryServerInterceptor(limiter),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
+			grpc_ratelimit.StreamServerInterceptor(limiter),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	}...)
