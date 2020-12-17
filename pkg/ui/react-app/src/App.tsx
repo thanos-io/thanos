@@ -3,7 +3,7 @@ import { Container } from 'reactstrap';
 import { Router, Redirect, globalHistory } from '@reach/router';
 import { QueryParamProvider } from 'use-query-params';
 
-import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList } from './pages';
+import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList, NotFound } from './pages';
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
 import Navigation from './thanos/Navbar';
@@ -48,6 +48,7 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
             <Stores path="/stores" pathPrefix={pathPrefix} />
             <Blocks path="/blocks" pathPrefix={pathPrefix} />
             <Blocks path="/loaded" pathPrefix={pathPrefix} view="loaded" />
+            <NotFound default/>
           </Router>
         </QueryParamProvider>
       </Container>

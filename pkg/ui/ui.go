@@ -21,25 +21,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 )
 
-var (
-	reactAppPaths = []string{
-		"/",
-		"/alerts",
-		"/config",
-		"/flags",
-		"/graph",
-		"/rules",
-		"/service-discovery",
-		"/status",
-		"/targets",
-		"/tsdb-status",
-		"/version",
-		"/stores",
-		"/blocks",
-		"/loaded",
-	}
-)
-
 type BaseUI struct {
 	logger                       log.Logger
 	menuTmpl                     string
@@ -63,13 +44,6 @@ func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
-	for _, rp := range reactAppPaths {
-		if fp != rp {
-			continue
-		}
-		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
-		return
-	}
 	fp = filepath.Join("pkg/ui/static/react/", fp)
 	bu.serveAsset(fp, w, req)
 }
@@ -113,9 +87,11 @@ func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request
 	if err != nil {
 		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 		w.WriteHeader(http.StatusNotFound)
+		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
 		return
 	}
 	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
+
 }
 
 func (bu *BaseUI) getTemplate(name string) (string, error) {
