@@ -254,8 +254,16 @@ API.txt for details.
   // we don't know which variant(s) we'll need yet, but generating both is
   // cheap
 
-  const specMonths = baseSpec.concat([[3, 'month'], [6, 'month'], [1, 'year']]);
-  const specQuarters = baseSpec.concat([[1, 'quarter'], [2, 'quarter'], [1, 'year']]);
+  const specMonths = baseSpec.concat([
+    [3, 'month'],
+    [6, 'month'],
+    [1, 'year'],
+  ]);
+  const specQuarters = baseSpec.concat([
+    [1, 'quarter'],
+    [2, 'quarter'],
+    [1, 'year'],
+  ]);
 
   function init(plot) {
     plot.hooks.processOptions.push(function(plot) {
