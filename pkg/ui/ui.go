@@ -39,7 +39,7 @@ func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, tmp
 func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
 	fp = filepath.Join("pkg/ui/static", fp)
-	_ = bu.serveAsset(fp, w, req)
+	bu.serveAsset(fp, w, req)
 }
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
