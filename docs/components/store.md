@@ -213,7 +213,7 @@ We recommend having overlapping time ranges with Thanos Sidecar and other Thanos
 
 Thanos Querier deals with overlapping time series by merging them together.
 
-Filtering is done on a [Chunk](../design.md/#Note) level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
+Filtering is done on a [Chunk](../design.md/#chunk) level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
 
 ### External Label Partitioning (Sharding)
 
@@ -289,7 +289,7 @@ While the remaining settings are **optional**:
 
 ## Caching Bucket
 
-Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#Note) and metadata caching to speed up loading of [chunks](../design.md/#Note) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
+Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chunk) and metadata caching to speed up loading of [chunks](../design.md/#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 
 Currently only memcached "backend" is supported:
 
@@ -312,11 +312,11 @@ metafile_max_size: 1MiB
 
 `config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
 
-Additional options to configure various aspects of [chunks](../design.md/#Note) cache are available:
+Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
 
-- `chunk_subrange_size`: size of segment of [chunks](../design.md/#Note) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
-- `chunk_object_attrs_ttl`: how long to keep information about [chunk](../design.md/#Note) file attributes (e.g. size) in the cache.
+- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
 Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
@@ -327,7 +327,7 @@ Following options are used for metadata caching (meta.json files, deletion mark 
 - `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
-Note that [chunks](../design.md/#Note) and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+Note that [chunks](../design.md/#chunk) and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 ## Index Header
 
