@@ -165,46 +165,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
-
 		err := determineWriteErrorCause(tc.err, tc.threshold)
-		if tc.exp != nil {
-			testutil.NotOk(t, err)
-			testutil.Equals(t, tc.exp.Error(), err.Error())
-			continue
-		}
-		testutil.Ok(t, err)
-	}
-}
-
-func TestWriteErrorCause(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		err  error
-		exp  error
-	}{
-		{
-			name: "nested matching multierror",
-			err: errors.Wrap(errors.Wrap(errutil.MultiError([]error{
-				tsdb.ErrNotReady,
-				errors.New("foo"),
-				errors.New("bar"),
-			}), "baz"), "qux"),
-			exp: errNotReady,
-		},
-		{
-			name: "deep nested matching multierror",
-			err: errors.Wrap(errutil.MultiError([]error{
-				errutil.MultiError([]error{
-					errors.New("qux"),
-					status.Error(codes.AlreadyExists, "conflict"),
-				}),
-				errors.New("foo"),
-				errors.New("bar"),
-			}), "baz"),
-			exp: errors.New("baz: 3 errors: 2 errors: qux; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
-		},
-	} {
-		err := writeErrorCause(tc.err)
 		if tc.exp != nil {
 			testutil.NotOk(t, err)
 			testutil.Equals(t, tc.exp.Error(), err.Error())
