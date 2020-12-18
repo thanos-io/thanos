@@ -65,7 +65,8 @@ func registerReceive(app *extkingpin.App) {
 
 	retention := extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
-	hashringsFile := extflag.RegisterPathOrContent(cmd, "receive.hashrings", "File that contains the hashring configuration.", false)
+	hashringsFilePath := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").String()
+	hashringsFileContent := cmd.Flag("receive.hashrings", "Alternative to 'receive.hashrings-file' flag (lower priority). Content of file that contains the hashring configuration.").PlaceHolder("<content>").String()
 
 	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
@@ -151,7 +152,8 @@ func registerReceive(app *extkingpin.App) {
 			tsdbOpts,
 			*ignoreBlockSize,
 			lset,
-			hashringsFile,
+			*hashringsFilePath,
+			*hashringsFileContent,
 			refreshInterval,
 			*localEndpoint,
 			*tenantHeader,
@@ -191,7 +193,8 @@ func runReceive(
 	tsdbOpts *tsdb.Options,
 	ignoreBlockSize bool,
 	lset labels.Labels,
-	hashringsFile *extflag.PathOrContent,
+	hashringsFilePath string,
+	hashringsFileContent string,
 	refreshInterval *model.Duration,
 	endpoint string,
 	tenantHeader string,
@@ -369,8 +372,8 @@ func runReceive(
 		updates := make(chan receive.Hashring, 1)
 
 		// The Hashrings config file path is given initializing config watcher.
-		if configPath, err := hashringsFile.Path(); err == nil && configPath != "" {
-			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, configPath, *refreshInterval)
+		if hashringsFilePath != "" {
+			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, hashringsFilePath, *refreshInterval)
 			if err != nil {
 				return errors.Wrap(err, "failed to initialize config watcher")
 			}
@@ -384,27 +387,23 @@ func runReceive(
 
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
+				level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
 				return receive.HashringFromConfigWatcher(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})
 		} else {
-			// The Hashrings config file path is not given, so initialize using content..
-			configContent, err := hashringsFile.Content()
-			if err != nil {
-				return errors.Wrap(err, "failed to read hashrings configuration file")
-			}
-
 			var ring receive.Hashring
 			// The Hashrings config file content given initialize configuration from content.
-			if len(configContent) > 0 {
-				ring, err = receive.HashringFromConfig(configContent)
+			if len(hashringsFileContent) > 0 {
+				ring, err = receive.HashringFromConfig(hashringsFileContent)
 				if err != nil {
 					close(updates)
 					return errors.Wrap(err, "failed to validate hashring configuration file")
 				}
+				level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
 			} else {
-				// The hashring file is not specified use single node hashring.
+				level.Info(logger).Log("msg", "the hashring file is not specified use single node hashring.")
 				ring = receive.SingleNodeHashring(endpoint)
 			}
 

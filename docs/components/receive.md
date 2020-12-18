@@ -147,12 +147,14 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
-      --receive.hashrings-file=<file-path>
-                                 Path to File that contains the hashring
-                                 configuration.
+      --receive.hashrings-file=<path>
+                                 Path to file that contains the hashring
+                                 configuration. A watcher is initialized to
+                                 watch changes and update the hashring
+                                 dynamically.
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
-                                 (lower priority). Content of File that contains
+                                 (lower priority). Content of file that contains
                                  the hashring configuration.
       --receive.hashrings-file-refresh-interval=5m
                                  Refresh interval to re-read the hashring

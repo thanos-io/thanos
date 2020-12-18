@@ -184,8 +184,8 @@ func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw 
 }
 
 // HashringFromConfig loads raw configuration content and returns a Hashring if the given configuration is not valid.
-func HashringFromConfig(content []byte) (Hashring, error) {
-	config, err := parseConfig(content)
+func HashringFromConfig(content string) (Hashring, error) {
+	config, err := parseConfig([]byte(content))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse configuration")
 	}

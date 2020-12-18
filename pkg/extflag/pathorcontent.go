@@ -71,20 +71,3 @@ func (p *PathOrContent) Content() ([]byte, error) {
 
 	return content, nil
 }
-
-// Path returns the path of the given file that has passed to the flag.
-// It returns error if both a path and content are given.
-// It returns error if the required flag is set to true and path is empty.
-func (p *PathOrContent) Path() (string, error) {
-	fileFlagName := fmt.Sprintf("%s-file", p.flagName)
-
-	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return "", errors.Errorf("both %s and %s flags set.", fileFlagName, p.flagName)
-	}
-
-	if len(*p.path) == 0 && p.required {
-		return "", errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", fileFlagName, p.flagName)
-	}
-
-	return *p.path, nil
-}
