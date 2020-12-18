@@ -126,7 +126,6 @@ func DefaultCodeToLevelGRPC(c codes.Code) grpc_logging.Level {
 	switch c {
 	case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss:
 		return grpc_logging.ERROR
-
 	default:
 		return grpc_logging.DEBUG
 	}
