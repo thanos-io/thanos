@@ -123,8 +123,6 @@ func main() {
 		})
 	}
 
-	level.Warn(logger).Log("msg", "log.request.decision flag would be soon deprecated in the next release. Use request.logging instead.")
-
 	// Create a signal channel to dispatch reload events to sub-commands.
 	reloadCh := make(chan struct{}, 1)
 
