@@ -159,15 +159,20 @@ var MapAllowedLevels = map[string][]string{
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]Option, error) {
+	// Default Option: No Logging.
+	logOpts := []Option{WithDecider(func(_ string, _ error) Decision {
+		return NoLogCall
+	})}
+
 	// If flag is incorrectly parsed.
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []Option{}, fmt.Errorf("getting request logging config failed. %v", err)
+		return logOpts, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+		return logOpts, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
 	}
 	// If old flag is enabled.
 	if len(flagDecision) > 0 {
@@ -176,9 +181,9 @@ func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([
 		})}
 		return logOpts, nil
 	}
-	logOpts, err := NewHTTPOption(configYAML)
+	logOpts, err = NewHTTPOption(configYAML)
 	if err != nil {
-		return []Option{}, err
+		return logOpts, err
 	}
 
 	return logOpts, nil
@@ -186,22 +191,26 @@ func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
 func DecideGRPCFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
+	// Default Option: No Logging.
+	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
+		return grpc_logging.NoLogCall
+	})}
 
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("getting request logging config failed. %v", err)
+		return []tags.Option{}, logOpts, fmt.Errorf("getting request logging config failed. %v", err)
 	}
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+		return []tags.Option{}, logOpts, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
 	}
 
 	// If the old flag is empty, use the new YAML config.
 	if len(flagDecision) == 0 {
 		tagOpts, logOpts, err := NewGRPCOption(configYAML)
 		if err != nil {
-			return []tags.Option{}, []grpc_logging.Option{}, err
+			return []tags.Option{}, logOpts, err
 		}
 		return tagOpts, logOpts, nil
 	}
@@ -222,7 +231,7 @@ func DecideGRPCFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([
 			return tagMap
 		}),
 	}
-	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
+	logOpts = []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
 		switch flagDecision {
 		case "NoLogCall":
 			return grpc_logging.NoLogCall

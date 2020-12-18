@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -439,12 +438,9 @@ func runQuery(
 
 		// Configure Request Logging for HTTP calls.
 		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
-
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
-
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
@@ -501,7 +497,6 @@ func runQuery(
 		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
 
 		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,

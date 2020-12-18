@@ -8,7 +8,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"sync"
 	"time"
 
@@ -225,7 +224,6 @@ func runSidecar(
 		_, _, err = logging.DecideGRPCFlag(reqLogDecision, conf.reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
 
 		s := grpcserver.New(logger, reg, tracer, conf.reqLogConfig, reqLogDecision, comp, grpcProbe,

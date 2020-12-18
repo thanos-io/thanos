@@ -563,7 +563,6 @@ func runRule(
 		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
 
 		// TODO: Add rules API implementation when ready.
@@ -613,7 +612,6 @@ func runRule(
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 

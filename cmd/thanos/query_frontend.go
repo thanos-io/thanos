@@ -5,7 +5,6 @@ package main
 
 import (
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -215,9 +214,7 @@ func runQueryFrontend(
 
 	if err != nil {
 		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		os.Exit(1)
 	}
-
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 	ins := extpromhttp.NewInstrumentationMiddleware(reg)
 

@@ -476,7 +476,6 @@ func runReceive(
 		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			os.Exit(1)
 		}
 
 		g.Add(func() error {
