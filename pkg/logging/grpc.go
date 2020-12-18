@@ -34,17 +34,14 @@ func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 	if len(optcfg.Level) == 0 && !optcfg.Decision.LogEnd && !optcfg.Decision.LogStart {
 		return true, nil
 	}
-
 	if len(optcfg.Level) == 0 && (optcfg.Decision.LogStart || optcfg.Decision.LogEnd) {
 		return false, fmt.Errorf("level field is empty.")
 	}
-
 	return false, nil
 }
 
 // This function configures all the method to have global config for logging.
 func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bool, bool, error) {
-
 	globalLevel := "ERROR"
 	globalStart, globalEnd := false, false
 
@@ -55,23 +52,19 @@ func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bo
 	if err != nil {
 		return "", false, false, err
 	}
-
 	if !isEmpty {
 		globalLevel = globalOptionConfig.Level
 		globalStart = globalOptionConfig.Decision.LogStart
 		globalEnd = globalOptionConfig.Decision.LogEnd
 	}
-	var protocolOptionConfig OptionsConfig
+
+	protocolOptionConfig := reqLogConfig.HTTP.Options
 	if isgRPC {
 		// gRPC config overrides the global config.
 		protocolOptionConfig = reqLogConfig.GRPC.Options
-	} else {
-		// HTTP config overrides the global config.
-		protocolOptionConfig = reqLogConfig.HTTP.Options
 	}
 
 	isEmpty, err = checkOptionsConfigEmpty(protocolOptionConfig)
-
 	// If the decision for logging is enabled with empty level field.
 	if err != nil {
 		return "", false, false, err
@@ -83,7 +76,6 @@ func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bo
 		globalEnd = protocolOptionConfig.Decision.LogEnd
 	}
 	return globalLevel, globalStart, globalEnd, nil
-
 }
 
 // Returns the logging ENUM based on logStart and logEnd values.
@@ -91,15 +83,12 @@ func getGRPCLoggingOption(logStart bool, logEnd bool) (grpc_logging.Decision, er
 	if !logStart && !logEnd {
 		return grpc_logging.NoLogCall, nil
 	}
-
 	if !logStart && logEnd {
 		return grpc_logging.LogFinishCall, nil
 	}
-
 	if logStart && logEnd {
 		return grpc_logging.LogStartAndFinishCall, nil
 	}
-
 	return -1, fmt.Errorf("log start call is not supported.")
 }
 
@@ -109,19 +98,16 @@ func validateLevel(level string) error {
 	if len(level) == 0 {
 		return fmt.Errorf("level field in YAML file is empty.")
 	}
-
 	if level == "INFO" || level == "DEBUG" || level == "ERROR" || level == "WARNING" {
 		return nil
 	}
-
 	return fmt.Errorf("The format of level is invalid. Expected INFO/DEBUG/ERROR/WARNING, got this %v", level)
-
 }
 
 // NewGRPCOption adds in the config options and returns tags for logging middleware.
 func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
 
-	// Configure tagOpts and logOpts
+	// Configure tagOpts and logOpts.
 	tagOpts := []tags.Option{
 		tags.WithFieldExtractor(func(_ string, req interface{}) map[string]string {
 			tagMap := tags.TagBasedRequestFieldExtractor("request-id")("", req)
@@ -145,7 +131,7 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 		grpc_logging.WithLevels(DefaultCodeToLevelGRPC),
 	}
 
-	// Unmarshal YAML
+	// Unmarshal YAML.
 	// if req logging is disabled.
 	if len(configYAML) == 0 {
 		return tagOpts, logOpts, nil

@@ -60,7 +60,6 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 }
 
 func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddleware {
-
 	o := evaluateOpt(opts)
 	return &HTTPServerMiddleware{
 		logger: log.With(logger, "protocol", "http", "http.component", "server"),
@@ -73,15 +72,12 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	if !logStart && !logEnd {
 		return NoLogCall, nil
 	}
-
 	if !logStart && logEnd {
 		return LogFinishCall, nil
 	}
-
 	if logStart && logEnd {
 		return LogStartAndFinishCall, nil
 	}
-
 	return -1, fmt.Errorf("log start call is not supported.")
 }
 
@@ -101,7 +97,6 @@ func getLevel(lvl string) level.Option {
 }
 
 func NewHTTPOption(configYAML []byte) ([]Option, error) {
-
 	// Define a black config option.
 	logOpts := []Option{
 		WithDecider(func(_ string, err error) Decision {
@@ -168,7 +163,6 @@ func NewHTTPOption(configYAML []byte) ([]Option, error) {
 			if idx < len(methodNameSlice) && methodNameSlice[idx] == runtimeMethodName {
 				return reqLogDecision
 			}
-
 			return NoLogCall
 		}),
 	}...)
