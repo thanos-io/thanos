@@ -20,8 +20,8 @@ import (
 
 // NewRequestConfig parses the string into a req logging config structure.
 // Raise an error if unmarshalling is not possible, or values are not valid.
-func NewRequestConfig(configYAML []byte) (*ReqLogConfig, error) {
-	reqLogConfig := &ReqLogConfig{}
+func NewRequestConfig(configYAML []byte) (*RequestConfig, error) {
+	reqLogConfig := &RequestConfig{}
 	if err := yaml.UnmarshalStrict(configYAML, reqLogConfig); err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 }
 
 // This function configures all the method to have global config for logging.
-func fillGlobalOptionConfig(reqLogConfig *ReqLogConfig, isgRPC bool) (string, bool, bool, error) {
+func fillGlobalOptionConfig(reqLogConfig *RequestConfig, isgRPC bool) (string, bool, bool, error) {
 	globalLevel := "ERROR"
 	globalStart, globalEnd := false, false
 

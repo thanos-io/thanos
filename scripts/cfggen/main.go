@@ -86,7 +86,7 @@ func main() {
 		}
 	}
 
-	if err := generate(logging.ReqLogConfig{}, generateName("logging_", "request"), *outputDir); err != nil {
+	if err := generate(logging.RequestConfig{}, generateName("logging_", "request"), *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "request_logging", "err", err)
 		os.Exit(1)
 

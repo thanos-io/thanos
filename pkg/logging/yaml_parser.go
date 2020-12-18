@@ -3,7 +3,7 @@
 
 package logging
 
-type ReqLogConfig struct {
+type RequestConfig struct {
 	HTTP    HTTPProtocolConfigs `yaml:"http"`
 	GRPC    GRPCProtocolConfigs `yaml:"grpc"`
 	Options OptionsConfig       `yaml:"options"`
