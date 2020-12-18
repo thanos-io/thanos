@@ -97,18 +97,6 @@ Flags:
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                                 Path to YAML file with request logging
-                                 configuration. Currently disabled for tools
-                                 components. See format details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                 Alternative to 'request.logging-file' flag
-                                 (lower priority). Content of YAML file with
-                                 request logging configuration. Currently
-                                 disabled for tools components. See format
-                                 details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
@@ -152,6 +140,16 @@ Flags:
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
+      --request.logging-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging=<content>
+                                 Alternative to 'request.logging-file' flag
+                                 (lower priority). Content of YAML file with
+                                 request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:

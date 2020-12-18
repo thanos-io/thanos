@@ -34,17 +34,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
 
 Subcommands:
   tools bucket verify [<flags>]
@@ -142,17 +131,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -249,18 +227,6 @@ Flags:
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                                Path to YAML file with request logging
-                                configuration. Currently disabled for tools
-                                components. See format details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                Alternative to 'request.logging-file' flag
-                                (lower priority). Content of YAML file with
-                                request logging configuration. Currently
-                                disabled for tools components. See format
-                                details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
@@ -336,17 +302,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -426,17 +381,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -484,17 +428,6 @@ Flags:
                              priority). Content of YAML file with tracing
                              configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                             Path to YAML file with request logging
-                             configuration. Currently disabled for tools
-                             components. See format details:
-                             https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                             Alternative to 'request.logging-file' flag (lower
-                             priority). Content of YAML file with request
-                             logging configuration. Currently disabled for tools
-                             components. See format details:
-                             https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                              Path to YAML file that contains object store
                              configuration. See format details:
@@ -550,18 +483,6 @@ Flags:
                                  (lower priority). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                                 Path to YAML file with request logging
-                                 configuration. Currently disabled for tools
-                                 components. See format details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                 Alternative to 'request.logging-file' flag
-                                 (lower priority). Content of YAML file with
-                                 request logging configuration. Currently
-                                 disabled for tools components. See format
-                                 details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
@@ -660,17 +581,6 @@ Flags:
                               priority). Content of YAML file with tracing
                               configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                              Path to YAML file with request logging
-                              configuration. Currently disabled for tools
-                              components. See format details:
-                              https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                              Alternative to 'request.logging-file' flag (lower
-                              priority). Content of YAML file with request
-                              logging configuration. Currently disabled for
-                              tools components. See format details:
-                              https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object store
                               configuration. See format details:
@@ -732,17 +642,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
@@ -819,18 +718,6 @@ Flags:
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                                Path to YAML file with request logging
-                                configuration. Currently disabled for tools
-                                components. See format details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                Alternative to 'request.logging-file' flag
-                                (lower priority). Content of YAML file with
-                                request logging configuration. Currently
-                                disabled for tools components. See format
-                                details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
@@ -901,17 +788,6 @@ Flags:
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --request.logging-file=<file-path>
-                           Path to YAML file with request logging configuration.
-                           Currently disabled for tools components. See format
-                           details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                           Alternative to 'request.logging-file' flag (lower
-                           priority). Content of YAML file with request logging
-                           configuration. Currently disabled for tools
-                           components. See format details:
-                           https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --rules=RULES ...    The rule files glob to check (repeated).
 
 ```
