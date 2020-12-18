@@ -48,7 +48,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogConfig extflag.PathOrContent, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogConfig *extflag.PathOrContent, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",

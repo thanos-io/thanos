@@ -128,7 +128,7 @@ func registerQuery(app *extkingpin.App) {
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
-	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -218,7 +218,7 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogDecision string,
-	reqLogConfig extflag.PathOrContent,
+	reqLogConfig *extflag.PathOrContent,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,

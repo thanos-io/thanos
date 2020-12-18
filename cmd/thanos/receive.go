@@ -98,7 +98,7 @@ func registerReceive(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -177,7 +177,7 @@ func runReceive(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogConfig extflag.PathOrContent,
+	reqLogConfig *extflag.PathOrContent,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,

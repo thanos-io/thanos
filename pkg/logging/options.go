@@ -158,7 +158,7 @@ var MapAllowedLevels = map[string][]string{
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideHTTPFlag(flagDecision string, reqLogConfig extflag.PathOrContent) ([]Option, error) {
+func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 	// If flag is incorrectly parsed.
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
@@ -185,7 +185,7 @@ func DecideHTTPFlag(flagDecision string, reqLogConfig extflag.PathOrContent) ([]
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideGRPCFlag(flagDecision string, reqLogConfig extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
+func DecideGRPCFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
 
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {

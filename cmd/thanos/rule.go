@@ -129,7 +129,7 @@ func registerRule(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -275,7 +275,7 @@ func runRule(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogDecision string,
-	reqLogConfig extflag.PathOrContent,
+	reqLogConfig *extflag.PathOrContent,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
