@@ -34,6 +34,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
 - [#3509](https://github.com/thanos-io/thanos/pull/3509) Store: Added touch series limit
 - [#3388](https://github.com/thanos-io/thanos/pull/3378) Tools: Bucket replicator now can specify block IDs to copy.
+- [#3361](https://github.com/thanos-io/thanos/pull/3361) Sidecar, Store, Query, Ruler, Compactor, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
 - [#3121](https://github.com/thanos-io/thanos/pull/3121) Receive: Added `--receive.hashrings` alternative to `receive.hashrings-file` flag (lower priority). Content of JSON file that contains the hashring configuration.
 
 ### Fixed
@@ -74,7 +75,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#3361](https://github.com/thanos-io/thanos/pull/3361) Query, Ruler, Sidecar, Store: Added request logging for gRPC in the server side.
 - [#3259](https://github.com/thanos-io/thanos/pull/3259) Thanos BlockViewer: Added a button in the blockviewer that allows users to download the metadata of a block.
 - [#3261](https://github.com/thanos-io/thanos/pull/3261) Thanos Store: Use segment files specified in meta.json file, if present. If not present, Store does the LIST operation as before.
 - [#3276](https://github.com/thanos-io/thanos/pull/3276) Query Frontend: Support query splitting and retry for label names, label values and series requests.
