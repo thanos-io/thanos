@@ -455,12 +455,9 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)
 		global.Register(r, false, ins)
 
-		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag("", conf.reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
-			os.Exit(1)
-		}
+		logOpts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
+			return logging.NoLogCall
+		})}
 
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
@@ -519,7 +516,6 @@ type compactConfig struct {
 	maxCompactionLevel                             int
 	http                                           httpConfig
 	dataDir                                        string
-	reqLogConfig                                   extflag.PathOrContent
 	objStore                                       extflag.PathOrContent
 	consistencyDelay                               time.Duration
 	retentionRaw, retentionFiveMin, retentionOneHr model.Duration
@@ -615,7 +611,6 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
-	cc.reqLogConfig = *extkingpin.RegisterRequestLoggingFlags(cmd)
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
