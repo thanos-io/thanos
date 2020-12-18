@@ -386,7 +386,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{"a"}, resp.Names)
+	testutil.Equals(t, []string{"a", "ext_a", "ext_b"}, resp.Names)
 
 	// Outside time range.
 	resp, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
@@ -395,7 +395,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{}, resp.Names)
+	testutil.Equals(t, []string{"ext_a", "ext_b"}, resp.Names)
 }
 
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
@@ -476,7 +476,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []string{"a"}, resp.Values)
+	testutil.Equals(t, []string{"a", "b"}, resp.Values)
 
 	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",

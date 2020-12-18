@@ -218,9 +218,10 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		end           func() int64
 	}{
 		{
-			title:     "no label in tsdb",
-			labels:    []string{},
-			timestamp: now.Unix(),
+			title:         "no label in tsdb",
+			labels:        []string{},
+			expectedNames: []string{"region"},
+			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -231,7 +232,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		{
 			title:         "add one label",
 			labels:        []string{"foo", "foo"},
-			expectedNames: []string{"foo"},
+			expectedNames: []string{"foo", "region"},
 			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
@@ -244,7 +245,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 			title:  "add another label",
 			labels: []string{"bar", "bar"},
 			// We will get two labels here.
-			expectedNames: []string{"bar", "foo"},
+			expectedNames: []string{"bar", "foo", "region"},
 			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
@@ -254,9 +255,10 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 			},
 		},
 		{
-			title:     "query range outside tsdb head",
-			labels:    []string{},
-			timestamp: now.Unix(),
+			title:         "query range outside tsdb head",
+			labels:        []string{},
+			expectedNames: []string{"region"},
+			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -267,7 +269,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		{
 			title:         "get all labels",
 			labels:        []string{"buz", "buz"},
-			expectedNames: []string{"bar", "buz", "foo"},
+			expectedNames: []string{"bar", "buz", "foo", "region"},
 			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)

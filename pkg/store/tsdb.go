@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/strutil"
 	"io"
 	"math"
 
@@ -214,6 +215,12 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	extLabelNames := make([]string, 0, len(s.extLset))
+	for _, lbl := range s.extLset {
+		extLabelNames = append(extLabelNames, lbl.Name)
+	}
+	res = strutil.MergeSlices(res, extLabelNames)
 	return &storepb.LabelNamesResponse{Names: res}, nil
 }
 
@@ -231,5 +238,11 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	// Add the external label value as well.
+	if extLabelValue := s.extLset.Get(r.Label); extLabelValue != "" {
+		res = strutil.MergeSlices(res, []string{extLabelValue})
+	}
+
 	return &storepb.LabelValuesResponse{Values: res}, nil
 }
