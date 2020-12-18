@@ -172,7 +172,7 @@ func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
 		return logOpts, nil
 	}
 
-	logOpts, err := NewHTTPLoggingOption(configYAML)
+	logOpts, err := NewHTTPOption(configYAML)
 	if err != nil {
 		return []Option{}, err
 	}
@@ -219,7 +219,7 @@ func DecideGRPCFlag(flagDecision string, configYAML []byte) ([]tags.Option, []gr
 		return tagOpts, logOpts, nil
 	}
 
-	tagOpts, logOpts, err := NewGRPCLoggingOption(configYAML)
+	tagOpts, logOpts, err := NewGRPCOption(configYAML)
 	if err != nil {
 		return []tags.Option{}, []grpc_logging.Option{}, err
 	}

@@ -18,9 +18,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// NewReqLogConfig parses the string into a req logging config structure.
+// NewRequestConfig parses the string into a req logging config structure.
 // Raise an error if unmarshalling is not possible, or values are not valid.
-func NewReqLogConfig(configYAML []byte) (*ReqLogConfig, error) {
+func NewRequestConfig(configYAML []byte) (*ReqLogConfig, error) {
 	reqLogConfig := &ReqLogConfig{}
 	if err := yaml.UnmarshalStrict(configYAML, reqLogConfig); err != nil {
 		return nil, err
@@ -118,8 +118,8 @@ func validateLevel(level string) error {
 
 }
 
-// NewGRPCLoggingOption adds in the config options and returns tags for logging middleware.
-func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+// NewGRPCOption adds in the config options and returns tags for logging middleware.
+func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
 
 	// Configure tagOpts and logOpts
 	tagOpts := []tags.Option{
@@ -151,7 +151,7 @@ func NewGRPCLoggingOption(configYAML []byte) ([]tags.Option, []grpc_logging.Opti
 		return tagOpts, logOpts, nil
 	}
 
-	reqLogConfig, err := NewReqLogConfig(configYAML)
+	reqLogConfig, err := NewRequestConfig(configYAML)
 	// If unmarshalling is an issue.
 	if err != nil {
 		return tagOpts, logOpts, err

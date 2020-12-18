@@ -100,7 +100,7 @@ func getLevel(lvl string) level.Option {
 	}
 }
 
-func NewHTTPLoggingOption(configYAML []byte) ([]Option, error) {
+func NewHTTPOption(configYAML []byte) ([]Option, error) {
 
 	// Define a black config option.
 	logOpts := []Option{
@@ -114,7 +114,7 @@ func NewHTTPLoggingOption(configYAML []byte) ([]Option, error) {
 		return logOpts, nil
 	}
 
-	reqLogConfig, err := NewReqLogConfig(configYAML)
+	reqLogConfig, err := NewRequestConfig(configYAML)
 	// If unmarshalling is an issue.
 	if err != nil {
 		return logOpts, err
