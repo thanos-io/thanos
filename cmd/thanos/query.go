@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -25,12 +26,12 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -143,6 +144,17 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
 		}
 
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		HTTPlogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
 		var fileSD *file.Discovery
 		if len(*fileSDFiles) > 0 {
 			conf := &file.SDConfig{
@@ -165,8 +177,9 @@ func registerQuery(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			*reqLogDecision,
-			reqLogConfig,
+			HTTPlogOpts,
+			GRPCLogOpts,
+			tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -216,8 +229,9 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogDecision string,
-	reqLogConfig *extflag.PathOrContent,
+	HTTPlogOpts []logging.Option,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -437,11 +451,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
@@ -493,13 +503,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-
-		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),

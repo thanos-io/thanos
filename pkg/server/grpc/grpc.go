@@ -21,8 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -48,7 +46,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogConfig *extflag.PathOrContent, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, logOpts []grpc_logging.Option, tagsOpts []tags.Option, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -70,16 +68,6 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		panicsTotal.Inc()
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
-	}
-
-	tagsOpts, logOpts, err := logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
-
-	if err != nil {
-		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		tagsOpts = []tags.Option{}
-		logOpts = []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
-			return grpc_logging.NoLogCall
-		})}
 	}
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{

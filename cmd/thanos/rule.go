@@ -17,6 +17,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -179,12 +181,24 @@ func registerRule(app *extkingpin.App) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		HTTPlogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
 		return runRule(g,
 			logger,
 			reg,
 			tracer,
-			*reqLogDecision,
-			reqLogConfig,
+			HTTPlogOpts,
+			GRPCLogOpts,
+			tagOpts,
 			reload,
 			lset,
 			*alertmgrs,
@@ -274,8 +288,9 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogDecision string,
-	reqLogConfig *extflag.PathOrContent,
+	HTTPlogOpts []logging.Option,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
@@ -559,14 +574,8 @@ func runRule(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
@@ -608,12 +617,7 @@ func runRule(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
-
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
 
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)

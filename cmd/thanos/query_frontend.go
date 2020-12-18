@@ -130,7 +130,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, reqLogConfig, cfg, comp)
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		HTTPlogOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
+		return runQueryFrontend(g, logger, reg, tracer, HTTPlogOpts, cfg, comp)
 	})
 }
 
@@ -139,7 +145,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogConfig *extflag.PathOrContent,
+	HTTPlogOpts []logging.Option,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -210,12 +216,7 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	logOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
-
-	if err != nil {
-		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-	}
-	logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
 	ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 	// Start metrics HTTP server.

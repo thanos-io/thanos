@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -124,11 +126,24 @@ func registerStore(app *extkingpin.App) {
 				minTime, maxTime)
 		}
 
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		HTTPlogOpts, err := logging.DecideHTTPFlag("", reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
 		return runStore(g,
 			logger,
 			reg,
 			tracer,
-			reqLogConfig,
+			HTTPlogOpts,
+			GRPCLogOpts,
+			tagOpts,
 			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
@@ -174,7 +189,9 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogConfig *extflag.PathOrContent,
+	HTTPlogOpts []logging.Option,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
@@ -208,10 +225,6 @@ func runStore(
 		grpcProbe,
 		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-
-	// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
-	// TODO: @yashrsharma44 - to be removed in the next release.
-	reqLogDecision := ""
 
 	srv := httpserver.New(logger, reg, component, httpProbe,
 		httpserver.WithListen(httpBindAddr),
@@ -367,13 +380,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-
-		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
@@ -398,13 +405,7 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
-
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "err", err)
-		}
-
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
 		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 

@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -49,6 +51,12 @@ func registerSidecar(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&reloader.Options{
@@ -60,7 +68,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, GRPCLogOpts, tagOpts)
 	})
 }
 
@@ -72,6 +80,8 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 ) error {
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
@@ -216,17 +226,8 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
-		// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
-		// TODO: @yashrsharma44 - to be removed in the next release.
-		reqLogDecision := ""
 
-		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, conf.reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-
-		s := grpcserver.New(logger, reg, tracer, conf.reqLogConfig, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),

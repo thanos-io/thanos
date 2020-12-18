@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -110,6 +112,12 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
+		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
+		if err != nil {
+			return errors.Errorf("config for request logging not recognized %v", err)
+		}
+
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
@@ -135,7 +143,7 @@ func registerReceive(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			reqLogConfig,
+			GRPCLogOpts, tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -177,7 +185,8 @@ func runReceive(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogConfig *extflag.PathOrContent,
+	GRPCLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -468,16 +477,6 @@ func runReceive(
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 
-		// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
-		// TODO: @yashrsharma44 - to be removed in the next release.
-		reqLogDecision := ""
-
-		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
-		if err != nil {
-			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-		}
-
 		g.Add(func() error {
 			defer close(startGRPC)
 
@@ -501,7 +500,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),
