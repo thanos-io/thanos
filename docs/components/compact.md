@@ -421,16 +421,6 @@ Flags:
                                 selecting blocks. It follows native Prometheus
                                 relabel-config syntax. See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --request.logging-file=<file-path>
-                                Path to YAML file with request logging
-                                configuration. See format details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                Alternative to 'request.logging-file' flag
-                                (lower priority). Content of YAML file with
-                                request logging configuration. See format
-                                details:
-                                https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the
