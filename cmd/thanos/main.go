@@ -122,7 +122,6 @@ func main() {
 			cancel()
 		})
 	}
-
 	// Create a signal channel to dispatch reload events to sub-commands.
 	reloadCh := make(chan struct{}, 1)
 

@@ -455,11 +455,11 @@ func runCompact(
 		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)
 		global.Register(r, false, ins)
 
-		logOpts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
+		// Configure Request Logging for HTTP calls.
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.NoLogCall
 		})}
-
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		// Separate fetcher for global view.
@@ -611,6 +611,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
