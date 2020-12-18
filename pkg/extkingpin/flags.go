@@ -74,7 +74,7 @@ func RegisterRequestLoggingFlags(app FlagClause) *extflag.PathOrContent {
 		app,
 		"request.logging",
 		// TODO @yashrsharma44: Change the link with the documented link for yaml configuration.
-		"YAML file with request logging configuration. Currently disabled for tools components. See format details: https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825",
+		"YAML file with request logging configuration. See format details: https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825",
 		false,
 	)
 }
