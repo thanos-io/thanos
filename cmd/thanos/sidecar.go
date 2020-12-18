@@ -49,7 +49,7 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&reloader.Options{
@@ -61,7 +61,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, reqLogYAML, *conf)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
 	})
 }
 
@@ -72,7 +72,6 @@ func runSidecar(
 	tracer opentracing.Tracer,
 	reloader *reloader.Reloader,
 	comp component.Component,
-	reqLogYAML []byte,
 	conf sidecarConfig,
 ) error {
 	var m = &promMetadata{
@@ -223,13 +222,13 @@ func runSidecar(
 		reqLogDecision := ""
 
 		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, conf.reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 			os.Exit(1)
 		}
 
-		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, conf.reqLogConfig, reqLogDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),
@@ -402,6 +401,7 @@ type sidecarConfig struct {
 	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
+	reqLogConfig extflag.PathOrContent
 	objStore     extflag.PathOrContent
 	shipper      shipperConfig
 	limitMinTime thanosmodel.TimeOrDurationValue
@@ -414,6 +414,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
+	sc.reqLogConfig = *extkingpin.RegisterRequestLoggingFlags(cmd)
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").

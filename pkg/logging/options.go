@@ -13,6 +13,7 @@ import (
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"google.golang.org/grpc/codes"
 )
 
@@ -157,7 +158,13 @@ var MapAllowedLevels = map[string][]string{
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
+func DecideHTTPFlag(flagDecision string, reqLogConfig extflag.PathOrContent) ([]Option, error) {
+	// If flag is incorrectly parsed.
+	configYAML, err := reqLogConfig.Content()
+	if err != nil {
+		return []Option{}, fmt.Errorf("getting request logging config failed. %v", err)
+	}
+
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
 		return []Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
@@ -178,7 +185,13 @@ func DecideHTTPFlag(flagDecision string, configYAML []byte) ([]Option, error) {
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideGRPCFlag(flagDecision string, configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+func DecideGRPCFlag(flagDecision string, reqLogConfig extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
+
+	configYAML, err := reqLogConfig.Content()
+	if err != nil {
+		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("getting request logging config failed. %v", err)
+	}
+
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
 		return []tags.Option{}, []grpc_logging.Option{}, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")

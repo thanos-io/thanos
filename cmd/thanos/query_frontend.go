@@ -128,9 +128,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
 	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with request.logging. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
+	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, reqLogYAML, cfg, comp)
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runQueryFrontend(g, logger, reg, tracer, reqLogConfig, cfg, comp)
 	})
 }
 
@@ -139,7 +140,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogYAML []byte,
+	reqLogConfig extflag.PathOrContent,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -210,7 +211,7 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	logOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogYAML)
+	logOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
 
 	if err != nil {
 		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)

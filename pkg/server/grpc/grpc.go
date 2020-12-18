@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -47,7 +48,7 @@ type Server struct {
 
 // New creates a new gRPC Store API.
 // If rulesSrv is not nil, it also registers Rules API to the returned server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogYAML []byte, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, reqLogConfig extflag.PathOrContent, reqLogDecision string, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
 		network: "tcp",
@@ -71,7 +72,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-	tagsOpts, logOpts, err := logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+	tagsOpts, logOpts, err := logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 
 	if err != nil {
 		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)

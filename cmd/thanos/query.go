@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -127,8 +128,9 @@ func registerQuery(app *extkingpin.App) {
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -165,7 +167,7 @@ func registerQuery(app *extkingpin.App) {
 			reg,
 			tracer,
 			*reqLogDecision,
-			reqLogYAML,
+			reqLogConfig,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -216,7 +218,7 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogDecision string,
-	reqLogYAML []byte,
+	reqLogConfig extflag.PathOrContent,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -436,7 +438,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogYAML)
+		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
@@ -496,13 +498,13 @@ func runQuery(
 		}
 
 		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 			os.Exit(1)
 		}
 
-		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),

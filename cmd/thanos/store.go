@@ -117,8 +117,9 @@ func registerStore(app *extkingpin.App) {
 
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, debugLogging bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				minTime, maxTime)
@@ -128,7 +129,7 @@ func registerStore(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			reqLogYAML,
+			reqLogConfig,
 			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
@@ -174,7 +175,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogYAML []byte,
+	reqLogConfig extflag.PathOrContent,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
@@ -368,13 +369,13 @@ func runStore(
 		}
 
 		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 			os.Exit(1)
 		}
 
-		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, reqLogConfig, reqLogDecision, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
@@ -399,7 +400,7 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogYAML)
+		logOpts, err := logging.DecideHTTPFlag(reqLogDecision, reqLogConfig)
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "err", err)

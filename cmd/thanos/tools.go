@@ -27,7 +27,7 @@ func registerCheckRules(app extkingpin.AppClause) {
 	cmd := app.Command("rules-check", "Check if the rule files are valid or not.")
 	ruleFiles := cmd.Flag("rules", "The rule files glob to check (repeated).").Required().ExistingFiles()
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ []byte, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 		return checkRulesFiles(logger, ruleFiles)

@@ -98,7 +98,9 @@ func registerReceive(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
+	reqLogConfig := *extkingpin.RegisterRequestLoggingFlags(cmd)
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -133,7 +135,7 @@ func registerReceive(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			reqLogYAML,
+			reqLogConfig,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -175,7 +177,7 @@ func runReceive(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	reqLogYAML []byte,
+	reqLogConfig extflag.PathOrContent,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -471,7 +473,7 @@ func runReceive(
 		reqLogDecision := ""
 
 		// Check if the request logging config is correct. Raise an error if not.
-		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 			os.Exit(1)
@@ -500,7 +502,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, reqLogConfig, reqLogDecision, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),

@@ -85,8 +85,8 @@ func registerCompact(app *extkingpin.App) {
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, _ bool) error {
-		return runCompact(g, logger, tracer, reqLogYAML, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
 	})
 }
 
@@ -94,7 +94,6 @@ func runCompact(
 	g *run.Group,
 	logger log.Logger,
 	tracer opentracing.Tracer,
-	reqLogYAML []byte,
 	reg *prometheus.Registry,
 	component component.Component,
 	conf compactConfig,
@@ -457,7 +456,7 @@ func runCompact(
 		global.Register(r, false, ins)
 
 		// Configure Request Logging for HTTP calls.
-		logOpts, err := logging.NewHTTPOption(reqLogYAML)
+		logOpts, err := logging.DecideHTTPFlag("", conf.reqLogConfig)
 		if err != nil {
 			level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
 			os.Exit(1)
@@ -520,6 +519,7 @@ type compactConfig struct {
 	maxCompactionLevel                             int
 	http                                           httpConfig
 	dataDir                                        string
+	reqLogConfig                                   extflag.PathOrContent
 	objStore                                       extflag.PathOrContent
 	consistencyDelay                               time.Duration
 	retentionRaw, retentionFiveMin, retentionOneHr model.Duration
@@ -615,7 +615,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
-
+	cc.reqLogConfig = *extkingpin.RegisterRequestLoggingFlags(cmd)
 	cc.webConf.registerFlag(cmd)
 
 	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
