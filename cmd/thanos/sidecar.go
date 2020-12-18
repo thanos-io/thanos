@@ -49,7 +49,6 @@ func registerSidecar(app *extkingpin.App) {
 	cmd := app.Command(component.Sidecar.String(), "Sidecar for Prometheus server.")
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
-
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Check if the YAML configuration of request.logging is correct. Exit early if error.
 		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)

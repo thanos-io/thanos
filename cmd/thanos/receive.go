@@ -476,7 +476,6 @@ func runReceive(
 	{
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
-
 		g.Add(func() error {
 			defer close(startGRPC)
 
