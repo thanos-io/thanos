@@ -460,6 +460,7 @@ func runCompact(
 		logOpts, err := logging.NewHTTPLoggingOption(reqLogYAML)
 		if err != nil {
 			level.Error(logger).Log("msg", "config YAML for request logging not recognized", "error", err)
+			os.Exit(1)
 		}
 
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)

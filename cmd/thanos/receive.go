@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/logging"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -468,6 +469,13 @@ func runReceive(
 		// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
 		// TODO: @yashrsharma44 - to be removed in the next release.
 		reqLogDecision := ""
+
+		// Check if the request logging config is correct. Raise an error if not.
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
+			os.Exit(1)
+		}
 
 		g.Add(func() error {
 			defer close(startGRPC)

@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -219,6 +221,13 @@ func runSidecar(
 		// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
 		// TODO: @yashrsharma44 - to be removed in the next release.
 		reqLogDecision := ""
+
+		// Check if the request logging config is correct. Raise an error if not.
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
+			os.Exit(1)
+		}
 
 		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),

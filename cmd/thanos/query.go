@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -439,7 +440,7 @@ func runQuery(
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			logOpts = []logging.Option{}
+			os.Exit(1)
 		}
 
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
@@ -492,6 +493,13 @@ func runQuery(
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
+		}
+
+		// Check if the request logging config is correct. Raise an error if not.
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
+			os.Exit(1)
 		}
 
 		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,

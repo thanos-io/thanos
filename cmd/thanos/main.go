@@ -127,6 +127,7 @@ func main() {
 	reqLogYAML, err := reqLogConfig.Content()
 	if err != nil {
 		level.Error(logger).Log("msg", "getting request logging config failed", "err", err)
+		os.Exit(1)
 	}
 	level.Warn(logger).Log("msg", "log.request.decision flag would be soon deprecated in the next release. Use request.logging instead.")
 

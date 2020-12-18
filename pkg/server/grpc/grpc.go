@@ -76,7 +76,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	if err != nil {
 		level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
 		tagsOpts = []tags.Option{}
-		logOpts = []grpc_logging.Option{}
+		logOpts = []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
+			return grpc_logging.NoLogCall
+		})}
 	}
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{

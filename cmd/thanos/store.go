@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -366,6 +367,13 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		// Check if the request logging config is correct. Raise an error if not.
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
+			os.Exit(1)
+		}
+
 		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
@@ -395,7 +403,7 @@ func runStore(
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "err", err)
-			logOpts = []logging.Option{}
+			os.Exit(1)
 		}
 
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)

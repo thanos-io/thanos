@@ -557,6 +557,13 @@ func runRule(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		// Check if the request logging config is correct. Raise an error if not.
+		_, _, err = logging.DecideGRPCFlag(reqLogDecision, reqLogYAML)
+		if err != nil {
+			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
+			os.Exit(1)
+		}
+
 		// TODO: Add rules API implementation when ready.
 		s := grpcserver.New(logger, reg, tracer, reqLogYAML, reqLogDecision, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
@@ -604,7 +611,7 @@ func runRule(
 
 		if err != nil {
 			level.Error(logger).Log("msg", "config for request logging not recognized", "error", err)
-			logOpts = []logging.Option{}
+			os.Exit(1)
 		}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, logOpts...)
 
