@@ -5,7 +5,6 @@ package store
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/strutil"
 	"io"
 	"math"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/strutil"
 )
 
 const RemoteReadFrameLimit = 1048576
