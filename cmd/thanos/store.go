@@ -117,8 +117,6 @@ func registerStore(app *extkingpin.App) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with request.logging. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
-
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reqLogYAML []byte, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
@@ -130,7 +128,6 @@ func registerStore(app *extkingpin.App) {
 			reg,
 			tracer,
 			reqLogYAML,
-			*reqLogDecision,
 			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
@@ -177,7 +174,6 @@ func runStore(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	reqLogYAML []byte,
-	reqLogDecision string,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
@@ -211,6 +207,10 @@ func runStore(
 		grpcProbe,
 		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
+
+	// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
+	// TODO: @yashrsharma44 - to be removed in the next release.
+	reqLogDecision := ""
 
 	srv := httpserver.New(logger, reg, component, httpProbe,
 		httpserver.WithListen(httpBindAddr),

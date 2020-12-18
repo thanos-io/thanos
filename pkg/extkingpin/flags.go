@@ -72,10 +72,9 @@ func RegisterCommonTracingFlags(app FlagClause) *extflag.PathOrContent {
 func RegisterRequestLoggingFlags(app FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
-		// TODO @yashrsharma44: Discuss the name for this flag :).
 		"request.logging",
 		// TODO @yashrsharma44: Change the link with the documented link for yaml configuration.
-		"YAML file with request logging configuration. See format details: https://gist.github.com/yashrsharma44/d7db9121f59c0d3b54f3c42f485abf6a",
+		"YAML file with request logging configuration. Currently disabled for tools components. See format details: https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825",
 		false,
 	)
 }

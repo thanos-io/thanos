@@ -464,7 +464,11 @@ func runReceive(
 	{
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
+
+		// Add in a dummy variable for supporting the deprecated flag, log.request.decision.
+		// TODO: @yashrsharma44 - to be removed in the next release.
 		reqLogDecision := ""
+
 		g.Add(func() error {
 			defer close(startGRPC)
 
