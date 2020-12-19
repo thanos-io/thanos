@@ -350,7 +350,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep, int64(end.Sub(start)/time.Second))
-	if err != nil {
+	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
