@@ -21,11 +21,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -486,7 +487,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start int64, end int64, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)

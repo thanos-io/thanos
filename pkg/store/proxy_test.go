@@ -1409,31 +1409,34 @@ func TestStoreMatches(t *testing.T) {
 	for _, c := range []struct {
 		s          Client
 		mint, maxt int64
+		ms         []*labels.Matcher
 
-		ms            []storepb.LabelMatcher
-		expectedMatch bool
+		expectedMatch  bool
+		expectedReason string
 	}{
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "b", "1"),
 			},
-
-			expectedMatch: false,
+			maxt:           -1,
+			expectedMatch:  false,
+			expectedReason: "does not have data within this time period: [0,-1]. Store time ranges: [0,0]",
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "b", "1"),
 			},
 			maxt:          1,
 			expectedMatch: true,
 		},
 		{
-			s:             &testClient{minTime: 100, maxTime: 200},
-			mint:          201,
-			maxt:          300,
-			expectedMatch: false,
+			s:              &testClient{minTime: 100, maxTime: 200},
+			mint:           201,
+			maxt:           300,
+			expectedMatch:  false,
+			expectedReason: "does not have data within this time period: [201,300]. Store time ranges: [100,200]",
 		},
 		{
 			s:             &testClient{minTime: 100, maxTime: 200},
@@ -1442,10 +1445,11 @@ func TestStoreMatches(t *testing.T) {
 			expectedMatch: true,
 		},
 		{
-			s:             &testClient{minTime: 100, maxTime: 200},
-			mint:          50,
-			maxt:          100,
-			expectedMatch: false,
+			s:              &testClient{minTime: 100, maxTime: 200},
+			mint:           50,
+			maxt:           99,
+			expectedMatch:  false,
+			expectedReason: "does not have data within this time period: [50,99]. Store time ranges: [100,200]",
 		},
 		{
 			s:             &testClient{minTime: 100, maxTime: 200},
@@ -1455,32 +1459,33 @@ func TestStoreMatches(t *testing.T) {
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
 			},
 			maxt:          1,
 			expectedMatch: true,
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "c"),
 			},
-			maxt:          1,
-			expectedMatch: false,
+			maxt:           1,
+			expectedMatch:  false,
+			expectedReason: "external labels [{a=\"b\"}] does not match request label matchers: [a=\"c\"]",
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "b|c"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "a", "b|c"),
 			},
 			maxt:          1,
 			expectedMatch: true,
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{labels.FromStrings("a", "b")}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotRegexp, "a", ""),
 			},
 			maxt:          1,
 			expectedMatch: true,
@@ -1491,11 +1496,12 @@ func TestStoreMatches(t *testing.T) {
 				labels.FromStrings("a", "c"),
 				labels.FromStrings("a", "d"),
 			}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "e"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "e"),
 			},
-			maxt:          1,
-			expectedMatch: false,
+			maxt:           1,
+			expectedMatch:  false,
+			expectedReason: "external labels [{a=\"b\"} {a=\"c\"} {a=\"d\"}] does not match request label matchers: [a=\"e\"]",
 		},
 		{
 			s: &testClient{labelSets: []labels.Labels{
@@ -1503,8 +1509,8 @@ func TestStoreMatches(t *testing.T) {
 				labels.FromStrings("a", "c"),
 				labels.FromStrings("a", "d"),
 			}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "a", "c"),
 			},
 			maxt:          1,
 			expectedMatch: true,
@@ -1515,17 +1521,18 @@ func TestStoreMatches(t *testing.T) {
 				labels.FromStrings("a", "c"),
 				labels.FromStrings("a", "d"),
 			}},
-			ms: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
+			ms: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchNotRegexp, "a", ""),
 			},
 			maxt:          1,
 			expectedMatch: true,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ok, err := storeMatches(c.s, c.mint, c.maxt, nil, c.ms...)
-			testutil.Ok(t, err)
+			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
 			testutil.Equals(t, c.expectedMatch, ok)
+			testutil.Equals(t, c.expectedReason, reason)
+
 		})
 	}
 }
@@ -1879,7 +1886,15 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := testClient{}
 
-	testutil.Assert(t, storeMatchDebugMetadata(c, [][]*labels.Matcher{{}}))
-	testutil.Assert(t, !storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}}))
-	testutil.Assert(t, storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}}))
+	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
+	testutil.Assert(t, ok)
+	testutil.Equals(t, "", reason)
+
+	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
+	testutil.Assert(t, !ok)
+	testutil.Equals(t, "__address__ testaddr does not match debug store metadata matchers: [[__address__=\"wrong\"]]", reason)
+
+	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
+	testutil.Assert(t, ok)
+	testutil.Equals(t, "", reason)
 }

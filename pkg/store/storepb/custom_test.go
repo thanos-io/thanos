@@ -506,12 +506,12 @@ func TestMatchersToString_Translate(t *testing.T) {
 		t.Run(c.expected, func(t *testing.T) {
 			testutil.Equals(t, c.expected, MatchersToString(c.ms...))
 
-			promMs, err := TranslateFromPromMatchers(c.ms...)
+			promMs, err := MatchersToPromMatchers(c.ms...)
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, c.expected, PromMatchersToString(promMs...))
 
-			ms, err := TranslatePromMatchers(promMs...)
+			ms, err := PromMatchersToMatchers(promMs...)
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, c.ms, ms)

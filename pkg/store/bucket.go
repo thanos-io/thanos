@@ -867,7 +867,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer s.queryGate.Done()
 	}
 
-	matchers, err := storepb.TranslateFromPromMatchers(req.Matchers...)
+	matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -891,7 +891,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
 		if err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -1076,7 +1076,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -1160,7 +1160,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.TranslateFromPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
