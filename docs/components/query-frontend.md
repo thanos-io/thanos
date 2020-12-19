@@ -119,7 +119,8 @@ Naming is hard :) Please check [here](https://github.com/thanos-io/thanos/pull/2
 ```$
 usage: thanos query-frontend [<flags>]
 
-query frontend
+query frontend command implements a service deployed in front of queriers to
+improve query parallelization and caching.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
