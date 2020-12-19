@@ -219,7 +219,7 @@ option controls if storeAPI unavailability is considered critical.
 ### Concurrent Selects
 
 Thanos Querier has the ability to perform concurrent select request per query. It dissects given PromQL statement and executes selectors concurrently against the discovered StoreAPIs.
-The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
+The maximum number of concurrent requests are being made per query is controlled by `query.max-concurrent-select` flag.
 Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
 
 ### Store filtering
