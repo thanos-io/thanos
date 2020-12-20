@@ -108,7 +108,7 @@ func GetQTypeName(addr string) (qtype string, name string) {
 
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
-// defaultPort is used for non-SRV records when a port is not supplied.
+// For non-SRV records, it will return an error if a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	resolvedAddrs := map[string][]string{}
 	errs := errutil.MultiError{}
