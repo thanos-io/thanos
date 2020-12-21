@@ -530,7 +530,7 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
 }
 
-// BlockIDLabel Special label that will have an ULID of the meta.json being referenced to.
+// Special label that will have an ULID of the meta.json being referenced to.
 const BlockIDLabel = "__block_id"
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.

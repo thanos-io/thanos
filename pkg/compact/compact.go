@@ -380,7 +380,7 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
-// AppendMeta add the block with the given meta to the compaction group.
+// AppendMeta adds the block with the given meta to the compaction group.
 func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
