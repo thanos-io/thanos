@@ -51,12 +51,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 				MaxBodySize: 10 * 1024 * 1024,
 			},
 			QueryRangeConfig: queryfrontend.QueryRangeConfig{
-				Limits:             &cortexvalidation.Limits{},
-				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+				Limits: &cortexvalidation.Limits{},
 			},
 			LabelsConfig: queryfrontend.LabelsConfig{
-				Limits:             &cortexvalidation.Limits{},
-				ResultsCacheConfig: &queryrange.ResultsCacheConfig{},
+				Limits: &cortexvalidation.Limits{},
 			},
 		},
 	}
@@ -160,7 +158,7 @@ func runQueryFrontend(
 		return err
 	}
 	if len(labelsCacheConfContentYaml) > 0 {
-		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
+		cacheConfig, err := queryfrontend.NewCacheConfig(logger, labelsCacheConfContentYaml)
 		if err != nil {
 			return errors.Wrap(err, "initializing the labels cache config")
 		}

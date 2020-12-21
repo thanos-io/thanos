@@ -11,7 +11,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-query.rules',
+        name: 'thanos-query',
         rules: [
           {
             alert: 'ThanosQueryHttpRequestQueryErrorRateHigh',

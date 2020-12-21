@@ -10,7 +10,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-receive.rules',
+        name: 'thanos-receive',
         rules: [
           {
             alert: 'ThanosReceiveHttpRequestErrorRateHigh',

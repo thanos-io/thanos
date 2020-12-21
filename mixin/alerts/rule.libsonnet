@@ -10,7 +10,7 @@
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-rule.rules',
+        name: 'thanos-rule',
         rules: [
           {
             alert: 'ThanosRuleQueueIsDroppingAlerts',

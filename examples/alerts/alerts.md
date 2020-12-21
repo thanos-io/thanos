@@ -4,9 +4,9 @@ Here are some example alerts configured for Kubernetes environment.
 
 ## Compaction
 
-[embedmd]:# (../tmp/thanos-compact.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-compact.yaml yaml)
 ```yaml
-name: thanos-compact.rules
+name: thanos-compact
 rules:
 - alert: ThanosCompactMultipleRunning
   annotations:
@@ -74,9 +74,9 @@ rules:
 
 For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thanos Ruler is working:
 
-[embedmd]:# (../tmp/thanos-rule.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-rule.yaml yaml)
 ```yaml
-name: thanos-rule.rules
+name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
   annotations:
@@ -229,9 +229,9 @@ rules:
 
 ## Store Gateway
 
-[embedmd]:# (../tmp/thanos-store.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-store.yaml yaml)
 ```yaml
-name: thanos-store.rules
+name: thanos-store
 rules:
 - alert: ThanosStoreGrpcErrorRate
   annotations:
@@ -299,9 +299,9 @@ rules:
 
 ## Sidecar
 
-[embedmd]:# (../tmp/thanos-sidecar.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-sidecar.yaml yaml)
 ```yaml
-name: thanos-sidecar.rules
+name: thanos-sidecar
 rules:
 - alert: ThanosSidecarPrometheusDown
   annotations:
@@ -311,6 +311,17 @@ rules:
     summary: Thanos Sidecar cannot connect to Prometheus
   expr: |
     sum by (job, pod) (thanos_sidecar_prometheus_up{job=~"thanos-sidecar.*"} == 0)
+  for: 5m
+  labels:
+    severity: critical
+- alert: ThanosSidecarBucketOperationsFailed
+  annotations:
+    description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} bucket operations
+      are failing
+    runbook_url: https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed
+    summary: Thanos Sidecar bucket operations are failing
+  expr: |
+    rate(thanos_objstore_bucket_operation_failures_total{job=~"thanos-sidecar.*"}[5m]) > 0
   for: 5m
   labels:
     severity: critical
@@ -328,9 +339,9 @@ rules:
 
 ## Query
 
-[embedmd]:# (../tmp/thanos-query.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-query.yaml yaml)
 ```yaml
-name: thanos-query.rules
+name: thanos-query
 rules:
 - alert: ThanosQueryHttpRequestQueryErrorRateHigh
   annotations:
@@ -442,9 +453,9 @@ rules:
 
 ## Receive
 
-[embedmd]:# (../tmp/thanos-receive.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-receive.yaml yaml)
 ```yaml
-name: thanos-receive.rules
+name: thanos-receive
 rules:
 - alert: ThanosReceiveHttpRequestErrorRateHigh
   annotations:
@@ -560,9 +571,9 @@ rules:
 
 ## Replicate
 
-[embedmd]:# (../tmp/thanos-bucket-replicate.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-bucket-replicate.yaml yaml)
 ```yaml
-name: thanos-bucket-replicate.rules
+name: thanos-bucket-replicate
 rules:
 - alert: ThanosBucketReplicateIsDown
   annotations:
@@ -610,9 +621,9 @@ rules:
 
 ### Absent Rules
 
-[embedmd]:# (../tmp/thanos-component-absent.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-component-absent.yaml yaml)
 ```yaml
-name: thanos-component-absent.rules
+name: thanos-component-absent
 rules:
 - alert: ThanosBucketReplicateIsDown
   annotations:

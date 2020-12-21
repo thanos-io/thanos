@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -547,7 +548,7 @@ func runRule(
 
 	// Start gRPC server.
 	{
-		tsdbStore := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
+		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, lset)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
@@ -701,6 +702,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		}
 		lset = append(lset, labels.Label{Name: parts[0], Value: val})
 	}
+	sort.Sort(lset)
 	return lset, nil
 }
 

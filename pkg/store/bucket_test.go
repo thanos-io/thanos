@@ -1259,6 +1259,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
+			extLset:     extLset,
 		}
 		blocks = append(blocks, b)
 	}

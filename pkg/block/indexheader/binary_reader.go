@@ -418,6 +418,8 @@ type postingOffset struct {
 	tableOff int
 }
 
+const valueSymbolsCacheSize = 1024
+
 type BinaryReader struct {
 	b   index.ByteSlice
 	toc *BinaryTOC
@@ -432,9 +434,16 @@ type BinaryReader struct {
 	postingsV1 map[string]map[string]index.Range
 
 	// Symbols struct that keeps only 1/postingOffsetsInMemSampling in the memory, then looks up the rest via mmap.
-	symbols     *index.Symbols
-	nameSymbols map[uint32]string // Cache of the label name symbol lookups,
+	symbols *index.Symbols
+	// Cache of the label name symbol lookups,
 	// as there are not many and they are half of all lookups.
+	nameSymbols map[uint32]string
+	// Direct cache of values. This is much faster than an LRU cache and still provides
+	// a reasonable cache hit ratio.
+	valueSymbols [valueSymbolsCacheSize]struct {
+		index  uint32
+		symbol string
+	}
 
 	dec *index.Decoder
 
@@ -801,7 +810,12 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 	return rngs, nil
 }
 
-func (r BinaryReader) LookupSymbol(o uint32) (string, error) {
+func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
+	cacheIndex := o % valueSymbolsCacheSize
+	if cached := r.valueSymbols[cacheIndex]; cached.index == o && cached.symbol != "" {
+		return cached.symbol, nil
+	}
+
 	if s, ok := r.nameSymbols[o]; ok {
 		return s, nil
 	}
@@ -812,7 +826,13 @@ func (r BinaryReader) LookupSymbol(o uint32) (string, error) {
 		o += headerLen - index.HeaderLen
 	}
 
-	return r.symbols.Lookup(o)
+	s, err := r.symbols.Lookup(o)
+	if err != nil {
+		return s, err
+	}
+	r.valueSymbols[cacheIndex].index = o
+	r.valueSymbols[cacheIndex].symbol = s
+	return s, nil
 }
 
 func (r BinaryReader) LabelValues(name string) ([]string, error) {

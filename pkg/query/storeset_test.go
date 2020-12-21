@@ -29,29 +29,29 @@ var testGRPCOpts = []grpc.DialOption{
 	grpc.WithInsecure(),
 }
 
-type testStore struct {
+type mockedStore struct {
 	infoDelay time.Duration
 	info      storepb.InfoResponse
 }
 
-func (s *testStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+func (s *mockedStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	if s.infoDelay > 0 {
 		time.Sleep(s.infoDelay)
 	}
 	return &s.info, nil
 }
 
-func (s *testStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *mockedStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	return status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *testStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (s *mockedStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
+func (s *mockedStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
@@ -84,7 +84,7 @@ func startTestStores(storeMetas []testStoreMeta) (*testStores, error) {
 
 		srv := grpc.NewServer()
 
-		storeSrv := &testStore{
+		storeSrv := &mockedStore{
 			info: storepb.InfoResponse{
 				LabelSets: meta.extlsetFn(listener.Addr().String()),
 				MaxTime:   meta.maxTime,
@@ -1012,12 +1012,12 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 			storeStatuses: map[string]*StoreStatus{},
 		}
 		mockStoreRef := &storeRef{
-			addr: "testStore",
+			addr: "mockedStore",
 		}
 
 		mockStoreSet.updateStoreStatus(mockStoreRef, tc.InputError)
 
-		b, err := json.Marshal(mockStoreSet.storeStatuses["testStore"].LastError)
+		b, err := json.Marshal(mockStoreSet.storeStatuses["mockedStore"].LastError)
 		testutil.Ok(t, err)
 		testutil.Equals(t, tc.ExpectedLastErr, string(b))
 	}
@@ -1028,19 +1028,19 @@ func TestUpdateStoreStateForgetsPreviousErrors(t *testing.T) {
 		storeStatuses: map[string]*StoreStatus{},
 	}
 	mockStoreRef := &storeRef{
-		addr: "testStore",
+		addr: "mockedStore",
 	}
 
 	mockStoreSet.updateStoreStatus(mockStoreRef, errors.New("test err"))
 
-	b, err := json.Marshal(mockStoreSet.storeStatuses["testStore"].LastError)
+	b, err := json.Marshal(mockStoreSet.storeStatuses["mockedStore"].LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `"test err"`, string(b))
 
 	// updating status without and error should clear the previous one.
 	mockStoreSet.updateStoreStatus(mockStoreRef, nil)
 
-	b, err = json.Marshal(mockStoreSet.storeStatuses["testStore"].LastError)
+	b, err = json.Marshal(mockStoreSet.storeStatuses["mockedStore"].LastError)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `null`, string(b))
 }

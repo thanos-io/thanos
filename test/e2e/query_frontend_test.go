@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -221,7 +221,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	t.Run("query frontend splitting works for labels names API", func(t *testing.T) {
 		// LabelNames and LabelValues API should still work via query frontend.
-		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -240,7 +240,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -261,8 +261,8 @@ func TestQueryFrontend(t *testing.T) {
 	})
 
 	t.Run("query frontend splitting works for labels values API", func(t *testing.T) {
-		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			return len(res) > 0
+		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(1),
@@ -280,8 +280,8 @@ func TestQueryFrontend(t *testing.T) {
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			return len(res) > 0
+		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(3),
@@ -305,11 +305,20 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
-				return len(res) > 0
+				if len(res) != 1 {
+					return false
+				}
+
+				return reflect.DeepEqual(res[0], map[string]string{
+					"__name__":   "up",
+					"instance":   "localhost:9090",
+					"job":        "myself",
+					"prometheus": "test",
+				})
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -332,11 +341,20 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-24*time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
-				return len(res) > 0
+				if len(res) != 1 {
+					return false
+				}
+
+				return reflect.DeepEqual(res[0], map[string]string{
+					"__name__":   "up",
+					"instance":   "localhost:9090",
+					"job":        "myself",
+					"prometheus": "test",
+				})
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(

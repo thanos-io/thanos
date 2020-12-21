@@ -5,6 +5,9 @@ package labelpb
 
 import (
 	"fmt"
+	ioutil "io/ioutil"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -50,13 +53,79 @@ func TestLabelMarshal_Unmarshal(t *testing.T) {
 
 func TestExtendLabels(t *testing.T) {
 	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
+		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "xb", Value: "2"}}, labels.FromStrings("replica", "01")))
 
 	testutil.Equals(t, labels.Labels{{Name: "replica", Value: "01"}},
-		ExtendLabels(labels.Labels{}, labels.FromStrings("replica", "01")))
+		ExtendSortedLabels(labels.Labels{}, labels.FromStrings("replica", "01")))
 
 	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
-		ExtendLabels(labels.Labels{{Name: "xb", Value: "2"}, {Name: "replica", Value: "NOT01"}, {Name: "a", Value: "1"}}, labels.FromStrings("replica", "01")))
+		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "NOT01"}, {Name: "xb", Value: "2"}}, labels.FromStrings("replica", "01")))
+
+	testInjectExtLabels(testutil.NewTB(t))
+}
+
+func BenchmarkExtendLabels(b *testing.B) {
+	testInjectExtLabels(testutil.NewTB(b))
+}
+
+var x labels.Labels
+
+func testInjectExtLabels(tb testutil.TB) {
+	in := labels.FromStrings(
+		"__name__", "subscription_labels",
+		"_id", "0dfsdfsdsfdsffd1e96-4432-9abe-e33436ea969a",
+		"account", "1afsdfsddsfsdfsdfsdfsdfs",
+		"ebs_account", "1asdasdad45",
+		"email_domain", "asdasddgfkw.example.com",
+		"endpoint", "metrics",
+		"external_organization", "dfsdfsdf",
+		"instance", "10.128.4.231:8080",
+		"job", "sdd-acct-mngr-metrics",
+		"managed", "false",
+		"namespace", "production",
+		"organization", "dasdadasdasasdasaaFGDSG",
+		"pod", "sdd-acct-mngr-6669c947c8-xjx7f",
+		"prometheus", "telemeter-production/telemeter",
+		"prometheus_replica", "prometheus-telemeter-1",
+		"risk", "5",
+		"service", "sdd-acct-mngr-metrics",
+		"support", "Self-Support", // Should be overwritten.
+	)
+	extLset := labels.FromStrings(
+		"support", "Host-Support",
+		"replica", "1",
+		"tenant", "2342",
+	)
+	tb.ResetTimer()
+	for i := 0; i < tb.N(); i++ {
+		x = ExtendSortedLabels(in, extLset)
+
+		if !tb.IsBenchmark() {
+			testutil.Equals(tb, labels.FromStrings(
+				"__name__", "subscription_labels",
+				"_id", "0dfsdfsdsfdsffd1e96-4432-9abe-e33436ea969a",
+				"account", "1afsdfsddsfsdfsdfsdfsdfs",
+				"ebs_account", "1asdasdad45",
+				"email_domain", "asdasddgfkw.example.com",
+				"endpoint", "metrics",
+				"external_organization", "dfsdfsdf",
+				"instance", "10.128.4.231:8080",
+				"job", "sdd-acct-mngr-metrics",
+				"managed", "false",
+				"namespace", "production",
+				"organization", "dasdadasdasasdasaaFGDSG",
+				"pod", "sdd-acct-mngr-6669c947c8-xjx7f",
+				"prometheus", "telemeter-production/telemeter",
+				"prometheus_replica", "prometheus-telemeter-1",
+				"replica", "1",
+				"risk", "5",
+				"service", "sdd-acct-mngr-metrics",
+				"support", "Host-Support",
+				"tenant", "2342",
+			), x)
+		}
+	}
+	fmt.Fprint(ioutil.Discard, x)
 }
 
 var (
@@ -103,4 +172,148 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 			testutil.Ok(b, (&zdest).Unmarshal(data))
 		}
 	})
+}
+
+func TestSortZLabelSets(t *testing.T) {
+	expectedResult := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+	}
+
+	list := ZLabelSets{
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__": "up",
+					"instance": "localhost:10908",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_server_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "LabelNames",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":    "grpc_client_handled_total",
+					"cluster":     "test",
+					"grpc_code":   "OK",
+					"grpc_method": "Info",
+				}),
+			),
+		},
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"__name__":  "grpc_client_handled_total",
+					"cluster":   "test",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+		// This label set is the same as the previous one, which should correctly return 0 in Less() function.
+		{
+			Labels: ZLabelsFromPromLabels(
+				labels.FromMap(map[string]string{
+					"cluster":   "test",
+					"__name__":  "grpc_client_handled_total",
+					"grpc_code": "OK",
+					"aa":        "1",
+					"bb":        "2",
+					"cc":        "3",
+					"dd":        "4",
+					"ee":        "5",
+				}),
+			),
+		},
+	}
+
+	sort.Sort(list)
+	reflect.DeepEqual(expectedResult, list)
 }
