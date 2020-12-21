@@ -517,7 +517,7 @@ func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
 // (Counter cannot go down)
 //
 // This is to mitigate https://github.com/thanos-io/thanos/issues/2401.
-// TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given
+// TODO(bwplotka): Find better deduplication algorithm that does not require knowledge if the given.
 // series is counter or not: https://github.com/thanos-io/thanos/issues/2547.
 type counterErrAdjustSeriesIterator struct {
 	chunkenc.Iterator
