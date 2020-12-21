@@ -532,6 +532,11 @@ Flags:
                                  duration relative to current time, such as -1d
                                  or 2h45m. Valid duration units are ms, s, m, h,
                                  d, w, y.
+      --id=ID ...                Block to be replicated to the destination
+                                 bucket. IDs will be used to match blocks and
+                                 other matchers will be ignored. When specified,
+                                 this command will be run only once after
+                                 successful replication. Repeated field
 
 ```
 

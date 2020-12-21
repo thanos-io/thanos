@@ -653,12 +653,12 @@ func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string
 
 // SeriesInGRPC returns the labels from Prometheus series API. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]map[string]string, error) {
+func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*labels.Matcher, startTime, endTime int64) ([]map[string]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/series")
 	q := u.Query()
 
-	q.Add("match[]", storepb.MatchersToString(matchers...))
+	q.Add("match[]", storepb.PromMatchersToString(matchers...))
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
 	u.RawQuery = q.Encode()
@@ -672,11 +672,14 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []sto
 
 // LabelNames returns all known label names. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, startTime, endTime int64) ([]string, error) {
+func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/labels")
 	q := u.Query()
 
+	if len(matchers) > 0 {
+		q.Add("match[]", storepb.MatchersToString(matchers...))
+	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
 	u.RawQuery = q.Encode()
@@ -689,11 +692,14 @@ func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, startTime,
 
 // LabelValuesInGRPC returns all known label values for a given label name. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label string, startTime, endTime int64) ([]string, error) {
+func (c *Client) LabelValuesInGRPC(ctx context.Context, base *url.URL, label string, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/label/", label, "/values")
 	q := u.Query()
 
+	if len(matchers) > 0 {
+		q.Add("match[]", storepb.MatchersToString(matchers...))
+	}
 	q.Add("start", formatTime(timestamp.Time(startTime)))
 	q.Add("end", formatTime(timestamp.Time(endTime)))
 	u.RawQuery = q.Encode()

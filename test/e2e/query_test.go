@@ -21,11 +21,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -283,14 +284,28 @@ func TestQueryLabelNames(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelNames(t, ctx, q.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 		return len(res) > 0
 	})
 
 	// Outside time range.
-	labelNames(t, ctx, q.HTTPEndpoint(), timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelNames(t, ctx, q.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
 		return len(res) == 0
 	})
+
+	labelNames(t, ctx, q.HTTPEndpoint(), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			// Expected result: [__name__, instance, job, prometheus, replica]
+			return len(res) == 7
+		},
+	)
+
+	// There is no matched series.
+	labelNames(t, ctx, q.HTTPEndpoint(), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "foobar"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 0
+		},
+	)
 }
 
 func TestQueryLabelValues(t *testing.T) {
@@ -327,14 +342,26 @@ func TestQueryLabelValues(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	labelValues(t, ctx, q.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 		return len(res) == 1 && res[0] == "localhost:9090"
 	})
 
 	// Outside time range.
-	labelValues(t, ctx, q.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
+	labelValues(t, ctx, q.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(-23*time.Hour)), func(res []string) bool {
 		return len(res) == 0
 	})
+
+	labelValues(t, ctx, q.HTTPEndpoint(), "__name__", []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 1 && res[0] == "up"
+		},
+	)
+
+	labelValues(t, ctx, q.HTTPEndpoint(), "__name__", []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "foobar"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+			return len(res) == 0
+		},
+	)
 }
 
 func checkNetworkRequests(t *testing.T, addr string) {
@@ -423,13 +450,13 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, op
 	testutil.Equals(t, expected, result)
 }
 
-func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64, check func(res []string) bool) {
+func labelNames(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start, end int64, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, mustURLParse(t, "http://"+addr), start, end)
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, mustURLParse(t, "http://"+addr), matchers, start, end)
 		if err != nil {
 			return err
 		}
@@ -442,13 +469,13 @@ func labelNames(t *testing.T, ctx context.Context, addr string, start, end int64
 }
 
 //nolint:unparam
-func labelValues(t *testing.T, ctx context.Context, addr, label string, start, end int64, check func(res []string) bool) {
+func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers []storepb.LabelMatcher, start, end int64, check func(res []string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, mustURLParse(t, "http://"+addr), label, start, end)
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, mustURLParse(t, "http://"+addr), label, matchers, start, end)
 		if err != nil {
 			return err
 		}
@@ -460,7 +487,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, start, e
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start int64, end int64, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)

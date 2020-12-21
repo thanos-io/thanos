@@ -135,16 +135,14 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	extLset := p.externalLabelsFn()
 
-	match, newMatchers, err := matchesExternalLabels(r.Matchers, extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-
 	if !match {
 		return nil
 	}
-
-	if len(newMatchers) == 0 {
+	if len(matchers) == 0 {
 		return status.Error(codes.InvalidArgument, "no matchers specified (excluding external labels)")
 	}
 
@@ -155,7 +153,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	if r.SkipChunks {
-		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, newMatchers, r.MinTime, r.MaxTime)
+		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
 			return err
 		}
@@ -176,18 +174,17 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
-
-	for _, m := range newMatchers {
+	for _, m := range matchers {
 		pm := &prompb.LabelMatcher{Name: m.Name, Value: m.Value}
 
 		switch m.Type {
-		case storepb.LabelMatcher_EQ:
+		case labels.MatchEqual:
 			pm.Type = prompb.LabelMatcher_EQ
-		case storepb.LabelMatcher_NEQ:
+		case labels.MatchNotEqual:
 			pm.Type = prompb.LabelMatcher_NEQ
-		case storepb.LabelMatcher_RE:
+		case labels.MatchRegexp:
 			pm.Type = prompb.LabelMatcher_RE
-		case storepb.LabelMatcher_NRE:
+		case labels.MatchNotRegexp:
 			pm.Type = prompb.LabelMatcher_NRE
 		default:
 			return errors.New("unrecognized matcher type")
@@ -377,8 +374,8 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 		}
 
 		chks = append(chks, storepb.AggrChunk{
-			MinTime: int64(samples[0].Timestamp),
-			MaxTime: int64(samples[chunkSize-1].Timestamp),
+			MinTime: samples[0].Timestamp,
+			MaxTime: samples[chunkSize-1].Timestamp,
 			Raw:     &storepb.Chunk{Type: enc, Data: cb},
 		})
 
@@ -434,25 +431,26 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	return presp, nil
 }
 
-// matchesExternalLabels filters out external labels matching from matcher if exists as the local storage does not have them.
-// It also returns false if given matchers are not matching external labels.
-func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []storepb.LabelMatcher, error) {
-	if len(externalLabels) == 0 {
-		return true, ms, nil
-	}
-
-	tms, err := storepb.TranslateFromPromMatchers(ms...)
+// matchesExternalLabels returns false if given matchers are not matching external labels.
+// If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+	tms, err := storepb.MatchersToPromMatchers(ms...)
 	if err != nil {
 		return false, nil, err
 	}
 
-	var newMatcher []storepb.LabelMatcher
+	if len(externalLabels) == 0 {
+		return true, tms, nil
+	}
+
+	var newMatchers []*labels.Matcher
 	for i, tm := range tms {
 		// Validate all matchers.
 		extValue := externalLabels.Get(tm.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
-			newMatcher = append(newMatcher, ms[i])
+			tms = append(tms[:i], tms[i:]...)
+			newMatchers = append(newMatchers, tm)
 			continue
 		}
 
@@ -462,8 +460,7 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 			return false, nil, nil
 		}
 	}
-
-	return true, newMatcher, nil
+	return true, newMatchers, nil
 }
 
 // encodeChunk translates the sample pairs into a chunk.
@@ -483,7 +480,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 
 // LabelNames returns all known label names.
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, r.Start, r.End)
+	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, nil, r.Start, r.End)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +496,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
 	}
 
-	vals, err := p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Start, r.End)
+	vals, err := p.client.LabelValuesInGRPC(ctx, p.base, r.Label, nil, r.Start, r.End)
 	if err != nil {
 		return nil, err
 	}

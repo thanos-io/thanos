@@ -36,8 +36,6 @@ func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
 }
 
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
-	t.Helper()
-
 	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
