@@ -259,6 +259,7 @@ ${THANOS_EXECUTABLE} rule \
   --query "http://0.0.0.0:10914" \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
+  --label 'rule="true"' \
   ${OBJSTORECFG} &
 
 STORES="${STORES} --store 127.0.0.1:19998"
