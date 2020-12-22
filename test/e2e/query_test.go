@@ -477,27 +477,3 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.L
 		return errors.Errorf("unexpected results %v", res)
 	}))
 }
-
-//nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
-	t.Helper()
-
-	logger := log.NewLogfmtLogger(os.Stdout)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q, start, end, step, opts)
-		if err != nil {
-			return err
-		}
-
-		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
-		}
-
-		if check(res) {
-			return nil
-		}
-
-		return errors.Errorf("unexpected results size %d", len(res))
-	}))
-}

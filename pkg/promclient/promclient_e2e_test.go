@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid"
+	papi "github.com/prometheus/client_golang/api"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -167,20 +169,32 @@ func TestQueryRange_e2e(t *testing.T) {
 
 		testutil.Ok(t, p.Start())
 
-		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		u := fmt.Sprintf("http://%s", p.Addr())
 		testutil.Ok(t, err)
+		client, err := papi.NewClient(papi.Config{
+			Address: string(u),
+		})
+		if err != nil {
+			fmt.Printf("Error creating client: %v\n", err)
+			os.Exit(1)
+		}
 
-		res, _, err := NewDefaultClient().QueryRange(
-			ctx,
-			u,
-			`{a="b"}`,
-			timestamp.FromTime(now.Add(-2*time.Hour)),
-			timestamp.FromTime(now),
-			14,
-			QueryOptions{},
-		)
-		testutil.Ok(t, err)
-
-		testutil.Equals(t, len(res) > 0, true)
+		v1api := v1.NewAPI(client)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		r := v1.Range{
+			Start: time.Now().Add(-time.Hour),
+			End:   time.Now(),
+			Step:  14,
+		}
+		result, warnings, err := v1api.QueryRange(ctx, "{a=\"b\"}", r)
+		if err != nil {
+			fmt.Printf("Error querying Prometheus: %v\n", err)
+			os.Exit(1)
+		}
+		if len(warnings) > 0 {
+			fmt.Printf("Warnings: %v\n", warnings)
+		}
+		fmt.Printf("Result:\n%v\n", result)
 	})
 }
