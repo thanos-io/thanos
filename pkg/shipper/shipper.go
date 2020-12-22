@@ -366,7 +366,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return block.Upload(ctx, s.logger, s.bucket, updir, metadata.NoneFunc)
+	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir
