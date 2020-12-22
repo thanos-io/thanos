@@ -21,10 +21,12 @@ var errNotFound = errors.New("inmem: object not found")
 // InMemBucket implements the objstore.Bucket interfaces against local memory.
 // Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
 type InMemBucket struct {
-	mtx             sync.RWMutex
-	objects         map[string][]byte
-	attrs           map[string]ObjectAttributes
-	downloadedCount map[string]uint
+	mtx     sync.RWMutex
+	objects map[string][]byte
+	attrs   map[string]ObjectAttributes
+
+	downloadedCount     map[string]uint
+	downloadedCountLock sync.RWMutex
 }
 
 // NewInMemBucket returns a new in memory Bucket.
@@ -45,6 +47,8 @@ func (b *InMemBucket) Objects() map[string][]byte {
 
 // GetDownloadedCount returns how many times a given object has been "downloaded".
 func (b *InMemBucket) GetDownloadedCount(obj string) int {
+	b.downloadedCountLock.RLock()
+	defer b.downloadedCountLock.RUnlock()
 	return int(b.downloadedCount[obj])
 }
 
@@ -112,6 +116,8 @@ func (b *InMemBucket) Get(_ context.Context, name string) (io.ReadCloser, error)
 		return nil, errNotFound
 	}
 
+	b.downloadedCountLock.Lock()
+	defer b.downloadedCountLock.Unlock()
 	b.downloadedCount[name]++
 
 	return ioutil.NopCloser(bytes.NewReader(file)), nil
@@ -131,18 +137,24 @@ func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64
 	}
 
 	if int64(len(file)) < off {
+		b.downloadedCountLock.Lock()
+		defer b.downloadedCountLock.Unlock()
 		b.downloadedCount[name]++
 
 		return ioutil.NopCloser(bytes.NewReader(nil)), nil
 	}
 
 	if length == -1 {
+		b.downloadedCountLock.Lock()
+		defer b.downloadedCountLock.Unlock()
 		b.downloadedCount[name]++
 
 		return ioutil.NopCloser(bytes.NewReader(file[off:])), nil
 	}
 
 	if length <= 0 {
+		b.downloadedCountLock.Lock()
+		defer b.downloadedCountLock.Unlock()
 		b.downloadedCount[name]++
 
 		return ioutil.NopCloser(bytes.NewReader(nil)), errors.New("length cannot be smaller or equal 0")
@@ -153,6 +165,8 @@ func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64
 		length = int64(len(file)) - off
 	}
 
+	b.downloadedCountLock.Lock()
+	defer b.downloadedCountLock.Unlock()
 	b.downloadedCount[name]++
 
 	return ioutil.NopCloser(bytes.NewReader(file[off : off+length])), nil

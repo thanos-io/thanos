@@ -290,7 +290,7 @@ func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File
 			RelPath:   filepath.Join(ChunksDirname, f.Name()),
 			SizeBytes: f.Size(),
 		}
-		if hf != metadata.NoneFunc {
+		if hf != metadata.NoneFunc && !f.IsDir() {
 			h, err := metadata.CalculateHash(filepath.Join(blockDir, ChunksDirname, f.Name()), hf)
 			if err != nil {
 				return nil, errors.Wrapf(err, "calculate hash %v", filepath.Join(ChunksDirname, f.Name()))
