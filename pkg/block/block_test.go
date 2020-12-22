@@ -231,7 +231,7 @@ func TestDelete(t *testing.T) {
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String())))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 
-		markedForDeletion := prometheus.NewCounter(prometheus.CounterOpts{})
+		markedForDeletion := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
 		testutil.Ok(t, MarkForDeletion(ctx, log.NewNopLogger(), bkt, b1, "", markedForDeletion))
 
 		// Full delete.
