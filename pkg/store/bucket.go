@@ -1479,7 +1479,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	}
 	if copied != length {
 		b.chunkPool.Put(c)
-		return nil, errors.Errorf("Read less than specified wanted=%v got=%v", length, copied)
+		return nil, errors.Errorf("read %v bytes but got %v", length, copied)
 	}
 	internalBuf := buf.Bytes()
 	return &internalBuf, nil
