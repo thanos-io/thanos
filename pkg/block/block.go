@@ -164,12 +164,15 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 
 // Delete removes directory that is meant to be block directory.
 // NOTE: Always prefer this method for deleting blocks.
-//  * We have to delete block's files in the certain order (meta.json first)
+//  * We have to delete block's files in the certain order (meta.json first and deletion-mark.json last)
 //  to ensure we don't end up with malformed partial blocks. Thanos system handles well partial blocks
 //  only if they don't have meta.json. If meta.json is present Thanos assumes valid block.
 //  * This avoids deleting empty dir (whole bucket) by mistake.
 func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) error {
 	metaFile := path.Join(id.String(), MetaFilename)
+	deletionMarkFile := path.Join(id.String(), metadata.DeletionMarkFilename)
+
+	// Delete block meta file.
 	ok, err := bkt.Exists(ctx, metaFile)
 	if err != nil {
 		return errors.Wrapf(err, "stat %s", metaFile)
@@ -182,10 +185,30 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 		level.Debug(logger).Log("msg", "deleted file", "file", metaFile, "bucket", bkt.Name())
 	}
 
-	// Delete the bucket, but skip the metaFile as we just deleted that. This is required for eventual object storages (list after write).
-	return deleteDirRec(ctx, logger, bkt, id.String(), func(name string) bool {
-		return name == metaFile
+	// Delete the block objects, but skip:
+	// - The metaFile as we just deleted. This is required for eventual object storages (list after write).
+	// - The deletionMarkFile as we'll delete it at last.
+	err = deleteDirRec(ctx, logger, bkt, id.String(), func(name string) bool {
+		return name == metaFile || name == deletionMarkFile
 	})
+	if err != nil {
+		return err
+	}
+
+	// Delete block deletion mark.
+	ok, err = bkt.Exists(ctx, deletionMarkFile)
+	if err != nil {
+		return errors.Wrapf(err, "stat %s", deletionMarkFile)
+	}
+
+	if ok {
+		if err := bkt.Delete(ctx, deletionMarkFile); err != nil {
+			return errors.Wrapf(err, "delete %s", deletionMarkFile)
+		}
+		level.Debug(logger).Log("msg", "deleted file", "file", deletionMarkFile, "bucket", bkt.Name())
+	}
+
+	return nil
 }
 
 // deleteDirRec removes all objects prefixed with dir from the bucket. It skips objects that return true for the passed keep function.
