@@ -117,7 +117,11 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
 	if err := bkt.Upload(ctx, path.Join(id.String(), MetaFilename), &metaEncoded); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload meta file"))
+		// Don't call cleanUp here. Despite getting error, meta.json may have been uploaded in certain cases,
+		// and even though cleanUp will not see it yet, meta.json may appear in the bucket later.
+		// (Eg. S3 is known to behave this way when it returns 503 "SlowDown" error).
+		// If meta.json is not uploaded, this will produce partial blocks, but such blocks will be cleaned later.
+		return errors.Wrap(err, "upload meta file")
 	}
 
 	return nil

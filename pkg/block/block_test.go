@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -366,4 +368,69 @@ func TestMarkForNoCompact(t *testing.T) {
 			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
 		})
 	}
+}
+
+func TestUploadCleanup(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	ctx := context.Background()
+
+	tmpDir, err := ioutil.TempDir("", "test-block-upload")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bkt := objstore.NewInMemBucket()
+	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		{{Name: "a", Value: "1"}},
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "b", Value: "1"}},
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+	testutil.Ok(t, err)
+
+	{
+		errBkt := errBucket{Bucket: bkt, failSuffix: "/index"}
+
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()))
+		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
+
+		// If upload of index fails, block is deleted.
+		testutil.Equals(t, 1, len(bkt.Objects())) // Only debug meta file is present.
+		testutil.Assert(t, len(bkt.Objects()[path.Join(DebugMetas, fmt.Sprintf("%s.json", b1.String()))]) > 0)
+	}
+
+	{
+		errBkt := errBucket{Bucket: bkt, failSuffix: "/meta.json"}
+
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()))
+		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
+
+		// If upload of meta.json fails, nothing is cleaned up.
+		testutil.Equals(t, 4, len(bkt.Objects()))
+		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]) > 0)
+		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]) > 0)
+		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]) > 0)
+		testutil.Assert(t, len(bkt.Objects()[path.Join(DebugMetas, fmt.Sprintf("%s.json", b1.String()))]) > 0)
+	}
+}
+
+var errUploadFailed = errors.New("upload failed")
+
+type errBucket struct {
+	objstore.Bucket
+
+	failSuffix string
+}
+
+func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	err := eb.Bucket.Upload(ctx, name, r)
+	if err != nil {
+		return err
+	}
+
+	if strings.HasSuffix(name, eb.failSuffix) {
+		return errUploadFailed
+	}
+	return nil
 }
