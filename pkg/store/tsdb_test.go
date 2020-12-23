@@ -79,8 +79,7 @@ func TestTSDBStore_Series(t *testing.T) {
 		_, err = appender.Add(labels.FromStrings("a", "1"), int64(i), float64(i))
 		testutil.Ok(t, err)
 	}
-	err = appender.Commit()
-	testutil.Ok(t, err)
+	testutil.Ok(t, appender.Commit())
 
 	for _, tc := range []struct {
 		title          string
@@ -197,11 +196,12 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
+			appender := db.Appender(context.Background())
 			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
 			testutil.Ok(t, err)
+			testutil.Ok(t, appender.Commit())
 		}
 	}
 
@@ -218,9 +218,12 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		end           func() int64
 	}{
 		{
+			// Ideally, if there is no label in TSDB but our request is within the TSDB time range,
+			// the external labels should be added to the response. However, if there is no series in TSDB,
+			// the minTime of TSDB would be math.MaxInt64 so any request will be out of time range.
 			title:         "no label in tsdb",
 			labels:        []string{},
-			expectedNames: []string{"region"},
+			expectedNames: []string{},
 			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
@@ -244,7 +247,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		{
 			title:  "add another label",
 			labels: []string{"bar", "bar"},
-			// We will get two labels here.
+			// We will get two labels and one external label name here.
 			expectedNames: []string{"bar", "foo", "region"},
 			timestamp:     now.Unix(),
 			start: func() int64 {
@@ -257,7 +260,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		{
 			title:         "query range outside tsdb head",
 			labels:        []string{},
-			expectedNames: []string{"region"},
+			expectedNames: []string{},
 			timestamp:     now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
@@ -305,11 +308,12 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
+			appender := db.Appender(context.Background())
 			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
 			testutil.Ok(t, err)
+			testutil.Ok(t, appender.Commit())
 		}
 	}
 
@@ -326,10 +330,11 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 		end            func() int64
 	}{
 		{
-			title:       "no label in tsdb",
-			addedLabels: []string{},
-			queryLabel:  "foo",
-			timestamp:   now.Unix(),
+			title:          "no label in tsdb",
+			addedLabels:    []string{},
+			expectedValues: []string{},
+			queryLabel:     "foo",
+			timestamp:      now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
@@ -364,15 +369,29 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			},
 		},
 		{
-			title:       "query time range outside head",
-			addedLabels: []string{},
-			queryLabel:  "foo",
-			timestamp:   now.Unix(),
+			title:          "query time range outside head",
+			addedLabels:    []string{},
+			expectedValues: []string{},
+			queryLabel:     "foo",
+			timestamp:      now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
 			},
 			end: func() int64 {
 				return head.MinTime() - 1
+			},
+		},
+		{
+			title:          "query external label",
+			addedLabels:    []string{"region", "us-west"},
+			queryLabel:     "region",
+			expectedValues: []string{"eu-west", "us-west"},
+			timestamp:      now.Unix(),
+			start: func() int64 {
+				return timestamp.FromTime(minTime)
+			},
+			end: func() int64 {
+				return timestamp.FromTime(maxTime)
 			},
 		},
 	} {

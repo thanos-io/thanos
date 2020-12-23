@@ -484,6 +484,11 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 
 // LabelNames returns all known label names.
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	mint, maxt := p.timestamps()
+	if r.Start > maxt || r.End <= mint {
+		return &storepb.LabelNamesResponse{Names: []string{}}, nil
+	}
+
 	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, nil, r.Start, r.End)
 	if err != nil {
 		return nil, err
@@ -500,6 +505,11 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 
 // LabelValues returns all known label values for a given label name.
 func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	mint, maxt := p.timestamps()
+	if r.Start > maxt || r.End <= mint {
+		return &storepb.LabelValuesResponse{Values: []string{}}, nil
+	}
+
 	vals, err := p.client.LabelValuesInGRPC(ctx, p.base, r.Label, nil, r.Start, r.End)
 	if err != nil {
 		return nil, err

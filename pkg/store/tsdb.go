@@ -205,6 +205,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
+	withinTimeRange, err := s.checkRequestTimeRange(r.End)
+	if !withinTimeRange || err != nil {
+		return &storepb.LabelNamesResponse{Names: []string{}}, err
+	}
+
 	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -228,6 +233,11 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
+	withinTimeRange, err := s.checkRequestTimeRange(r.End)
+	if !withinTimeRange || err != nil {
+		return &storepb.LabelValuesResponse{Values: []string{}}, err
+	}
+
 	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -245,4 +255,15 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 
 	return &storepb.LabelValuesResponse{Values: res}, nil
+}
+
+func (s *TSDBStore) checkRequestTimeRange(end int64) (bool, error) {
+	minTime, err := s.db.StartTime()
+	if err != nil {
+		return false, errors.Wrap(err, "TSDB min Time")
+	}
+	if end <= minTime {
+		return false, nil
+	}
+	return true, nil
 }
