@@ -296,9 +296,15 @@ Currently only memcached "backend" is supported:
 ```yaml
 type: MEMCACHED # Case-insensitive
 config:
-  addresses:
-    - localhost:11211
-
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_item_size: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
 chunk_subrange_size: 16000
 max_chunks_get_range_requests: 3
 chunk_object_attrs_ttl: 24h
@@ -310,7 +316,7 @@ metafile_content_ttl: 24h
 metafile_max_size: 1MiB
 ```
 
-`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
+`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
 
 Additional options to configure various aspects of chunks cache are available:
 
