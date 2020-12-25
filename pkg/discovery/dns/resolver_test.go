@@ -35,6 +35,10 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 	return "", m.resultSRVs[name], nil
 }
 
+func (m mockHostnameResolver) IsNotFound(err error) bool {
+	return false
+}
+
 type DNSSDTest struct {
 	testName       string
 	addr           string
