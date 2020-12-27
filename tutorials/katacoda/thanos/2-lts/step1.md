@@ -6,7 +6,7 @@ will allow us to cost-effectively achieve unlimited retention for Prometheus.
 
 Last but not the least, we will go through setting all up for querying and automated maintenance (e.g compactions, retention and downsampling).
 
-In order to showcase all of this, let's start with single cluster setup from the previous course. Let's start this initial Prometheus setup, ready?
+In order to showcase all of this, let's start with a single cluster setup from the previous course. Let's start this initial Prometheus setup, ready?
 
 ## Generate Artificial Metrics for 1 year
 
@@ -29,7 +29,7 @@ level=info ts=2020-10-20T18:28:42.625041939Z caller=block.go:87 msg="all blocks 
 level=info ts=2020-10-20T18:28:42.625100758Z caller=main.go:118 msg=exiting cmd="block gen"
 ```
 
-Run below command to see dozens of generated TSDB blocks:
+Run the below command to see dozens of generated TSDB blocks:
 
 ```
 ls -lR /root/prom-eu1
@@ -144,6 +144,6 @@ Similar to previous course let's check if the Querier works as intended. Let's l
 
 This should list the sidecar, including the external labels.
 
-On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StorAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/https://2886795307-9091-ollie02.environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0).
+On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StoreAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/https://2886795307-9091-ollie02.environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0).
 
 Click `Continue` to see how we can move this data to much cheaper and easier to operate object storage.
