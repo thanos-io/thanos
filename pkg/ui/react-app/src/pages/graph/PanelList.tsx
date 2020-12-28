@@ -4,13 +4,14 @@ import { UncontrolledAlert, Button } from 'reactstrap';
 
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
-import PathPrefixProps from '../../types/PathPrefixProps';
 import { StoreListProps } from '../../thanos/pages/stores/Stores';
 import { Store } from '../../thanos/pages/stores/store';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { withStatusIndicator } from '../../components/withStatusIndicator';
+import { usePathPrefix } from '../../contexts/PathPrefixContext';
+import { API_PATH } from '../../constants/constants';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
 
@@ -19,7 +20,7 @@ export const updateURL = (nextPanels: PanelMeta[]) => {
   window.history.pushState({}, '', query);
 };
 
-interface PanelListProps extends PathPrefixProps, RouteComponentProps {
+interface PanelListProps extends RouteComponentProps {
   panels: PanelMeta[];
   metrics: string[];
   useLocalTime: boolean;
@@ -28,15 +29,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   enableAutocomplete: boolean;
 }
 
-export const PanelListContent: FC<PanelListProps> = ({
-  metrics = [],
-  useLocalTime,
-  pathPrefix,
-  queryHistoryEnabled,
-  stores = {},
-  enableAutocomplete,
-  ...rest
-}) => {
+export const PanelListContent: FC<PanelListProps> = ({ metrics = [], useLocalTime, queryHistoryEnabled, ...rest }) => {
   const [panels, setPanels] = useState(rest.panels);
   const [historyItems, setLocalStorageHistoryItems] = useLocalStorage<string[]>('history', []);
   const [storeData, setStoreData] = useState([] as Store[]);
@@ -89,10 +82,13 @@ export const PanelListContent: FC<PanelListProps> = ({
     ]);
   };
 
+  const pathPrefix = usePathPrefix();
+
   return (
     <>
       {panels.map(({ id, options }) => (
         <Panel
+          pathPrefix={pathPrefix}
           onExecuteQuery={handleExecuteQuery}
           key={id}
           options={options}
@@ -114,7 +110,6 @@ export const PanelListContent: FC<PanelListProps> = ({
           useLocalTime={useLocalTime}
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
-          pathPrefix={pathPrefix}
           stores={storeData}
           enableAutocomplete={enableAutocomplete}
         />
@@ -128,20 +123,21 @@ export const PanelListContent: FC<PanelListProps> = ({
 
 const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
 
-const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
+const PanelList: FC<RouteComponentProps> = () => {
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
   const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-autocomplete', true);
 
-  const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
+  const pathPrefix = usePathPrefix();
+  const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/${API_PATH}/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
     `${pathPrefix}/api/v1/stores`
   );
 
   const browserTime = new Date().getTime() / 1000;
-  const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
+  const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/${API_PATH}/query?query=time()`);
 
   useEffect(() => {
     if (timeRes.data) {
@@ -212,7 +208,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       )}
       <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
-        pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
         stores={debugMode ? storesRes.data : {}}
