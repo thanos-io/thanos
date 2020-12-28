@@ -4,7 +4,7 @@ import { RuleStatus } from './AlertContents';
 import { Rule } from '../../types/types';
 import { faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { createExternalExpressionLink } from '../../utils/index';
+import { createExternalExpressionLink, formatDuration } from '../../utils/index';
 
 interface CollapsibleAlertPanelProps {
   rule: Rule;
@@ -34,6 +34,9 @@ const CollapsibleAlertPanel: FC<CollapsibleAlertPanelProps> = ({ rule, showAnnot
             </div>
             <div>
               expr: <a href={createExternalExpressionLink(rule.query)}>{rule.query}</a>
+            </div>
+            <div>
+              <div>for: {formatDuration(rule.duration * 1000)}</div>
             </div>
             <div>
               <div>labels:</div>
