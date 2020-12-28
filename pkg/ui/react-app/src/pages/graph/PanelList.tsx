@@ -29,7 +29,7 @@ interface PanelListProps extends RouteComponentProps {
   enableAutocomplete: boolean;
 }
 
-export const PanelListContent: FC<PanelListProps> = ({ metrics = [], useLocalTime, queryHistoryEnabled, ...rest }) => {
+export const PanelListContent: FC<PanelListProps> = ({ metrics = [], useLocalTime, queryHistoryEnabled, stores = {}, enableAutocomplete, ...rest }) => {
   const [panels, setPanels] = useState(rest.panels);
   const [historyItems, setLocalStorageHistoryItems] = useLocalStorage<string[]>('history', []);
   const [storeData, setStoreData] = useState([] as Store[]);
@@ -133,7 +133,7 @@ const PanelList: FC<RouteComponentProps> = () => {
   const pathPrefix = usePathPrefix();
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/${API_PATH}/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
-    `${pathPrefix}/api/v1/stores`
+    `${pathPrefix}/${API_PATH}/stores`
   );
 
   const browserTime = new Date().getTime() / 1000;

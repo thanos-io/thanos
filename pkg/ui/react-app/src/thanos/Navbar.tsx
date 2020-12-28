@@ -12,7 +12,7 @@ import {
   DropdownMenu,
   DropdownToggle,
 } from 'reactstrap';
-import PathPrefixProps from '../types/PathPrefixProps';
+import { usePathPrefix } from '../contexts/PathPrefixContext';
 
 interface NavConfig {
   name: string;
@@ -61,13 +61,14 @@ interface NavigationProps {
   defaultRoute: string;
 }
 
-const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosComponent, defaultRoute }) => {
+const Navigation: FC<NavigationProps> = ({ thanosComponent, defaultRoute }) => {
   const [isOpen, setIsOpen] = useState(false);
   const toggle = () => setIsOpen(!isOpen);
+  const pathPrefix = usePathPrefix();
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
       <NavbarToggler onClick={toggle} />
-      <Link className="navbar-brand" to={`${pathPrefix}/new${defaultRoute}`}>
+      <Link className="navbar-brand" to={`${pathPrefix}${defaultRoute}`}>
         Thanos - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
       </Link>

@@ -4,13 +4,14 @@ import { UncontrolledAlert } from 'reactstrap';
 import { useQueryParams, withDefault, NumberParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
-import PathPrefixProps from '../../../types/PathPrefixProps';
 import { Block } from './block';
 import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { sortBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
+import { usePathPrefix } from '../../../contexts/PathPrefixContext';
+import { API_PATH } from '../../../constants/constants';
 
 export interface BlockListProps {
   blocks: Block[];
@@ -84,8 +85,8 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
         </div>
       ) : (
-        <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
-      )}
+          <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
+        )}
     </>
   );
 };
@@ -96,9 +97,10 @@ interface BlocksProps {
   view?: string;
 }
 
-export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
+export const Blocks: FC<RouteComponentProps & BlocksProps> = ({ view = 'global' }) => {
+  const pathPrefix = usePathPrefix();
   const { response, error, isLoading } = useFetch<BlockListProps>(
-    `${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`
+    `${pathPrefix}/${API_PATH}/blocks${view ? '?view=' + view : ''}`
   );
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
