@@ -176,35 +176,42 @@ func (cw *ConfigWatcher) C() <-chan []HashringConfig {
 
 // ValidateConfig returns an error if the configuration that's being watched is not valid.
 func (cw *ConfigWatcher) ValidateConfig() error {
-	_, _, err := cw.loadConfig()
+	_, _, err := loadConfig(cw.logger, cw.path)
 	return err
 }
 
-// loadConfig loads raw configuration content and returns a configuration.
-func (cw *ConfigWatcher) loadConfig() ([]HashringConfig, float64, error) {
-	cfgContent, err := cw.readFile()
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to read configuration file")
+// Stop shuts down the config watcher.
+func (cw *ConfigWatcher) Stop() {
+	level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	// Closing the watcher will deadlock unless all events and errors are drained.
+	go func() {
+		for {
+			select {
+			case <-cw.watcher.Errors:
+			case <-cw.watcher.Events:
+			// Drain all events and errors.
+			case <-done:
+				return
+			}
+		}
+	}()
+	if err := cw.watcher.Close(); err != nil {
+		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
 	}
 
-	config, err := cw.parseConfig(cfgContent)
-	if err != nil {
-		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
-	}
-
-	// If hashring is empty, return an error.
-	if len(config) == 0 {
-		return nil, 0, errors.Wrapf(errEmptyConfigurationFile, "failed to load configuration file, path: %s", cw.path)
-	}
-
-	return config, hashAsMetricValue(cfgContent), nil
+	close(cw.ch)
+	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
 }
 
 // refresh reads the configured file and sends the hashring configuration on the channel.
 func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.refreshCounter.Inc()
 
-	config, cfgHash, err := cw.loadConfig()
+	config, cfgHash, err := loadConfig(cw.logger, cw.path)
 	if err != nil {
 		cw.errorCounter.Inc()
 		level.Error(cw.logger).Log("msg", "failed to load configuration file", "err", err, "path", cw.path)
@@ -238,42 +245,35 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	}
 }
 
-// Stop shuts down the config watcher.
-func (cw *ConfigWatcher) Stop() {
-	level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
-
-	done := make(chan struct{})
-	defer close(done)
-
-	// Closing the watcher will deadlock unless all events and errors are drained.
-	go func() {
-		for {
-			select {
-			case <-cw.watcher.Errors:
-			case <-cw.watcher.Events:
-			// Drain all events and errors.
-			case <-done:
-				return
-			}
-		}
-	}()
-	if err := cw.watcher.Close(); err != nil {
-		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
+// loadConfig loads raw configuration content and returns a configuration.
+func loadConfig(logger log.Logger, path string) ([]HashringConfig, float64, error) {
+	cfgContent, err := readFile(logger, path)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to read configuration file")
 	}
 
-	close(cw.ch)
-	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
+	config, err := parseConfig(cfgContent)
+	if err != nil {
+		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
+	}
+
+	// If hashring is empty, return an error.
+	if len(config) == 0 {
+		return nil, 0, errors.Wrapf(errEmptyConfigurationFile, "failed to load configuration file, path: %s", path)
+	}
+
+	return config, hashAsMetricValue(cfgContent), nil
 }
 
 // readFile reads the configuration file and returns content of configuration file.
-func (cw *ConfigWatcher) readFile() ([]byte, error) {
-	fd, err := os.Open(cw.path)
+func readFile(logger log.Logger, path string) ([]byte, error) {
+	fd, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err := fd.Close(); err != nil {
-			level.Error(cw.logger).Log("msg", "failed to close file", "err", err, "path", cw.path)
+			level.Error(logger).Log("msg", "failed to close file", "err", err, "path", path)
 		}
 	}()
 
@@ -281,7 +281,7 @@ func (cw *ConfigWatcher) readFile() ([]byte, error) {
 }
 
 // parseConfig parses the raw configuration content and returns a HashringConfig.
-func (cw *ConfigWatcher) parseConfig(content []byte) ([]HashringConfig, error) {
+func parseConfig(content []byte) ([]HashringConfig, error) {
 	var config []HashringConfig
 	err := json.Unmarshal(content, &config)
 	return config, err

@@ -184,10 +184,6 @@ sleep 0.5
 
 if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
 
-  cat <<-EOF >./data/hashring.json
-		[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]
-	EOF
-
   for i in $(seq 0 1 2); do
     ${THANOS_EXECUTABLE} receive \
       --debug.name receive${i} \
@@ -203,7 +199,7 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --label "receive_replica=\"${i}\"" \
       --label 'receive="true"' \
       --receive.local-endpoint 127.0.0.1:1${i}907 \
-      --receive.hashrings-file ./data/hashring.json \
+      --receive.hashrings '[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]' \
       --remote-write.address 0.0.0.0:1${i}908 \
       ${OBJSTORECFG} &
 

@@ -149,7 +149,13 @@ Flags:
                                  storage. 0d - disables this retention.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
-                                 configuration.
+                                 configuration. A watcher is initialized to
+                                 watch changes and update the hashring
+                                 dynamically.
+      --receive.hashrings=<content>
+                                 Alternative to 'receive.hashrings-file' flag
+                                 (lower priority). Content of file that contains
+                                 the hashring configuration.
       --receive.hashrings-file-refresh-interval=5m
                                  Refresh interval to re-read the hashring
                                  configuration file. (used as a fallback)
