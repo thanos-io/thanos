@@ -164,6 +164,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		nil,
 		0,
 		NewChunksLimiterFactory(maxChunksLimit),
+		NewSeriesLimiterFactory(0),
 		false,
 		20,
 		filterConf,

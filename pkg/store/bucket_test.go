@@ -575,6 +575,7 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		2e5,
 		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
 		false,
 		20,
 		allowAllFilterConf,
@@ -826,6 +827,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				nil,
 				0,
 				NewChunksLimiterFactory(0),
+				NewSeriesLimiterFactory(0),
 				false,
 				20,
 				allowAllFilterConf,
@@ -1273,6 +1275,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		},
 		queryGate:            noopGate{},
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 	}
 
 	for _, block := range blocks {
@@ -1489,6 +1492,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		},
 		queryGate:            noopGate{},
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1642,6 +1646,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		nil,
 		1000000,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
 		false,
 		10,
 		nil,
@@ -1735,6 +1740,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		nil,
 		1000000,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
 		false,
 		10,
 		nil,
@@ -1879,6 +1885,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		nil,
 		1000000,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
 		false,
 		10,
 		nil,
@@ -2039,6 +2046,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		nil,
 		1000000,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
 		false,
 		10,
 		nil,

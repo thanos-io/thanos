@@ -104,7 +104,7 @@ type bucketStoreMetrics struct {
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
-	queriesDropped        prometheus.Counter
+	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
@@ -186,10 +186,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		},
 	})
 
-	m.queriesDropped = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+	m.queriesDropped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_queries_dropped_total",
-		Help: "Number of queries that were dropped due to the sample limit.",
-	})
+		Help: "Number of queries that were dropped due to the limit.",
+	}, []string{"reason"})
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
 		Help: fmt.Sprintf("Total number of cases where %v bytes was not enough was to fetch series from index, resulting in refetch.", maxSeriesSize),
@@ -276,6 +276,8 @@ type BucketStore struct {
 
 	// chunksLimiterFactory creates a new limiter used to limit the number of chunks fetched by each Series() call.
 	chunksLimiterFactory ChunksLimiterFactory
+	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call.
+	seriesLimiterFactory SeriesLimiterFactory
 	partitioner          partitioner
 
 	filterConfig             *FilterConfig
@@ -300,6 +302,7 @@ func NewBucketStore(
 	queryGate gate.Gate,
 	maxChunkPoolBytes uint64,
 	chunksLimiterFactory ChunksLimiterFactory,
+	seriesLimiterFactory SeriesLimiterFactory,
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
@@ -333,6 +336,7 @@ func NewBucketStore(
 		filterConfig:                filterConfig,
 		queryGate:                   queryGate,
 		chunksLimiterFactory:        chunksLimiterFactory,
+		seriesLimiterFactory:        seriesLimiterFactory,
 		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
@@ -683,6 +687,7 @@ func blockSeries(
 	matchers []*labels.Matcher,
 	req *storepb.SeriesRequest,
 	chunksLimiter ChunksLimiter,
+	seriesLimiter SeriesLimiter,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -691,6 +696,11 @@ func blockSeries(
 
 	if len(ps) == 0 {
 		return storepb.EmptySeriesSet(), indexr.stats, nil
+	}
+
+	// Reserve series seriesLimiter
+	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
+		return nil, nil, errors.Wrap(err, "exceeded series limit")
 	}
 
 	// Preload all series index data.
@@ -882,7 +892,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		g, gctx          = errgroup.WithContext(ctx)
 		resHints         = &hintspb.SeriesResponseHints{}
 		reqBlockMatchers []*labels.Matcher
-		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped)
+		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks"))
+		seriesLimiter    = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
 	)
 
 	if req.Hints != nil {
@@ -938,6 +949,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					chunksLimiter,
+					seriesLimiter,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
