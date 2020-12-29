@@ -23,7 +23,7 @@ config:
   bucket: example-bucket
 ```
 
-In general about 1MB of local disk space is required per TSDB block stored in the object storage bucket.
+In general, an average of 6 MB of local disk space is required per TSDB block stored in the object storage bucket. It is for the precomputed index, which includes symbols and postings offsets. The size of this precomputed index can go up to 30 MB per block.
 
 ## Flags
 
