@@ -12,7 +12,7 @@ owner: MalloZup
 
 ## Summary and motivation
 
-We want to implement a way to  "rate limiting" concept in thanos, which should prevent to overlaoad CPU and other resource server side which can result with high concurrent request in GRPC.
+We want to implement a way to "rate limiting" concept in Thanos, which should prevent overloading CPU and other resources on the server-side due to high concurrent requests in GRPC.
 
 At the point of this writing, gRPC has no standard library way to implement a rate-limiter. Although there is an interceptor from gRPC ecosystem ( see later)
 
