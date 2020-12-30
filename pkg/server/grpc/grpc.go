@@ -8,7 +8,6 @@ import (
 	"math"
 	"net"
 	"runtime/debug"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -46,8 +45,12 @@ type Server struct {
 
 // TODO: make this const as a option to pass
 const (
-	gatherTime    = 30 * time.Second
-	tokenCapacity = 6
+	// A token is added to the bucket every 1 / rate second
+	// add 5 token per seconds
+	rate = 5
+	// TODO number are arbitrary
+	// capacity of bucket. allow only 40 requests
+	tokenCapacity = 40
 )
 
 type rateLimiterInterceptor struct {
@@ -97,7 +100,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	limiter := &rateLimiterInterceptor{}
 
 	// init the Tockenbucket
-	limiter.tokenBucket = ratelimit.NewBucket(gatherTime, int64(tokenCapacity))
+	limiter.tokenBucket = ratelimit.NewBucket(rate, int64(tokenCapacity))
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
