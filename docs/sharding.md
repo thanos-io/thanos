@@ -77,4 +77,4 @@ We can shard by adjusting which labels should be included in the blocks.
 
 For store gateway, we can specify `--min-time` and `--max-time` flags to filter for what blocks store gateway should be responsible for.
 
-More details can refer to "Time based partitioning" chapter in [Store gateway](components/store.md).
+More details can refer to "Time based partitioning" chapter in [Store gateway](../../components/store.md/).
