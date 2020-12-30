@@ -5,7 +5,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net"
 	"runtime/debug"
@@ -45,28 +44,28 @@ type Server struct {
 	opts options
 }
 
+// TODO: make this const as a option to pass
 const (
 	gatherTime    = 30 * time.Second
-	port          = ":50051"
 	tokenCapacity = 6
 )
 
 type rateLimiterInterceptor struct {
-	TokenBucket *ratelimit.Bucket
+	tokenBucket *ratelimit.Bucket
 }
 
 func (r *rateLimiterInterceptor) Limit() bool {
-	// debug
-	fmt.Printf("Token Avail %d \n", r.TokenBucket.Available())
+	// this call doesn't block
+	tokenRes := r.tokenBucket.TakeAvailable(1)
 
 	// if zero we reached rate limit, so return true ( report error to Grpc)
-	tokenRes := r.TokenBucket.TakeAvailable(1)
 	if tokenRes == 0 {
-		fmt.Printf("Reached Rate-Limiting %d \n", r.TokenBucket.Available())
+		// TODO: use a logger
+		//  fmt.Printf("Reached Rate-Limiting %d \n", r.TokenBucket.Available())
 		return true
 	}
 
-	// if tokenRes is not zero, means gRpc request can continue to flow without rate limiting :)
+	// if tokenRes is not zero, we don't have reached the rate-limit
 	return false
 }
 
@@ -96,7 +95,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 	limiter := &rateLimiterInterceptor{}
-	limiter.TokenBucket = ratelimit.NewBucket(gatherTime, int64(tokenCapacity))
+
+	// init the Tockenbucket
+	limiter.tokenBucket = ratelimit.NewBucket(gatherTime, int64(tokenCapacity))
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
