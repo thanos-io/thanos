@@ -3,7 +3,7 @@ title: Thanos Rate Limiting for GRPC
 type: proposal
 menu: proposals
 status: WIP
-owner: bwplotka
+owner: MalloZup
 ---
 
 ### Related Tickets
@@ -81,5 +81,4 @@ Using https://github.com/thanos-io/thanos/blob/058e22b5b5ed13b44856d8c4fe355a400
 
 
 Open questions:
-
 
