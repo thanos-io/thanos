@@ -60,7 +60,7 @@ const App: FC<ThanosComponentProps> = ({ thanosComponent }) => {
         <Container fluid style={{ paddingTop: 70 }}>
           <QueryParamProvider reachHistory={globalHistory}>
             <Router basepath={`${basePath}`}>
-              <Redirect from="/" to={`${defaultRouteConfig[thanosComponent]}`} noThrow />
+              <Redirect from="/" to={`${basePath}${defaultRouteConfig[thanosComponent]}`} noThrow />
 
               <PanelList path="/graph" />
               <Alerts path="/alerts" />
