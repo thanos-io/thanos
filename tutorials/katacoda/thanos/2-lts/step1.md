@@ -144,6 +144,6 @@ Similar to previous course let's check if the Querier works as intended. Let's l
 
 This should list the sidecar, including the external labels.
 
-On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StoreAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/https://2886795307-9091-ollie02.environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0).
+On graph you should also see our 5 series for 1y time, thanks to Prometheus and sidecar StoreAPI: [Graph](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0).
 
 Click `Continue` to see how we can move this data to much cheaper and easier to operate object storage.
