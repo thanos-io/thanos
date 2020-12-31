@@ -86,9 +86,12 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                         <td className="rule-cell">
                           <GraphExpressionLink title="alert" expr={r.name} />
                           <GraphExpressionLink title="expr" expr={r.query} />
-                          <div>
-                            <strong>for:</strong> {formatDuration(r.duration * 1000)}
-                          </div>
+                          {r.duration > 0 && (
+                            <div>
+                              <strong>for:</strong> {formatDuration(r.duration * 1000)}
+                            </div>
+                          )}
+
                           <div>
                             <strong>labels:</strong>
                             {Object.entries(r.labels).map(([key, value]) => (
