@@ -53,10 +53,7 @@ const App: FC<ThanosComponentProps> = ({ thanosComponent }) => {
   return (
     <ErrorBoundary>
       <PathPrefixContext.Provider value={basePath}>
-        <Navigation
-          thanosComponent={thanosComponent}
-          defaultRoute={defaultRouteConfig[thanosComponent]}
-        />
+        <Navigation thanosComponent={thanosComponent} defaultRoute={defaultRouteConfig[thanosComponent]} />
         <Container fluid style={{ paddingTop: 70 }}>
           <QueryParamProvider reachHistory={globalHistory}>
             <Router basepath={`${basePath}`}>
@@ -76,8 +73,8 @@ const App: FC<ThanosComponentProps> = ({ thanosComponent }) => {
               <Blocks path="/loaded" view="loaded" />
               <NotFound default defaultRoute={defaultRouteConfig[thanosComponent]} />
             </Router>
-          .
-        </QueryParamProvider>
+            .
+          </QueryParamProvider>
         </Container>
       </PathPrefixContext.Provider>
     </ErrorBoundary>

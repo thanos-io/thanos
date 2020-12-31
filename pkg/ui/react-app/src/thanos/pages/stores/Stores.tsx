@@ -21,8 +21,8 @@ export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
           <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
         ))
       ) : (
-          <UncontrolledAlert color="warning">No stores registered.</UncontrolledAlert>
-        )}
+        <UncontrolledAlert color="warning">No stores registered.</UncontrolledAlert>
+      )}
     </>
   );
 };

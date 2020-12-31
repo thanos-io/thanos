@@ -85,8 +85,8 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           <BlockDetails selectBlock={selectBlock} block={selectedBlock} />
         </div>
       ) : (
-          <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
-        )}
+        <UncontrolledAlert color="warning">No blocks found.</UncontrolledAlert>
+      )}
     </>
   );
 };
