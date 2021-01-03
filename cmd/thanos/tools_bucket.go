@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -344,7 +345,6 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)
 
-
 		if *webRoutePrefix == "" {
 			*webRoutePrefix = *webExternalPrefix
 		}
@@ -352,24 +352,23 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		if *webRoutePrefix != *webExternalPrefix {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
-				
 
 		router := route.New()
 
 		// RoutePrefix must always start with '/'.
-		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+		*webRoutePrefix = "/" + strings.Trim(*webRoutePrefix, "/")
 
 		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "/" {
+		if *webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
 			})
-			router.Get(webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+			router.Get(*webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
 			})
-			router = router.WithPrefix(webRoutePrefix)
-		}		
-		
+			router = router.WithPrefix(*webRoutePrefix)
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName, "", component.Bucket)
