@@ -63,7 +63,7 @@ func queryTmplFuncs() template.FuncMap {
 	}
 }
 
-// Register registers new GET routes for subpages and retirects from / to /graph.
+// Register registers new GET routes for subpages and redirects from / to /graph.
 func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		return ins.NewHandler(name, http.HandlerFunc(next))
