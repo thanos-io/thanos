@@ -164,7 +164,7 @@ charts or filled areas).
               bottom =
                 qy +
                 ((otherpoints[j - otherps + accumulateOffset] - qy) * (px - qx)) /
-                (otherpoints[j - otherps + keyOffset] - qx);
+                  (otherpoints[j - otherps + keyOffset] - qx);
 
             newpoints[l + accumulateOffset] += bottom;
 
