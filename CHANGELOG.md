@@ -12,6 +12,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.18.0](https://github.com/thanos-io/thanos/releases) - Release in progress
+
 ### Added
 
 - [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
