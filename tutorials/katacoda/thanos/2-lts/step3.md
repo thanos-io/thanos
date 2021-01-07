@@ -78,7 +78,7 @@ The potential duplication of data between Prometheus+sidecar results and store G
 
 Another interesting question here is how to ensure if we query the data from bucket only?
 
-We can check this by visitng the [New UI]((https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.expr=&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=[])), inserting `continuous_app_metric0` metrics again with 1 year time range of graph,
+We can check this by visitng the [New UI](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/new/graph?g0.expr=&g0.tab=0&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=1&g0.partial_response=0&g0.store_matches=[]), inserting `continuous_app_metric0` metrics again with 1 year time range of graph,
 and click on `Enable Store Filtering`.
 
 This allows us to filter stores and helps in debugging from where we are querying the data exactly.
