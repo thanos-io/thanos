@@ -648,12 +648,12 @@ func newBinaryTOCFromByteSlice(bs index.ByteSlice) (*BinaryTOC, error) {
 	}, nil
 }
 
-func (r BinaryReader) IndexVersion() (int, error) {
+func (r *BinaryReader) IndexVersion() (int, error) {
 	return r.indexVersion, nil
 }
 
 // TODO(bwplotka): Get advantage of multi value offset fetch.
-func (r BinaryReader) PostingsOffset(name string, value string) (index.Range, error) {
+func (r *BinaryReader) PostingsOffset(name string, value string) (index.Range, error) {
 	rngs, err := r.postingsOffset(name, value)
 	if err != nil {
 		return index.Range{}, err
@@ -676,7 +676,7 @@ func skipNAndName(d *encoding.Decbuf, buf *int) {
 	}
 	d.Skip(*buf)
 }
-func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Range, error) {
+func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Range, error) {
 	rngs := make([]index.Range, 0, len(values))
 	if r.indexVersion == index.FormatV1 {
 		e, ok := r.postingsV1[name]
@@ -845,7 +845,7 @@ func (r *BinaryReader) LookupSymbol(o uint32) (string, error) {
 	return s, nil
 }
 
-func (r BinaryReader) LabelValues(name string) ([]string, error) {
+func (r *BinaryReader) LabelValues(name string) ([]string, error) {
 	if r.indexVersion == index.FormatV1 {
 		e, ok := r.postingsV1[name]
 		if !ok {
@@ -901,7 +901,7 @@ func yoloString(b []byte) string {
 	return *((*string)(unsafe.Pointer(&b)))
 }
 
-func (r BinaryReader) LabelNames() ([]string, error) {
+func (r *BinaryReader) LabelNames() ([]string, error) {
 	allPostingsKeyName, _ := index.AllPostingsKey()
 	labelNames := make([]string, 0, len(r.postings))
 	for name := range r.postings {
