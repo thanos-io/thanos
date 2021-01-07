@@ -111,6 +111,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	m.mu.RLock()
 	h, ok := m.cache[tenant]
 	m.mu.RUnlock()
+
 	if ok {
 		return h.GetN(tenant, ts, n)
 	}

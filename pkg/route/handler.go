@@ -28,11 +28,11 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/errutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -62,7 +62,6 @@ var (
 	errUnavailable = errors.New("target not available")
 )
 
-
 // replica encapsulates the replica number of a request and if the request is
 // already replicated.
 type replica struct {
@@ -85,15 +84,15 @@ type Options struct {
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	logger   log.Logger
-	router   *route.Router
-	options  *Options
-	listener net.Listener
-	mtx        sync.RWMutex
-	hashring   Hashring
-	peers      *peerGroup
-	expBackoff backoff.Backoff
-	peerStates map[string]*retryState
+	logger            log.Logger
+	router            *route.Router
+	options           *Options
+	listener          net.Listener
+	mtx               sync.RWMutex
+	hashring          Hashring
+	peers             *peerGroup
+	expBackoff        backoff.Backoff
+	peerStates        map[string]*retryState
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
@@ -241,9 +240,7 @@ func (h *Handler) Run() error {
 	return httpSrv.Serve(h.listener)
 }
 
-
 func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
-
 	// Forward any time series as necessary.
 	// Time series will be replicated as necessary.
 	if err := h.forward(ctx, tenant, wreq); err != nil {
@@ -252,7 +249,6 @@ func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb
 		}
 		return err
 	}
-
 
 	return nil
 }
@@ -280,8 +276,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
-
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if len(tenant) == 0 {
 		tenant = h.options.DefaultTenantID
@@ -303,7 +297,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		level.Error(h.logger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
 }
 
 // forward accepts a write request, batches its time series by
@@ -345,7 +338,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 			wreqs[endpoint] = &prompb.WriteRequest{}
 			replicas[endpoint] = replica{
 				replicated: false,
-				n: 0,
+				n:          0,
 			}
 		}
 		wr := wreqs[endpoint]
@@ -364,7 +357,7 @@ func (h *Handler) writeQuorum() int {
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
 func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
-	var errs terrors.MultiError
+	var errs errutil.MultiError
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
 	defer func() {
@@ -410,8 +403,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 			continue
 		}
-
-
 
 		// Make a request to the specified endpoint.
 		go func(endpoint string) {
@@ -571,13 +562,12 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	return nil
 }
 
-
 // countCause counts the number of errors within the given error
 // whose causes satisfy the given function.
 // countCause will inspect the error's cause or, if the error is a MultiError,
 // the cause of each contained error but will not traverse any deeper.
 func countCause(err error, f func(error) bool) int {
-	errs, ok := err.(terrors.MultiError)
+	errs, ok := err.(errutil.MultiError)
 	if !ok {
 		errs = []error{err}
 	}
