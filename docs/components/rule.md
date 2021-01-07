@@ -356,7 +356,7 @@ Flags:
                                  LogFinishCall: Logs the finish call of the
                                  requests. LogStartAndFinishCall: Logs the start
                                  and finish call of the requests. NoLogCall:
-                                 Disable request logging.
+                                 Disable request logging. Default Value is null.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
