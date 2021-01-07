@@ -77,10 +77,10 @@ function draw() {
     }
 }
 
-// isThanosBlock eturns true if it is a block that has been processed by Thanos.
+// isThanosBlock returns true if it is a block that has been processed by Thanos.
 function isThanosBlock(d) {
     return d.thanos.labels !== null &&
-        d.thanos.source != ""
+        d.thanos.source !== ""
 }
 
 function stringify(map) {
