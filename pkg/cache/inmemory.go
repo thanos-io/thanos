@@ -7,7 +7,6 @@ import (
 	"context"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -28,10 +27,6 @@ var (
 
 const (
 	maxInt = int(^uint(0) >> 1)
-	// Size of a golang slice i.e unsafe.Sizeof([]byte{}) on amd64.
-	sliceHeaderSize = 16
-	// As the cache key is of type String its size is 8 bytes.
-	keyHeaderSize = 8
 )
 
 // InMemoryCacheConfig holds the in-memory cache config.
@@ -43,19 +38,19 @@ type InMemoryCacheConfig struct {
 }
 
 type InMemoryCache struct {
-	mtx sync.Mutex
-
 	logger           log.Logger
-	lru              *lru.LRU
 	maxSizeBytes     uint64
 	maxItemSizeBytes uint64
 
-	curSize uint64
-
-	evicted          prometheus.Counter
-	requests         prometheus.Counter
-	hits             prometheus.Counter
-	hitsExpired      prometheus.Counter
+	mtx         sync.Mutex
+	curSize     uint64
+	lru         *lru.LRU
+	evicted     prometheus.Counter
+	requests    prometheus.Counter
+	hits        prometheus.Counter
+	hitsExpired prometheus.Counter
+	// The input cache value would be copied to an inmemory array
+	// instead of simply using the one sent by the caller.
 	added            prometheus.Counter
 	current          prometheus.Gauge
 	currentSize      prometheus.Gauge
@@ -64,7 +59,12 @@ type InMemoryCache struct {
 }
 
 type cacheDataWithTTLWrapper struct {
-	data       []byte
+	data []byte
+	// The objects that are over the TTL are not destroyed eagerly.
+	// When there is a hit for an item that is over the TTL, the object is removed from the cache
+	// and null is returned.
+	// There is ongoing effort to integrate TTL within the Hashicorp golang cache itself.
+	// This https://github.com/hashicorp/golang-lru/pull/41 can be used here once complete.
 	expiryTime time.Time
 }
 
@@ -78,7 +78,7 @@ func parseInMemoryCacheConfig(conf []byte) (InMemoryCacheConfig, error) {
 	return config, nil
 }
 
-// NewInMemoryCache creates a new thread-safe LRU cache for chunks and metadata and ensures the total cache
+// NewInMemoryCache creates a new thread-safe LRU cache and ensures the total cache
 // size approximately does not exceed maxBytes.
 func NewInMemoryCache(name string, logger log.Logger, reg prometheus.Registerer, conf []byte) (*InMemoryCache, error) {
 	config, err := parseInMemoryCacheConfig(conf)
@@ -89,7 +89,7 @@ func NewInMemoryCache(name string, logger log.Logger, reg prometheus.Registerer,
 	return NewInMemoryCacheWithConfig(name, logger, reg, config)
 }
 
-// NewInMemoryCacheWithConfig creates a new thread-safe LRU cache chunks and metadata ensures the total cache
+// NewInMemoryCacheWithConfig creates a new thread-safe LRU cache and ensures the total cache
 // size approximately does not exceed maxBytes.
 func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.Registerer, config InMemoryCacheConfig) (*InMemoryCache, error) {
 	if config.MaxItemSize > config.MaxSize {
@@ -103,66 +103,70 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 	}
 
 	c.evicted = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_items_evicted_total",
+		Name:        "thanos_cache_inmemory_items_evicted_total",
 		Help:        "Total number of items that were evicted from the inmemory cache.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.added = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_items_added_total",
+		Name:        "thanos_cache_inmemory_items_added_total",
 		Help:        "Total number of items that were added to the inmemory cache.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.requests = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_requests_total",
+		Name:        "thanos_cache_inmemory_requests_total",
 		Help:        "Total number of requests to the inmemory cache.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.hitsExpired = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_hits_on_expired_data_total",
+		Name:        "thanos_cache_inmemory_hits_on_expired_data_total",
 		Help:        "Total number of requests to the inmemory cache that were a hit but needed to be evicted due to TTL.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.overflow = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_items_overflowed_total",
+		Name:        "thanos_cache_inmemory_items_overflowed_total",
 		Help:        "Total number of items that could not be added to the inmemory cache due to being too big.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.hits = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name:        "thanos_store_cache_hits_total",
+		Name:        "thanos_cache_inmemory_hits_total",
 		Help:        "Total number of requests to the inmemory cache that were a hit.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.current = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Name:        "thanos_store_cache_items",
+		Name:        "thanos_cache_inmemory_items",
 		Help:        "Current number of items in the inmemory cache.",
 		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.currentSize = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_store_cache_items_size_bytes",
-		Help: "Current byte size of items in the inmemory cache.",
+		Name:        "thanos_cache_inmemory_items_size_bytes",
+		Help:        "Current byte size of items in the inmemory cache.",
+		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	c.totalCurrentSize = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_store_cache_total_size_bytes",
-		Help: "Current byte size of items (both value and key) in the inmemory cache.",
+		Name:        "thanos_cache_inmemory_total_size_bytes",
+		Help:        "Current byte size of items (both value and key) in the inmemory cache.",
+		ConstLabels: prometheus.Labels{"name": name},
 	})
 
 	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_store_cache_max_size_bytes",
-		Help: "Maximum number of bytes to be held in the inmemory cache.",
+		Name:        "thanos_cache_inmemory_max_size_bytes",
+		Help:        "Maximum number of bytes to be held in the inmemory cache.",
+		ConstLabels: prometheus.Labels{"name": name},
 	}, func() float64 {
 		return float64(c.maxSizeBytes)
 	})
 	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_store_cache_max_item_size_bytes",
-		Help: "Maximum number of bytes for single entry to be held in the inmemory cache.",
+		Name:        "thanos_cache_inmemory_max_item_size_bytes",
+		Help:        "Maximum number of bytes for single entry to be held in the inmemory cache.",
+		ConstLabels: prometheus.Labels{"name": name},
 	}, func() float64 {
 		return float64(c.maxItemSizeBytes)
 	})
@@ -185,8 +189,8 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 }
 
 func (c *InMemoryCache) onEvict(key, val interface{}) {
-	keySize := keyHeaderSize + uint64(len(key.(string)))
-	entrySize := sliceHeaderSize + uint64(len(val.(cacheDataWithTTLWrapper).data)) + uint64(unsafe.Sizeof(val.(cacheDataWithTTLWrapper).expiryTime))
+	keySize := uint64(len(key.(string)))
+	entrySize := uint64(len(val.(cacheDataWithTTLWrapper).data))
 
 	c.evicted.Inc()
 	c.current.Dec()
@@ -217,9 +221,8 @@ func (c *InMemoryCache) get(key string) ([]byte, bool) {
 }
 
 func (c *InMemoryCache) set(key string, val []byte, ttl time.Duration) {
-	var size = sliceHeaderSize + uint64(len(val))
-	keySize := keyHeaderSize + uint64(len(key))
-	entrySize := sliceHeaderSize + uint64(len(val)) + uint64(unsafe.Sizeof(time.Now().Add(ttl)))
+	var size = uint64(len(val))
+	keySize := uint64(len(key))
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -241,7 +244,7 @@ func (c *InMemoryCache) set(key string, val []byte, ttl time.Duration) {
 
 	c.added.Inc()
 	c.currentSize.Add(float64(size))
-	c.totalCurrentSize.Add(float64(keySize + entrySize))
+	c.totalCurrentSize.Add(float64(keySize + size))
 	c.current.Inc()
 	c.curSize += size
 }

@@ -102,3 +102,14 @@ max_item_size: 2KB
 		})
 	}
 }
+
+func TestNewInMemoryCache(t *testing.T) {
+	// Should return error when the max size of the cache is smaller than the max size of
+	conf := []byte(`
+max_size: 2KB
+max_item_size: 1MB
+`)
+	cache, err := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*InMemoryCache)(nil), cache)
+}

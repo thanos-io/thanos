@@ -15,7 +15,6 @@ require (
 	github.com/cortexproject/cortex v1.6.1-0.20210108144208-6c2dab103f20
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
-	github.com/fatih/color v1.10.0 // indirect
 	github.com/fatih/structtag v1.1.0
 	github.com/felixge/fgprof v0.9.1
 	github.com/fsnotify/fsnotify v1.4.9
@@ -69,7 +68,6 @@ require (
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v2 v2.3.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
-	honnef.co/go/tools v0.0.1-2020.1.6 // indirect
 )
 
 replace (
