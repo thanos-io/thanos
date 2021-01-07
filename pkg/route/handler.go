@@ -53,15 +53,6 @@ const (
 	labelError   = "error"
 )
 
-var (
-	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr = errors.New("conflict")
-
-	errBadReplica  = errors.New("replica count exceeds replication factor")
-	errNotReady    = errors.New("target not ready")
-	errUnavailable = errors.New("target not available")
-)
-
 // replica encapsulates the replica number of a request and if the request is
 // already replicated.
 type replica struct {
@@ -243,14 +234,7 @@ func (h *Handler) Run() error {
 func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
 	// Forward any time series as necessary.
 	// Time series will be replicated as necessary.
-	if err := h.forward(ctx, tenant, wreq); err != nil {
-		if countCause(err, isConflict) > 0 {
-			return conflictErr
-		}
-		return err
-	}
-
-	return nil
+	return h.forward(ctx, tenant, wreq)
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -282,14 +266,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.handleRequest(ctx, tenant, &wreq)
-	switch err {
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+	switch determineWriteErrorCause(err, 1) {
 	case nil:
 		return
 	case errNotReady:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errUnavailable:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case conflictErr:
+	case errConflict:
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -393,7 +380,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
+					ec <- errors.Wrapf(err, "replicate write request for endpoint %v", endpoint)
 					return
 				}
 
@@ -547,37 +534,10 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		if countCause(err, isNotReady) >= quorum {
-			return errors.Wrap(errNotReady, "replicate: quorum not reached")
-		}
-		if countCause(err, isConflict) >= quorum {
-			return errors.Wrap(conflictErr, "replicate: quorum not reached")
-		}
-		if countCause(err, isUnavailable) >= quorum {
-			return errors.Wrap(errUnavailable, "replicate: quorum not reached")
-		}
-		return errors.Wrap(err, "unexpected error, before quorum is reached")
+		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 
 	return nil
-}
-
-// countCause counts the number of errors within the given error
-// whose causes satisfy the given function.
-// countCause will inspect the error's cause or, if the error is a MultiError,
-// the cause of each contained error but will not traverse any deeper.
-func countCause(err error, f func(error) bool) int {
-	errs, ok := err.(errutil.MultiError)
-	if !ok {
-		errs = []error{err}
-	}
-	var n int
-	for i := range errs {
-		if f(errors.Cause(errs[i])) {
-			n++
-		}
-	}
-	return n
 }
 
 // isConflict returns whether or not the given error represents a conflict.
@@ -585,7 +545,7 @@ func isConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == conflictErr ||
+	return err == errConflict ||
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
