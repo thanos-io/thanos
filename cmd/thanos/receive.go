@@ -112,7 +112,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		// Check if the YAML configuration of request.logging is correct. .
 		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)

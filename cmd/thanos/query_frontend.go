@@ -130,7 +130,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		// Check if the YAML configuration of request.logging is correct.
 		HTTPlogOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)

@@ -126,7 +126,7 @@ func registerStore(app *extkingpin.App) {
 				minTime, maxTime)
 		}
 
-		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		// Check if the YAML configuration of request.logging is correct.
 		HTTPlogOpts, err := logging.DecideHTTPFlag("", reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)

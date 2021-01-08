@@ -50,7 +50,7 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		// Check if the YAML configuration of request.logging is correct.
 		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)

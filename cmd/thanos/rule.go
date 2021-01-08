@@ -181,7 +181,7 @@ func registerRule(app *extkingpin.App) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
-		// Check if the YAML configuration of request.logging is correct. Exit early if error.
+		// Check if the YAML configuration of request.logging is correct.
 		HTTPlogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
