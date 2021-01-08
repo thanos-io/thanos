@@ -364,7 +364,7 @@ Flags:
                                  LogFinishCall: Logs the finish call of the
                                  requests. LogStartAndFinishCall: Logs the start
                                  and finish call of the requests. NoLogCall:
-                                 Disable request logging. Default Value is null.
+                                 Disable request logging.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.

@@ -242,8 +242,7 @@ Flags:
                                  LogFinishCall : Logs the finish call of the
                                  requests. LogStartAndFinishCall : Logs the
                                  start and finish call of the requests.
-                                 NoLogCall : Disable request logging. Default
-                                 Value is null.
+                                 NoLogCall : Disable request logging.
       --request.logging-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
