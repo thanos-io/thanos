@@ -769,6 +769,14 @@ Flags:
                                 Path to YAML file that contains
                                 []metadata.DeletionRequest that will be applied
                                 to blocks
+      --rewrite.to-relabel-config=<content>
+                                Alternative to 'rewrite.to-relabel-config-file'
+                                flag (mutually exclusive). Content of YAML file
+                                that contains relabel configs that will be
+                                applied to blocks
+      --rewrite.to-relabel-config-file=<file-path>
+                                Path to YAML file that contains relabel configs
+                                that will be applied to blocks
       --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>
