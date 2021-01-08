@@ -145,12 +145,12 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		// Check if the YAML configuration of request.logging is correct.
-		HTTPlogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
 
-		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
@@ -177,8 +177,8 @@ func registerQuery(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			HTTPlogOpts,
-			GRPCLogOpts,
+			httpLogOpts,
+			grpcLogOpts,
 			tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
@@ -229,8 +229,8 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	HTTPlogOpts []logging.Option,
-	GRPCLogOpts []grpc_logging.Option,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
@@ -451,7 +451,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
@@ -503,7 +503,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithListen(grpcBindAddr),

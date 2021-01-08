@@ -182,12 +182,12 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		// Check if the YAML configuration of request.logging is correct.
-		HTTPlogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
 
-		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
@@ -196,8 +196,8 @@ func registerRule(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			HTTPlogOpts,
-			GRPCLogOpts,
+			httpLogOpts,
+			grpcLogOpts,
 			tagOpts,
 			reload,
 			lset,
@@ -288,8 +288,8 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	HTTPlogOpts []logging.Option,
-	GRPCLogOpts []grpc_logging.Option,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
@@ -575,7 +575,7 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
@@ -617,7 +617,7 @@ func runRule(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		// Configure Request Logging for HTTP calls.
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)

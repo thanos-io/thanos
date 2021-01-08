@@ -127,12 +127,12 @@ func registerStore(app *extkingpin.App) {
 		}
 
 		// Check if the YAML configuration of request.logging is correct.
-		HTTPlogOpts, err := logging.DecideHTTPFlag("", reqLogConfig)
+		httpLogOpts, err := logging.DecideHTTPFlag("", reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
 
-		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
 		if err != nil {
 			return errors.Errorf("config for request logging not recognized %v", err)
 		}
@@ -141,8 +141,8 @@ func registerStore(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			HTTPlogOpts,
-			GRPCLogOpts,
+			httpLogOpts,
+			grpcLogOpts,
 			tagOpts,
 			indexCacheConfig,
 			objStoreConfig,
@@ -189,8 +189,8 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	HTTPlogOpts []logging.Option,
-	GRPCLogOpts []grpc_logging.Option,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
@@ -380,7 +380,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
@@ -405,7 +405,7 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, HTTPlogOpts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
