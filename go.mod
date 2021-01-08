@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.5.1-0.20201111110551-ba512881b076
+	github.com/cortexproject/cortex v1.6.1-0.20210108144208-6c2dab103f20
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
@@ -44,14 +44,14 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/prometheus/alertmanager v0.21.1-0.20200911160112-1fdff6b3f939
+	github.com/prometheus/alertmanager v0.21.1-0.20201106142418-c39b78780054
 	github.com/prometheus/client_golang v1.8.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.15.0
-	github.com/prometheus/prometheus v1.8.2-0.20201119142752-3ad25a6dc3d9
+	github.com/prometheus/prometheus v1.8.2-0.20201119181812-c8f810083d3f
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
-	github.com/weaveworks/common v0.0.0-20200914083218-61ffdd448099
+	github.com/weaveworks/common v0.0.0-20201119133501-0619918236ec
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.7.0

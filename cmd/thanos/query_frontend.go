@@ -193,7 +193,7 @@ func runQueryFrontend(
 	roundTripper = tripperWare(roundTripper)
 
 	// Create the query frontend transport.
-	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger)
+	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
 	if cfg.CompressResponses {
 		handler = gziphandler.GzipHandler(handler)
 	}
