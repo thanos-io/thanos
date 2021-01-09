@@ -4,6 +4,8 @@
 package compactv2
 
 import (
+	"math"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -77,17 +79,25 @@ SeriesLoop:
 
 				// Special case: Delete whole series.
 				chksIter := s.Iterator()
-				var chks []chunks.Meta
+				var minT int64 = math.MaxInt64
+				var maxT int64 = math.MinInt64
 				for chksIter.Next() {
-					chks = append(chks, chksIter.At())
+					c := chksIter.At()
+					if c.MinTime < minT {
+						minT = c.MinTime
+					}
+					if c.MaxTime > maxT {
+						maxT = c.MaxTime
+					}
 				}
 				if d.err = chksIter.Err(); d.err != nil {
 					return false
 				}
 
 				var deleted tombstones.Intervals
-				if len(chks) > 0 {
-					deleted = deleted.Add(tombstones.Interval{Mint: chks[0].MinTime, Maxt: chks[len(chks)-1].MaxTime})
+				// If minTime is set then there is at least one chunk.
+				if minT != math.MaxInt64 {
+					deleted = deleted.Add(tombstones.Interval{Mint: minT, Maxt: maxT})
 				}
 				d.log.DeleteSeries(lbls, deleted)
 				d.p.SeriesProcessed()

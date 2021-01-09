@@ -47,16 +47,17 @@ func (s *lazyPopulateChunkSeriesSet) Next() bool {
 			continue
 		}
 
+		chks := make([]chunks.Meta, len(s.bufChks))
+		copy(chks, s.bufChks)
 		for i := range s.bufChks {
-			s.bufChks[i].Chunk = &lazyPopulatableChunk{cr: s.sReader.cr, m: &s.bufChks[i]}
+			chks[i].Chunk = &lazyPopulatableChunk{cr: s.sReader.cr, m: &chks[i]}
 		}
 		s.curr = &storage.ChunkSeriesEntry{
 			Lset: make(labels.Labels, len(s.bufLbls)),
 			ChunkIteratorFn: func() chunks.Iterator {
-				return storage.NewListChunkSeriesIterator(s.bufChks...)
+				return storage.NewListChunkSeriesIterator(chks...)
 			},
 		}
-		// TODO: Do we need to copy this?
 		copy(s.curr.Lset, s.bufLbls)
 		return true
 	}
