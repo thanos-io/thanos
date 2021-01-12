@@ -1,30 +1,39 @@
 ---
-title: Thanos Rate Limiting for GRPC
+title: Thanos Rate Limiting mechanism for GRPC
 type: proposal
 menu: proposals
 status: WIP
-owner: MalloZup
+owner: MalloZup (Dario Maiocchi)
 ---
 
 ### Related Tickets
 
 * https://github.com/thanos-io/thanos/issues/3525 (main)
 
-## Summary and motivation
+# Index:
+- Motivation (1)
+- Actual state of situation (2)
+- Implementation abstracts (3)
+- Alternatives evaluations (4)
+- Pragmatic approach of implementations (planning) (5)
+
+## 1 Summary and motivation
 
 We want to implement a way to "rate limiting" concept in Thanos, which should prevent overloading CPU and other resources on the server-side due to high concurrent requests in GRPC.
 
-At the point of this writing, gRPC has no standard library way to implement a rate-limiter. Although there is an interceptor from gRPC ecosystem ( see later)
+At the point of this writing, gRPC has no standard library way to implement a rate-limiter. Although there is an interceptor from gRPC ecosystem.
 
-The goal of the  mechanism should be a unified, safe way for rate limiting, both per component but also potentially per tenant.
+* The goal of the mechanism should be a unified, safe way for rate limiting, both per component but also potentially per tenant.
+* Another goal is to reuse similar rate limit technique for HTTP as for gRPC
 
 There are basically 2 ways of solving the problem:
-We should avoid such saturation with a rate-limiting concept or investigate if client queuing is better.
+We should avoid such saturation with a rate-limiting.
 
+The rate-limit mechanism should coexist also with the `gate` mechanism, which is already implemented in thanos and will be described leter below.
 
-## Actual situation:
+## 2) Actual state of situation:
 
-Right now in thanos we do have already some rate-limiting mechanism implemented with `gate`. ( more details on gate see later).
+Right now in thanos we do have already some rate-limiting mechanism implemented with `gate` constructor from prometheus.
 
 This are used in;
 
@@ -34,50 +43,41 @@ This are used in;
 
 - `memcached_client`: https://github.com/thanos-io/thanos/blob/1fff9a7157d1f3b7d5e0ce36f999b10bb3ae7ec4/pkg/cacheutil/memcached_client.go#L232
 
+The gate mechanism however doesn't prevent the high-load, even if it is a semaphore like mechanism.
 
+## 3) Technical Implementation (Abstract):
 
-
-
-
-## Technical Implementation(s):
-
-
-1) Rate-limiting via interceptor (global mechanism at Grpc init)
+1) Rate-limiting via interceptor (global mechanism at Grpc server initialisation)
 
 For implementing a rate-limiting in Grpc we need following resources:
 
-a) an interceptor (middleware) to be registered 
-b) a function which is called by the interceptor for limiting
+a) An interceptor (middleware) need to be registered.  
+b) a function which is called by the interceptor for limiting. ( rate-limiting algorithms)
 
-In our context, having a interceptor registered by grpc server, would have a global mechanism we would  need to modify the actual-situation ( see previous point).
-
-
+In our context, having a interceptor registered by grpc server, would have a global mechanism we would need to modify the actual-situation ( see previous point).
 
 a) 
 Currently github.com/grpc-ecosystem/go-grpc-middleware/ratelimit offer a way to implement and register a "limiter" for Grpc.
 
 See  example: https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/ratelimit/examples_test.go.
 
-b)
-Once the interceptor is easy initiated, we can create a semaphore mechanism for limiting N Requests.
+b) the function which limits the traffic, uses a token bucket mechanism.
 
-For implementing a semaphore we can use the `gate` constructuctor which is indeed a sempaphore with some prometheus metrics on top and context aware.
+## 4) Alternatives: 
 
-So in our interceptor limiter function we can have the gate with `RateLimitingReq` requests
+- status: `could be improved`. Gate mechanism is not implemented in all part of codebase. We could improve adopation of the `gate` construct and investigate 
+- status:`discarded`. Cortex into the `v2` query-frontend( thanos uses `v1`), implement a scheduler. However is not applicable.
 
-```golang
-   g := gate.New(RateLimitingReq)
+## 5) Planning of the implementation:
 
-   if err := g.Start(ctx); err != nil {
-      return
-   }
-   defer g.Done()
+- [ ] discuss this proposal
 
-  // do critical
-```
+- [ ] Improve the grpc-handlers ecosystems. Branch: `V2` 
+      - [ ] Change the interface to return `error`. In order to provide better context to Client who reaches rate-limiting.
+      - [ ] Improve example.
+      - [ ] Investigate  if needed, to add the rate-limiter library token algorithm, if importing it or implementing from scratch. to be discussed with team.
 
-The `RateLimitingReq` should be a config parameter which by default is X number and user can modify/tune if needed.
-Using https://github.com/thanos-io/thanos/blob/058e22b5b5ed13b44856d8c4fe355a40091f6a97/cmd/thanos/query.go#L461 should be ok.
-
-
-Open questions:
+- [ ] Send a PR to thanos upstream with:
+      - rate-limiting configuration/init on grpc server.
+      - read global configuration options, in order to get the `Token Capacity` and `Token rate` from thanos conf.
+      - evaluate if we need to do some `e2e` test or similar to test the functionality. 
