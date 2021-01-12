@@ -23,7 +23,7 @@ In this halted example, we can read that compactor detected 2 overlapped blocks.
 * Duplicated upload with different ULID (non-persistent storage for Prometheus can cause this)
 * 2 Prometheus instances are misconfigured and they are uploading the data with exactly the same external labels. This is wrong, they should be unique.
 
-Checking producers log for such ULID, and checking meta.json (e.g if sample stats are the same or not) helps. Checksum the index and chunks files as well to reveal if data is exactly the same, thus ok to be removed manually. You may find `scripts/thanos-block.jq` script useful when inspecting `meta.json` files, as it translates timestamps to human-readable form.
+Checking producers log for such ULID, and checking meta.json (e.g if sample stats are the same or not) helps. Checksum the index and [chunks files](../design.md/#chunk-file) as well to reveal if data is exactly the same, thus ok to be removed manually. You may find `scripts/thanos-block.jq` script useful when inspecting `meta.json` files, as it translates timestamps to human-readable form.
 
 ### Reasons
 
