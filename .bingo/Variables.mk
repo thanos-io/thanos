@@ -64,11 +64,11 @@ $(GOLANGCI_LINT): .bingo/golangci-lint.mod
 	@echo "(re)installing $(GOBIN)/golangci-lint-v1.29.0"
 	@cd .bingo && $(GO) build -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.29.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
-HUGO := $(GOBIN)/hugo-v0.74.3
+HUGO := $(GOBIN)/hugo-v0.80.0
 $(HUGO): .bingo/hugo.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/hugo-v0.74.3"
-	@cd .bingo && $(GO) build -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.74.3 "github.com/gohugoio/hugo"
+	@echo "(re)installing $(GOBIN)/hugo-v0.80.0"
+	@cd .bingo && $(GO) build -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.80.0 "github.com/gohugoio/hugo"
 
 JB := $(GOBIN)/jb-v0.4.0
 $(JB): .bingo/jb.mod
