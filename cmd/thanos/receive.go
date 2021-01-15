@@ -115,7 +115,7 @@ func registerReceive(app *extkingpin.App) {
 		// Check if the YAML configuration of request.logging is correct. .
 		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", reqLogConfig)
 		if err != nil {
-			return errors.Errorf("config for request logging not recognized %v", err)
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		tsdbOpts := &tsdb.Options{

@@ -133,7 +133,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		// Check if the YAML configuration of request.logging is correct.
 		httpLogOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
 		if err != nil {
-			return errors.Errorf("config for request logging not recognized %v", err)
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)

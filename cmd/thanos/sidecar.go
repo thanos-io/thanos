@@ -53,7 +53,7 @@ func registerSidecar(app *extkingpin.App) {
 		// Check if the YAML configuration of request.logging is correct.
 		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Errorf("config for request logging not recognized %v", err)
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		rl := reloader.New(log.With(logger, "component", "reloader"),
