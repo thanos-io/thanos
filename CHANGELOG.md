@@ -15,6 +15,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Added
 
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) ui: make old bucket viewer UI work with vanilla Prometheus blocks
+- [#3361](https://github.com/thanos-io/thanos/pull/3361) Sidecar, Store, Query, Ruler, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
 - [#2641](https://github.com/thanos-io/thanos/issues/2641) Query Frontend: Added `--query-range.request-downsampled` flag enabling additional queries for downsampled data in case of empty or incomplete response to range request.
 
 ### Fixed
@@ -34,7 +35,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
 - [#3509](https://github.com/thanos-io/thanos/pull/3509) Store: Added touch series limit
 - [#3388](https://github.com/thanos-io/thanos/pull/3378) Tools: Bucket replicator now can specify block IDs to copy.
-- [#3361](https://github.com/thanos-io/thanos/pull/3361) Sidecar, Store, Query, Ruler, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
 - [#3121](https://github.com/thanos-io/thanos/pull/3121) Receive: Added `--receive.hashrings` alternative to `receive.hashrings-file` flag (lower priority). Content of JSON file that contains the hashring configuration.
 
 ### Fixed
