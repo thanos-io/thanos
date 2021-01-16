@@ -319,7 +319,7 @@ In order to achieve co-ordination between compactor and all object storage reade
 ```$
 usage: thanos compact [<flags>]
 
-continuously compacts blocks in an object store bucket
+Continuously compacts blocks in an object store bucket.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
