@@ -81,7 +81,7 @@ func (cs compactionSet) maxLevel() int {
 }
 
 func registerCompact(app *extkingpin.App) {
-	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
+	cmd := app.Command(component.Compact.String(), "Continuously compacts blocks in an object store bucket.")
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
