@@ -43,7 +43,7 @@ type queryFrontendConfig struct {
 
 func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
-	cmd := app.Command(comp.String(), "query frontend command implements a service deployed in front of queriers to improve query parallelization and caching.")
+	cmd := app.Command(comp.String(), "Query frontend command implements a service deployed in front of queriers to improve query parallelization and caching.")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
 			// Max body size is 10 MiB.

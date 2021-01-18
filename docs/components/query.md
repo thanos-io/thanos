@@ -286,8 +286,8 @@ Example file SD file in YAML:
 ```$
 usage: thanos query [<flags>]
 
-query node exposing PromQL enabled Query API with data retrieved from multiple
-store nodes
+Query node exposing PromQL enabled Query API with data retrieved from multiple
+store nodes.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
