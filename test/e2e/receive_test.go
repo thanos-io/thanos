@@ -15,7 +15,7 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/route"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -70,14 +70,14 @@ func TestReceive(t *testing.T) {
 		// receiver in the hashring than the one handling the request.
 		// The querier queries all the receivers and the test verifies
 		// the time series are forwarded to the correct receive node.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2")
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
+		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3")
 		testutil.Ok(t, err)
 
-		h := receive.HashringConfig{
+		h := route.HashringConfig{
 			Endpoints: []string{
 				r1.GRPCNetworkEndpointFor(s.NetworkName()),
 				r2.GRPCNetworkEndpointFor(s.NetworkName()),
@@ -85,20 +85,16 @@ func TestReceive(t *testing.T) {
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		// Create a router.
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1, h)
-		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1, h)
-		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3, route1))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
@@ -149,14 +145,14 @@ func TestReceive(t *testing.T) {
 		// receives Prometheus remote-written data. The querier queries all
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2")
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
+		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3")
 		testutil.Ok(t, err)
 
-		h := receive.HashringConfig{
+		h := route.HashringConfig{
 			Endpoints: []string{
 				r1.GRPCNetworkEndpointFor(s.NetworkName()),
 				r2.GRPCNetworkEndpointFor(s.NetworkName()),
@@ -164,16 +160,12 @@ func TestReceive(t *testing.T) {
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
+		// Create a router.
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
-		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3, h)
-		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3, route1))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
@@ -223,14 +215,14 @@ func TestReceive(t *testing.T) {
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2")
 		testutil.Ok(t, err)
-		notRunningR3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
+		notRunningR3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3")
 		testutil.Ok(t, err)
 
-		h := receive.HashringConfig{
+		h := route.HashringConfig{
 			Endpoints: []string{
 				r1.GRPCNetworkEndpointFor(s.NetworkName()),
 				r2.GRPCNetworkEndpointFor(s.NetworkName()),
@@ -238,14 +230,13 @@ func TestReceive(t *testing.T) {
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
-		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
-		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		// Create a router.
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1, r2, route1))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
@@ -288,30 +279,30 @@ func TestReceive(t *testing.T) {
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
-		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1")
 		testutil.Ok(t, err)
 
-		h := receive.HashringConfig{
+		h := route.HashringConfig{
 			Endpoints: []string{
 				r1.GRPCNetworkEndpointFor(s.NetworkName()),
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		// Create the router.
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1))
+		testutil.Ok(t, s.StartAndWaitReady(r1,route1))
 		testutil.Ok(t, err)
 
 		conf1 := ReverseProxyConfig{
 			tenantId: "tenant-1",
 			port:     ":9097",
-			target:   "http://" + r1.Endpoint(8081),
+			target:   "http://" + route1.Endpoint(8081),
 		}
 		conf2 := ReverseProxyConfig{
 			tenantId: "tenant-2",
 			port:     ":9098",
-			target:   "http://" + r1.Endpoint(8081),
+			target:   "http://" + route1.Endpoint(8081),
 		}
 
 		go generateProxy(conf1)

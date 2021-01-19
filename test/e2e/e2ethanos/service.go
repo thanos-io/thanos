@@ -36,3 +36,4 @@ func (s *Service) GRPCNetworkEndpoint() string {
 func (s *Service) GRPCNetworkEndpointFor(networkName string) string {
 	return s.NetworkEndpointFor(networkName, s.grpc)
 }
+
