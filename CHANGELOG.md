@@ -12,7 +12,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.06
+## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.19
 
 ### Added
 
