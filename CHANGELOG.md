@@ -16,6 +16,10 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) ui: make old bucket viewer UI work with vanilla Prometheus blocks
 
+### Fixed
+
+- [#3732](https://github.com/thanos-io/thanos/pull/3732) pkg/rules/proxy: fix hotlooping when receiving client errors
+
 ### Changed
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
