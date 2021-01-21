@@ -12,6 +12,10 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+- [#3734](https://github.com/thanos-io/thanos/pull/3734) pkg/rules/proxy: fix hotlooping when receiving client errors
+
 ## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.19
 
 ### Added
