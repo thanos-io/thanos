@@ -25,9 +25,17 @@ staticDir: "static"
 
 permalinks:
   # Generate those for every file.
+  # TODO(bwplotka): Move to mdox + fixes to ensure we don't need to manually do this.
   tip: "/:sections/:filename.md"
-  v0.16: "/:sections/:filename.md"
+  v0.18: "/:sections/:filename.md"
   v0.17: "/:sections/:filename.md"
+  v0.16: "/:sections/:filename.md"
+  v0.15: "/:sections/:filename.md"
+  v0.14: "/:sections/:filename.md"
+  v0.13: "/:sections/:filename.md"
+  v0.12: "/:sections/:filename.md"
+  v0.11: "/:sections/:filename.md"
+  v0.10: "/:sections/:filename.md"
 
 params:
   SlackInvite: "https://slack.cncf.io"

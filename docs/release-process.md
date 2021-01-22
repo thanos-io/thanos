@@ -89,6 +89,8 @@ Release is happening on separate `release-<major>.<minor>` branch.
     1. Note any changes in the changelog
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
 
+1. Update website's [hugo.yaml](../website/hugo.yaml) to have correct links for new release (add `0.y.z: "/:sections/:filename.md"`).
+
 1. Update tutorials:
 
     1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
