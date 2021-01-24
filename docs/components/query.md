@@ -428,6 +428,7 @@ Flags:
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
+      --query.default-step=1s    Set default step for range queries
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

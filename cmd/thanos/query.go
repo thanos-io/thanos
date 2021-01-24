@@ -125,6 +125,9 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
+	defaultRangeQueryStep := extkingpin.ModelDuration(cmd.Flag("query.default-step", "Set default step for range queries").
+		Default("1s"))
+
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -181,6 +184,7 @@ func registerQuery(app *extkingpin.App) {
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
+			time.Duration(*defaultRangeQueryStep),
 			time.Duration(*queryTimeout),
 			*lookbackDelta,
 			*dynamicLookbackDelta,
@@ -231,6 +235,7 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
+	defaultRangeQueryStep time.Duration,
 	queryTimeout time.Duration,
 	lookbackDelta time.Duration,
 	dynamicLookbackDelta bool,
@@ -454,6 +459,7 @@ func runQuery(
 			enableRulePartialResponse,
 			queryReplicaLabels,
 			flagsMap,
+			defaultRangeQueryStep,
 			instantDefaultMaxSourceResolution,
 			defaultMetadataTimeRange,
 			gate.New(
