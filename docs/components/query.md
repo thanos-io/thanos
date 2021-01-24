@@ -8,7 +8,7 @@ menu: components
 
 The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
-In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](/pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](https://github.com/thanos-io/thanos/blob/master/pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
 Querier is fully stateless and horizontally scalable.
 
