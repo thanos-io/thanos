@@ -27,17 +27,18 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
-	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	http_util "github.com/thanos-io/thanos/pkg/http"
@@ -51,7 +52,6 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
-	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -129,6 +129,12 @@ func registerRule(app *extkingpin.App) {
 			"about order.").
 		Default("false").Hidden().Bool()
 
+	remoteWrite := cmd.Flag("remote-write",
+		"If true, the rule will try to remote-write the evaluated time series to the remote-write endpoints.",
+	).Default("false").Bool()
+
+	remoteWriteConfig := extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", false)
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -177,6 +183,11 @@ func registerRule(app *extkingpin.App) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
+		remoteWriteConfigYAML, err := remoteWriteConfig.Content()
+		if err != nil {
+			return err
+		}
+
 		return runRule(g,
 			logger,
 			reg,
@@ -216,6 +227,8 @@ func registerRule(app *extkingpin.App) {
 			*allowOutOfOrderUpload,
 			*httpMethod,
 			getFlagsMap(cmd.Flags()),
+			*remoteWrite,
+			remoteWriteConfigYAML,
 		)
 	})
 }
@@ -306,6 +319,8 @@ func runRule(
 	allowOutOfOrderUpload bool,
 	httpMethod string,
 	flagsMap map[string]string,
+	remoteWrite bool,
+	remoteWriteConfigYAML []byte,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -361,24 +376,41 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, dnsSDInterval)
 	}
 
-	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
-	if err != nil {
-		return errors.Wrap(err, "open TSDB")
-	}
+	var (
+		appendable storage.Appendable
+		queryable  storage.Queryable
+		//tsdbReader store.TSDBReader
+	)
 
-	level.Debug(logger).Log("msg", "removing storage lock file if any")
-	if err := removeLockfileIfAny(logger, dataDir); err != nil {
-		return errors.Wrap(err, "remove storage lock files")
-	}
+	if remoteWrite {
+		rw := &thanosrules.RemoteWrite{}
 
-	{
-		done := make(chan struct{})
-		g.Add(func() error {
-			<-done
-			return db.Close()
-		}, func(error) {
-			close(done)
-		})
+		appendable = rw
+		queryable = rw
+	} else {
+		db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
+		if err != nil {
+			return errors.Wrap(err, "open TSDB")
+		}
+
+		level.Debug(logger).Log("msg", "removing storage lock file if any")
+		if err := removeLockfileIfAny(logger, dataDir); err != nil {
+			return errors.Wrap(err, "remove storage lock files")
+		}
+
+		{
+			done := make(chan struct{})
+			g.Add(func() error {
+				<-done
+				return db.Close()
+			}, func(error) {
+				close(done)
+			})
+		}
+
+		appendable = db
+		queryable = db
+		//tsdbReader = db
 	}
 
 	// Build the Alertmanager clients.
@@ -464,9 +496,9 @@ func runRule(
 			rules.ManagerOptions{
 				NotifyFunc:  notifyFunc,
 				Logger:      logger,
-				Appendable:  db,
+				Appendable:  appendable,
 				ExternalURL: nil,
-				Queryable:   db,
+				Queryable:   queryable,
 				ResendDelay: resendDelay,
 			},
 			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, httpMethod),
@@ -548,7 +580,7 @@ func runRule(
 
 	// Start gRPC server.
 	{
-		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, lset)
+		//tsdbStore := store.NewTSDBStore(logger, tsdbReader, component.Rule, lset)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
@@ -557,7 +589,7 @@ func runRule(
 
 		// TODO: Add rules API implementation when ready.
 		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
+			//grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
