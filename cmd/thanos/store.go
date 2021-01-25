@@ -38,8 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
-const fetcherConcurrency = 32
-
 // registerStore registers a store command.
 func registerStore(app *extkingpin.App) {
 	cmd := app.Command(component.Store.String(), "Store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift, Tencent COS and Aliyun OSS.")
@@ -80,6 +78,9 @@ func registerStore(app *extkingpin.App) {
 
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage.").
 		Default("20").Int()
+
+	blockMetaFetchConcurrency := cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
+		Default("32").Int()
 
 	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
@@ -145,6 +146,7 @@ func registerStore(app *extkingpin.App) {
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
+			*blockMetaFetchConcurrency,
 			&store.FilterConfig{
 				MinTime: *minTime,
 				MaxTime: *maxTime,
@@ -183,6 +185,7 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
+	metaFetchConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
@@ -277,8 +280,8 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, fetcherConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, metaFetchConcurrency)
+	metaFetcher, err := block.NewMetaFetcher(logger, metaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
