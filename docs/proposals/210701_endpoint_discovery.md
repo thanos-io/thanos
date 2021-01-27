@@ -42,7 +42,7 @@ info:
     blah: ...
 ```
 
-Right now this info API would be added to existing components Ruler, Store, Sidecar, Compact, Downsample, Receive. But this would be added in the future for Targets, Examplers, etc.
+Right now this info API would be added to existing components Ruler, Store, Sidecar, Compact, Downsample, Receive. But this would be added in the future for Targets, Exemplers, etc.
 
 The upgrade path would be possible in this case, as it's strictly additive for endpoints, and there will be a migration path to fallback to current discovery methods which could be removed in the future.
 
@@ -59,4 +59,3 @@ Regardless of the solution we will be not removing any flags for a given period 
 1. We would be adding the new info APIs and flags needed for the above solution, so this part would be entirely additive.
 2. Second step would be the integration of this APIs and flags and migration of existing code.
 3. We would not be removing the existing flags (`--store` and `--rule`) for some grace period of time, after that passes we would also have to remove it and any migration code.
-
