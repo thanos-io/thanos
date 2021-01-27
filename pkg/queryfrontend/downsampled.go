@@ -19,10 +19,10 @@ func DownsampledMiddleware(merger queryrange.Merger, registerer prometheus.Regis
 		return downsampled{
 			next:   next,
 			merger: merger,
-			extraCounter: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
+			additionalQueriesCount: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
 				Namespace: "thanos",
 				Name:      "frontend_downsampled_extra_queries_total",
-				Help:      "Total number of extra queries for downsampled data",
+				Help:      "Total number of additional queries for downsampled data",
 			}),
 		}
 	})
@@ -33,7 +33,7 @@ type downsampled struct {
 	merger queryrange.Merger
 
 	// Metrics.
-	extraCounter prometheus.Counter
+	additionalQueriesCount prometheus.Counter
 }
 
 var resolutions = []int64{downsample.ResLevel1, downsample.ResLevel2}
@@ -54,7 +54,7 @@ func (d downsampled) Do(ctx context.Context, req queryrange.Request) (queryrange
 forLoop:
 	for i < len(resolutions) {
 		if i > 0 {
-			d.extraCounter.Inc()
+			d.additionalQueriesCount.Inc()
 		}
 		r := *tqrr
 		resp, err = d.next.Do(ctx, &r)
