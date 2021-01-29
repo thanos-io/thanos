@@ -185,4 +185,5 @@ Flags:
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
+
 ```
