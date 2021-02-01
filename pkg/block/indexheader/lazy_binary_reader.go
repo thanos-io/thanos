@@ -23,6 +23,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+var (
+	errNotIdle = errors.New("the reader is not idle")
+)
+
 // LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
 type LazyBinaryReaderMetrics struct {
 	loadCount         prometheus.Counter
@@ -133,7 +137,8 @@ func (r *LazyBinaryReader) Close() error {
 		defer r.onClosed(r)
 	}
 
-	return r.unload()
+	// Unload without checking if idle.
+	return r.unload(0)
 }
 
 // IndexVersion implements Reader.
@@ -245,17 +250,20 @@ func (r *LazyBinaryReader) load() error {
 	return nil
 }
 
-// unload closes underlying BinaryReader. Calling this function on a already unloaded reader is a no-op.
-func (r *LazyBinaryReader) unload() error {
-	// Always update the used timestamp so that the pool will not call unload() again until the next
-	// idle timeout is hit.
-	r.usedAt.Store(time.Now().UnixNano())
-
+// unload closes underlying BinaryReader if the reader is idle since idleSince time (as unix nano). If idleSince is 0,
+// the check on the last usage is skipped. Calling this function on a already unloaded reader is a no-op.
+func (r *LazyBinaryReader) unload(idleSince int64) error {
 	r.readerMx.Lock()
 	defer r.readerMx.Unlock()
 
+	// Nothing to do if already unloaded.
 	if r.reader == nil {
 		return nil
+	}
+
+	// Do not unload if not idle.
+	if idleSince > 0 && r.usedAt.Load() > idleSince {
+		return errNotIdle
 	}
 
 	r.metrics.unloadCount.Inc()
@@ -268,6 +276,20 @@ func (r *LazyBinaryReader) unload() error {
 	return nil
 }
 
-func (r *LazyBinaryReader) lastUsedAt() int64 {
-	return r.usedAt.Load()
+// isLoaded returns true if the underlying index-header reader is currently loaded.
+func (r *LazyBinaryReader) isLoaded() bool {
+	r.readerMx.RLock()
+	defer r.readerMx.RUnlock()
+
+	return r.reader != nil
+}
+
+// isIdle returns true if the reader is idle since idleSince time (as unix nano).
+func (r *LazyBinaryReader) isIdle(idleSince int64) bool {
+	if r.usedAt.Load() > idleSince {
+		return false
+	}
+
+	// Do not consider it idle if unloaded.
+	return r.isLoaded()
 }

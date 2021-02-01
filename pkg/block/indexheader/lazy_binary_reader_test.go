@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
@@ -167,4 +168,52 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 		testutil.Equals(t, float64(2), promtestutil.ToFloat64(m.unloadCount))
 		testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
 	}
+}
+
+func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir, err := ioutil.TempDir("", "test-indexheader")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	// Create block.
+	blockID, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		{{Name: "a", Value: "1"}},
+		{{Name: "a", Value: "2"}},
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String())))
+
+	m := NewLazyBinaryReaderMetrics(nil)
+	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
+	testutil.Ok(t, err)
+	testutil.Assert(t, r.reader == nil)
+
+	// Should lazy load the index upon first usage.
+	labelNames, err := r.LabelNames()
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string{"a"}, labelNames)
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+
+	// Try to unload but not idle since enough time.
+	testutil.Equals(t, errNotIdle, r.unload(time.Now().Add(-time.Minute).UnixNano()))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
+
+	// Try to unload and idle since enough time.
+	testutil.Ok(t, r.unload(time.Now().UnixNano()))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
+	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.unloadCount))
+	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
 }
