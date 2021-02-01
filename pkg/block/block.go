@@ -103,16 +103,22 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String())); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
+	if err := retry(logger, 3, 5*time.Second, func() (err error) {
+		return bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String()))
+	}); err != nil {
+		return errors.Wrap(err, "upload debug meta file")
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
+	if err := retry(logger, 3, 5*time.Second, func() (err error) {
+		return objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname))
+	}); err != nil {
+		return errors.Wrap(err, "upload chunks")
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
+	if err := retry(logger, 3, 5*time.Second, func() (err error) {
+		return objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename))
+	}); err != nil {
+		return errors.Wrap(err, "upload index")
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
@@ -127,11 +133,19 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	return nil
 }
 
-func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) error {
-	// Cleanup the dir with an uncancelable context.
-	cleanErr := Delete(context.Background(), logger, bkt, id)
-	if cleanErr != nil {
-		return errors.Wrapf(err, "failed to clean block after upload issue. Partial block in system. Err: %s", err.Error())
+func retry(logger log.Logger, attempts int, sleep time.Duration, f func() error) (err error) {
+	for i := 0; ; i++ {
+		err = f()
+		if err == nil {
+			return
+		}
+
+		if i >= (attempts - 1) {
+			break
+		}
+
+		time.Sleep(sleep)
+		level.Warn(logger).Log("msg", "failed to upload, retrying...", "err", err.Error())
 	}
 	return err
 }
