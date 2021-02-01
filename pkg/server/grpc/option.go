@@ -13,9 +13,11 @@ import (
 type options struct {
 	registerServerFuncs []registerServerFunc
 
-	gracePeriod time.Duration
-	listen      string
-	network     string
+	gracePeriod   time.Duration
+	listen        string
+	network       string
+	tokenCapacity int
+	tokenRate     int
 
 	tlsConfig *tls.Config
 
