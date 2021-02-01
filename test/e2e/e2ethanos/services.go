@@ -500,3 +500,39 @@ func NewMemcached(name string) *e2e.ConcreteService {
 
 	return memcached
 }
+
+func NewToolsBucketWeb(sharedDir string, name string, bucketConfig client.BucketConfig, routePrefix, externalPrefix string) (*Service, error) {
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig)
+	}
+
+	args := e2e.BuildArgs(map[string]string{
+		"--debug.name":            fmt.Sprintf("toolsBucketWeb-%s", name),
+		"--http-address":          ":8080",
+		"--log.level":             logLevel,
+		"--objstore.config":       string(bktConfigBytes),
+	})
+	if routePrefix != "" {
+		args = append(args, "--web.route-prefix="+routePrefix)
+	}
+
+	if externalPrefix != "" {
+		args = append(args, "--web.external-prefix="+externalPrefix)
+	}
+
+	args = append([]string{"bucket", "web"}, args...)
+	
+	toolsBucketWeb := NewService(
+		fmt.Sprintf("toolsBucketWeb-%s", name),
+		DefaultImage(),
+		e2e.NewCommand("tools", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+	)
+	toolsBucketWeb.SetUser(strconv.Itoa(os.Getuid()))
+	toolsBucketWeb.SetBackoff(defaultBackoffConfig)
+
+	return toolsBucketWeb, nil
+}
