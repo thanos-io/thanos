@@ -43,7 +43,7 @@ func registerStore(app *extkingpin.App) {
 	cmd := app.Command(component.Store.String(), "Store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift, Tencent COS and Aliyun OSS.")
 
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, tokenRate := extkingpin.RegisterGRPCFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
 		Default("./data").String()
@@ -162,6 +162,7 @@ func registerStore(app *extkingpin.App) {
 			getFlagsMap(cmd.Flags()),
 			*lazyIndexReaderEnabled,
 			*lazyIndexReaderIdleTimeout,
+			*tokenRate,
 		)
 	})
 }
@@ -197,6 +198,7 @@ func runStore(
 	flagsMap map[string]string,
 	lazyIndexReaderEnabled bool,
 	lazyIndexReaderIdleTimeout time.Duration,
+	tokenRate int,
 ) error {
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -365,6 +367,7 @@ func runStore(
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithTokenRate(tokenRate),
 		)
 
 		g.Add(func() error {

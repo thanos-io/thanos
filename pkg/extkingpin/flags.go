@@ -26,6 +26,7 @@ func RegisterGRPCFlags(cmd FlagClause) (
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
+	grpcTokenRate *int,
 ) {
 	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
@@ -34,12 +35,14 @@ func RegisterGRPCFlags(cmd FlagClause) (
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+	grpcTokenRate = cmd.Flag("grpc-server-token-rate", "the rate at which tokens are added to the bucket in seconds. Default 10").Default("10").Int()
 
 	return grpcBindAddr,
 		grpcGracePeriod,
 		grpcTLSSrvCert,
 		grpcTLSSrvKey,
-		grpcTLSSrvClientCA
+		grpcTLSSrvClientCA,
+		grpcTokenRate
 }
 
 // RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.

@@ -43,16 +43,6 @@ type Server struct {
 	opts options
 }
 
-// TODO: make this const as a option to pass
-const (
-	// A token is added to the bucket every 1 / rate second
-	// add 5 token per seconds
-	rate = 5
-	// TODO number are arbitrary
-	// capacity of bucket. allow only 40 requests
-	tokenCapacity = 40
-)
-
 type rateLimiterInterceptor struct {
 	tokenBucket *ratelimit.Bucket
 }
@@ -77,7 +67,9 @@ func (r *rateLimiterInterceptor) Limit() bool {
 func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, opts ...Option) *Server {
 	logger = log.With(logger, "service", "gRPC/server", "component", comp.String())
 	options := options{
-		network: "tcp",
+		network:       "tcp",
+		tokenCapacity: 100,
+		tokenRate:     5,
 	}
 	for _, o := range opts {
 		o.apply(&options)
@@ -100,7 +92,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	limiter := &rateLimiterInterceptor{}
 
 	// init the Tockenbucket
-	limiter.tokenBucket = ratelimit.NewBucket(rate, int64(tokenCapacity))
+	limiter.tokenBucket = ratelimit.NewBucket(options.tokenRate, int64(options.tokenCapacity))
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),

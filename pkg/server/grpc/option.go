@@ -17,7 +17,7 @@ type options struct {
 	listen        string
 	network       string
 	tokenCapacity int
-	tokenRate     int
+	tokenRate     time.Duration
 
 	tlsConfig *tls.Config
 
@@ -80,5 +80,12 @@ func WithNetwork(s string) Option {
 func WithTLSConfig(cfg *tls.Config) Option {
 	return optionFunc(func(o *options) {
 		o.tlsConfig = cfg
+	})
+}
+
+// WithTokenRate sets TLS configuration for gRPC server.
+func WithTokenRate(tokenRate int) Option {
+	return optionFunc(func(o *options) {
+		o.tokenRate = time.Duration(tokenRate)
 	})
 }
