@@ -204,14 +204,14 @@ func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
 
 	// Try to unload but not idle since enough time.
-	testutil.Equals(t, errNotIdle, r.unload(time.Now().Add(-time.Minute).UnixNano()))
+	testutil.Equals(t, errNotIdle, r.unloadIfIdleSince(time.Now().Add(-time.Minute).UnixNano()))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadCount))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
 
 	// Try to unload and idle since enough time.
-	testutil.Ok(t, r.unload(time.Now().UnixNano()))
+	testutil.Ok(t, r.unloadIfIdleSince(time.Now().UnixNano()))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.loadCount))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(m.unloadCount))

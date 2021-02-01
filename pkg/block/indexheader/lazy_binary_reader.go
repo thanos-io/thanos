@@ -138,7 +138,7 @@ func (r *LazyBinaryReader) Close() error {
 	}
 
 	// Unload without checking if idle.
-	return r.unload(0)
+	return r.unloadIfIdleSince(0)
 }
 
 // IndexVersion implements Reader.
@@ -250,9 +250,9 @@ func (r *LazyBinaryReader) load() error {
 	return nil
 }
 
-// unload closes underlying BinaryReader if the reader is idle since idleSince time (as unix nano). If idleSince is 0,
+// unloadIfIdleSince closes underlying BinaryReader if the reader is idle since given time (as unix nano). If idleSince is 0,
 // the check on the last usage is skipped. Calling this function on a already unloaded reader is a no-op.
-func (r *LazyBinaryReader) unload(idleSince int64) error {
+func (r *LazyBinaryReader) unloadIfIdleSince(ts int64) error {
 	r.readerMx.Lock()
 	defer r.readerMx.Unlock()
 
@@ -261,8 +261,8 @@ func (r *LazyBinaryReader) unload(idleSince int64) error {
 		return nil
 	}
 
-	// Do not unload if not idle.
-	if idleSince > 0 && r.usedAt.Load() > idleSince {
+	// Do not unloadIfIdleSince if not idle.
+	if ts > 0 && r.usedAt.Load() > ts {
 		return errNotIdle
 	}
 
@@ -284,9 +284,9 @@ func (r *LazyBinaryReader) isLoaded() bool {
 	return r.reader != nil
 }
 
-// isIdle returns true if the reader is idle since idleSince time (as unix nano).
-func (r *LazyBinaryReader) isIdle(idleSince int64) bool {
-	if r.usedAt.Load() > idleSince {
+// isIdleSince returns true if the reader is idle since given time (as unix nano).
+func (r *LazyBinaryReader) isIdleSince(ts int64) bool {
+	if r.usedAt.Load() > ts {
 		return false
 	}
 
