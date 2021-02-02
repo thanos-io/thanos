@@ -276,20 +276,16 @@ func (r *LazyBinaryReader) unloadIfIdleSince(ts int64) error {
 	return nil
 }
 
-// isLoaded returns true if the underlying index-header reader is currently loaded.
-func (r *LazyBinaryReader) isLoaded() bool {
-	r.readerMx.RLock()
-	defer r.readerMx.RUnlock()
-
-	return r.reader != nil
-}
-
 // isIdleSince returns true if the reader is idle since given time (as unix nano).
 func (r *LazyBinaryReader) isIdleSince(ts int64) bool {
 	if r.usedAt.Load() > ts {
 		return false
 	}
 
-	// Do not consider it idle if unloaded.
-	return r.isLoaded()
+	// A reader can be considered idle only if it's loaded.
+	r.readerMx.RLock()
+	loaded := r.reader != nil
+	r.readerMx.RUnlock()
+
+	return loaded
 }

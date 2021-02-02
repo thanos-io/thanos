@@ -99,10 +99,10 @@ func (p *ReaderPool) Close() {
 }
 
 func (p *ReaderPool) closeIdleReaders() {
-	idleSince := time.Now().Add(-p.lazyReaderIdleTimeout).UnixNano()
+	idleTimeoutAgo := time.Now().Add(-p.lazyReaderIdleTimeout).UnixNano()
 
-	for _, r := range p.getIdleReadersSince(idleSince) {
-		if err := r.unloadIfIdleSince(idleSince); err != nil && !errors.Is(err, errNotIdle) {
+	for _, r := range p.getIdleReadersSince(idleTimeoutAgo) {
+		if err := r.unloadIfIdleSince(idleTimeoutAgo); err != nil && !errors.Is(err, errNotIdle) {
 			level.Warn(p.logger).Log("msg", "failed to close idle index-header reader", "err", err)
 		}
 	}
