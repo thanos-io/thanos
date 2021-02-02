@@ -508,10 +508,10 @@ func NewToolsBucketWeb(sharedDir string, name string, bucketConfig client.Bucket
 	}
 
 	args := e2e.BuildArgs(map[string]string{
-		"--debug.name":            fmt.Sprintf("toolsBucketWeb-%s", name),
-		"--http-address":          ":8080",
-		"--log.level":             logLevel,
-		"--objstore.config":       string(bktConfigBytes),
+		"--debug.name":      fmt.Sprintf("toolsBucketWeb-%s", name),
+		"--http-address":    ":8080",
+		"--log.level":       logLevel,
+		"--objstore.config": string(bktConfigBytes),
 	})
 	if routePrefix != "" {
 		args = append(args, "--web.route-prefix="+routePrefix)
@@ -522,7 +522,7 @@ func NewToolsBucketWeb(sharedDir string, name string, bucketConfig client.Bucket
 	}
 
 	args = append([]string{"bucket", "web"}, args...)
-	
+
 	toolsBucketWeb := NewService(
 		fmt.Sprintf("toolsBucketWeb-%s", name),
 		DefaultImage(),

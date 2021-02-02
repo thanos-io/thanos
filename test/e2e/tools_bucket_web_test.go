@@ -6,10 +6,12 @@ package e2e_test
 import (
 	"net/http/httptest"
 	"testing"
+
 	"github.com/cortexproject/cortex/integration/e2e"
+	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
+
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
-	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -34,8 +36,8 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 			Endpoint:  m.NetworkHTTPEndpoint(),
 			Insecure:  true,
 		},
-	}	
-	
+	}
+
 	b, err := e2ethanos.NewToolsBucketWeb(
 		s.SharedDir(), "1",
 		svcConfig,
@@ -44,7 +46,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(b))
-	
+
 	checkNetworkRequests(t, "http://"+b.HTTPEndpoint()+"/"+externalPrefix+"/blocks")
 }
 
@@ -69,8 +71,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 			Endpoint:  m.NetworkHTTPEndpoint(),
 			Insecure:  true,
 		},
-	}	
-
+	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
 		s.SharedDir(), "1",
@@ -100,7 +101,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	routePrefix := "test"
 	const bucket = "toolsBucketWeb_test"
 	m := e2edb.NewMinio(8080, bucket)
-	testutil.Ok(t, s.StartAndWaitReady(m))	
+	testutil.Ok(t, s.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type: client.S3,
@@ -111,8 +112,8 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 			Endpoint:  m.NetworkHTTPEndpoint(),
 			Insecure:  true,
 		},
-	}		
-	
+	}
+
 	b, err := e2ethanos.NewToolsBucketWeb(
 		s.SharedDir(), "1",
 		svcConfig,
