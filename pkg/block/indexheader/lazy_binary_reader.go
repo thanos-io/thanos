@@ -23,6 +23,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
+var (
+	errNotIdle = errors.New("the reader is not idle")
+)
+
 // LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
 type LazyBinaryReaderMetrics struct {
 	loadCount         prometheus.Counter
@@ -133,7 +137,8 @@ func (r *LazyBinaryReader) Close() error {
 		defer r.onClosed(r)
 	}
 
-	return r.unload()
+	// Unload without checking if idle.
+	return r.unloadIfIdleSince(0)
 }
 
 // IndexVersion implements Reader.
@@ -245,17 +250,20 @@ func (r *LazyBinaryReader) load() error {
 	return nil
 }
 
-// unload closes underlying BinaryReader. Calling this function on a already unloaded reader is a no-op.
-func (r *LazyBinaryReader) unload() error {
-	// Always update the used timestamp so that the pool will not call unload() again until the next
-	// idle timeout is hit.
-	r.usedAt.Store(time.Now().UnixNano())
-
+// unloadIfIdleSince closes underlying BinaryReader if the reader is idle since given time (as unix nano). If idleSince is 0,
+// the check on the last usage is skipped. Calling this function on a already unloaded reader is a no-op.
+func (r *LazyBinaryReader) unloadIfIdleSince(ts int64) error {
 	r.readerMx.Lock()
 	defer r.readerMx.Unlock()
 
+	// Nothing to do if already unloaded.
 	if r.reader == nil {
 		return nil
+	}
+
+	// Do not unloadIfIdleSince if not idle.
+	if ts > 0 && r.usedAt.Load() > ts {
+		return errNotIdle
 	}
 
 	r.metrics.unloadCount.Inc()
@@ -268,6 +276,16 @@ func (r *LazyBinaryReader) unload() error {
 	return nil
 }
 
-func (r *LazyBinaryReader) lastUsedAt() int64 {
-	return r.usedAt.Load()
+// isIdleSince returns true if the reader is idle since given time (as unix nano).
+func (r *LazyBinaryReader) isIdleSince(ts int64) bool {
+	if r.usedAt.Load() > ts {
+		return false
+	}
+
+	// A reader can be considered idle only if it's loaded.
+	r.readerMx.RLock()
+	loaded := r.reader != nil
+	r.readerMx.RUnlock()
+
+	return loaded
 }
