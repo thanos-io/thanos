@@ -383,7 +383,14 @@ func runRule(
 	)
 
 	if remoteWrite {
-		rw := &thanosrules.RemoteWrite{}
+		remoteWriteConfig, err := thanosrules.LoadRemoteWriteConfig(remoteWriteConfigYAML)
+		if err != nil {
+			return err
+		}
+
+		rw := &thanosrules.RemoteWrite{
+			RemoteWriteConfig: remoteWriteConfig,
+		}
 
 		appendable = rw
 		queryable = rw

@@ -78,6 +78,12 @@ cat >data/rules.yml <<-EOF
 	      expr: sum(go_threads) by (job)
 EOF
 
+# Setup optional remote-write config for Thanos Ruler.
+cat >data/rule-remote-write.yaml <<-EOF
+name: thanos-receivers
+url: http://127.0.0.1:10908/api/v1/receive
+EOF
+
 STORES=""
 
 # Start three Prometheus servers monitoring themselves.

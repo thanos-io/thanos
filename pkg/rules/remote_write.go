@@ -12,12 +12,30 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
+	"gopkg.in/yaml.v2"
 )
 
-type RemoteWrite struct{}
+type RemoteWriteConfig struct {
+	// The URL of the endpoint to send samples to.
+	URL string `json:"url"`
+	// The name of the remote write queue, must be unique if specified. The
+	// name is used in metrics and logging in order to differentiate queues.
+	// Only valid in Prometheus versions 2.15.0 and newer.
+	Name string `json:"name,omitempty"`
+}
+
+func LoadRemoteWriteConfig(content []byte) (RemoteWriteConfig, error) {
+	var config RemoteWriteConfig
+	err := yaml.UnmarshalStrict(content, &config)
+	return config, err
+}
+
+type RemoteWrite struct {
+	RemoteWriteConfig RemoteWriteConfig
+}
 
 func (r *RemoteWrite) Appender(ctx context.Context) storage.Appender {
-	return &RemoteWriteAppender{mu: &sync.Mutex{}}
+	return &RemoteWriteAppender{mu: &sync.Mutex{}, config: r.RemoteWriteConfig}
 }
 
 func (r *RemoteWrite) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
@@ -25,8 +43,9 @@ func (r *RemoteWrite) Querier(ctx context.Context, mint, maxt int64) (storage.Qu
 }
 
 type RemoteWriteAppender struct {
-	mu  *sync.Mutex
-	req prompb.WriteRequest
+	config RemoteWriteConfig
+	mu     *sync.Mutex
+	req    prompb.WriteRequest
 }
 
 func (r *RemoteWriteAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
@@ -54,7 +73,6 @@ func (r *RemoteWriteAppender) Add(l labels.Labels, t int64, v float64) (uint64, 
 }
 
 func (r *RemoteWriteAppender) AddFast(ref uint64, t int64, v float64) error {
-	fmt.Printf("Appender AddFast: %d, %d, %2.f\n", ref, t, v)
 	return nil
 }
 
@@ -66,7 +84,7 @@ func (r *RemoteWriteAppender) Commit() error {
 
 	payloadCompressed := snappy.Encode(nil, payload)
 
-	req, err := http.NewRequest(http.MethodPost, "http://localhost:10908/api/v1/receive", bytes.NewBuffer(payloadCompressed))
+	req, err := http.NewRequest(http.MethodPost, r.config.URL, bytes.NewBuffer(payloadCompressed))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP remote-write request: %w", err)
 	}
@@ -85,28 +103,23 @@ func (r *RemoteWriteAppender) Commit() error {
 }
 
 func (r *RemoteWriteAppender) Rollback() error {
-	fmt.Println("Appender Rollback")
 	return nil
 }
 
 type RemoteWriteQueryable struct{}
 
 func (r *RemoteWriteQueryable) LabelValues(name string) ([]string, storage.Warnings, error) {
-	fmt.Printf("Queryable LabelValues: %s\n", name)
 	return nil, nil, nil
 }
 
 func (r *RemoteWriteQueryable) LabelNames() ([]string, storage.Warnings, error) {
-	fmt.Printf("Queryable LabelNames\n")
 	return nil, nil, nil
 }
 
 func (r *RemoteWriteQueryable) Close() error {
-	fmt.Println("Queryable Close")
 	return nil
 }
 
 func (r *RemoteWriteQueryable) Select(sortSeries bool, hints *storage.SelectHints, matchers ...*labels.Matcher) storage.SeriesSet {
-	fmt.Printf("Queryable Select: %t, %v, %v\n", sortSeries, hints, matchers)
 	return nil
 }
