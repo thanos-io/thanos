@@ -88,7 +88,9 @@ func TestReceive(t *testing.T) {
 		// Create a router.
 		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3, route1))
+		 x:=s.StartAndWaitReady(r1, r2, r3, route1)
+		 println(x)
+		 time.Sleep(5*time.Minute)
 
 		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(route1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
@@ -161,7 +163,7 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Create a router.
-		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 3, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3, route1))
 
@@ -232,7 +234,7 @@ func TestReceive(t *testing.T) {
 
 
 		// Create a router.
-		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		route1, err := e2ethanos.NewRouter(s.SharedDir(), s.NetworkName(), "1", 3, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(r1, r2, route1))
 
@@ -342,3 +344,4 @@ func TestReceive(t *testing.T) {
 		})
 	})
 }
+

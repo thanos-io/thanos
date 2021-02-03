@@ -208,12 +208,11 @@ func runReceive(
 	)
 	g.Add(func() error {
 		statusProber.Healthy()
-
-		return srv.ListenAndServe()
+		err:=srv.ListenAndServe()
+		return err
 	}, func(err error) {
 		statusProber.NotReady(err)
 		defer statusProber.NotHealthy(err)
-
 		srv.Shutdown(err)
 	})
 
@@ -248,6 +247,7 @@ func runReceive(
 				)
 
 			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", grpcBindAddr)
+			statusProber.Ready()
 			if err := s.ListenAndServe(); err != nil {
 				return errors.Wrap(err, "serve gRPC")
 			}
@@ -256,8 +256,9 @@ func runReceive(
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
+			s.Shutdown(err)
 			return nil
-		}, func(error) {})
+		}, func(err error) {s.Shutdown(err)})
 	}
 
 
