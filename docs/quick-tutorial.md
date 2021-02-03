@@ -7,7 +7,7 @@ weight: 1
 
 # Quick Tutorial
 
-Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
+Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos)
 We will be progressively updating our Katacoda Course with more scenarios.
 
 On top of this feel free to go through our tutorial presented here:
