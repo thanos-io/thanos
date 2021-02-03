@@ -28,7 +28,7 @@ func TestHash(t *testing.T) {
 		Labels: []labelpb.ZLabel{ts.Labels[1], ts.Labels[0]},
 	}
 
-	if hash("", ts) != hash("", ts2) {
+	if hash("", ts.Labels) != hash("", ts2.Labels) {
 		t.Errorf("expected hashes to be independent of label order")
 	}
 }
@@ -155,7 +155,7 @@ func TestHashringGet(t *testing.T) {
 		},
 	} {
 		hs := newMultiHashring(tc.cfg)
-		h, err := hs.Get(tc.tenant, ts)
+		h, err := hs.Get(tc.tenant, ts.Labels)
 		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)

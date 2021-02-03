@@ -28,11 +28,11 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/errutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -52,16 +52,6 @@ const (
 	labelSuccess = "success"
 	labelError   = "error"
 )
-
-var (
-	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr = errors.New("conflict")
-
-	errBadReplica  = errors.New("replica count exceeds replication factor")
-	errNotReady    = errors.New("target not ready")
-	errUnavailable = errors.New("target not available")
-)
-
 
 // replica encapsulates the replica number of a request and if the request is
 // already replicated.
@@ -85,15 +75,15 @@ type Options struct {
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	logger   log.Logger
-	router   *route.Router
-	options  *Options
-	listener net.Listener
-	mtx        sync.RWMutex
-	hashring   Hashring
-	peers      *peerGroup
-	expBackoff backoff.Backoff
-	peerStates map[string]*retryState
+	logger            log.Logger
+	router            *route.Router
+	options           *Options
+	listener          net.Listener
+	mtx               sync.RWMutex
+	hashring          Hashring
+	peers             *peerGroup
+	expBackoff        backoff.Backoff
+	peerStates        map[string]*retryState
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
@@ -241,20 +231,10 @@ func (h *Handler) Run() error {
 	return httpSrv.Serve(h.listener)
 }
 
-
 func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
-
 	// Forward any time series as necessary.
 	// Time series will be replicated as necessary.
-	if err := h.forward(ctx, tenant, wreq); err != nil {
-		if countCause(err, isConflict) > 0 {
-			return conflictErr
-		}
-		return err
-	}
-
-
-	return nil
+	return h.forward(ctx, tenant, wreq)
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -280,22 +260,23 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
-
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if len(tenant) == 0 {
 		tenant = h.options.DefaultTenantID
 	}
 
 	err = h.handleRequest(ctx, tenant, &wreq)
-	switch err {
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	}
+	switch determineWriteErrorCause(err, 1) {
 	case nil:
 		return
 	case errNotReady:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errUnavailable:
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case conflictErr:
+	case errConflict:
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -303,7 +284,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		level.Error(h.logger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
 }
 
 // forward accepts a write request, batches its time series by
@@ -336,7 +316,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 	// to every other node in the hashring, rather than
 	// one request per time series.
 	for i := range wreq.Timeseries {
-		endpoint, err := h.hashring.Get(tenant, &wreq.Timeseries[i])
+		endpoint, err := h.hashring.Get(tenant, wreq.Timeseries[i].Labels)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -345,7 +325,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 			wreqs[endpoint] = &prompb.WriteRequest{}
 			replicas[endpoint] = replica{
 				replicated: false,
-				n: 0,
+				n:          0,
 			}
 		}
 		wr := wreqs[endpoint]
@@ -364,7 +344,7 @@ func (h *Handler) writeQuorum() int {
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
 func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
-	var errs terrors.MultiError
+	var errs errutil.MultiError
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
 	defer func() {
@@ -400,7 +380,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					ec <- errors.Wrapf(err, "replicate write request, endpoint %v", endpoint)
+					ec <- errors.Wrapf(err, "replicate write request for endpoint %v", endpoint)
 					return
 				}
 
@@ -410,8 +390,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 			continue
 		}
-
-
 
 		// Make a request to the specified endpoint.
 		go func(endpoint string) {
@@ -543,7 +521,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 
 	for i = 0; i < h.options.ReplicationFactor; i++ {
-		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
+		endpoint, err := h.hashring.GetN(tenant, wreq.Timeseries[0].Labels, i)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -556,38 +534,10 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		if countCause(err, isNotReady) >= quorum {
-			return errors.Wrap(errNotReady, "replicate: quorum not reached")
-		}
-		if countCause(err, isConflict) >= quorum {
-			return errors.Wrap(conflictErr, "replicate: quorum not reached")
-		}
-		if countCause(err, isUnavailable) >= quorum {
-			return errors.Wrap(errUnavailable, "replicate: quorum not reached")
-		}
-		return errors.Wrap(err, "unexpected error, before quorum is reached")
+		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 
 	return nil
-}
-
-
-// countCause counts the number of errors within the given error
-// whose causes satisfy the given function.
-// countCause will inspect the error's cause or, if the error is a MultiError,
-// the cause of each contained error but will not traverse any deeper.
-func countCause(err error, f func(error) bool) int {
-	errs, ok := err.(terrors.MultiError)
-	if !ok {
-		errs = []error{err}
-	}
-	var n int
-	for i := range errs {
-		if f(errors.Cause(errs[i])) {
-			n++
-		}
-	}
-	return n
 }
 
 // isConflict returns whether or not the given error represents a conflict.
@@ -595,7 +545,7 @@ func isConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == conflictErr ||
+	return err == errConflict ||
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
