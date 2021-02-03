@@ -20,6 +20,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
+- [#3539](https://github.com/thanos-io/thanos/pull/3539) Query: Queries timeout based on lower value out of global Query timeout and per-request timeout specified as part of the query API.
 
 ## [v0.18.0](https://github.com/thanos-io/thanos/releases) - Release in progress
 
