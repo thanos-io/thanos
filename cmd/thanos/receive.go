@@ -252,13 +252,9 @@ func runReceive(
 				return errors.Wrap(err, "serve gRPC")
 			}
 			return nil
-		}, func(error) {})
+		}, func(err error) {s.Shutdown(err)})
 		// We need to be able to start and stop the gRPC server
 		// whenever the DB changes, thus it needs its own run group.
-		g.Add(func() error {
-			s.Shutdown(err)
-			return nil
-		}, func(err error) {s.Shutdown(err)})
 	}
 
 
@@ -366,4 +362,5 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 
 	return nil
 }
+
 
