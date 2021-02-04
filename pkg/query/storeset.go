@@ -51,7 +51,7 @@ type RuleSpec interface {
 }
 
 type MetadataSpec interface {
-	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+	// Addr returns MetadataAPI Address for the metadata spec. It is used as its ID.
 	Addr() string
 }
 
@@ -586,7 +586,7 @@ func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 	return rules
 }
 
-// GetRulesClients returns a list of all active rules clients.
+// GetMetadataClients returns a list of all active metadata clients.
 func (s *StoreSet) GetMetadataClients() []metadatapb.MetadataClient {
 	s.storesMtx.RLock()
 	defer s.storesMtx.RUnlock()

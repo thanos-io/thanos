@@ -152,7 +152,7 @@ func registerQuery(app *extkingpin.App) {
 		}
 
 		if dup := firstDuplicate(*metadataEndpoints); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --target flag.", dup)
+			return errors.Errorf("Address %s is duplicated for --metadata flag.", dup)
 		}
 
 		var fileSD *file.Discovery
@@ -438,7 +438,7 @@ func runQuery(
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
 				}
 				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs); err != nil {
-					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
+					level.Error(logger).Log("msg", "failed to resolve addresses for metadataAPIs", "err", err)
 				}
 				return nil
 			})
