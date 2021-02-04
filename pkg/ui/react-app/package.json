@@ -45,7 +45,8 @@
     "tempusdominus-bootstrap-4": "^5.1.2",
     "tempusdominus-core": "^5.0.3",
     "typescript": "^3.3.3",
-    "use-query-params": "^1.1.6"
+    "use-query-params": "^1.1.6",
+    "y18n": "4.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
