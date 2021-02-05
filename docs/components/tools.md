@@ -245,7 +245,7 @@ Flags:
                                 thanos UI to be served on a sub-path. Defaults
                                 to the value of --web.external-prefix. This
                                 option is analogous to --web.route-prefix of
-                                Prometheus.                                
+                                Prometheus.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the

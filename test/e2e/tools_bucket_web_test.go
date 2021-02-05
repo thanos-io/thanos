@@ -23,7 +23,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	externalPrefix := "thanos"
+	externalPrefix := "testThanos"
 	m := e2edb.NewMinio(8080, "thanos")
 	testutil.Ok(t, s.StartAndWaitReady(m))
 
@@ -57,7 +57,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	externalPrefix := "thanos"
+	externalPrefix := "testThanos"
 	const bucket = "toolsBucketWeb_test"
 	m := e2edb.NewMinio(8080, bucket)
 	testutil.Ok(t, s.StartAndWaitReady(m))
@@ -97,7 +97,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	externalPrefix := "thanos"
+	externalPrefix := "testThanos"
 	routePrefix := "test"
 	const bucket = "toolsBucketWeb_test"
 	m := e2edb.NewMinio(8080, bucket)
