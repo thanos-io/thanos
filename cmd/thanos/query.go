@@ -47,16 +47,28 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+type queryConfig struct {
+	secure bool
+	cert   string
+}
+
+func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) {
+	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&qc.secure)
+	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&qc.cert)
+
+}
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
+	conf := &queryConfig{}
+	conf.registerFlag(cmd)
+
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
-	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
-	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
@@ -169,8 +181,6 @@ func registerQuery(app *extkingpin.App) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
-			*secure,
-			*cert,
 			*key,
 			*caCert,
 			*serverName,
@@ -202,6 +212,7 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			component.Query,
+			*conf,
 		)
 	})
 }
@@ -219,8 +230,6 @@ func runQuery(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
-	secure bool,
-	cert string,
 	key string,
 	caCert string,
 	serverName string,
@@ -252,6 +261,8 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	comp component.Component,
+	conf queryConfig,
+
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -259,7 +270,7 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, conf.secure, conf.cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
