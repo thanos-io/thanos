@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -48,14 +49,34 @@ import (
 )
 
 type queryConfig struct {
-	secure bool
-	cert   string
+	secure              bool
+	cert                string
+	httpBindAddr        *string
+	httpGracePeriod     *model.Duration
+	grpcBindAddr        *string
+	grpcGracePeriod     *model.Duration
+	grpcCert            *string
+	grpcKey             *string
+	grpcClientCA        *string
+	key                 string
+	caCert              string
+	serverName          string
+	webRoutePrefix      string
+	webExternalPrefix   string
+	webPrefixHeaderName string
 }
 
 func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&qc.secure)
 	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&qc.cert)
-
+	qc.httpBindAddr, qc.httpGracePeriod = extkingpin.RegisterHTTPFlags(cmd)
+	qc.grpcBindAddr, qc.grpcGracePeriod, qc.grpcCert, qc.grpcKey, qc.grpcClientCA = extkingpin.RegisterGRPCFlags(cmd)
+	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").StringVar(&qc.key)
+	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&qc.caCert)
+	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&qc.serverName)
+	cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").StringVar(&qc.webRoutePrefix)
+	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").StringVar(&qc.webExternalPrefix)
+	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").StringVar(&qc.webPrefixHeaderName)
 }
 
 // registerQuery registers a query command.
@@ -65,17 +86,6 @@ func registerQuery(app *extkingpin.App) {
 
 	conf := &queryConfig{}
 	conf.registerFlag(cmd)
-
-	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
-
-	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
-	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
-	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
-
-	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
-	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
-	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
 	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
 
@@ -162,11 +172,11 @@ func registerQuery(app *extkingpin.App) {
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
-		if *webRoutePrefix == "" {
-			*webRoutePrefix = *webExternalPrefix
+		if conf.webRoutePrefix == "" {
+			conf.webRoutePrefix = conf.webExternalPrefix
 		}
 
-		if *webRoutePrefix != *webExternalPrefix {
+		if conf.webRoutePrefix != conf.webExternalPrefix {
 			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
 		}
 
@@ -176,19 +186,6 @@ func registerQuery(app *extkingpin.App) {
 			reg,
 			tracer,
 			*requestLoggingDecision,
-			*grpcBindAddr,
-			time.Duration(*grpcGracePeriod),
-			*grpcCert,
-			*grpcKey,
-			*grpcClientCA,
-			*key,
-			*caCert,
-			*serverName,
-			*httpBindAddr,
-			time.Duration(*httpGracePeriod),
-			*webRoutePrefix,
-			*webExternalPrefix,
-			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
 			time.Duration(*queryTimeout),
@@ -225,19 +222,6 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	requestLoggingDecision string,
-	grpcBindAddr string,
-	grpcGracePeriod time.Duration,
-	grpcCert string,
-	grpcKey string,
-	grpcClientCA string,
-	key string,
-	caCert string,
-	serverName string,
-	httpBindAddr string,
-	httpGracePeriod time.Duration,
-	webRoutePrefix string,
-	webExternalPrefix string,
-	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
 	queryTimeout time.Duration,
@@ -270,7 +254,7 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, conf.secure, conf.cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, conf.secure, conf.cert, conf.key, conf.caCert, conf.serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
@@ -430,17 +414,17 @@ func runQuery(
 		router := route.New()
 
 		// RoutePrefix must always start with '/'.
-		webRoutePrefix = "/" + strings.Trim(webRoutePrefix, "/")
+		conf.webRoutePrefix = "/" + strings.Trim(conf.webRoutePrefix, "/")
 
 		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "/" {
+		if conf.webRoutePrefix != "/" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix+"/graph", http.StatusFound)
+				http.Redirect(w, r, conf.webRoutePrefix+"/graph", http.StatusFound)
 			})
-			router.Get(webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix+"/graph", http.StatusFound)
+			router.Get(conf.webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, conf.webRoutePrefix+"/graph", http.StatusFound)
 			})
-			router = router.WithPrefix(webRoutePrefix)
+			router = router.WithPrefix(conf.webRoutePrefix)
 		}
 
 		// Configure Request Logging for HTTP calls.
@@ -451,7 +435,7 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, stores, conf.webExternalPrefix, conf.webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewQueryAPI(
 			logger,
@@ -476,8 +460,8 @@ func runQuery(
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
-			httpserver.WithListen(httpBindAddr),
-			httpserver.WithGracePeriod(httpGracePeriod),
+			httpserver.WithListen(*conf.httpBindAddr),
+			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
 		)
 		srv.Handle("/", router)
 
@@ -494,7 +478,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -502,8 +486,8 @@ func runQuery(
 		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
-			grpcserver.WithListen(grpcBindAddr),
-			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithListen(*conf.grpcBindAddr),
+			grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 
