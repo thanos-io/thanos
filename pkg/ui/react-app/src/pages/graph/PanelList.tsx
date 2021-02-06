@@ -141,10 +141,12 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
-      `${pathPrefix}/api/v1/stores`
-      );
-  const { response: flagsRes, error: flagsErr, isLoading:flagsLoading } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
-  let defaultStep = flagsRes.data ? flagsRes.data['query.default-step'] : "";
+    `${pathPrefix}/api/v1/stores`
+  );
+  const { response: flagsRes, error: flagsErr, isLoading: flagsLoading } = useFetch<FlagMap>(
+    `${pathPrefix}/api/v1/status/flags`
+  );
+  const defaultStep = flagsRes.data ? flagsRes.data['query.default-step'] : '';
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
