@@ -39,7 +39,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
-		s.SharedDir(), "1",
+		"1",
 		svcConfig,
 		"",
 		externalPrefix,
@@ -74,7 +74,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
-		s.SharedDir(), "1",
+		"1",
 		svcConfig,
 		"",
 		externalPrefix,
@@ -115,9 +115,9 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
-		s.SharedDir(), "1",
+		"1",
 		svcConfig,
-		"",
+		routePrefix,
 		externalPrefix,
 	)
 	testutil.Ok(t, err)
