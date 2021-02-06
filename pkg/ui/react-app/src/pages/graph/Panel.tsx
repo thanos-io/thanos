@@ -15,6 +15,7 @@ import QueryStatsView, { QueryStats } from './QueryStatsView';
 import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
+import { parseRange } from '../../utils/index';
 
 interface PanelProps {
   id: string;
@@ -27,6 +28,7 @@ interface PanelProps {
   onExecuteQuery: (query: string) => void;
   stores: Store[];
   enableAutocomplete: boolean;
+  defaultStep: string;
 }
 
 interface PanelState {
@@ -140,7 +142,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     const endTime = this.getEndTime().valueOf() / 1000; // TODO: shouldn't valueof only work when it's a moment?
     const startTime = endTime - this.props.options.range;
-    const resolution = this.props.options.resolution || Math.max(Math.floor(this.props.options.range / 250), 1);
+    const resolution =
+      this.props.options.resolution ||
+      Math.max(Math.floor(this.props.options.range / 250), parseRange(this.props.defaultStep) as number);
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
       dedup: this.props.options.useDeduplication.toString(),
