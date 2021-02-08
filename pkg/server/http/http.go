@@ -39,6 +39,10 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	}
 
 	mux := http.NewServeMux()
+	if options.mux != nil {
+		mux = options.mux
+	}
+
 	registerMetrics(mux, reg)
 	registerProbes(mux, prober, logger)
 	registerProfiler(mux)
