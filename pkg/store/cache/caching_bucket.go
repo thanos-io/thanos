@@ -104,7 +104,7 @@ func NewCachingBucket(b objstore.Bucket, cfg *CachingBucketConfig, logger log.Lo
 }
 
 func (cb *CachingBucket) Name() string {
-	return "caching: " + cb.Bucket.Name()
+	return cb.Bucket.Name()
 }
 
 func (cb *CachingBucket) WithExpectedErrs(expectedFunc objstore.IsOpFailureExpectedFunc) objstore.Bucket {

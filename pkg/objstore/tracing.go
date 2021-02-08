@@ -90,7 +90,7 @@ func (t TracingBucket) Delete(ctx context.Context, name string) (err error) {
 }
 
 func (t TracingBucket) Name() string {
-	return "tracing: " + t.bkt.Name()
+	return t.bkt.Name()
 }
 
 func (t TracingBucket) Close() error {
