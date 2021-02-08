@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -181,13 +182,30 @@ func runCompact(
 		return err
 	}
 
+	backoffConfContentYaml, err := conf.backoff.Content()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if len(backoffConfContentYaml) > 0 {
+		b, err := runutil.NewBackoff(ctx, logger, backoffConfContentYaml)
+		if err != nil {
+			cancel()
+			return errors.Wrap(err, "create backoff")
+		}
+		bkt = objstore.NewBucketWithBackoff(bkt, b, logger, reg)
+	}
+
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
 	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
 	if err != nil {
+		cancel()
 		return err
 	}
 
@@ -206,6 +224,7 @@ func runCompact(
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
@@ -259,12 +278,14 @@ func runCompact(
 			garbageCollectedBlocks,
 			conf.blockSyncConcurrency)
 		if err != nil {
+			cancel()
 			return errors.Wrap(err, "create syncer")
 		}
 	}
 
 	levels, err := compactions.levels(conf.maxCompactionLevel)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "get compaction levels")
 	}
 
@@ -272,7 +293,6 @@ func runCompact(
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
@@ -517,6 +537,7 @@ type compactConfig struct {
 	http                                           httpConfig
 	dataDir                                        string
 	objStore                                       extflag.PathOrContent
+	backoff                                        extflag.PathOrContent
 	consistencyDelay                               time.Duration
 	retentionRaw, retentionFiveMin, retentionOneHr model.Duration
 	wait                                           bool
@@ -551,6 +572,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("./data").StringVar(&cc.dataDir)
 
 	cc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
+	cc.backoff = *extkingpin.RegisterCommonBackoffFlags(cmd, "", false)
 
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&cc.consistencyDelay)

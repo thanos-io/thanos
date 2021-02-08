@@ -58,6 +58,14 @@ func RegisterCommonObjStoreFlags(cmd FlagClause, suffix string, required bool, e
 	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("objstore%s.config", suffix), help, required)
 }
 
+// RegisterCommonBackoffFlags register flags to specify backoff retry configuration.
+func RegisterCommonBackoffFlags(cmd FlagClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
+	help := fmt.Sprintf("YAML file that contains backoff%s configuration.", suffix)
+	help = strings.Join(append([]string{help}, extraDesc...), " ")
+
+	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("backoff%s.config", suffix), help, required)
+}
+
 // RegisterCommonTracingFlags registers flags to pass a tracing configuration to be used with OpenTracing.
 func RegisterCommonTracingFlags(app FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(

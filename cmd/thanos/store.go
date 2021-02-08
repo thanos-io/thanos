@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
-
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -27,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -72,6 +72,7 @@ func registerStore(app *extkingpin.App) {
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
 
 	objStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
+	backoffConfig := extkingpin.RegisterCommonBackoffFlags(cmd, "", false)
 
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
@@ -129,6 +130,7 @@ func registerStore(app *extkingpin.App) {
 			tracer,
 			indexCacheConfig,
 			objStoreConfig,
+			backoffConfig,
 			*dataDir,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
@@ -174,6 +176,7 @@ func runStore(
 	tracer opentracing.Tracer,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
+	backoffConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
@@ -243,18 +246,36 @@ func runStore(
 		}
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	backoffConfigYaml, err := backoffConfig.Content()
+	if err != nil {
+		cancel()
+		return errors.Wrap(err, "get backoff configuration")
+	}
+	if len(backoffConfigYaml) > 0 {
+		b, err := runutil.NewBackoff(ctx, logger, backoffConfigYaml)
+		if err != nil {
+			cancel()
+			return errors.Wrap(err, "create backoff")
+		}
+		bkt = objstore.NewBucketWithBackoff(bkt, b, logger, reg)
+	}
+
 	relabelContentYaml, err := selectorRelabelConf.Content()
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
 	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
 	if err != nil {
+		cancel()
 		return err
 	}
 
 	indexCacheContentYaml, err := indexCacheConfig.Content()
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "get content of index cache configuration")
 	}
 
@@ -277,6 +298,7 @@ func runStore(
 		})
 	}
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "create index cache")
 	}
 
@@ -290,11 +312,13 @@ func runStore(
 			block.NewDeduplicateFilter(),
 		}, nil)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "meta fetcher")
 	}
 
 	// Limit the concurrency on queries against the Thanos store.
 	if maxConcurrency < 0 {
+		cancel()
 		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrency)
 	}
 
@@ -321,13 +345,13 @@ func runStore(
 		lazyIndexReaderIdleTimeout,
 	)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "create object storage store")
 	}
 
 	// bucketStoreReady signals when bucket store is ready.
 	bucketStoreReady := make(chan struct{})
 	{
-		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 

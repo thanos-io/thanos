@@ -28,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -239,6 +240,21 @@ func runSidecar(
 			return err
 		}
 
+		backoffConfContentYaml, err := conf.backoff.Content()
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		if len(backoffConfContentYaml) > 0 {
+			b, err := runutil.NewBackoff(ctx, logger, backoffConfContentYaml)
+			if err != nil {
+				cancel()
+				return errors.Wrap(err, "create backoff")
+			}
+			bkt = objstore.NewBucketWithBackoff(bkt, b, logger, reg)
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
@@ -250,7 +266,6 @@ func runSidecar(
 			level.Error(logger).Log("err", err)
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
@@ -388,6 +403,7 @@ type sidecarConfig struct {
 	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
+	backoff      extflag.PathOrContent
 	objStore     extflag.PathOrContent
 	shipper      shipperConfig
 	limitMinTime thanosmodel.TimeOrDurationValue
@@ -401,6 +417,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
+	sc.backoff = *extkingpin.RegisterCommonBackoffFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
