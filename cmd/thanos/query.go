@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -49,125 +48,105 @@ import (
 )
 
 type queryConfig struct {
-	secure              bool
-	cert                string
-	httpBindAddr        *string
-	httpGracePeriod     *model.Duration
-	grpcBindAddr        *string
-	grpcGracePeriod     *model.Duration
-	grpcCert            *string
-	grpcKey             *string
-	grpcClientCA        *string
-	key                 string
-	caCert              string
-	serverName          string
-	webRoutePrefix      string
-	webExternalPrefix   string
-	webPrefixHeaderName string
-}
-
-func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&qc.secure)
-	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&qc.cert)
-	qc.httpBindAddr, qc.httpGracePeriod = extkingpin.RegisterHTTPFlags(cmd)
-	qc.grpcBindAddr, qc.grpcGracePeriod, qc.grpcCert, qc.grpcKey, qc.grpcClientCA = extkingpin.RegisterGRPCFlags(cmd)
-	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").StringVar(&qc.key)
-	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&qc.caCert)
-	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&qc.serverName)
-	cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").StringVar(&qc.webRoutePrefix)
-	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").StringVar(&qc.webExternalPrefix)
-	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").StringVar(&qc.webPrefixHeaderName)
+	secure                            bool
+	cert                              string
+	httpBindAddr                      *string
+	httpGracePeriod                   *model.Duration
+	grpcBindAddr                      *string
+	grpcGracePeriod                   *model.Duration
+	grpcCert                          *string
+	grpcKey                           *string
+	grpcClientCA                      *string
+	key                               string
+	caCert                            string
+	serverName                        string
+	webRoutePrefix                    string
+	webExternalPrefix                 string
+	webPrefixHeaderName               string
+	requestLoggingDecision            string
+	queryTimeout                      model.Duration
+	maxConcurrentQueries              int
+	maxConcurrentSelects              int
+	lookbackDelta                     time.Duration
+	queryReplicaLabels                []string
+	instantDefaultMaxSourceResolution model.Duration
+	defaultMetadataTimeRange          time.Duration
+	selectorLabels                    []string
+	stores                            []string
+	ruleEndpoints                     []string
+	strictStores                      []string
+	fileSDFiles                       []string
+	fileSDInterval                    model.Duration
+	dnsSDInterval                     model.Duration
+	dnsSDResolver                     string
+	unhealthyStoreTimeout             model.Duration
+	enableQueryPartialResponse        bool
+	enableAutodownsampling            bool
+	enableRulePartialResponse         bool
+	defaultEvaluationInterval         model.Duration
+	storeResponseTimeout              model.Duration
 }
 
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+	var conf *queryConfig
 
-	conf := &queryConfig{}
-	conf.registerFlag(cmd)
-
-	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
-
-	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
-		Default("2m"))
-
-	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
-		Default("20").Int()
-
-	lookbackDelta := cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").Duration()
-	dynamicLookbackDelta := cmd.Flag("query.dynamic-lookback-delta", "Allow for larger lookback duration for queries based on resolution.").Hidden().Default("true").Bool()
-
-	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
-		Default("4").Int()
-
-	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
-		Strings()
-
-	instantDefaultMaxSourceResolution := extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
-
-	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
-
-	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
-		PlaceHolder("<name>=\"<value>\"").Strings()
-
-	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
-		PlaceHolder("<store>").Strings()
-
+	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&conf.secure)
+	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&conf.cert)
+	conf.httpBindAddr, conf.httpGracePeriod = extkingpin.RegisterHTTPFlags(cmd)
+	conf.grpcBindAddr, conf.grpcGracePeriod, conf.grpcCert, conf.grpcKey, conf.grpcClientCA = extkingpin.RegisterGRPCFlags(cmd)
+	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").StringVar(&conf.key)
+	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&conf.caCert)
+	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&conf.serverName)
+	cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").StringVar(&conf.webRoutePrefix)
+	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").StringVar(&conf.webExternalPrefix)
+	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").StringVar(&conf.webPrefixHeaderName)
+	conf.requestLoggingDecision = *cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	conf.queryTimeout = *extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").Default("2m"))
+	conf.maxConcurrentQueries = *cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").Default("20").Int()
+	conf.lookbackDelta = *cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").Duration()
+	conf.maxConcurrentSelects = *cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").Default("4").Int()
+	conf.queryReplicaLabels = *cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").Strings()
+	conf.instantDefaultMaxSourceResolution = *extkingpin.ModelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
+	conf.defaultMetadataTimeRange = *cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
+	conf.selectorLabels = *cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").PlaceHolder("<name>=\"<value>\"").Strings()
+	conf.stores = *cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").PlaceHolder("<store>").Strings()
 	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<rule>").Strings()
-
-	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
-		PlaceHolder("<staticstore>").Strings()
-
-	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
-		PlaceHolder("<path>").Strings()
-
-	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
-		Default("5m"))
-
+	conf.ruleEndpoints = *cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").Hidden().PlaceHolder("<rule>").Strings()
+	conf.strictStores = *cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").PlaceHolder("<staticstore>").Strings()
+	conf.fileSDFiles = *cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").PlaceHolder("<path>").Strings()
+	conf.fileSDInterval = *extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").Default("5m"))
 	// TODO(bwplotka): Grab this from TTL at some point.
-	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
-		Default("30s"))
-
-	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
-		Default(string(dns.GolangResolverType)).Hidden().String()
-
-	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
-
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
-		Default("false").Bool()
-
-	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
-		Default("true").Bool()
-
-	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
-		Hidden().Default("true").Bool()
-
-	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
-
-	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	conf.dnsSDInterval = *extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").Default("30s"))
+	conf.dnsSDResolver = *cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).Default(string(dns.GolangResolverType)).Hidden().String()
+	conf.unhealthyStoreTimeout = *extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+	conf.enableAutodownsampling = *cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").Default("false").Bool()
+	conf.enableQueryPartialResponse = *cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").Default("true").Bool()
+	conf.enableRulePartialResponse = *cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").Hidden().Default("true").Bool()
+	conf.defaultEvaluationInterval = *extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
+	conf.storeResponseTimeout = *extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		selectorLset, err := parseFlagLabels(*selectorLabels)
+		selectorLset, err := parseFlagLabels(conf.selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		if dup := firstDuplicate(*stores); dup != "" {
+		if dup := firstDuplicate(conf.stores); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
 		}
 
-		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
+		if dup := firstDuplicate(conf.ruleEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
 		}
 
 		var fileSD *file.Discovery
-		if len(*fileSDFiles) > 0 {
+		if len(conf.fileSDFiles) > 0 {
 			conf := &file.SDConfig{
-				Files:           *fileSDFiles,
-				RefreshInterval: *fileSDInterval,
+				Files:           conf.fileSDFiles,
+				RefreshInterval: conf.fileSDInterval,
 			}
 			fileSD = file.NewDiscovery(conf, logger)
 		}
@@ -185,29 +164,6 @@ func registerQuery(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			*requestLoggingDecision,
-			*maxConcurrentQueries,
-			*maxConcurrentSelects,
-			time.Duration(*queryTimeout),
-			*lookbackDelta,
-			*dynamicLookbackDelta,
-			time.Duration(*defaultEvaluationInterval),
-			time.Duration(*storeResponseTimeout),
-			*queryReplicaLabels,
-			selectorLset,
-			getFlagsMap(cmd.Flags()),
-			*stores,
-			*ruleEndpoints,
-			*enableAutodownsampling,
-			*enableQueryPartialResponse,
-			*enableRulePartialResponse,
-			fileSD,
-			time.Duration(*dnsSDInterval),
-			*dnsSDResolver,
-			time.Duration(*unhealthyStoreTimeout),
-			time.Duration(*instantDefaultMaxSourceResolution),
-			*defaultMetadataTimeRange,
-			*strictStores,
 			component.Query,
 			*conf,
 		)
@@ -221,32 +177,8 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	requestLoggingDecision string,
-	maxConcurrentQueries int,
-	maxConcurrentSelects int,
-	queryTimeout time.Duration,
-	lookbackDelta time.Duration,
-	dynamicLookbackDelta bool,
-	defaultEvaluationInterval time.Duration,
-	storeResponseTimeout time.Duration,
-	queryReplicaLabels []string,
-	selectorLset labels.Labels,
-	flagsMap map[string]string,
-	storeAddrs []string,
-	ruleAddrs []string,
-	enableAutodownsampling bool,
-	enableQueryPartialResponse bool,
-	enableRulePartialResponse bool,
-	fileSD *file.Discovery,
-	dnsSDInterval time.Duration,
-	dnsSDResolver string,
-	unhealthyStoreTimeout time.Duration,
-	instantDefaultMaxSourceResolution time.Duration,
-	defaultMetadataTimeRange time.Duration,
-	strictStores []string,
 	comp component.Component,
 	conf queryConfig,
-
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -263,10 +195,10 @@ func runQuery(
 	dnsStoreProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_store_apis_", reg),
-		dns.ResolverType(dnsSDResolver),
+		dns.ResolverType(conf.dnsSDResolver),
 	)
 
-	for _, store := range strictStores {
+	for _, store := range conf.strictStores {
 		if dns.IsDynamicNode(store) {
 			return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
 		}
@@ -275,7 +207,7 @@ func runQuery(
 	dnsRuleProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_rule_apis_", reg),
-		dns.ResolverType(dnsSDResolver),
+		dns.ResolverType(conf.dnsSDResolver),
 	)
 
 	var (
@@ -285,7 +217,7 @@ func runQuery(
 			func() (specs []query.StoreSpec) {
 
 				// Add strict & static nodes.
-				for _, addr := range strictStores {
+				for _, addr := range conf.strictStores {
 					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
 				}
 				// Add DNS resolved addresses from static flags and file SD.
@@ -305,7 +237,7 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
-			unhealthyStoreTimeout,
+			time.Duration(conf.unhealthyStoreTimeout),
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
@@ -314,14 +246,14 @@ func runQuery(
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
 			proxy,
 			maxConcurrentSelects,
-			queryTimeout,
+			time.Duration(conf.queryTimeout),
 		)
 		engineOpts = promql.EngineOpts{
 			Logger: logger,
 			Reg:    reg,
 			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 			MaxSamples:    math.MaxInt32,
-			Timeout:       queryTimeout,
+			Timeout:       time.Duration(conf.queryTimeout),
 			LookbackDelta: lookbackDelta,
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
@@ -429,7 +361,7 @@ func runQuery(
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.LogDecision[requestLoggingDecision]
+			return logging.LogDecision[conf.requestLoggingDecision]
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
 
