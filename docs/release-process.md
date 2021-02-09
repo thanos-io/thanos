@@ -31,8 +31,9 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.19.0   | (planned) 2021.01.10     | `@bwplotka  `            |
-| v0.18.0   | (planned) 2020.12.30     | `@squat     `            |
+| v0.20.0   | (planned) 2021.03.31     | `@kakkoyun`              |
+| v0.19.0   | (planned) 2021.02.17     | `@bwplotka`              |
+| v0.18.0   | 2021.01.06               | `@squat`                 |
 | v0.17.0   | 2020.11.18               | `@metalmatze`            |
 | v0.16.0   | 2020.10.26               | `@bwplotka`              |
 | v0.15.0   | 2020.08.12               | `@kakkoyun`              |
