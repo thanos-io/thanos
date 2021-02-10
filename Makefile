@@ -171,7 +171,7 @@ docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
 	@echo ">> generating docs"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning whte noise"
+	@echo ">> cleaning white noise"
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
