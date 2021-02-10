@@ -58,6 +58,7 @@ const (
 	ReplicaLabelsParam       = "replicaLabels[]"
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
+	Step                     = "step"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -228,17 +229,19 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 	return defaultEnablePartialResponse, nil
 }
 
-func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration) (step time.Duration, _ *api.ApiError) {
+func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (step time.Duration, _ *api.ApiError) {
 	// Overwrite the cli flag when provided as a query parameter.
-	if val := r.FormValue("step"); val != "" {
+	if val := r.FormValue(Step); val != "" {
 		var err error
 		defaultRangeQueryStep, err = parseDuration(val)
 		if err != nil {
-			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", defaultRangeQueryStep)}
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Step)}
 		}
 	}
 
-	return defaultRangeQueryStep, nil
+	// Default step is used this way to make it consistent with UI
+	d := time.Duration(math.Max(float64(rangeSeconds/250), float64(defaultRangeQueryStep/time.Second))) * time.Second
+	return d, nil
 }
 
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
@@ -336,7 +339,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
-	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep)
+	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep, int64(end.Sub(start)/time.Second))
 	if err != nil {
 		return nil, nil, apiErr
 	}
