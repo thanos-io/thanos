@@ -371,6 +371,14 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
 		var networkErrors []string
 
+		// Listen for failed network requests and push them to an array.
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			switch ev := ev.(type) {
+			case *network.EventLoadingFailed:
+				networkErrors = append(networkErrors, ev.ErrorText)
+			}
+		})
+
 		err := chromedp.Run(ctx,
 			network.Enable(),
 			chromedp.Navigate(addr),
@@ -381,20 +389,9 @@ func checkNetworkRequests(t *testing.T, addr string) {
 			return err
 		}
 
-		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			switch ev := ev.(type) {
-			case *network.EventLoadingFailed:
-				networkErrors = append(networkErrors, ev.ErrorText)
-			}
-		})
-
-		err = func() error {
-			if len(networkErrors) > 0 {
-				return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
-			}
-			return nil
-		}()
+		if len(networkErrors) > 0 {
+			err = fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+		}
 		return err
 	}))
 }
