@@ -358,13 +358,14 @@ Flags:
                                  header. This allows thanos UI to be served on a
                                  sub-path.
       --log.request.decision=    Deprecation Warning - This flag would be soon
-                                 deprecated, and replaced with request.logging.
-                                 Request Logging for logging the start and end
-                                 of requests. By default this flag is disabled.
-                                 LogFinishCall: Logs the finish call of the
-                                 requests. LogStartAndFinishCall: Logs the start
-                                 and finish call of the requests. NoLogCall:
-                                 Disable request logging.
+                                 deprecated, and replaced with
+                                 `request.logging`. Request Logging for logging
+                                 the start and end of requests. By default this
+                                 flag is disabled. LogFinishCall: Logs the
+                                 finish call of the requests.
+                                 LogStartAndFinishCall: Logs the start and
+                                 finish call of the requests. NoLogCall: Disable
+                                 request logging.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.

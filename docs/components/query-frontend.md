@@ -236,13 +236,14 @@ Flags:
                                  arg specified will take precedence. If no
                                  headers match 'anonymous' will be used.
       --log.request.decision=    Deprecation Warning - This flag would be soon
-                                 deprecated, and replaced with request.logging.
-                                 Request Logging for logging the start and end
-                                 of requests. By default this flag is disabled.
-                                 LogFinishCall : Logs the finish call of the
-                                 requests. LogStartAndFinishCall : Logs the
-                                 start and finish call of the requests.
-                                 NoLogCall : Disable request logging.
+                                 deprecated, and replaced with
+                                 `request.logging`. Request Logging for logging
+                                 the start and end of requests. By default this
+                                 flag is disabled. LogFinishCall : Logs the
+                                 finish call of the requests.
+                                 LogStartAndFinishCall : Logs the start and
+                                 finish call of the requests. NoLogCall :
+                                 Disable request logging.
       --request.logging-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
