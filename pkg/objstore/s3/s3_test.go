@@ -5,6 +5,10 @@ package s3
 
 import (
 	"context"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -296,4 +300,34 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), sseConfigKey, override))
 	testutil.Ok(t, err)
 	testutil.Equals(t, encrypt.KMS, sse.Type())
+}
+
+func TestBucket_Get_ShouldReturnErrorIfServerTruncateResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.Header().Set("Content-Length", "100")
+
+		// Write less bytes than the content length.
+		_, err := w.Write([]byte("12345"))
+		testutil.Ok(t, err)
+	}))
+	defer srv.Close()
+
+	cfg := DefaultConfig
+	cfg.Bucket = "test-bucket"
+	cfg.Endpoint = srv.Listener.Addr().String()
+	cfg.Insecure = true
+	cfg.Region = "test"
+	cfg.AccessKey = "test"
+	cfg.SecretKey = "test"
+
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	reader, err := bkt.Get(context.Background(), "test")
+	testutil.Ok(t, err)
+
+	// We expect an error when reading back.
+	_, err = ioutil.ReadAll(reader)
+	testutil.Equals(t, io.ErrUnexpectedEOF, err)
 }
