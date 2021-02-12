@@ -482,7 +482,7 @@ func TestQueryEndpoints(t *testing.T) {
 				},
 			},
 		},
-		// Use default step when missing
+		// Use default step when missing.
 		{
 			endpoint: api.queryRange,
 			query: url.Values{
