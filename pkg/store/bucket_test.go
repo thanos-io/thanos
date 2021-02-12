@@ -2224,3 +2224,60 @@ func labelNamesFromSeriesSet(series []*storepb.Series) []string {
 	sort.Strings(labels)
 	return labels
 }
+
+func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
+	var (
+		ctx    = context.Background()
+		logger = log.NewNopLogger()
+
+		// Read chunks of different length. We're not using random to make the benchmark repeatable.
+		readLengths = []int64{300, 500, 1000, 5000, 10000, 30000, 50000, 100000, 300000, 1500000}
+	)
+
+	tmpDir, err := ioutil.TempDir("", "benchmark")
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, os.RemoveAll(tmpDir))
+	})
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, bkt.Close())
+	})
+
+	// Create a block.
+	blockID := createBlockWithOneSeriesWithStep(testutil.NewTB(b), tmpDir, labels.FromStrings("__name__", "test"), 0, 100000, rand.New(rand.NewSource(0)), 5000)
+
+	// Upload the block to the bucket.
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	blockMeta, err := metadata.InjectThanos(logger, filepath.Join(tmpDir, blockID.String()), thanosMeta, nil)
+	testutil.Ok(b, err)
+
+	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String())))
+
+	// Create a chunk pool with buckets between 1KB and 32KB.
+	chunkPool, err := pool.NewBucketedBytesPool(1024, 32*1024, 2, 1e10)
+	testutil.Ok(b, err)
+
+	// Create a bucket block with only the dependencies we need for the benchmark.
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil)
+	testutil.Ok(b, err)
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		offset := int64(0)
+		length := readLengths[n%len(readLengths)]
+
+		_, err := blk.readChunkRange(ctx, 0, offset, length)
+		if err != nil {
+			b.Fatal(err.Error())
+		}
+	}
+}

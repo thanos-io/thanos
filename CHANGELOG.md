@@ -21,10 +21,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#3773](https://github.com/thanos-io/thanos/pull/3773) Compact: Pad compaction planner size check
-
-### Fixed
-
-- [#3773](https://github.com/thanos-io/thanos/pull/3773) Compact: Pad compaction planner size check
+- [#3796](https://github.com/thanos-io/thanos/pull/3796) Store: Decreased memory allocations while fetching block's chunks.
 
 ### Changed
 
