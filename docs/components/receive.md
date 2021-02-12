@@ -178,12 +178,12 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --tsdb.allow-overlapping-blocks
+                                 Allow overlapping blocks, which in turn enables
+                                 vertical compaction and vertical query merge.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
-      --tsdb.allow-overlapping-blocks
-                                 Allow overlapping blocks, which in turn enables
-                                 vertical compaction and vertical query merge.
 
 ```
