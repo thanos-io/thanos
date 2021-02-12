@@ -76,6 +76,8 @@ config:
   agent_port: 0
 ```
 
+More informations on Jaeger client parmeters can be found in [Jaeger client features](https://www.jaegertracing.io/docs/1.21/client-features/)
+
 ### Stackdriver
 
 Client for https://cloud.google.com/trace/ tracing.
