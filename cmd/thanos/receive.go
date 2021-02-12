@@ -87,6 +87,7 @@ func registerReceive(app *extkingpin.App) {
 
 	tsdbMinBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbAllowOverlappingBlocks := cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 
@@ -108,11 +109,12 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
-			NoLockfile:        *noLockFile,
-			WALCompression:    *walCompression,
+			MinBlockDuration:       int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:       int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:      int64(time.Duration(*retention) / time.Millisecond),
+			NoLockfile:             *noLockFile,
+			WALCompression:         *walCompression,
+			AllowOverlappingBlocks: *tsdbAllowOverlappingBlocks,
 		}
 
 		// Local is empty, so try to generate a local endpoint
