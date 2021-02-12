@@ -194,8 +194,16 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	}()
 	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
 
-	if _, err = io.Copy(f, rc); err != nil {
+	atts, err := bkt.Attributes(ctx, src)
+	if err != nil {
+		return errors.Wrapf(err, "attributes file %s", src)
+	}
+	copied, err := io.Copy(f, rc)
+	if err != nil {
 		return errors.Wrap(err, "copy object to file")
+	}
+	if copied != atts.Size {
+		return errors.Errorf("copy object to file %s. object length %v but got %v", src, atts.Size, copied)
 	}
 	return nil
 }
