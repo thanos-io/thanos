@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
 	"go.uber.org/goleak"
 
@@ -168,11 +170,15 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
-	reloads := &atomic.Value{}
-	reloads.Store(0)
 	i := 0
+	reloads := 0
+	reloadsMtx := sync.Mutex{}
+
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloadsMtx.Lock()
+		defer reloadsMtx.Unlock()
+
 		i++
 		if i%2 == 0 {
 			// Fail every second request to ensure that retry works.
@@ -180,7 +186,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 			return
 		}
 
-		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		reloads++
 		resp.WriteHeader(http.StatusOK)
 	})
 	go func() {
@@ -190,6 +196,17 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
+
+	ruleDir := t.TempDir()
+	tempRule1File := path.Join(ruleDir, "rule1.yaml")
+	tempRule3File := path.Join(ruleDir, "rule3.yaml")
+	tempRule4File := path.Join(ruleDir, "rule4.yaml")
+
+	testutil.Ok(t, ioutil.WriteFile(tempRule1File, []byte("rule1-changed"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(tempRule3File, []byte("rule3-changed"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(tempRule4File, []byte("rule4-changed"), os.ModePerm))
+
+	defer func() { testutil.Ok(t, os.RemoveAll(ruleDir)) }()
 
 	dir := t.TempDir()
 	dir2 := t.TempDir()
@@ -202,9 +219,10 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule-dir"), path.Join(dir, "rule-dir")))
 
 	logger := log.NewNopLogger()
+	r := prometheus.NewRegistry()
 	reloader := New(
 		logger,
-		nil,
+		r,
 		&Options{
 			ReloadURL:     reloadURL,
 			CfgFile:       "",
@@ -246,10 +264,13 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 			case <-time.After(500 * time.Millisecond):
 			}
 
-			rel := reloads.Load().(int)
+			reloadsMtx.Lock()
+			rel := reloads
 			if init && rel <= reloadsSeen {
+				reloadsMtx.Unlock()
 				continue
 			}
+			reloadsMtx.Unlock()
 			init = true
 			reloadsSeen = rel
 
@@ -280,7 +301,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 				// │  └─ rule4.yaml
 				// ├─ rule3-001.yaml -> rule3-source.yaml
 				// └─ rule3-source.yaml
-				testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule1-changed"), os.ModePerm))
+				testutil.Ok(t, os.Rename(tempRule1File, path.Join(dir, "rule1.yaml")))
 			case 2:
 				// Create dir/rule3.yaml (symlink to rule3-001.yaml).
 				//
@@ -309,7 +330,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 				// │  └─ rule4.yaml
 				// ├─ rule3-002.yaml -> rule3-source.yaml (*)
 				// └─ rule3-source.yaml (*)
-				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+				testutil.Ok(t, os.Rename(tempRule3File, path.Join(dir2, "rule3-source.yaml")))
 				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-002.yaml")))
 				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-002.yaml"), path.Join(dir2, "rule3.yaml")))
 				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
@@ -326,7 +347,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 				// ├─ rule-dir
 				// │  └─ rule4.yaml (*)
 				// └─ rule3-source.yaml
-				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4-changed"), os.ModePerm))
+				testutil.Ok(t, os.Rename(tempRule4File, path.Join(dir2, "rule-dir", "rule4.yaml")))
 			}
 
 			if rel > 4 {
@@ -340,7 +361,11 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	g.Wait()
 
 	testutil.Ok(t, err)
-	testutil.Equals(t, 5, reloads.Load().(int))
+	testutil.Equals(t, 6.0, promtest.ToFloat64(reloader.watcher.watchEvents))
+	testutil.Equals(t, 0.0, promtest.ToFloat64(reloader.watcher.watchErrors))
+	testutil.Equals(t, 4.0, promtest.ToFloat64(reloader.reloadErrors))
+	testutil.Equals(t, 9.0, promtest.ToFloat64(reloader.reloads))
+	testutil.Equals(t, 5, reloads)
 }
 
 func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
