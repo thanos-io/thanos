@@ -70,6 +70,14 @@ func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration,
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {
+	compactWithStoreGateway(t, "--no-compact.enable-concurrent-group-compaction")
+}
+
+func TestConcurrentGroupCompactWithStoreGateway(t *testing.T) {
+	compactWithStoreGateway(t, "--compact.enable-concurrent-group-compaction")
+}
+
+func compactWithStoreGateway(t *testing.T, groupConcurrencyArg string) {
 	t.Parallel()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -559,7 +567,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, f.Close())
 
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil, groupConcurrencyArg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 
@@ -618,7 +626,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		}
 
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", groupConcurrencyArg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 
@@ -651,7 +659,13 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, err)
 		operationMatcher, err := labels.NewMatcher(labels.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(478),
+		var expectedOps float64
+		if groupConcurrencyArg == "--no-compact.enable-concurrent-group-compaction" {
+			expectedOps = 478
+		} else {
+			expectedOps = 480
+		}
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(expectedOps),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2e.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
@@ -679,7 +693,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	}
 
 	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s")
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s", groupConcurrencyArg)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 

@@ -207,6 +207,11 @@ type Grouper interface {
 	// Groups returns the compaction groups for all blocks currently known to the syncer.
 	// It creates all groups from the scratch on every call.
 	Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error)
+	// Starting a group lets the grouper know that the blocks in the groups are currently
+	// being compacted and to ignore them in future plans.
+	StartGroup(group *Group)
+	// Complete the group lets the grouper know that the blocks in this group can again be planned.
+	CompleteGroup(group *Group)
 }
 
 // DefaultGroupKey returns a unique identifier for the group the block belongs to, based on
@@ -222,18 +227,22 @@ func defaultGroupKey(res int64, lbls labels.Labels) string {
 // DefaultGrouper is the Thanos built-in grouper. It groups blocks based on downsample
 // resolution and block's labels.
 type DefaultGrouper struct {
-	bkt                      objstore.Bucket
-	logger                   log.Logger
-	acceptMalformedIndex     bool
-	enableVerticalCompaction bool
-	compactions              *prometheus.CounterVec
-	compactionRunsStarted    *prometheus.CounterVec
-	compactionRunsCompleted  *prometheus.CounterVec
-	compactionFailures       *prometheus.CounterVec
-	verticalCompactions      *prometheus.CounterVec
-	garbageCollectedBlocks   prometheus.Counter
-	blocksMarkedForDeletion  prometheus.Counter
-	hashFunc                 metadata.HashFunc
+	bkt                             objstore.Bucket
+	logger                          log.Logger
+	acceptMalformedIndex            bool
+	enableVerticalCompaction        bool
+	enableConcurrentGroupCompaction bool
+	compactions                     *prometheus.CounterVec
+	compactionRunsStarted           *prometheus.CounterVec
+	compactionRunsCompleted         *prometheus.CounterVec
+	compactionFailures              *prometheus.CounterVec
+	verticalCompactions             *prometheus.CounterVec
+	garbageCollectedBlocks          prometheus.Counter
+	blocksMarkedForDeletion         prometheus.Counter
+	hashFunc                        metadata.HashFunc
+	planner                         Planner
+	locked                          map[ulid.ULID]bool
+	lockedMtx                       sync.Mutex
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -242,16 +251,19 @@ func NewDefaultGrouper(
 	bkt objstore.Bucket,
 	acceptMalformedIndex bool,
 	enableVerticalCompaction bool,
+	enableConcurrentGroupCompaction bool,
 	reg prometheus.Registerer,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
 	hashFunc metadata.HashFunc,
+	planner Planner,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
-		bkt:                      bkt,
-		logger:                   logger,
-		acceptMalformedIndex:     acceptMalformedIndex,
-		enableVerticalCompaction: enableVerticalCompaction,
+		bkt:                             bkt,
+		logger:                          logger,
+		acceptMalformedIndex:            acceptMalformedIndex,
+		enableVerticalCompaction:        enableVerticalCompaction,
+		enableConcurrentGroupCompaction: enableConcurrentGroupCompaction,
 		compactions: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_compact_group_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block.",
@@ -275,12 +287,39 @@ func NewDefaultGrouper(
 		garbageCollectedBlocks:  garbageCollectedBlocks,
 		blocksMarkedForDeletion: blocksMarkedForDeletion,
 		hashFunc:                hashFunc,
+		planner:                 planner,
+		locked:                  map[ulid.ULID]bool{},
 	}
+}
+
+func (g *DefaultGrouper) StartGroup(group *Group) {
+	if !g.enableConcurrentGroupCompaction {
+		return
+	}
+	g.lockedMtx.Lock()
+	for _, m := range group.metasByMinTime {
+		g.locked[m.ULID] = true
+	}
+	g.lockedMtx.Unlock()
+}
+
+func (g *DefaultGrouper) CompleteGroup(group *Group) {
+	if !g.enableConcurrentGroupCompaction {
+		return
+	}
+	g.lockedMtx.Lock()
+	for _, m := range group.metasByMinTime {
+		delete(g.locked, m.ULID)
+	}
+	g.lockedMtx.Unlock()
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
 // It creates all groups from the scratch on every call.
 func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error) {
+	if g.enableConcurrentGroupCompaction {
+		return g.concurrentGroups(blocks)
+	}
 	groups := map[string]*Group{}
 	for _, m := range blocks {
 		groupKey := DefaultGroupKey(m.Thanos)
@@ -295,6 +334,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				m.Thanos.Downsample.Resolution,
 				g.acceptMalformedIndex,
 				g.enableVerticalCompaction,
+				g.enableConcurrentGroupCompaction,
 				g.compactions.WithLabelValues(groupKey),
 				g.compactionRunsStarted.WithLabelValues(groupKey),
 				g.compactionRunsCompleted.WithLabelValues(groupKey),
@@ -320,26 +360,143 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 	return res, nil
 }
 
+// concurrentGroups returns the compaction groups for all blocks currently known to the syncer. This differs from
+// the default grouping in that a single group will be split into a group per available plan.
+func (g *DefaultGrouper) concurrentGroups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error) {
+	groups := map[string]*Group{}
+	for _, m := range blocks {
+		if _, ok := g.locked[m.ULID]; ok {
+			continue
+		}
+		groupKey := DefaultGroupKey(m.Thanos)
+		group, ok := groups[groupKey]
+		if !ok {
+			lbls := labels.FromMap(m.Thanos.Labels)
+			group, err = NewGroup(
+				log.With(g.logger, "group", fmt.Sprintf("%d@%v", m.Thanos.Downsample.Resolution, lbls.String()), "groupKey", groupKey),
+				g.bkt,
+				groupKey,
+				lbls,
+				m.Thanos.Downsample.Resolution,
+				g.acceptMalformedIndex,
+				g.enableVerticalCompaction,
+				g.enableConcurrentGroupCompaction,
+				g.compactions.WithLabelValues(groupKey),
+				g.compactionRunsStarted.WithLabelValues(groupKey),
+				g.compactionRunsCompleted.WithLabelValues(groupKey),
+				g.compactionFailures.WithLabelValues(groupKey),
+				g.verticalCompactions.WithLabelValues(groupKey),
+				g.garbageCollectedBlocks,
+				g.blocksMarkedForDeletion,
+				g.hashFunc,
+			)
+			if err != nil {
+				return nil, errors.Wrap(err, "create compaction group")
+			}
+			groups[groupKey] = group
+			res = append(res, group)
+		}
+		if err := group.AppendMeta(m); err != nil {
+			return nil, errors.Wrap(err, "add compaction group")
+		}
+	}
+
+	newGroups := []*Group{}
+	// Split each group by available plans.
+	for _, group := range res {
+		newGroup, err := g.splitGroupByPlans(group)
+		if err != nil {
+			return nil, err
+		}
+		newGroups = append(newGroups, newGroup...)
+	}
+	res = newGroups
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Key() < res[j].Key()
+	})
+	return res, nil
+}
+
+// Recursively plan a groups metas until there are no available plans and return a new group for each plan.
+// This allows a single group key to utilize group concurrency when there are multiple plans available to compact.
+func (g *DefaultGrouper) splitGroupByPlans(group *Group) ([]*Group, error) {
+	groups := []*Group{}
+	for {
+		var toCompact []*metadata.Meta
+		var err error
+		if len(group.metasByMinTime) != 0 {
+			toCompact, err = g.planner.Plan(context.Background(), group.metasByMinTime)
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "split group")
+		}
+		if len(groups) > 0 && len(toCompact) == 0 {
+			break
+		}
+		lbls := group.Labels()
+		groupKey := group.Key()
+		newGroup, err := NewGroup(
+			log.With(g.logger, "split group", fmt.Sprintf("%d@%v", group.Resolution(), lbls.String()), "groupKey", groupKey),
+			g.bkt,
+			groupKey,
+			lbls,
+			group.Resolution(),
+			group.acceptMalformedIndex,
+			g.enableVerticalCompaction,
+			g.enableConcurrentGroupCompaction,
+			g.compactions.WithLabelValues(groupKey),
+			g.compactionRunsStarted.WithLabelValues(groupKey),
+			g.compactionRunsCompleted.WithLabelValues(groupKey),
+			g.compactionFailures.WithLabelValues(groupKey),
+			g.verticalCompactions.WithLabelValues(groupKey),
+			g.garbageCollectedBlocks,
+			g.blocksMarkedForDeletion,
+			g.hashFunc,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "create split compaction group")
+		}
+		groups = append(groups, newGroup)
+		newMetasByMinTime := []*metadata.Meta{}
+		ids := map[ulid.ULID]bool{}
+		for _, m := range toCompact {
+			if err := newGroup.AppendMeta(m); err != nil {
+				return nil, errors.Wrap(err, "add to split compaction group")
+			}
+			ids[m.ULID] = true
+		}
+		for _, m := range group.metasByMinTime {
+			if _, ok := ids[m.ULID]; !ok {
+				newMetasByMinTime = append(newMetasByMinTime, m)
+			}
+		}
+		group.metasByMinTime = newMetasByMinTime
+	}
+	return groups, nil
+}
+
 // Group captures a set of blocks that have the same origin labels and downsampling resolution.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger                      log.Logger
-	bkt                         objstore.Bucket
-	key                         string
-	labels                      labels.Labels
-	resolution                  int64
-	mtx                         sync.Mutex
-	metasByMinTime              []*metadata.Meta
-	acceptMalformedIndex        bool
-	enableVerticalCompaction    bool
-	compactions                 prometheus.Counter
-	compactionRunsStarted       prometheus.Counter
-	compactionRunsCompleted     prometheus.Counter
-	compactionFailures          prometheus.Counter
-	verticalCompactions         prometheus.Counter
-	groupGarbageCollectedBlocks prometheus.Counter
-	blocksMarkedForDeletion     prometheus.Counter
-	hashFunc                    metadata.HashFunc
+	logger                         log.Logger
+	bkt                            objstore.Bucket
+	key                            string
+	labels                         labels.Labels
+	resolution                     int64
+	mtx                            sync.Mutex
+	metasByMinTime                 []*metadata.Meta
+	acceptMalformedIndex           bool
+	enableVerticalCompaction       bool
+	enableConcurentGroupCompaction bool
+	compactions                    prometheus.Counter
+	compactionRunsStarted          prometheus.Counter
+	compactionRunsCompleted        prometheus.Counter
+	compactionFailures             prometheus.Counter
+	verticalCompactions            prometheus.Counter
+	groupGarbageCollectedBlocks    prometheus.Counter
+	blocksMarkedForDeletion        prometheus.Counter
+	hashFunc                       metadata.HashFunc
 }
 
 // NewGroup returns a new compaction group.
@@ -351,6 +508,7 @@ func NewGroup(
 	resolution int64,
 	acceptMalformedIndex bool,
 	enableVerticalCompaction bool,
+	enableConcurrentGroupCompaction bool,
 	compactions prometheus.Counter,
 	compactionRunsStarted prometheus.Counter,
 	compactionRunsCompleted prometheus.Counter,
@@ -364,21 +522,22 @@ func NewGroup(
 		logger = log.NewNopLogger()
 	}
 	g := &Group{
-		logger:                      logger,
-		bkt:                         bkt,
-		key:                         key,
-		labels:                      lset,
-		resolution:                  resolution,
-		acceptMalformedIndex:        acceptMalformedIndex,
-		enableVerticalCompaction:    enableVerticalCompaction,
-		compactions:                 compactions,
-		compactionRunsStarted:       compactionRunsStarted,
-		compactionRunsCompleted:     compactionRunsCompleted,
-		compactionFailures:          compactionFailures,
-		verticalCompactions:         verticalCompactions,
-		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
-		blocksMarkedForDeletion:     blocksMarkedForDeletion,
-		hashFunc:                    hashFunc,
+		logger:                         logger,
+		bkt:                            bkt,
+		key:                            key,
+		labels:                         lset,
+		resolution:                     resolution,
+		acceptMalformedIndex:           acceptMalformedIndex,
+		enableVerticalCompaction:       enableVerticalCompaction,
+		enableConcurentGroupCompaction: enableConcurrentGroupCompaction,
+		compactions:                    compactions,
+		compactionRunsStarted:          compactionRunsStarted,
+		compactionRunsCompleted:        compactionRunsCompleted,
+		compactionFailures:             compactionFailures,
+		verticalCompactions:            verticalCompactions,
+		groupGarbageCollectedBlocks:    groupGarbageCollectedBlocks,
+		blocksMarkedForDeletion:        blocksMarkedForDeletion,
+		hashFunc:                       hashFunc,
 	}
 	return g, nil
 }
@@ -487,7 +646,12 @@ type Compactor interface {
 func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor) (shouldRerun bool, compID ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
-	subDir := filepath.Join(dir, cg.Key())
+	var subDir string
+	if cg.enableConcurentGroupCompaction && len(cg.metasByMinTime) > 0 {
+		subDir = filepath.Join(dir, cg.Key()+"-"+cg.metasByMinTime[0].ULID.String())
+	} else {
+		subDir = filepath.Join(dir, cg.Key())
+	}
 
 	defer func() {
 		// Leave the compact directory for inspection if it is a halt error
@@ -700,10 +864,17 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		overlappingBlocks = true
 	}
 
-	toCompact, err := planner.Plan(ctx, cg.metasByMinTime)
-	if err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
+	var toCompact []*metadata.Meta
+	if cg.enableConcurentGroupCompaction {
+		// If concurrent group compaction is enabled then the compaction group has already been planned.
+		toCompact = cg.metasByMinTime
+	} else {
+		toCompact, err = planner.Plan(ctx, cg.metasByMinTime)
+		if err != nil {
+			return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
+		}
 	}
+
 	if len(toCompact) == 0 {
 		// Nothing to do.
 		return false, ulid.ULID{}, nil
@@ -914,7 +1085,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
+					c.grouper.StartGroup(g)
 					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
+					c.grouper.CompleteGroup(g)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()

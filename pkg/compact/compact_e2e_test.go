@@ -135,7 +135,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, metadata.NoneFunc)
+		grouper := NewDefaultGrouper(nil, bkt, false, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, metadata.NoneFunc, nil)
 		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
@@ -199,7 +199,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		planner := NewTSDBBasedPlanner(logger, []int64{1000, 3000})
 
-		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, metadata.NoneFunc)
+		grouper := NewDefaultGrouper(logger, bkt, false, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, metadata.NoneFunc, planner)
 		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2)
 		testutil.Ok(t, err)
 
@@ -390,6 +390,122 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 			testutil.Assert(t, len(meta.Thanos.SegmentFiles) > 0, "compacted blocks have segment files set")
 		}
+	})
+}
+
+func TestGroup_GroupConcurrency_e2e(t *testing.T) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		// Create fresh, empty directory for actual test.
+		dir, err := ioutil.TempDir("", "test-compact")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		logger := log.NewLogfmtLogger(os.Stderr)
+
+		reg := prometheus.NewRegistry()
+
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, objstore.WithNoopInstr(bkt), 48*time.Hour, fetcherConcurrency)
+		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
+			ignoreDeletionMarkFilter,
+			duplicateBlocksFilter,
+		}, nil)
+		testutil.Ok(t, err)
+
+		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 5)
+		testutil.Ok(t, err)
+
+		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
+		testutil.Ok(t, err)
+
+		planner := NewTSDBBasedPlanner(logger, []int64{1000, 3000})
+
+		grouper := NewDefaultGrouper(logger, bkt, false, true, true, reg, blocksMarkedForDeletion, garbageCollectedBlocks, metadata.NoneFunc, planner)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2)
+		testutil.Ok(t, err)
+		extLabels := labels.Labels{{Name: "e1", Value: "1"}}
+		metas := createAndUpload(t, bkt, []blockgenSpec{
+			{
+				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "5"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 1000, maxt: 2000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "5"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "5"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "5"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
+			{
+				numSamples: 100, mint: 4000, maxt: 5000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "7"}},
+				},
+			},
+		})
+
+		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Equals(t, 7.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 7.0, promtest.ToFloat64(sy.metrics.blocksMarkedForDeletion))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 3.0, promtest.ToFloat64(grouper.compactions.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(grouper.verticalCompactions.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 4.0, promtest.ToFloat64(grouper.compactionRunsStarted.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 4.0, promtest.ToFloat64(grouper.compactionRunsCompleted.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(grouper.compactionFailures.WithLabelValues(DefaultGroupKey(metas[0].Thanos))))
 	})
 }
 

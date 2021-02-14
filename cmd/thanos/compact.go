@@ -243,6 +243,13 @@ func runCompact(
 			"msg", "vertical compaction is enabled", "compact.enable-vertical-compaction", fmt.Sprintf("%v", conf.enableVerticalCompaction),
 		)
 	}
+
+	if conf.enableConcurrentGroupCompaction {
+		level.Info(logger).Log(
+			"msg", "concurrent group compaction is enabled", "compact.enable-concurrent-group-compaction", fmt.Sprintf("%v", conf.enableConcurrentGroupCompaction),
+		)
+	}
+
 	var (
 		compactorView = ui.NewBucketUI(
 			logger,
@@ -321,21 +328,23 @@ func runCompact(
 		return errors.Wrap(err, "create working downsample directory")
 	}
 
-	grouper := compact.NewDefaultGrouper(
-		logger,
-		bkt,
-		conf.acceptMalformedIndex,
-		enableVerticalCompaction,
-		reg,
-		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
-		compactMetrics.garbageCollectedBlocks,
-		metadata.HashFunc(conf.hashFunc),
-	)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
 		bkt,
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+	)
+	grouper := compact.NewDefaultGrouper(
+		logger,
+		bkt,
+		conf.acceptMalformedIndex,
+		enableVerticalCompaction,
+		conf.enableConcurrentGroupCompaction,
+		reg,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+		compactMetrics.garbageCollectedBlocks,
+		metadata.HashFunc(conf.hashFunc),
+		planner,
 	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(
@@ -566,6 +575,7 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	enableConcurrentGroupCompaction                bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -644,6 +654,11 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")
+
+	cmd.Flag("compact.enable-concurrent-group-compaction", "Experimental. When set to true, compactor will compact all available plans for a single group concurrently"+
+		"up to the number of go routines set by compact.concurrency. This can help if a group is falling too far behind, because when a new plan becomes available for the group"+
+		"the compactor can start a compaction for that plan even though another plan for the same group is already running.").
+		Hidden().Default("false").BoolVar(&cc.enableConcurrentGroupCompaction)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
