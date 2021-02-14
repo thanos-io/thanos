@@ -27,7 +27,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
 
-## [v0.18.0](https://github.com/thanos-io/thanos/releases) - Release in progress
+## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.02.01
 
 ### Added
 
