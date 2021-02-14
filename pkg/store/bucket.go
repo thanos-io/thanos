@@ -1470,7 +1470,9 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 		return nil, errors.Errorf("unknown segment file for index %d", seq)
 	}
 
-	c, err := b.chunkPool.Get(int(length))
+	// Request bytes.MinRead extra space to ensure the copy operation will not trigger
+	// a memory reallocation.
+	c, err := b.chunkPool.Get(int(length) + bytes.MinRead)
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
