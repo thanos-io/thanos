@@ -817,7 +817,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 
 		limitStr := r.URL.Query().Get("limit")
 		if limitStr != "" {
-			limit, err := strconv.Atoi(limitStr)
+			limit, err := strconv.ParseInt(limitStr, 10, 64)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid metric metadata limit='%v'", limit)}
 			}
