@@ -316,6 +316,7 @@ func runStore(
 		chunkPool,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(maxSeriesCount),
+		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		verbose,
 		blockSyncConcurrency,
 		filterConf,

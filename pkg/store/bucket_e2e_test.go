@@ -168,6 +168,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		chunkPool,
 		NewChunksLimiterFactory(maxChunksLimit),
 		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
 		filterConf,
