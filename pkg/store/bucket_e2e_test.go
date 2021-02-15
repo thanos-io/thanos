@@ -154,6 +154,9 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}, nil)
 	testutil.Ok(t, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(0)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		s.logger,
 		nil,
@@ -162,7 +165,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		s.cache,
 		nil,
-		0,
+		chunkPool,
 		NewChunksLimiterFactory(maxChunksLimit),
 		NewSeriesLimiterFactory(0),
 		false,

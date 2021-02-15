@@ -300,7 +300,7 @@ func NewBucketStore(
 	dir string,
 	indexCache storecache.IndexCache,
 	queryGate gate.Gate,
-	maxChunkPoolBytes uint64,
+	chunkPool pool.BytesPool,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	debugLogging bool,
@@ -314,11 +314,6 @@ func NewBucketStore(
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-
-	chunkPool, err := pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, maxChunkPoolBytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "create chunk pool")
 	}
 
 	s := &BucketStore{
@@ -2448,4 +2443,9 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 	s.mergeDuration += o.mergeDuration
 
 	return &s
+}
+
+// NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
+func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.BytesPool, error) {
+	return pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, maxChunkPoolBytes)
 }
