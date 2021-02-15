@@ -82,7 +82,7 @@ const (
 	// not too small (too much memory).
 	DefaultPostingOffsetInMemorySampling = 32
 
-	partitionerMaxGapSize = 512 * 1024
+	PartitionerMaxGapSize = 512 * 1024
 
 	// Labels for metrics.
 	labelEncode = "encode"
@@ -278,7 +278,7 @@ type BucketStore struct {
 	chunksLimiterFactory ChunksLimiterFactory
 	// seriesLimiterFactory creates a new limiter used to limit the number of touched series by each Series() call.
 	seriesLimiterFactory SeriesLimiterFactory
-	partitioner          partitioner
+	partitioner          Partitioner
 
 	filterConfig             *FilterConfig
 	advLabelSets             []labelpb.ZLabelSet
@@ -303,6 +303,7 @@ func NewBucketStore(
 	maxChunkPoolBytes uint64,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
+	partitioner Partitioner,
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
@@ -337,7 +338,7 @@ func NewBucketStore(
 		queryGate:                   queryGate,
 		chunksLimiterFactory:        chunksLimiterFactory,
 		seriesLimiterFactory:        seriesLimiterFactory,
-		partitioner:                 gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+		partitioner:                 partitioner,
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
@@ -1383,7 +1384,7 @@ type bucketBlock struct {
 
 	pendingReaders sync.WaitGroup
 
-	partitioner partitioner
+	partitioner Partitioner
 
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
@@ -1400,7 +1401,7 @@ func newBucketBlock(
 	indexCache storecache.IndexCache,
 	chunkPool pool.BytesPool,
 	indexHeadReader indexheader.Reader,
-	p partitioner,
+	p Partitioner,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
 		logger:            logger,
@@ -2039,7 +2040,7 @@ type part struct {
 	elemRng [2]int
 }
 
-type partitioner interface {
+type Partitioner interface {
 	// Partition partitions length entries into n <= length ranges that cover all
 	// input ranges
 	// It supports overlapping ranges.
@@ -2049,6 +2050,12 @@ type partitioner interface {
 
 type gapBasedPartitioner struct {
 	maxGapSize uint64
+}
+
+func NewGapBasedPartitioner(maxGapSize uint64) Partitioner {
+	return gapBasedPartitioner{
+		maxGapSize: maxGapSize,
+	}
 }
 
 // Partition partitions length entries into n <= length ranges that cover all
