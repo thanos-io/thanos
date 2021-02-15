@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.6.1-0.20210108144208-6c2dab103f20
+	github.com/cortexproject/cortex v1.6.1-0.20210215155036-dfededd9f331
 	github.com/davecgh/go-spew v1.1.1
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
@@ -23,7 +23,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.0.3
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
-	github.com/golang/snappy v0.0.2
+	github.com/golang/snappy v0.0.3-0.20201103224600-674baa8c7fc3
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -51,7 +51,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20210215121130-6f488061dfb4
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
-	github.com/weaveworks/common v0.0.0-20201119133501-0619918236ec
+	github.com/weaveworks/common v0.0.0-20210112142934-23c8d7fa6120
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.7.0
