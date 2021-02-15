@@ -34,7 +34,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
 
@@ -1025,7 +1024,10 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 }
 
 func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series int) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -1396,13 +1398,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b1 *bucketBlock
 
 	const numSeries = 100
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1
 
 	// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
 	// Timestamp will be counted for each new series, so each series will have unique timestamp.
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1441,7 +1446,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1686,9 +1691,11 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	// Create a block with 1 series but an high number of samples,
 	// so that they will span across multiple chunks.
-	blkDir := filepath.Join(tmpDir, "block")
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "block")
+	headOpts.ChunkRange = 10000000000
 
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, blkDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1702,7 +1709,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		testutil.Ok(t, app.Commit())
 	}
 
-	blk := createBlockFromHead(t, blkDir, h)
+	blk := createBlockFromHead(t, headOpts.ChunkDirRoot, h)
 
 	thanosMeta := metadata.Thanos{
 		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
@@ -1710,7 +1717,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blkDir, blk.String()), thanosMeta, nil)
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(headOpts.ChunkDirRoot, blk.String()), thanosMeta, nil)
 	testutil.Ok(t, err)
 
 	// Create a bucket and upload the block there.
@@ -1721,7 +1728,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	instrBkt := objstore.WithNoopInstr(bkt)
 	logger := log.NewNopLogger()
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blkDir, blk.String())))
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String())))
 
 	// Instance a real bucket store we'll use to query the series.
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
@@ -1959,7 +1966,10 @@ func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, ra
 }
 
 func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples)*step, dir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = dir
+	headOpts.ChunkRange = int64(totalSamples) * step
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
