@@ -565,6 +565,9 @@ func TestBucketStore_Info(t *testing.T) {
 
 	defer testutil.Ok(t, os.RemoveAll(dir))
 
+	chunkPool, err := NewDefaultChunkBytesPool(2e5)
+	testutil.Ok(t, err)
+
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
@@ -573,7 +576,7 @@ func TestBucketStore_Info(t *testing.T) {
 		dir,
 		noopCache{},
 		nil,
-		2e5,
+		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		false,
@@ -817,6 +820,9 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			}, nil)
 			testutil.Ok(t, err)
 
+			chunkPool, err := NewDefaultChunkBytesPool(0)
+			testutil.Ok(t, err)
+
 			bucketStore, err := NewBucketStore(
 				logger,
 				nil,
@@ -825,7 +831,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				dir,
 				noopCache{},
 				nil,
-				0,
+				chunkPool,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
 				false,
@@ -1636,6 +1642,9 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -1644,7 +1653,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		false,
@@ -1730,6 +1739,9 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -1738,7 +1750,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		false,
@@ -1875,6 +1887,9 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(t, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -1883,7 +1898,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		false,
@@ -2036,6 +2051,9 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -2044,7 +2062,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		false,
