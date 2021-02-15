@@ -47,10 +47,12 @@ const (
 	// SSES3 is the name of the SSE-S3 method for objstore encryption.
 	SSES3 = "SSE-S3"
 
-	// SSEConfigKey is the context key to override SSE config. This feature is used by downstream
+	// sseConfigKey is the context key to override SSE config. This feature is used by downstream
 	// projects (eg. Cortex) to inject custom SSE config on a per-request basis. Future work or
 	// refactoring can introduce breaking changes as far as the functionality is preserved.
-	SSEConfigKey = ctxKey(0)
+	// NOTE: we're using a context value only because it's a very specific S3 option. If SSE will
+	// be available to wider set of backends we should probably add a variadic option to Get() and Upload().
+	sseConfigKey = ctxKey(0)
 )
 
 var DefaultConfig = Config{
@@ -497,7 +499,7 @@ func (b *Bucket) Close() error { return nil }
 
 // getServerSideEncryption returns the SSE to use.
 func (b *Bucket) getServerSideEncryption(ctx context.Context) (encrypt.ServerSide, error) {
-	if value := ctx.Value(SSEConfigKey); value != nil {
+	if value := ctx.Value(sseConfigKey); value != nil {
 		if sse, ok := value.(encrypt.ServerSide); ok {
 			return sse, nil
 		}
@@ -580,4 +582,10 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 			t.Logf("deleting bucket %s failed: %s", bktToCreate, err)
 		}
 	}, nil
+}
+
+// ContextWithSSEConfig returns a context with a  custom SSE config set. The returned context should be
+// provided to S3 objstore client functions to override the default SSE config.
+func ContextWithSSEConfig(ctx context.Context, value encrypt.ServerSide) context.Context {
+	return context.WithValue(ctx, sseConfigKey, value)
 }

@@ -293,7 +293,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
 	testutil.Ok(t, err)
 
-	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), SSEConfigKey, override))
+	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), sseConfigKey, override))
 	testutil.Ok(t, err)
 	testutil.Equals(t, encrypt.KMS, sse.Type())
 }
