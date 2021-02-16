@@ -119,7 +119,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           enableAutocomplete={enableAutocomplete}
         />
       ))}
-      <Button className="mb-3" color="primary" onClick={addPanel}>
+      <Button className="d-block mb-3" color="primary" onClick={addPanel}>
         Add Panel
       </Button>
     </>
