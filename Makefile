@@ -58,7 +58,7 @@ PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
 REACT_APP_PATH = pkg/ui/react-app
-REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
+REACT_APP_SOURCE_FILES = $(shell find $(REACT_APP_PATH)/public/ $(REACT_APP_PATH)/src/ $(REACT_APP_PATH)/tsconfig.json)
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
 
