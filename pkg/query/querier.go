@@ -342,7 +342,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
+		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -350,7 +350,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 		PartialResponseDisabled: !q.partialResponse,
 		Start:                   q.mint,
 		End:                     q.maxt,
-		LabelMatchers:           pbMatchers,
+		Matchers:                pbMatchers,
 	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
