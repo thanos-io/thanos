@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -1461,33 +1460,30 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	return buf.Bytes(), nil
 }
 
-func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
+func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64, chunkRanges byteRanges) (*[]byte, error) {
 	if seq < 0 || seq >= len(b.chunkObjs) {
 		return nil, errors.Errorf("unknown segment file for index %d", seq)
 	}
 
-	// Request bytes.MinRead extra space to ensure the copy operation will not trigger
-	// a memory reallocation.
-	c, err := b.chunkPool.Get(int(length) + bytes.MinRead)
+	// Get a reader for the required range.
+	reader, err := b.bkt.GetRange(ctx, b.chunkObjs[seq], off, length)
+	if err != nil {
+		return nil, errors.Wrap(err, "get range reader")
+	}
+	defer runutil.CloseWithLogOnErr(b.logger, reader, "readChunkRange close range reader")
+
+	// Get a buffer from the pool.
+	chunkBuffer, err := b.chunkPool.Get(chunkRanges.size())
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
 
-	buf := bytes.NewBuffer(*c)
-
-	r, err := b.bkt.GetRange(ctx, b.chunkObjs[seq], off, length)
+	*chunkBuffer, err = readByteRanges(reader, *chunkBuffer, chunkRanges)
 	if err != nil {
-		b.chunkPool.Put(c)
-		return nil, errors.Wrap(err, "get range reader")
+		return nil, err
 	}
-	defer runutil.CloseWithLogOnErr(b.logger, r, "readChunkRange close range reader")
 
-	if _, err = io.Copy(buf, r); err != nil {
-		b.chunkPool.Put(c)
-		return nil, errors.Wrap(err, "read range")
-	}
-	internalBuf := buf.Bytes()
-	return &internalBuf, nil
+	return chunkBuffer, nil
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
@@ -2255,7 +2251,11 @@ func (r *bucketChunkReader) preload() error {
 func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq int, start, end uint32) error {
 	fetchBegin := time.Now()
 
-	b, err := r.block.readChunkRange(ctx, seq, int64(start), int64(end-start))
+	// Compute the byte ranges of chunks we actually need. The total read data may be bigger
+	// than required because of the partitioner.
+	chunkRanges := chunkOffsetsToByteRanges(offs, start)
+
+	b, err := r.block.readChunkRange(ctx, seq, int64(start), int64(end-start), chunkRanges)
 	if err != nil {
 		return errors.Wrapf(err, "read range for %d", seq)
 	}
@@ -2275,8 +2275,13 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
-	for _, o := range offs {
-		cb := (*b)[o-start:]
+	readOffset := 0
+	for idx, o := range offs {
+		chunkRange := chunkRanges[idx]
+
+		// The chunks byte ranges are stored contiguously in the data buffer.
+		cb := (*b)[readOffset : readOffset+chunkRange.length]
+		readOffset += chunkRange.length
 
 		l, n := binary.Uvarint(cb)
 		if n < 1 {
@@ -2301,7 +2306,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 		fetchBegin = time.Now()
 
 		// Read entire chunk into new buffer.
-		nb, err := r.block.readChunkRange(ctx, seq, int64(o), int64(chLen))
+		nb, err := r.block.readChunkRange(ctx, seq, int64(o), int64(chLen), []byteRange{{offset: 0, length: chLen}})
 		if err != nil {
 			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chLen)
 		}
@@ -2322,6 +2327,29 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 		r.chunks[chunkRef] = rawChunk(cb[n:])
 	}
 	return nil
+}
+
+// chunkOffsetsToByteRanges returns non-overlapping byte ranges with each range offset
+// relative to start. The provided input offsets must be sorted.
+func chunkOffsetsToByteRanges(offsets []uint32, start uint32) byteRanges {
+	ranges := make([]byteRange, len(offsets))
+
+	for idx := 0; idx < len(offsets); idx++ {
+		ranges[idx] = byteRange{
+			// The byte range offset is required to be relative to the start of the read slice.
+			offset: int(offsets[idx] - start),
+			length: maxChunkSize,
+		}
+
+		if idx > 0 {
+			// Ensure ranges are non overlapping.
+			if prev := ranges[idx-1]; prev.length > ranges[idx].offset-prev.offset {
+				ranges[idx-1].length = ranges[idx].offset - prev.offset
+			}
+		}
+	}
+
+	return ranges
 }
 
 func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {

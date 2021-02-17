@@ -2299,9 +2299,171 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 		offset := int64(0)
 		length := readLengths[n%len(readLengths)]
 
-		_, err := blk.readChunkRange(ctx, 0, offset, length)
+		_, err := blk.readChunkRange(ctx, 0, offset, length, byteRanges{{offset: 0, length: int(length)}})
 		if err != nil {
 			b.Fatal(err.Error())
 		}
+	}
+}
+
+func BenchmarkBlockSeries(b *testing.B) {
+	var (
+		ctx    = context.Background()
+		logger = log.NewNopLogger()
+	)
+
+	tmpDir, err := ioutil.TempDir("", "benchmark")
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, os.RemoveAll(tmpDir))
+	})
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, bkt.Close())
+	})
+
+	// Create a block.
+	head, _ := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
+		TSDBDir:          filepath.Join(tmpDir, "head"),
+		SamplesPerSeries: 86400 / 15, // Simulate 1 day block with 15s scrape interval.
+		Series:           1000,
+		PrependLabels:    nil,
+		Random:           rand.New(rand.NewSource(120)),
+		SkipChunks:       true,
+	})
+	blockID := createBlockFromHead(b, tmpDir, head)
+	testutil.Ok(b, head.Close())
+
+	// Upload the block to the bucket.
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	blockMeta, err := metadata.InjectThanos(logger, filepath.Join(tmpDir, blockID.String()), thanosMeta, nil)
+	testutil.Ok(b, err)
+
+	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String())))
+
+	// Create chunk pool and partitioner using the same production settings.
+	chunkPool, err := NewDefaultChunkBytesPool(64 * 1024 * 1024 * 1024)
+	testutil.Ok(b, err)
+
+	partitioner := NewGapBasedPartitioner(PartitionerMaxGapSize)
+
+	// Create an index header reader.
+	indexHeaderReader, err := indexheader.NewBinaryReader(ctx, logger, bkt, tmpDir, blockMeta.ULID, DefaultPostingOffsetInMemorySampling)
+	testutil.Ok(b, err)
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.DefaultInMemoryIndexCacheConfig)
+	testutil.Ok(b, err)
+
+	// Create a bucket block with only the dependencies we need for the benchmark.
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
+	testutil.Ok(b, err)
+
+	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
+			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk)
+		})
+	}
+}
+
+func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock) {
+	ctx := context.Background()
+
+	// Run the same number of queries per goroutine.
+	queriesPerWorker := b.N / concurrency
+
+	// No limits.
+	chunksLimiter := NewChunksLimiterFactory(0)(nil)
+	seriesLimiter := NewSeriesLimiterFactory(0)(nil)
+
+	// Run multiple workers to execute the queries.
+	wg := sync.WaitGroup{}
+	wg.Add(concurrency)
+
+	for w := 0; w < concurrency; w++ {
+		go func() {
+			defer wg.Done()
+
+			for n := 0; n < queriesPerWorker; n++ {
+				// Each query touches a subset of series. To make it reproducible and make sure
+				// we just don't query consecutive series (as is in the real world), we do create
+				// a label matcher which looks for a short integer within the label value.
+				labelMatcher := fmt.Sprintf(".*%d.*", n%20)
+
+				req := &storepb.SeriesRequest{
+					MinTime: blockMeta.MinTime,
+					MaxTime: blockMeta.MaxTime,
+					Matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "i", Value: labelMatcher},
+					},
+					SkipChunks: false,
+				}
+
+				matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+				testutil.Ok(b, err)
+
+				indexReader := blk.indexReader(ctx)
+				chunkReader := blk.chunkReader(ctx)
+
+				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, req, chunksLimiter, seriesLimiter)
+				if err != nil {
+					b.Fatal(err.Error())
+				}
+
+				// Ensure at least 1 series has been returned (as expected).
+				if !seriesSet.Next() {
+					b.Fatal("no series returned")
+				}
+
+				testutil.Ok(b, indexReader.Close())
+				testutil.Ok(b, chunkReader.Close())
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+func TestChunkOffsetsToByteRanges(t *testing.T) {
+	tests := map[string]struct {
+		offsets  []uint32
+		start    uint32
+		expected byteRanges
+	}{
+		"no offsets in input": {
+			offsets:  nil,
+			expected: byteRanges{},
+		},
+		"no overlapping ranges in input": {
+			offsets: []uint32{1000, 20000, 45000},
+			start:   1000,
+			expected: byteRanges{
+				{offset: 0, length: 16000},
+				{offset: 19000, length: 16000},
+				{offset: 44000, length: 16000},
+			},
+		},
+		"overlapping ranges in input": {
+			offsets: []uint32{1000, 5000, 9500, 30000},
+			start:   1000,
+			expected: byteRanges{
+				{offset: 0, length: 4000},
+				{offset: 4000, length: 4500},
+				{offset: 8500, length: 16000},
+				{offset: 29000, length: 16000},
+			},
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			testutil.Equals(t, len(testData.offsets), len(testData.expected))
+			testutil.Equals(t, testData.expected, chunkOffsetsToByteRanges(testData.offsets, testData.start))
+		})
 	}
 }
