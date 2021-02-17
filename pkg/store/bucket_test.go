@@ -501,15 +501,15 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 
 	for _, c := range []struct {
 		input    [][2]int
-		expected []part
+		expected []Part
 	}{
 		{
 			input:    [][2]int{{1, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 1}}},
+			expected: []Part{{Start: 1, End: 10, ElemRng: [2]int{0, 1}}},
 		},
 		{
 			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 3}}},
+			expected: []Part{{Start: 1, End: 10, ElemRng: [2]int{0, 3}}},
 		},
 		{
 			input: [][2]int{
@@ -518,9 +518,9 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{20, 30},
 				{maxGapSize + 31, maxGapSize + 32},
 			},
-			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 32, elemRng: [2]int{3, 4}},
+			expected: []Part{
+				{Start: 1, End: 30, ElemRng: [2]int{0, 3}},
+				{Start: maxGapSize + 31, End: maxGapSize + 32, ElemRng: [2]int{3, 4}},
 			},
 		},
 		// Overlapping ranges.
@@ -532,9 +532,9 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{maxGapSize + 31, maxGapSize + 32},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 40, elemRng: [2]int{3, 5}},
+			expected: []Part{
+				{Start: 1, End: 30, ElemRng: [2]int{0, 3}},
+				{Start: maxGapSize + 31, End: maxGapSize + 40, ElemRng: [2]int{3, 5}},
 			},
 		},
 		{
@@ -544,7 +544,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
+			expected: []Part{{Start: 1, End: maxGapSize + 100, ElemRng: [2]int{0, 3}}},
 		},
 	} {
 		res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
