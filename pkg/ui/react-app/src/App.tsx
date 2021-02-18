@@ -46,7 +46,6 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
             <Blocks path="/loaded" pathPrefix={pathPrefix} view="loaded" />
             <NotFound pathPrefix={pathPrefix} default defaultRoute={defaultRouteConfig[thanosComponent]} />
           </Router>
-          .
         </QueryParamProvider>
       </Container>
     </ErrorBoundary>
