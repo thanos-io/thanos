@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 )
 
 var (
@@ -196,6 +197,11 @@ func runCompact(
 		return err
 	}
 
+	confContentYamlStr, err := config.ConcealSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
+
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return err
@@ -213,7 +219,7 @@ func runCompact(
 
 	// Add config content to configs map.
 	configFilesMap := map[string]string{
-		"Object Store Configuration":     string(confContentYaml),
+		"Object Store Configuration":     string(confContentYamlStr),
 		"Selector Relable Configuration": string(relabelContentYaml),
 	}
 

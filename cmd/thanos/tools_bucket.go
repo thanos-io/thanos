@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -381,8 +382,13 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
+		confContentYamlStr, err := config.ConcealSecret(confContentYaml)
+		if err != nil {
+			return err
+		}
+
 		var configFilesMap = make(map[string]string)
-		configFilesMap["Object Storage Configuration"] = string(confContentYaml)
+		configFilesMap["Object Storage Configuration"] = string(confContentYamlStr)
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
