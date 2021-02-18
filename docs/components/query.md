@@ -432,7 +432,7 @@ Flags:
                                  step is only used when step is not set in UI.
                                  In such cases, Thanos UI will use default step
                                  to calculate resolution (resolution =
-                                 min(rangeSeconds / 250, defaultStep)). This
+                                 max(rangeSeconds / 250, defaultStep)). This
                                  will not work from Grafana, but Grafana has
                                  __step variable which can be used.
       --store.response-timeout=0ms
