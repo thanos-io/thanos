@@ -1,7 +1,7 @@
 import { sortBlocks, isOverlapping } from './helpers';
 
-// number of blocks in data: 8.
-const data = {
+// Number of blocks in data: 8.
+const overlapCaseData = {
   blocks: [
     {
       compaction: {
@@ -200,7 +200,7 @@ const data = {
   label: 'monitor',
 };
 
-const sorted = sortBlocks(data.blocks, data.label);
+const sorted = sortBlocks(overlapCaseData.blocks, overlapCaseData.label);
 const source = 'prometheus_one';
 
 describe('overlapping blocks', () => {
@@ -239,7 +239,7 @@ describe('overlapping blocks', () => {
 });
 
 describe('isOverlapping helper', () => {
-  const b = data.blocks[0];
+  const b = overlapCaseData.blocks[0];
   it('should return true for perfectly overlapping blocks', () => {
     expect(isOverlapping({ ...b, minTime: 10, maxTime: 20 }, { ...b, minTime: 10, maxTime: 20 })).toBe(true);
   });
