@@ -56,6 +56,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 )
 
 // registerRule registers a rule command.
@@ -572,10 +573,20 @@ func runRule(
 			s.Shutdown(err)
 		})
 	}
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	confContentYamlStr, err := config.ConcealSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
 
 	configFilesMap := map[string]string{
 		"Query Config":          string(queryConfigYAML),
 		"Alert Managers Config": string(alertmgrsConfigYAML),
+		"Object Storage Config": string(confContentYamlStr),
 	}
 
 	// Start UI & metrics HTTP server.
@@ -631,11 +642,6 @@ func runRule(
 
 			srv.Shutdown(err)
 		})
-	}
-
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
 	}
 
 	if len(confContentYaml) > 0 {

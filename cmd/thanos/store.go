@@ -36,6 +36,7 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/ui/config"
 )
 
 const fetcherConcurrency = 32
@@ -220,6 +221,11 @@ func runStore(
 		return err
 	}
 
+	confContentYamlStr, err := config.ConcealSecret(confContentYaml)
+	if err != nil {
+		return err
+	}
+
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
@@ -253,7 +259,7 @@ func runStore(
 
 	// Add config files content to config files map.
 	configFilesMap := map[string]string{
-		"Object Store Configuration":     string(confContentYaml),
+		"Object Store Configuration":     string(confContentYamlStr),
 		"Index Cache Configuration":      string(indexCacheContentYaml),
 		"Caching Bucket Configuration":   string(cachingBucketConfigYaml),
 		"Selector Relabel Configuration": string(relabelContentYaml),
