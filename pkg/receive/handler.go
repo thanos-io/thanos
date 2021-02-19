@@ -310,6 +310,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
+	// exit early if the request contained no data
+	if 0 == len(wreq.Timeseries) {
+		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
+		return
+	}
+
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
