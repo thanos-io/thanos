@@ -2411,14 +2411,10 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				chunkReader := blk.chunkReader(ctx)
 
 				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, req, chunksLimiter, seriesLimiter)
-				if err != nil {
-					b.Fatal(err.Error())
-				}
+				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
-				if !seriesSet.Next() {
-					b.Fatal("no series returned")
-				}
+				testutil.Equals(b, true, seriesSet.Next())
 
 				testutil.Ok(b, indexReader.Close())
 				testutil.Ok(b, chunkReader.Close())
