@@ -229,7 +229,7 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 	return defaultEnablePartialResponse, nil
 }
 
-func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (step time.Duration, _ *api.ApiError) {
+func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (time.Duration, *api.ApiError) {
 	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(Step); val != "" {
 		var err error
