@@ -428,6 +428,13 @@ Flags:
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
+      --query.default-step=1s    Set default step for range queries. Default
+                                 step is only used when step is not set in UI.
+                                 In such cases, Thanos UI will use default step
+                                 to calculate resolution (resolution =
+                                 max(rangeSeconds / 250, defaultStep)). This
+                                 will not work from Grafana, but Grafana has
+                                 __step variable which can be used.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

@@ -5,7 +5,7 @@ import { withStatusIndicator } from '../../components/withStatusIndicator';
 import { useFetch } from '../../hooks/useFetch';
 import PathPrefixProps from '../../types/PathPrefixProps';
 
-interface FlagMap {
+export interface FlagMap {
   [key: string]: string;
 }
 
