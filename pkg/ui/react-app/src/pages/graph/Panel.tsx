@@ -152,6 +152,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // Add storeMatches to query params.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     this.props.options.storeMatches?.forEach((store: Store) =>
       params.append('storeMatch[]', `{__address__="${store.name}"}`)
     );
@@ -179,8 +180,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then(resp => resp.json())
-      .then(json => {
+      .then((resp) => resp.json())
+      .then((json) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -212,7 +213,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         });
         this.abortInFlightFetch = null;
       })
-      .catch(error => {
+      .catch((error) => {
         if (error.name === 'AbortError') {
           // Aborts are expected, don't show an error for them.
           return;
