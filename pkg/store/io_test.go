@@ -37,7 +37,7 @@ func TestByteRanges_contiguous(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		testutil.Equals(t, tc.expected, tc.ranges.contiguous())
+		testutil.Equals(t, tc.expected, tc.ranges.areContiguous())
 	}
 }
 

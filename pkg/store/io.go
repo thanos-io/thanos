@@ -32,8 +32,8 @@ func (r byteRanges) size() int {
 	return size
 }
 
-// contiguous returns whether all byte ranges are contiguous (no gaps).
-func (r byteRanges) contiguous() bool {
+// areContiguous returns whether all byte ranges are contiguous (no gaps).
+func (r byteRanges) areContiguous() bool {
 	if len(r) < 2 {
 		return true
 	}
@@ -65,7 +65,7 @@ func readByteRanges(src io.Reader, dst []byte, byteRanges byteRanges) ([]byte, e
 	dst = dst[0:expectedSize]
 
 	// Optimisation for the case all ranges are contiguous.
-	if byteRanges[0].offset == 0 && byteRanges.contiguous() {
+	if byteRanges[0].offset == 0 && byteRanges.areContiguous() {
 		// We get an ErrUnexpectedEOF if EOF is reached after some but not all bytes
 		// have been read. Due to how the reading logic works in the bucket store, we
 		// may try to overread at the end of an object, so we consider it legit.
