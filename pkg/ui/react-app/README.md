@@ -79,5 +79,3 @@ To build a Thanos binary that includes a compiled-in version of the production b
     make build
 
 This compiles in all web assets into the Thanos binary.
-
-Note that `make build` only compiles static assets using `bindata.go`, if you are working on React UI, make sure you run `make assets` to update `pkg/ui/bindata.go`
