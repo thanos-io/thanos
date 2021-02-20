@@ -94,15 +94,6 @@ $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES
 	   @echo ">> building React app"
 	   @scripts/build-react-app.sh
 
-.PHONY: assets
-assets: # Repacks all static assets into go file for easier deploy.
-assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
-	@echo ">> deleting asset file"
-	@rm pkg/ui/bindata.go || true
-	@echo ">> writing assets"
-	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
-	@$(MAKE) format
-
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
@@ -125,7 +116,7 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
-build: check-git deps $(PROMU)
+build: check-git deps $(PROMU) $(REACT_APP_OUTPUT_DIR)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 

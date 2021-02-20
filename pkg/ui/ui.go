@@ -5,13 +5,17 @@ package ui
 
 import (
 	"bytes"
+	"embed"
 	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -20,6 +24,9 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/component"
 )
+
+//go:embed templates/* static/*
+var asset embed.FS
 
 type BaseUI struct {
 	logger                       log.Logger
@@ -38,7 +45,7 @@ func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, tmp
 }
 func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
-	fp = filepath.Join("pkg/ui/static", fp)
+	fp = filepath.Join("static", fp)
 	if err := bu.serveAsset(fp, w, req); err != nil {
 		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 		w.WriteHeader(http.StatusNotFound)
@@ -47,10 +54,9 @@ func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
-	fp = filepath.Join("pkg/ui/static/react/", fp)
+	fp = filepath.Join("static/react/", fp)
 	if err := bu.serveAsset(fp, w, req); err != nil {
-		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
-
+		bu.serveReactIndex("static/react/index.html", w, req)
 	}
 }
 
@@ -76,14 +82,17 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 	}
 }
 
-func (bu *BaseUI) getAssetFile(filename string) (os.FileInfo, []byte, error) {
-	info, err := AssetInfo(filename)
+func (bu *BaseUI) getAssetFile(filename string) (info os.FileInfo, file []byte, err error) {
+	f, err := asset.Open(filename)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, "open file %s", filename)
 	}
-	file, err := Asset(filename)
-	if err != nil {
-		return nil, nil, err
+	defer runutil.CloseWithErrCapture(&err, f, "close file %s", filename)
+	if info, err = f.Stat(); err != nil {
+		return nil, nil, errors.Wrapf(err, "get stat for file %s", filename)
+	}
+	if file, err = io.ReadAll(f); err != nil {
+		return nil, nil, errors.Wrapf(err, "read file %s", filename)
 	}
 	return info, file, nil
 }
@@ -98,15 +107,15 @@ func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request
 }
 
 func (bu *BaseUI) getTemplate(name string) (string, error) {
-	baseTmpl, err := Asset("pkg/ui/templates/_base.html")
+	_, baseTmpl, err := bu.getAssetFile("templates/_base.html")
 	if err != nil {
 		return "", errors.Errorf("error reading base template: %s", err)
 	}
-	menuTmpl, err := Asset(filepath.Join("pkg/ui/templates", bu.menuTmpl))
+	_, menuTmpl, err := bu.getAssetFile(filepath.Join("templates", bu.menuTmpl))
 	if err != nil {
 		return "", errors.Errorf("error reading menu template %s: %s", bu.menuTmpl, err)
 	}
-	pageTmpl, err := Asset(filepath.Join("pkg/ui/templates", name))
+	_, pageTmpl, err := bu.getAssetFile(filepath.Join("templates", name))
 	if err != nil {
 		return "", errors.Errorf("error reading page template %s: %s", name, err)
 	}
