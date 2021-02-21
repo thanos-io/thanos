@@ -14,7 +14,7 @@ import { Theme, themeLocalStorageKey } from './Theme';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 import './App.css';
-import ConfigFiles from './pages/configfiles/ConfigFiles';
+import ConfigFiles from './thanos/pages/configfiles/ConfigFiles';
 
 const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
