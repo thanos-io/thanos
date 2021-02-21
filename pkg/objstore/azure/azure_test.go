@@ -5,6 +5,7 @@ package azure
 
 import (
 	"testing"
+
 	"github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
