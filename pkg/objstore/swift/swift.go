@@ -19,6 +19,7 @@ import (
 	"github.com/ncw/swift"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/config"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/yaml.v2"
@@ -49,7 +50,7 @@ type Config struct {
 	UserDomainName         string         `yaml:"user_domain_name"`
 	UserDomainID           string         `yaml:"user_domain_id"`
 	UserId                 string         `yaml:"user_id"`
-	Password               string         `yaml:"password"`
+	Password               config.Secret  `yaml:"password"`
 	DomainId               string         `yaml:"domain_id"`
 	DomainName             string         `yaml:"domain_name"`
 	ProjectID              string         `yaml:"project_id"`
@@ -81,7 +82,7 @@ func configFromEnv() (*Config, error) {
 	config := Config{
 		AuthVersion:            c.AuthVersion,
 		AuthUrl:                c.AuthUrl,
-		Password:               c.ApiKey,
+		Password:               config.Secret(c.ApiKey),
 		Username:               c.UserName,
 		UserId:                 c.UserId,
 		DomainId:               c.DomainId,
@@ -118,7 +119,7 @@ func connectionFromConfig(sc *Config) *swift.Connection {
 		DomainId:       sc.DomainId,
 		UserName:       sc.Username,
 		UserId:         sc.UserId,
-		ApiKey:         sc.Password,
+		ApiKey:         string(sc.Password),
 		AuthUrl:        sc.AuthUrl,
 		Retries:        sc.Retries,
 		Region:         sc.RegionName,
