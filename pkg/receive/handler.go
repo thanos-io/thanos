@@ -311,7 +311,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// exit early if the request contained no data
-	if 0 == len(wreq.Timeseries) {
+	if len(wreq.Timeseries) == 0 {
 		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
 		return
 	}
