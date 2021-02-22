@@ -53,7 +53,7 @@ type azureConfig struct {
 // Config Swift storage configuration.
 type swiftConfig struct {
 	Type   client.ObjProvider
-	Config swift.SwiftConfig
+	Config swift.Config
 }
 
 //Config S3 storage configuration.
