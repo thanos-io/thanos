@@ -86,7 +86,7 @@ component of the Thanos distributed system. We recommend:
 `make help` will print most of available commands with relevant details.
 * Spin up a prebuilt dev environment using Gitpod.io
 [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
-* In case you want to develop the project locally, install **Golang** in your machine. Here is a nice [gist](https://gist.github.com/nikhita/432436d570b89cab172dcf2894465753) for this purpose. -
+* In case you want to develop the project locally, install **Golang** in your machine. Here is a nice [gist](https://gist.github.com/nikhita/432436d570b89cab172dcf2894465753) for this purpose.
 
 ### Installing Project locally in your machine
 
@@ -106,7 +106,7 @@ component of the Thanos distributed system. We recommend:
 
 * Usually, while sending in a PR  `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs`, `make quickstart` are the most used commands while developing Thanos.
 
-* When you run `make build` the code is compiled and a binary named `thanos` is created, which can be run to start `thanos` binary. To run the binary, use `./thanos`
+* When you run `make build` from `$GOPATH/src/github.com/thanos`the code is compiled and a binary named `thanos` is created. To run the binary, run `thanos`, which would call the thanos binary from `$GOPATH/src/bin/thanos`.
 
 * In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
   * Run `make quickstart` for spinning up all components of Thanos quickly.
@@ -176,7 +176,6 @@ It is a good practice to keep your branch updated by rebasing your branch to mas
 
 * Rebase your master - `git rebase -i master`
 
-
 **Changelog and Review Procedure**
 
 If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
@@ -217,10 +216,12 @@ You have to commit the changes to `go.mod` and `go.sum` before submitting the pu
 * Thanos provides make commands that help you run the tests locally.
 * If you have a decent hardware to run the tests, you can run them locally.
 * If you want to run the tests once in a while, it is suitable for you to send in a PR, the built in CI/CD setup runs the tests for you, which is nice for once in a while run.
-*  `make test` - Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in `./test/e2e`.
-*  `make test-local`  Runs test excluding tests for ALL  object storage integrations.
-*   `make est-e2e`    Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-*   `make est-e2e-local`  Runs all thanos e2e tests locally.
+
+
+*  `make test`: Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in `./test/e2e`.
+*  `make test-local`: Runs test excluding tests for ALL object storage integrations.
+*   `make test-e2e`: Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
+*   `make test-e2e-local`: Runs all thanos e2e tests locally.
 
 
 ### Advanced testing
@@ -230,7 +231,7 @@ can run any component manually by crafting specific flags for a test setup, ther
 Consider the following methods:
 
 * `make quickstart`: this command spins
-up a simple setup of all Thanos components. Run `make build` before running the script to build the `thanos` binary first.
+up a simple setup of all Thanos components.
 * `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minutes)`
 at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)).
 This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
