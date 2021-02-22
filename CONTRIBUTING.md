@@ -109,7 +109,7 @@ component of the Thanos distributed system. We recommend:
 * When you run `make build` the code is compiled and a binary named `thanos` is created, which can be run to start `thanos` binary. To run the binary, use `./thanos`
 
 * In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
-  * Run `make quickstart` for spinning up all components of Thanos quickly. Note that it also spins up Prometheus instance, so you should have Prometheus installed.
+  * Run `make quickstart` for spinning up all components of Thanos quickly.
   * If you want to run specific components instead of all, feel free to use and edit - [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh)
 
 ### Pull Request Process
