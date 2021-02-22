@@ -75,7 +75,6 @@ require (
 )
 
 replace (
-
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
