@@ -81,6 +81,40 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
+        g.row('Blocks deletion')
+        .addPanel(
+          g.panel(
+            'Deletion Rate',
+            'Shows deletion rate of blocks already marked for deletion.'
+          ) +
+          g.queryPanel(
+            'sum(rate(thanos_compact_blocks_cleaned_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'Blocks cleanup {{job}}'
+          ) +
+          g.stack
+        )
+        .addPanel(
+          g.panel(
+            'Deletion Error Rate',
+            'Shows deletion failures rate of blocks already marked for deletion.'
+          ) +
+          g.queryPanel(
+            'sum(rate(thanos_compact_block_cleanup_failures_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'Blocks cleanup failures {{job}}'
+          )
+        )
+        .addPanel(
+          g.panel(
+            'Marking Rate',
+            'Shows rate at which blocks are marked for deletion (from GC and retention policy).'
+          ) +
+          g.queryPanel(
+            'sum(rate(thanos_compact_blocks_marked_for_deletion_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'Blocks marked {{job}}'
+          )
+        )
+      )
+      .addRow(
         g.row('Sync Meta')
         .addPanel(
           g.panel(

@@ -7,7 +7,6 @@
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
 | Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)    | Red Hat           |
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
-| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@prmsrswt](https://github.com/prmsrswt)    | Atlan             |
 | Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
@@ -106,3 +105,8 @@ maintainer team.
 
 Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
 
+
+## Previous Maintainers
+
+Dominic Green
+Povilas Versockas

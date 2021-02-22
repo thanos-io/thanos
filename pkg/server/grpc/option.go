@@ -10,8 +10,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const UnixSocket = "/tmp/test.sock"
-
 type options struct {
 	registerServerFuncs []registerServerFunc
 
@@ -37,7 +35,7 @@ func (f optionFunc) apply(o *options) {
 
 type registerServerFunc func(s *grpc.Server)
 
-// WithGRPCServer calls the passed gRPC registration functions on the created
+// WithServer calls the passed gRPC registration functions on the created
 // grpc.Server.
 func WithServer(f registerServerFunc) Option {
 	return optionFunc(func(o *options) {

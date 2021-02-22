@@ -131,7 +131,7 @@ func getOperation(r *http.Request) string {
 }
 
 // newQueryRangeTripperware returns a Tripperware for range queries configured with middlewares of
-// limit, step align, split by interval, cache requests and retry.
+// limit, step align, downsampled, split by interval, cache requests and retry.
 func newQueryRangeTripperware(
 	config QueryRangeConfig,
 	limits queryrange.Limits,
@@ -148,6 +148,14 @@ func newQueryRangeTripperware(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("step_align", m),
 			queryrange.StepAlignMiddleware,
+		)
+	}
+
+	if config.RequestDownsampled {
+		queryRangeMiddleware = append(
+			queryRangeMiddleware,
+			queryrange.InstrumentMiddleware("downsampled", m),
+			DownsampledMiddleware(codec, reg),
 		)
 	}
 

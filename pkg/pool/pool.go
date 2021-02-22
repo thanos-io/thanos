@@ -61,7 +61,7 @@ func NewBucketedBytesPool(minSize, maxSize int, factor float64, maxTotal uint64)
 // ErrPoolExhausted is returned if a pool cannot provide the request bytes.
 var ErrPoolExhausted = errors.New("pool exhausted")
 
-// Get returns a new byte slices that fits the given size.
+// Get returns a new byte slice that fits the given size.
 func (p *BucketedBytesPool) Get(sz int) (*[]byte, error) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()

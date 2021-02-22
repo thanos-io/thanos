@@ -21,11 +21,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -367,31 +368,32 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
 
-	var networkErrors []string
+	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
+		var networkErrors []string
 
-	// Listen for failed network requests and push them to an array.
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-		case *network.EventLoadingFailed:
-			networkErrors = append(networkErrors, ev.ErrorText)
+		// Listen for failed network requests and push them to an array.
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			switch ev := ev.(type) {
+			case *network.EventLoadingFailed:
+				networkErrors = append(networkErrors, ev.ErrorText)
+			}
+		})
+
+		err := chromedp.Run(ctx,
+			network.Enable(),
+			chromedp.Navigate(addr),
+			chromedp.WaitVisible(`body`),
+		)
+
+		if err != nil {
+			return err
 		}
-	})
 
-	err := chromedp.Run(ctx,
-		network.Enable(),
-		chromedp.Navigate(addr),
-		chromedp.WaitVisible(`body`),
-	)
-	testutil.Ok(t, err)
-
-	err = func() error {
 		if len(networkErrors) > 0 {
-			return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+			err = fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
 		}
-		return nil
-	}()
-
-	testutil.Ok(t, err)
+		return err
+	}))
 }
 
 func mustURLParse(t *testing.T, addr string) *url.URL {
@@ -486,7 +488,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []storepb.LabelMatcher, start int64, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start int64, end int64, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)

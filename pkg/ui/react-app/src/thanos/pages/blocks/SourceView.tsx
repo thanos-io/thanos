@@ -35,13 +35,17 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map(k => (
-            <BlocksRow
-              selectBlock={selectBlock}
-              blocks={data[k]}
-              key={k}
-              gridMaxTime={gridMaxTime}
-              gridMinTime={gridMinTime}
-            />
+            <React.Fragment key={k}>
+              {data[k].map((b, i) => (
+                <BlocksRow
+                  selectBlock={selectBlock}
+                  blocks={b}
+                  key={`${k}-${i}`}
+                  gridMaxTime={gridMaxTime}
+                  gridMinTime={gridMinTime}
+                />
+              ))}
+            </React.Fragment>
           ))}
         </div>
       </div>

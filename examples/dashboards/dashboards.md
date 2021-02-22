@@ -16,4 +16,4 @@ These dashboards require Grafana 5 or above, importing them in older versions ar
 
 ## Configuration
 
-All dashboards are generated using [`thanos-mixin`](https://github.com/thanos-io/thanos/tree/master/mixin/thanos) and check out [README](https://github.com/thanos-io/thanos/tree/master/mixin/thanos/README.md) for further information.
+All dashboards are generated using [`thanos-mixin`](https://github.com/thanos-io/thanos/tree/master/mixin) and check out [README](https://github.com/thanos-io/thanos/blob/master/mixin/README.md) for further information.

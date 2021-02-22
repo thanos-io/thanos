@@ -42,8 +42,8 @@ Data sources that persist their data for long-term storage do so via the Prometh
 
 A blocks top-level directory is a ULID (like UUID but lexicographically sortable and encoding the creation time).
 
-* Chunk files hold a few hundred MB worth of chunks each. Chunks for the same series are sequentially aligned. Series in return are aligned by their metric name. This becomes relevant further down.
-* The index file holds all information needed to lookup specific series by their labels and the positions of their chunks.
+* [Chunk files](design.md/#chunk-file) hold a few hundred MB worth of chunks each. Chunks for the same series are sequentially aligned. Series in return are aligned by their metric name. This becomes relevant further down.
+* The index file holds all information needed to lookup specific series by their labels and the positions of their [chunks](design.md/#chunk).
 * `meta.json` holds meta information about a block like stats, time range, and compaction level.
 
 Those block files can be backed up to an object storage and later be queried by another component (see below).
@@ -63,6 +63,11 @@ The meta.json is updated during upload time on sidecars.
               │                   Object Storage                 │
               └──────────────────────────────────────────────────┘
 ```
+#### Chunk
+A chunk is part of the data structure of Prometheus TSDB, holding up to 120 samples for a single timeseries.
+
+#### Chunk file
+A chunk file is the file in TSDB block that contains up to 0.5 GB worth of chunk entries in binary format.
 
 ### Stores
 
@@ -70,17 +75,17 @@ A store node acts as a gateway to block data that is stored in an object storage
 
 It continuously synchronizes which blocks exist in the bucket and translates requests for metric data into object storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their metadata (e.g. time range and labels) and caching frequent index lookups.
 
-The Prometheus 2.0 storage layout is optimized for minimal read amplification. For example, sample data for the same time series is sequentially aligned in a chunk file. Similarly, series for the same metric name are sequentially aligned as well.
-The store node is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each request may fetch up to hundreds of thousands of chunks at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
+The Prometheus 2.0 storage layout is optimized for minimal read amplification. For example, sample data for the same time series is sequentially aligned in a [chunk file](design.md/#chunk-file). Similarly, series for the same metric name are sequentially aligned as well.
+The store node is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each request may fetch up to hundreds of thousands of [chunks](design.md/#Note) at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
 
-Currently only index data is cached. Chunk data could be cached but is orders of magnitude larger in size. In the current state, fetching chunk data from the object storage already only accounts for a small fraction of end-to-end latency. Thus, there's currently no incentive to increase the store nodes resource requirements/limit its scalability by adding chunk caching.
+Currently only index data is cached. [Chunk](design.md/#chunk) data could be cached but is orders of magnitude larger in size. In the current state, fetching chunk data from the object storage already only accounts for a small fraction of end-to-end latency. Thus, there's currently no incentive to increase the store nodes resource requirements/limit its scalability by adding chunk caching.
 
 ### Stores & Data Sources - It's all the same
 
 Since store nodes and data sources expose the same gRPC Store API, clients can largely treat them as equivalent and don't have to be concerned with which specific component they are querying.
 Each implementer of the Store API advertise meta information about the data they provide. This allows clients to minimize the set of nodes they have to fan out to, to satisfy a particular data query.
 
-In its essence, the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed chunks of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provide complex query execution.
+In its essence, the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed [chunks](design.md/#chunk) of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provide complex query execution.
 
 ```
 ┌──────────────────────┐  ┌────────────┬─────────┐   ┌────────────┐

@@ -17,7 +17,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -306,7 +305,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
@@ -342,7 +341,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-24*time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {

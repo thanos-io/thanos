@@ -40,9 +40,6 @@ var DefaultConfig = Config{
 	Timeout:        model.Duration(5 * time.Minute),
 }
 
-// TODO(FUSAKLA): Added to avoid breaking dependency of Cortex which uses the original struct name SwiftConfig.
-type SwiftConfig = Config
-
 type Config struct {
 	AuthVersion            int            `yaml:"auth_version"`
 	AuthUrl                string         `yaml:"auth_url"`

@@ -34,7 +34,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
 
@@ -501,15 +500,15 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 
 	for _, c := range []struct {
 		input    [][2]int
-		expected []part
+		expected []Part
 	}{
 		{
 			input:    [][2]int{{1, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 1}}},
+			expected: []Part{{Start: 1, End: 10, ElemRng: [2]int{0, 1}}},
 		},
 		{
 			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
-			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 3}}},
+			expected: []Part{{Start: 1, End: 10, ElemRng: [2]int{0, 3}}},
 		},
 		{
 			input: [][2]int{
@@ -518,9 +517,9 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{20, 30},
 				{maxGapSize + 31, maxGapSize + 32},
 			},
-			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 32, elemRng: [2]int{3, 4}},
+			expected: []Part{
+				{Start: 1, End: 30, ElemRng: [2]int{0, 3}},
+				{Start: maxGapSize + 31, End: maxGapSize + 32, ElemRng: [2]int{3, 4}},
 			},
 		},
 		// Overlapping ranges.
@@ -532,9 +531,9 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{maxGapSize + 31, maxGapSize + 32},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: []part{
-				{start: 1, end: 30, elemRng: [2]int{0, 3}},
-				{start: maxGapSize + 31, end: maxGapSize + 40, elemRng: [2]int{3, 5}},
+			expected: []Part{
+				{Start: 1, End: 30, ElemRng: [2]int{0, 3}},
+				{Start: maxGapSize + 31, End: maxGapSize + 40, ElemRng: [2]int{3, 5}},
 			},
 		},
 		{
@@ -544,7 +543,7 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 				{1, maxGapSize + 100},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
+			expected: []Part{{Start: 1, End: maxGapSize + 100, ElemRng: [2]int{0, 3}}},
 		},
 	} {
 		res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
@@ -565,6 +564,9 @@ func TestBucketStore_Info(t *testing.T) {
 
 	defer testutil.Ok(t, os.RemoveAll(dir))
 
+	chunkPool, err := NewDefaultChunkBytesPool(2e5)
+	testutil.Ok(t, err)
+
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
@@ -573,8 +575,10 @@ func TestBucketStore_Info(t *testing.T) {
 		dir,
 		noopCache{},
 		nil,
-		2e5,
+		chunkPool,
 		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
 		allowAllFilterConf,
@@ -816,6 +820,9 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			}, nil)
 			testutil.Ok(t, err)
 
+			chunkPool, err := NewDefaultChunkBytesPool(0)
+			testutil.Ok(t, err)
+
 			bucketStore, err := NewBucketStore(
 				logger,
 				nil,
@@ -824,8 +831,10 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				dir,
 				noopCache{},
 				nil,
-				0,
+				chunkPool,
 				NewChunksLimiterFactory(0),
+				NewSeriesLimiterFactory(0),
+				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				false,
 				20,
 				allowAllFilterConf,
@@ -1023,7 +1032,10 @@ func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 }
 
 func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series int) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, 1000, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -1138,7 +1150,7 @@ func benchmarkExpandedPostings(
 				indexCache:        noopCache{},
 				bkt:               bkt,
 				meta:              &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: id}},
-				partitioner:       gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
 			indexr := newBucketIndexReader(context.Background(), b)
@@ -1254,7 +1266,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 			metrics:     m,
 			bkt:         bkt,
 			meta:        meta,
-			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
 			extLset:     extLset,
@@ -1273,6 +1285,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		},
 		queryGate:            noopGate{},
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 	}
 
 	for _, block := range blocks {
@@ -1393,13 +1406,16 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b1 *bucketBlock
 
 	const numSeries = 100
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1
 
 	// Create 4 blocks. Each will have numSeriesPerBlock number of series that have 1 sample only.
 	// Timestamp will be counted for each new series, so each series will have unique timestamp.
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1427,7 +1443,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
 			meta:        meta,
-			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
 		}
@@ -1438,7 +1454,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, 1, tmpDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1466,7 +1482,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
 			meta:        meta,
-			partitioner: gapBasedPartitioner{maxGapSize: partitionerMaxGapSize},
+			partitioner: NewGapBasedPartitioner(PartitionerMaxGapSize),
 			chunkObjs:   []string{filepath.Join(id.String(), "chunks", "000001")},
 			chunkPool:   chunkPool,
 		}
@@ -1489,6 +1505,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		},
 		queryGate:            noopGate{},
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
+		seriesLimiterFactory: NewSeriesLimiterFactory(0),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1632,6 +1649,9 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -1640,8 +1660,10 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		10,
 		nil,
@@ -1681,9 +1703,11 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	// Create a block with 1 series but an high number of samples,
 	// so that they will span across multiple chunks.
-	blkDir := filepath.Join(tmpDir, "block")
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "block")
+	headOpts.ChunkRange = 10000000000
 
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, blkDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1697,7 +1721,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		testutil.Ok(t, app.Commit())
 	}
 
-	blk := createBlockFromHead(t, blkDir, h)
+	blk := createBlockFromHead(t, headOpts.ChunkDirRoot, h)
 
 	thanosMeta := metadata.Thanos{
 		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
@@ -1705,7 +1729,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blkDir, blk.String()), thanosMeta, nil)
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(headOpts.ChunkDirRoot, blk.String()), thanosMeta, nil)
 	testutil.Ok(t, err)
 
 	// Create a bucket and upload the block there.
@@ -1716,7 +1740,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	instrBkt := objstore.WithNoopInstr(bkt)
 	logger := log.NewNopLogger()
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blkDir, blk.String())))
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String())))
 
 	// Instance a real bucket store we'll use to query the series.
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
@@ -1724,6 +1748,9 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
+
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
 		logger,
@@ -1733,8 +1760,10 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		10,
 		nil,
@@ -1869,6 +1898,9 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(t, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -1877,8 +1909,10 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		10,
 		nil,
@@ -1952,7 +1986,10 @@ func createBlockWithLargeChunk(t testutil.TB, dir string, lbls labels.Labels, ra
 }
 
 func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
-	h, err := tsdb.NewHead(nil, nil, nil, int64(totalSamples)*step, dir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = dir
+	headOpts.ChunkRange = int64(totalSamples) * step
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -2029,6 +2066,9 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
 	testutil.Ok(tb, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(1000000)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		logger,
 		nil,
@@ -2037,8 +2077,10 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		tmpDir,
 		indexCache,
 		nil,
-		1000000,
+		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		10,
 		nil,
@@ -2215,4 +2257,61 @@ func labelNamesFromSeriesSet(series []*storepb.Series) []string {
 
 	sort.Strings(labels)
 	return labels
+}
+
+func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
+	var (
+		ctx    = context.Background()
+		logger = log.NewNopLogger()
+
+		// Read chunks of different length. We're not using random to make the benchmark repeatable.
+		readLengths = []int64{300, 500, 1000, 5000, 10000, 30000, 50000, 100000, 300000, 1500000}
+	)
+
+	tmpDir, err := ioutil.TempDir("", "benchmark")
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, os.RemoveAll(tmpDir))
+	})
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, bkt.Close())
+	})
+
+	// Create a block.
+	blockID := createBlockWithOneSeriesWithStep(testutil.NewTB(b), tmpDir, labels.FromStrings("__name__", "test"), 0, 100000, rand.New(rand.NewSource(0)), 5000)
+
+	// Upload the block to the bucket.
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	blockMeta, err := metadata.InjectThanos(logger, filepath.Join(tmpDir, blockID.String()), thanosMeta, nil)
+	testutil.Ok(b, err)
+
+	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String())))
+
+	// Create a chunk pool with buckets between 1KB and 32KB.
+	chunkPool, err := pool.NewBucketedBytesPool(1024, 32*1024, 2, 1e10)
+	testutil.Ok(b, err)
+
+	// Create a bucket block with only the dependencies we need for the benchmark.
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil)
+	testutil.Ok(b, err)
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		offset := int64(0)
+		length := readLengths[n%len(readLengths)]
+
+		_, err := blk.readChunkRange(ctx, 0, offset, length)
+		if err != nil {
+			b.Fatal(err.Error())
+		}
+	}
 }

@@ -43,7 +43,7 @@ type queryFrontendConfig struct {
 
 func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
-	cmd := app.Command(comp.String(), "query frontend")
+	cmd := app.Command(comp.String(), "Query frontend command implements a service deployed in front of queriers to improve query parallelization and caching.")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
 			// Max body size is 10 MiB.
@@ -64,6 +64,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
+
+	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
@@ -193,7 +196,7 @@ func runQueryFrontend(
 	roundTripper = tripperWare(roundTripper)
 
 	// Create the query frontend transport.
-	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger)
+	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
 	if cfg.CompressResponses {
 		handler = gziphandler.GzipHandler(handler)
 	}

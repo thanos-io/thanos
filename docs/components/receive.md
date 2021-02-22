@@ -149,7 +149,13 @@ Flags:
                                  storage. 0d - disables this retention.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
-                                 configuration.
+                                 configuration. A watcher is initialized to
+                                 watch changes and update the hashring
+                                 dynamically.
+      --receive.hashrings=<content>
+                                 Alternative to 'receive.hashrings-file' flag
+                                 (lower priority). Content of file that contains
+                                 the hashring configuration.
       --receive.hashrings-file-refresh-interval=5m
                                  Refresh interval to re-read the hashring
                                  configuration file. (used as a fallback)
@@ -172,6 +178,9 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --tsdb.allow-overlapping-blocks
+                                 Allow overlapping blocks, which in turn enables
+                                 vertical compaction and vertical query merge.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on

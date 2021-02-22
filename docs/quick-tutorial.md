@@ -7,7 +7,7 @@ weight: 1
 
 # Quick Tutorial
 
-Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
+Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos)
 We will be progressively updating our Katacoda Course with more scenarios.
 
 On top of this feel free to go through our tutorial presented here:
@@ -114,7 +114,7 @@ global:
 
 ### [Querier/Query](components/query.md)
 
-Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
+Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](../components/query.md) to evaluate PromQL queries against all instances at once.
 
 The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
@@ -224,7 +224,7 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 
 ### [Ruler/Rule](components/rule.md)
 
-In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](components/rule.md),
+In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](../components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
 

@@ -201,6 +201,51 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
 	}
 
+	receiver := NewService(
+		fmt.Sprintf("receive-%v", name),
+		DefaultImage(),
+		// TODO(bwplotka): BuildArgs should be interface.
+		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
+			"--debug.name":                 fmt.Sprintf("receive-%v", name),
+			"--grpc-address":               ":9091",
+			"--grpc-grace-period":          "0s",
+			"--http-address":               ":8080",
+			"--remote-write.address":       ":8081",
+			"--label":                      fmt.Sprintf(`receive="%s"`, name),
+			"--tsdb.path":                  filepath.Join(container, "data"),
+			"--log.level":                  logLevel,
+			"--receive.replication-factor": strconv.Itoa(replicationFactor),
+			"--receive.local-endpoint":     localEndpoint,
+			"--receive.hashrings":          string(b),
+		})...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+		8081,
+	)
+	receiver.SetUser(strconv.Itoa(os.Getuid()))
+	receiver.SetBackoff(defaultBackoffConfig)
+
+	return receiver, nil
+}
+
+func NewReceiverWithConfigWatcher(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
+	if len(hashring) == 0 {
+		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
+	}
+
+	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dataDir := filepath.Join(dir, "data")
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	if err := os.MkdirAll(dataDir, 0777); err != nil {
+		return nil, errors.Wrap(err, "create receive dir")
+	}
+	b, err := json.Marshal(hashring)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
+	}
+
 	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0666); err != nil {
 		return nil, errors.Wrap(err, "creating receive config")
 	}

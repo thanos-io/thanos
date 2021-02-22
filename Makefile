@@ -7,14 +7,16 @@ DOCKER_CI_TAG     ?= test
 
 SHA=''
 arch = $(shell uname -m)
-# Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA
-# Update at 2020.12.11
+# Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
+# just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
+# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly (dependabot?)
+# Update at 2020.2.01
 ifeq ($(arch), x86_64)
     # amd64
-    SHA="fca3819d670cdaee0d785499fda202ea01c0640ca0803d26ae6dbf2a1c8c041c"
+    SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
 else ifeq ($(arch), armv8)
     # arm64
-    SHA="5478a46f1eb37ebe414c399766f8088bc8353345602053485dd429b9a87097e5"
+    SHA="4dd2d3bba195563e6cb2b286f23dc832d0fda6c6662e6de2e86df454094b44d8"
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
@@ -56,7 +58,7 @@ PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
 REACT_APP_PATH = pkg/ui/react-app
-REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
+REACT_APP_SOURCE_FILES = $(shell find $(REACT_APP_PATH)/public/ $(REACT_APP_PATH)/src/ $(REACT_APP_PATH)/tsconfig.json)
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
 
@@ -169,7 +171,7 @@ docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
 	@echo ">> generating docs"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning whte noise"
+	@echo ">> cleaning white noise"
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs

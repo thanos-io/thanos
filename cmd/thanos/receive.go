@@ -19,8 +19,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -63,8 +65,8 @@ func registerReceive(app *extkingpin.App) {
 
 	retention := extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
 
-	hashringsFile := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration.").
-		PlaceHolder("<path>").String()
+	hashringsFilePath := cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").String()
+	hashringsFileContent := cmd.Flag("receive.hashrings", "Alternative to 'receive.hashrings-file' flag (lower priority). Content of file that contains the hashring configuration.").PlaceHolder("<content>").String()
 
 	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
@@ -85,6 +87,7 @@ func registerReceive(app *extkingpin.App) {
 
 	tsdbMinBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 	tsdbMaxBlockDuration := extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbAllowOverlappingBlocks := cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 
@@ -105,20 +108,13 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		var cw *receive.ConfigWatcher
-		if *hashringsFile != "" {
-			cw, err = receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, *hashringsFile, *refreshInterval)
-			if err != nil {
-				return err
-			}
-		}
-
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:  int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration: int64(time.Duration(*retention) / time.Millisecond),
-			NoLockfile:        *noLockFile,
-			WALCompression:    *walCompression,
+			MinBlockDuration:       int64(time.Duration(*tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:       int64(time.Duration(*tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:      int64(time.Duration(*retention) / time.Millisecond),
+			NoLockfile:             *noLockFile,
+			WALCompression:         *walCompression,
+			AllowOverlappingBlocks: *tsdbAllowOverlappingBlocks,
 		}
 
 		// Local is empty, so try to generate a local endpoint
@@ -158,7 +154,9 @@ func registerReceive(app *extkingpin.App) {
 			tsdbOpts,
 			*ignoreBlockSize,
 			lset,
-			cw,
+			*hashringsFilePath,
+			*hashringsFileContent,
+			refreshInterval,
 			*localEndpoint,
 			*tenantHeader,
 			*defaultTenantID,
@@ -197,7 +195,9 @@ func runReceive(
 	tsdbOpts *tsdb.Options,
 	ignoreBlockSize bool,
 	lset labels.Labels,
-	cw *receive.ConfigWatcher,
+	hashringsFilePath string,
+	hashringsFileContent string,
+	refreshInterval *model.Duration,
 	endpoint string,
 	tenantHeader string,
 	defaultTenantID string,
@@ -373,7 +373,13 @@ func runReceive(
 		// watcher, we close the chan ourselves.
 		updates := make(chan receive.Hashring, 1)
 
-		if cw != nil {
+		// The Hashrings config file path is given initializing config watcher.
+		if hashringsFilePath != "" {
+			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, hashringsFilePath, *refreshInterval)
+			if err != nil {
+				return errors.Wrap(err, "failed to initialize config watcher")
+			}
+
 			// Check the hashring configuration on before running the watcher.
 			if err := cw.ValidateConfig(); err != nil {
 				cw.Stop()
@@ -383,15 +389,30 @@ func runReceive(
 
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				return receive.HashringFromConfig(ctx, updates, cw)
+				level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
+				return receive.HashringFromConfigWatcher(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})
 		} else {
+			var ring receive.Hashring
+			// The Hashrings config file content given initialize configuration from content.
+			if len(hashringsFileContent) > 0 {
+				ring, err = receive.HashringFromConfig(hashringsFileContent)
+				if err != nil {
+					close(updates)
+					return errors.Wrap(err, "failed to validate hashring configuration file")
+				}
+				level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
+			} else {
+				level.Info(logger).Log("msg", "the hashring file is not specified use single node hashring.")
+				ring = receive.SingleNodeHashring(endpoint)
+			}
+
 			cancel := make(chan struct{})
 			g.Add(func() error {
 				defer close(updates)
-				updates <- receive.SingleNodeHashring(endpoint)
+				updates <- ring
 				<-cancel
 				return nil
 			}, func(error) {

@@ -162,6 +162,7 @@ type QueryRangeConfig struct {
 	CachePathOrContent extflag.PathOrContent
 
 	AlignRangeWithStep     bool
+	RequestDownsampled     bool
 	SplitQueriesByInterval time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits

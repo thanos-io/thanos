@@ -31,8 +31,9 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.19.0   | (planned) 2021.01.10     | `@bwplotka  `            |
-| v0.18.0   | (planned) 2020.12.30     | `@squat     `            |
+| v0.20.0   | (planned) 2021.03.31     | `@kakkoyun`              |
+| v0.19.0   | (planned) 2021.02.17     | `@bwplotka`              |
+| v0.18.0   | 2021.01.06               | `@squat`                 |
 | v0.17.0   | 2020.11.18               | `@metalmatze`            |
 | v0.16.0   | 2020.10.26               | `@bwplotka`              |
 | v0.15.0   | 2020.08.12               | `@kakkoyun`              |
@@ -88,6 +89,8 @@ Release is happening on separate `release-<major>.<minor>` branch.
 
     1. Note any changes in the changelog
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
+
+1. Update website's [hugo.yaml](../website/hugo.yaml) to have correct links for new release (add `0.y.z: "/:sections/:filename.md"`).
 
 1. Update tutorials:
 

@@ -180,11 +180,12 @@ func TestQueryEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine: func(int64) *promql.Engine {
 			return qe
 		},
-		gate: gate.New(nil, 4),
+		gate:                  gate.New(nil, 4),
+		defaultRangeQueryStep: time.Second,
 	}
 
 	start := time.Unix(0, 0)
@@ -481,6 +482,28 @@ func TestQueryEndpoints(t *testing.T) {
 				},
 			},
 		},
+		// Use default step when missing.
+		{
+			endpoint: api.queryRange,
+			query: url.Values{
+				"query": []string{"time()"},
+				"start": []string{"0"},
+				"end":   []string{"2"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeMatrix,
+				Result: promql.Matrix{
+					promql.Series{
+						Points: []promql.Point{
+							{V: 0, T: timestamp.FromTime(start)},
+							{V: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
+							{V: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
+						},
+						Metric: nil,
+					},
+				},
+			},
+		},
 		// Missing query params in range queries.
 		{
 			endpoint: api.queryRange,
@@ -497,15 +520,6 @@ func TestQueryEndpoints(t *testing.T) {
 				"query": []string{"time()"},
 				"start": []string{"0"},
 				"step":  []string{"1"},
-			},
-			errType: baseAPI.ErrorBadData,
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"0"},
-				"end":   []string{"2"},
 			},
 			errType: baseAPI.ErrorBadData,
 		},
@@ -674,7 +688,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine: func(int64) *promql.Engine {
 			return qe
 		},
@@ -684,7 +698,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, nil, db, component.Query, nil), 2, timeout),
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine: func(int64) *promql.Engine {
 			return qe
 		},

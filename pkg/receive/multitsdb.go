@@ -295,7 +295,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.allowOutOfOrderUpload,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, reg, s, component.Receive, lset), s, ship)
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship)
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
