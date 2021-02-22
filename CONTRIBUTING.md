@@ -103,11 +103,8 @@ component of the Thanos distributed system. We recommend:
 ### Building/Running/Developing
 
 * Run `make help` for getting a list of helper commands that will make your development life much more easy. It also provides auto **linting** and **formatter** for making sure the code quality meets the standards of contribution.
-
 * Usually, while sending in a PR  `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs`, `make quickstart` are the most used commands while developing Thanos.
-
 * When you run `make build` from `$GOPATH/src/github.com/thanos`the code is compiled and a binary named `thanos` is created. To run the binary, run `thanos`, which would call the thanos binary from `$GOPATH/src/bin/thanos`.
-
 * In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
   * Run `make quickstart` for spinning up all components of Thanos quickly.
   * If you want to run specific components instead of all, feel free to use and edit - [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh)
@@ -134,16 +131,13 @@ $ thanos -h
 
 **Signing your work: DCO (Developer Certificate of Origin) Process.**
 
-By contributing to this project you agree to the [Developer Certificate of Origin](https://developercertificate.org/)(DCO). This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
-
-To signoff, you need to add  `Signed-off-by: Your Name <your email id>` at the end of your commit messages. You can do this using  [`git commit -s`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s). For example:
+* By contributing to this project you agree to the [Developer Certificate of Origin](https://developercertificate.org/)(DCO). This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
+* To signoff, you need to add  `Signed-off-by: Your Name <your email id>` at the end of your commit messages. You can do this using  [`git commit -s`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt--s). For example:
 ```
 $ git commit -s -m 'This is my commit message'
 ```
-
-You can also alias ``commit`` as `commit -s` in your `~/.gitconfig` to signoff all your future commits.
-
-If you have authored an unsigned commit, you can update it using ``git commit --amend --signoff``. If you've pushed your changes to GitHub already you'll need to force push your branch after this with ``git push -f``.
+* You can also alias ``commit`` as `commit -s` in your `~/.gitconfig` to signoff all your future commits.
+* If you have authored an unsigned commit, you can update it using ``git commit --amend --signoff``. If you've pushed your changes to GitHub already you'll need to force push your branch after this with ``git push -f``.
 
 **PR Changes**
 
@@ -161,33 +155,25 @@ $ git push origin <your_branch_for_new_pr>
 ```
 **Tests for your changes**
 
-Add unit tests for new functionality. Add e2e tests for major changes to functionality.
-
-If you don't have a live object store ready, you can use the `make test-local` command.
-
-**NOTE**: This command skips tests against live object storage systems by specifying environment variables; this causes the
+* Add unit tests for new functionality. Add e2e tests for major changes to functionality.
+* If you don't have a live object store ready, you can use the `make test-local` command.
+* **NOTE**: This command skips tests against live object storage systems by specifying environment variables; this causes the
 store-specific tests to be run against memory and filesystem object storage types only. The CI tests run uses GCS, AWS and Swift.
-
-Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
+* Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
 
 **Updating your branch**
 
 It is a good practice to keep your branch updated by rebasing your branch to master.
-
 * Update your master - `git checkout master; git pull <remote_name> master`
-
 * Rebase your master - `git rebase -i master`
 
 **Changelog and Review Procedure**
 
-If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
-
-You may merge the Pull Request once you have the sign-off of at least one developer with write access, or if you
+* If your change affects users (adds or removes feature) consider adding the item to the [CHANGELOG](CHANGELOG.md).
+* You may merge the Pull Request once you have the sign-off of at least one developer with write access, or if you
 do not have permission to do that, you may request the second reviewer to merge it for you.
-
-If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
-
-If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. _Remember, good things take time :)_
+* If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
+* If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. _Remember, good things take time :)_
 
 ### Dependency management
 
@@ -218,8 +204,6 @@ You have to commit the changes to `go.mod` and `go.sum` before submitting the pu
 * Thanos provides make commands that help you run the tests locally.
 * If you have a decent hardware to run the tests, you can run them locally.
 * If you want to run the tests once in a while, it is suitable for you to send in a PR, the built in CI/CD setup runs the tests for you, which is nice for once in a while run.
-
-
 *  `make test`: Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in `./test/e2e`.
 *  `make test-local`: Runs test excluding tests for ALL object storage integrations.
 *   `make test-e2e`: Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
