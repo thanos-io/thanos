@@ -7,7 +7,9 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
+	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
+	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
@@ -24,6 +26,7 @@ require (
 	github.com/gogo/status v1.0.3
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/snappy v0.0.3-0.20201103224600-674baa8c7fc3
+	github.com/gomodule/redigo v1.8.4 // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -52,6 +55,7 @@ require (
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	github.com/weaveworks/common v0.0.0-20210112142934-23c8d7fa6120
+	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da // indirect
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.7.0
@@ -71,11 +75,11 @@ require (
 )
 
 replace (
-	github.com/cortexproject/cortex => github.com/pracucci/cortex v0.0.0-20210222171122-5c74b43721b8
 
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+	github.com/cortexproject/cortex => github.com/pracucci/cortex v0.0.0-20210222171122-5c74b43721b8
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
