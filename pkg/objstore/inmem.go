@@ -43,8 +43,9 @@ func (b *InMemBucket) Objects() map[string][]byte {
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error) error {
+func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error, options ...IterOption) error {
 	unique := map[string]struct{}{}
+	params := ApplyIterOptions(options...)
 
 	var dirPartsCount int
 	dirParts := strings.SplitAfter(dir, DirDelim)
@@ -61,8 +62,13 @@ func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error) 
 			continue
 		}
 
-		parts := strings.SplitAfter(filename, DirDelim)
-		unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
+		if params.Recursive {
+			// Any object matching the prefix should be included.
+			unique[filename] = struct{}{}
+		} else {
+			parts := strings.SplitAfter(filename, DirDelim)
+			unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
+		}
 	}
 	b.mtx.RUnlock()
 
