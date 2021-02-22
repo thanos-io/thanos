@@ -104,12 +104,13 @@ component of the Thanos distributed system. We recommend:
 
 * Run `make help` for getting a list of helper commands that will make your development life much more easy. It also provides auto **linting** and **formatter** for making sure the code quality meets the standards of contribution.
 
-* Usually, while sending in a PR  `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs` are the most used commands while developing Thanos.
+* Usually, while sending in a PR  `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs`, `make quickstart` are the most used commands while developing Thanos.
 
 * When you run `make build` the code is compiled and a binary named `thanos` is created, which can be run to start `thanos` binary. To run the binary, use `./thanos`
 
-* In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided a shell script for automating the running the components -
-  * [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh) - run the all the components using `./quickstart`
+* In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
+  * Run `make quickstart` for spinning up all components of Thanos quickly. Note that it also spins up Prometheus instance, so you should have Prometheus installed.
+  * If you want to run specific components instead of all, feel free to use and edit - [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh)
 
 ### Pull Request Process
 
@@ -228,8 +229,8 @@ At some point during development it is useful, in addition to running unit or e2
 can run any component manually by crafting specific flags for a test setup, there are already some nice tools and scripts available.
 Consider the following methods:
 
-* [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh): this script spins
-up a simple example setup. Do `make build` before running the script to build the `thanos` binary first.
+* `make quickstart`: this command spins
+up a simple setup of all Thanos components. Run `make build` before running the script to build the `thanos` binary first.
 * `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minutes)`
 at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)).
 This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
