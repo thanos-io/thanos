@@ -62,9 +62,9 @@ type blockDesc struct {
 
 func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration) (ulid.ULID, error) {
 	if delay == 0*time.Second {
-		return e2eutil.CreateBlock(ctx, dir, b.series, 120, b.mint, b.maxt, b.extLset, 0, false)
+		return e2eutil.CreateBlock(ctx, dir, b.series, 120, b.mint, b.maxt, b.extLset, 0, metadata.NoneFunc)
 	}
-	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0, false)
+	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0, metadata.NoneFunc)
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {

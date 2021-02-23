@@ -161,7 +161,7 @@ func removeAllNonMetaDirs(metas map[ulid.ULID]*metadata.Meta, dir string) error 
 	for ulid := range metas {
 		ignoreDirs = append(ignoreDirs, ulid.String())
 	}
-	return runutil.DeleteAllExceptDirs(dir, ignoreDirs)
+	return runutil.DeleteAll(dir, ignoreDirs...)
 }
 
 func downsampleBucket(
@@ -210,7 +210,12 @@ func downsampleBucket(
 		}
 	}
 
-	if err := removeAllNonMetaDirs(metas, dir); err != nil {
+	ignoreDirs := []string{}
+	for ulid := range metas {
+		ignoreDirs = append(ignoreDirs, ulid.String())
+	}
+
+	if err := runutil.DeleteAll(dir, ignoreDirs...); err != nil {
 		level.Warn(logger).Log("msg", "failed deleting potentially outdated directories/files, some disk space usage might have leaked. Continuing", "err", err, "dir", dir)
 	}
 

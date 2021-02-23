@@ -91,7 +91,7 @@ func TestUpload(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "b", Value: "1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	testutil.Ok(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String()), os.ModePerm))
 
@@ -203,7 +203,7 @@ func TestUpload(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, nil, 124, false)
+		}, 100, 0, 1000, nil, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		err = Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
@@ -228,7 +228,7 @@ func TestDelete(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 4, len(bkt.Objects()))
@@ -248,7 +248,7 @@ func TestDelete(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc))
 		testutil.Equals(t, 5, len(bkt.Objects()))
@@ -302,7 +302,7 @@ func TestMarkForDeletion(t *testing.T) {
 				{{Name: "a", Value: "3"}},
 				{{Name: "a", Value: "4"}},
 				{{Name: "b", Value: "1"}},
-			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 			testutil.Ok(t, err)
 
 			tcase.preUpload(t, id, bkt)
@@ -358,7 +358,7 @@ func TestMarkForNoCompact(t *testing.T) {
 				{{Name: "a", Value: "3"}},
 				{{Name: "a", Value: "4"}},
 				{{Name: "b", Value: "1"}},
-			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 			testutil.Ok(t, err)
 
 			tcase.preUpload(t, id, bkt)
@@ -383,32 +383,93 @@ func TestHashDownload(t *testing.T) {
 
 	tmpDir, err := ioutil.TempDir("", "test-block-download")
 	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	t.Cleanup(func() {
+		testutil.Ok(t, os.RemoveAll(tmpDir))
+	})
 
 	bkt := objstore.NewInMemBucket()
+	r := prometheus.NewRegistry()
+	instrumentedBkt := objstore.BucketWithMetrics("test", bkt, r)
+
 	b1, err := e2eutil.CreateBlockWithTombstone(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 42, true)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 42, metadata.SHA256Func)
 	testutil.Ok(t, err)
-	testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String()), metadata.SHA256Func))
+
+	testutil.Ok(t, Upload(ctx, log.NewNopLogger(), instrumentedBkt, path.Join(tmpDir, b1.String()), metadata.SHA256Func))
 	testutil.Equals(t, 4, len(bkt.Objects()))
 
-	m, err := metadata.ReadFromDir(path.Join(tmpDir, b1.String()))
+	m, err := DownloadMeta(ctx, log.NewNopLogger(), bkt, b1)
 	testutil.Ok(t, err)
+
 	for _, fl := range m.Thanos.Files {
+		if fl.RelPath == MetaFilename {
+			continue
+		}
 		testutil.Assert(t, fl.Hash != nil, "expected a hash for %s but got nil", fl.RelPath)
 	}
-	err = Download(ctx, log.NewNopLogger(), bkt, m.ULID, path.Join(tmpDir, b1.String()))
-	testutil.Ok(t, err)
-	testutil.Equals(t, 0, bkt.GetDownloadedCount(m.ULID.String()+"/"+"index"))
-	testutil.Equals(t, 1, bkt.GetDownloadedCount(m.ULID.String()+"/"+"meta.json"))
-	testutil.Equals(t, 0, bkt.GetDownloadedCount(m.ULID.String()+"/"+"chunks/000001"))
 
-	err = Download(ctx, log.NewNopLogger(), bkt, m.ULID, path.Join(tmpDir, b1.String()))
-	testutil.Ok(t, err)
-	testutil.Equals(t, 0, bkt.GetDownloadedCount(m.ULID.String()+"/"+"index"))
-	testutil.Equals(t, 2, bkt.GetDownloadedCount(m.ULID.String()+"/"+"meta.json"))
-	testutil.Equals(t, 0, bkt.GetDownloadedCount(m.ULID.String()+"/"+"chunks/000001"))
+	// Remove the hash from one file to check if we always download it.
+	m.Thanos.Files[1].Hash = nil
+
+	metaEncoded := strings.Builder{}
+	testutil.Ok(t, m.Write(&metaEncoded))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(b1.String(), MetaFilename), strings.NewReader(metaEncoded.String())))
+
+	// Only downloads MetaFile and IndexFile.
+	{
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 2
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 2
+        thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+		`), `thanos_objstore_bucket_operations_total`))
+	}
+
+	// Ensures that we always download MetaFile.
+	{
+		testutil.Ok(t, os.Remove(path.Join(tmpDir, b1.String(), MetaFilename)))
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 4
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 4
+        thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+		`), `thanos_objstore_bucket_operations_total`))
+	}
+
+	// Remove chunks => gets redownloaded.
+	// Always downloads MetaFile.
+	// Finally, downloads the IndexFile since we have removed its hash.
+	{
+		testutil.Ok(t, os.RemoveAll(path.Join(tmpDir, b1.String(), ChunksDirname)))
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+			# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+			# TYPE thanos_objstore_bucket_operations_total counter
+			thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 7
+			thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 6
+			thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+			`), `thanos_objstore_bucket_operations_total`))
+	}
 }
 
 func TestUploadCleanup(t *testing.T) {
@@ -427,7 +488,7 @@ func TestUploadCleanup(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "b", Value: "1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, false)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	{

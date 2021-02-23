@@ -57,7 +57,7 @@ func TestReaders(t *testing.T) {
 		{{Name: "a", Value: "13"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "2"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, false)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
@@ -400,7 +400,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	}
 
 	// Create a block.
-	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, false)
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(b, err)
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 

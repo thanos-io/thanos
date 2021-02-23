@@ -201,7 +201,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 }
 
 // DownloadDir downloads all object found in the directory into the local directory.
-func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths []string) error {
+func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
 	if err := os.MkdirAll(dst, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
@@ -209,11 +209,11 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 	var downloadedFiles []string
 	if err := bkt.Iter(ctx, src, func(name string) error {
 		if strings.HasSuffix(name, DirDelim) {
-			return DownloadDir(ctx, logger, bkt, originalSrc, name, filepath.Join(dst, filepath.Base(name)), ignoredPaths)
+			return DownloadDir(ctx, logger, bkt, originalSrc, name, filepath.Join(dst, filepath.Base(name)), ignoredPaths...)
 		}
 		for _, ignoredPath := range ignoredPaths {
 			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
-				level.Info(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+				level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
 				return nil
 			}
 		}

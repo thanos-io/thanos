@@ -160,9 +160,9 @@ func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ..
 	*err = merr.Err()
 }
 
-// DeleteAllExceptDirs deletes all files and directories inside the given
+// DeleteAll deletes all files and directories inside the given
 // dir except for the ignoreDirs directories.
-func DeleteAllExceptDirs(dir string, ignoreDirs []string) error {
+func DeleteAll(dir string, ignoreDirs ...string) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")

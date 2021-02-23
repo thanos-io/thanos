@@ -43,7 +43,9 @@ const (
 	DebugMetas = "debug/metas"
 )
 
-// Download downloads directory that is mean to be block directory.
+// Download downloads directory that is mean to be block directory. If any of the files
+// have a hash calculated in the meta file and it matches with what is in the destination path then
+// we do not download it. We always download the meta file.
 func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
 	if err := os.MkdirAll(dst, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
@@ -59,12 +61,12 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 
 	ignoredPaths := []string{MetaFilename}
 	for _, fl := range m.Thanos.Files {
-		if fl.Hash == nil || fl.RelPath == "" {
+		if fl.Hash == nil || fl.Hash.Func == metadata.NoneFunc || fl.RelPath == "" {
 			continue
 		}
 		actualHash, err := metadata.CalculateHash(filepath.Join(dst, fl.RelPath), fl.Hash.Func)
 		if err != nil {
-			logger.Log("failed to calculate hash of %s due to %v, continuing", fl.RelPath, err)
+			level.Error(logger).Log("msg", "failed to calculate hash when downloading; re-downloading", "relPath", fl.RelPath, "err", err)
 			continue
 		}
 
@@ -73,7 +75,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 		}
 	}
 
-	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), id.String(), dst, ignoredPaths); err != nil {
+	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), id.String(), dst, ignoredPaths...); err != nil {
 		return err
 	}
 

@@ -43,7 +43,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
 			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
 			labels.Labels{{Name: "e1", Value: "1"}},
-			downsample.ResLevel0, false)
+			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))
 	}

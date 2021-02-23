@@ -891,7 +891,7 @@ func removeAllNonCGDirs(groups []*Group, compactDir string) error {
 	for _, gr := range groups {
 		ignoreDirs = append(ignoreDirs, gr.Key())
 	}
-	return runutil.DeleteAllExceptDirs(compactDir, ignoreDirs)
+	return runutil.DeleteAll(compactDir, ignoreDirs...)
 }
 
 // Compact runs compaction over bucket.
@@ -966,7 +966,13 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
-		if err := removeAllNonCGDirs(groups, c.compactDir); err != nil {
+
+		ignoreDirs := []string{}
+		for _, gr := range groups {
+			ignoreDirs = append(ignoreDirs, gr.Key())
+		}
+
+		if err := runutil.DeleteAll(c.compactDir, ignoreDirs...); err != nil {
 			level.Warn(c.logger).Log("msg", "failed deleting non-compaction group directories/files, some disk space usage might have leaked. Continuing", "err", err, "dir", c.compactDir)
 		}
 

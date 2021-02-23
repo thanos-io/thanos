@@ -25,8 +25,8 @@ const (
 
 // ObjectHash stores the hash of an object in the object storage.
 type ObjectHash struct {
-	Func  HashFunc
-	Value string
+	Func  HashFunc `json:"hashFunc"`
+	Value string   `json:"value"`
 }
 
 // Equal returns true if two hashes are equal.

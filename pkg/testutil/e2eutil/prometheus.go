@@ -343,9 +343,9 @@ func CreateBlock(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
-	addHashes bool,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, addHashes)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
@@ -357,9 +357,9 @@ func CreateBlockWithTombstone(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
-	addHashes bool,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, addHashes)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
@@ -374,9 +374,9 @@ func CreateBlockWithBlockDelay(
 	blockDelay time.Duration,
 	extLset labels.Labels,
 	resolution int64,
-	addHashes bool,
+	hashFunc metadata.HashFunc,
 ) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, addHashes)
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -410,7 +410,7 @@ func createBlock(
 	extLset labels.Labels,
 	resolution int64,
 	tombstones bool,
-	addHashes bool,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
@@ -482,16 +482,15 @@ func createBlock(
 	blockDir := filepath.Join(dir, id.String())
 
 	files := []metadata.File{}
-	if addHashes {
+	if hashFunc != metadata.NoneFunc {
 		paths := []string{}
-		err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
+		if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
 			paths = append(paths, path)
 			return nil
-		})
-		if err != nil {
+		}); err != nil {
 			return id, errors.Wrapf(err, "walking %s", dir)
 		}
 

@@ -291,15 +291,6 @@ func runCompact(
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
 	)
 
-	// Clean-up and create a fresh state at the beginning.
-	if err := os.RemoveAll(downsamplingDir); err != nil {
-		return errors.Wrap(err, "clean working downsample directory")
-	}
-
-	if err := os.RemoveAll(compactDir); err != nil {
-		return errors.Wrap(err, "clean working compact directory")
-	}
-
 	if err := os.Mkdir(compactDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "create working compact directory")
 	}
