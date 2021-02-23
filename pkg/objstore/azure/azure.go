@@ -115,10 +115,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 
 	marker := blob.Marker{}
 	params := objstore.ApplyIterOptions(options...)
-
-	listOptions := blob.ListBlobsSegmentOptions{
-		Prefix: prefix,
-	}
+	listOptions := blob.ListBlobsSegmentOptions{Prefix: prefix}
 
 	for i := 1; ; i++ {
 		var (
