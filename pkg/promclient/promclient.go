@@ -110,7 +110,7 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 
 	req, err := http.NewRequest(method, u.String(), b)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "create GET request")
+		return nil, 0, errors.Wrapf(err, "create %s request", method)
 	}
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
@@ -121,7 +121,7 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 
 	resp, err := c.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "perform GET request against %s", u.String())
+		return nil, 0, errors.Wrapf(err, "perform %s request against %s", method, u.String())
 	}
 	defer runutil.ExhaustCloseWithErrCapture(&err, resp.Body, "%s: close body", req.URL.String())
 
