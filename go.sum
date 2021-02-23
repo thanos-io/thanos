@@ -903,8 +903,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/posener/complete v1.1.1/go.mod h1:em0nMJCgc9GFtwrmVmEMR/ZL6WyhyjMBndrE9hABlRI=
 github.com/posener/complete v1.2.3/go.mod h1:WZIdtGGp+qx0sLrYKtIRAruyNpv6hFCicSgv7Sy7s/s=
-github.com/pracucci/cortex v0.0.0-20210223155100-db65eb46fb78 h1:UxS4hSV0i/nl8+aDCGx8MaoQcpZuWg8NWzTlyHKiOkY=
-github.com/pracucci/cortex v0.0.0-20210223155100-db65eb46fb78/go.mod h1:c9zwguG3EtW1SBqZsSUY+feyEu0hMBhlhL+5NZmVgwQ=
+github.com/pracucci/cortex v0.0.0-20210223160359-b668aa375d55 h1:fM74uTtpoctY2nAEWkl+Rai9JQMNbznBKgy22uNoXfo=
+github.com/pracucci/cortex v0.0.0-20210223160359-b668aa375d55/go.mod h1:c9zwguG3EtW1SBqZsSUY+feyEu0hMBhlhL+5NZmVgwQ=
 github.com/prometheus/alertmanager v0.21.0/go.mod h1:h7tJ81NA0VLWvWEayi1QltevFkLF3KxmC/malTcT8Go=
 github.com/prometheus/alertmanager v0.21.1-0.20201106142418-c39b78780054 h1:NgCRBfzDpyIhX6Pjh7XSWPHUC8T5dA1yVuK/gwXM7Jw=
 github.com/prometheus/alertmanager v0.21.1-0.20201106142418-c39b78780054/go.mod h1:imXRHOP6QTsE0fFsIsAV/cXimS32m7gVZOiUj11m6Ig=
