@@ -38,7 +38,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 		s.SharedDir(),
 		netName,
 		"prom2",
-		defaultPromConfig("ha", 1, "", "", "localhost:9090", "sidecar-prom1:8080"),
+		defaultPromConfig("ha", 1, "", "", "localhost:9090", "sidecar-prom2:8080"),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)

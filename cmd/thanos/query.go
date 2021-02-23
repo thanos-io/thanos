@@ -340,9 +340,6 @@ func runQuery(
 					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
 				}
 
-				// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
-				// hence, any duplicates will be tracked in the store api set.
-
 				return specs
 			},
 			dialOpts,
