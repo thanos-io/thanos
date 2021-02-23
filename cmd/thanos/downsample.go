@@ -152,18 +152,6 @@ func RunDownsample(
 	return nil
 }
 
-// removeAllNonMetaDirs removes all subdirectories and all files under the given dir
-// that do not correspond to any metas. This is needed in the case when
-// the downsampling process resumes without restarting the whole process
-// but the blocks do not exist in the remote object storage anymore.
-func removeAllNonMetaDirs(metas map[ulid.ULID]*metadata.Meta, dir string) error {
-	ignoreDirs := []string{}
-	for ulid := range metas {
-		ignoreDirs = append(ignoreDirs, ulid.String())
-	}
-	return runutil.DeleteAll(dir, ignoreDirs...)
-}
-
 func downsampleBucket(
 	ctx context.Context,
 	logger log.Logger,

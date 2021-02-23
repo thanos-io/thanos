@@ -881,19 +881,6 @@ func NewBucketCompactor(
 	}, nil
 }
 
-// removeAllNonCGDirs removes all subdirectories of the given directory
-// that are not part of the given compaction groups, and all files.
-// This is needed in the case when the compaction process resumes without
-// restarting the whole process but the blocks do not exist in the remote
-// object storage anymore.
-func removeAllNonCGDirs(groups []*Group, compactDir string) error {
-	ignoreDirs := []string{}
-	for _, gr := range groups {
-		ignoreDirs = append(ignoreDirs, gr.Key())
-	}
-	return runutil.DeleteAll(compactDir, ignoreDirs...)
-}
-
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 	defer func() {
