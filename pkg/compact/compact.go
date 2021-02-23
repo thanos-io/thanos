@@ -897,8 +897,9 @@ func removeAllNonCGDirs(groups []*Group, compactDir string) error {
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 	defer func() {
-		// Leave the compact directory for inspection if it is a halt error
-		// or if it is not then so that possibly we would not have to download everything again.
+		// Do not remove the compactDir if an error has occurred
+		// because potentially on the next run we would not have to download
+		// everything again.
 		if rerr != nil {
 			return
 		}
