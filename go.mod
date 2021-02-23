@@ -78,7 +78,7 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
-	github.com/cortexproject/cortex => github.com/pracucci/cortex v0.0.0-20210222171122-5c74b43721b8
+	github.com/cortexproject/cortex => github.com/pracucci/cortex v0.0.0-20210223155100-db65eb46fb78
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
