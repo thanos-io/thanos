@@ -64,7 +64,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 		if fl.Hash == nil || fl.Hash.Func == metadata.NoneFunc || fl.RelPath == "" {
 			continue
 		}
-		actualHash, err := metadata.CalculateHash(filepath.Join(dst, fl.RelPath), fl.Hash.Func)
+		actualHash, err := metadata.CalculateHash(filepath.Join(dst, fl.RelPath), fl.Hash.Func, logger)
 		if err != nil {
 			level.Error(logger).Log("msg", "failed to calculate hash when downloading; re-downloading", "relPath", fl.RelPath, "err", err)
 			continue
@@ -123,7 +123,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.New("empty external labels are not allowed for Thanos block.")
 	}
 
-	meta.Thanos.Files, err = gatherFileStats(bdir, hf)
+	meta.Thanos.Files, err = gatherFileStats(bdir, hf, logger)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
@@ -309,7 +309,7 @@ func GetSegmentFiles(blockDir string) []string {
 }
 
 // TODO(bwplotka): Gather stats when dirctly uploading files.
-func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File, _ error) {
+func gatherFileStats(blockDir string, hf metadata.HashFunc, logger log.Logger) (res []metadata.File, _ error) {
 	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
 	if err != nil {
 		return nil, errors.Wrapf(err, "read dir %v", filepath.Join(blockDir, ChunksDirname))
@@ -320,7 +320,7 @@ func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File
 			SizeBytes: f.Size(),
 		}
 		if hf != metadata.NoneFunc && !f.IsDir() {
-			h, err := metadata.CalculateHash(filepath.Join(blockDir, ChunksDirname, f.Name()), hf)
+			h, err := metadata.CalculateHash(filepath.Join(blockDir, ChunksDirname, f.Name()), hf, logger)
 			if err != nil {
 				return nil, errors.Wrapf(err, "calculate hash %v", filepath.Join(ChunksDirname, f.Name()))
 			}
@@ -338,7 +338,7 @@ func gatherFileStats(blockDir string, hf metadata.HashFunc) (res []metadata.File
 		SizeBytes: indexFile.Size(),
 	}
 	if hf != metadata.NoneFunc {
-		h, err := metadata.CalculateHash(filepath.Join(blockDir, IndexFilename), hf)
+		h, err := metadata.CalculateHash(filepath.Join(blockDir, IndexFilename), hf, logger)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calculate hash %v", indexFile.Name())
 		}

@@ -10,7 +10,9 @@ import (
 	"io"
 	"os"
 
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // HashFunc indicates what type of hash it is.
@@ -35,14 +37,14 @@ func (oh *ObjectHash) Equal(other *ObjectHash) bool {
 }
 
 // CalculateHash calculates the hash of the given type.
-func CalculateHash(p string, hf HashFunc) (ObjectHash, error) {
+func CalculateHash(p string, hf HashFunc, logger log.Logger) (ObjectHash, error) {
 	switch hf {
 	case SHA256Func:
 		f, err := os.Open(p)
 		if err != nil {
 			return ObjectHash{}, errors.Wrap(err, "opening file")
 		}
-		defer f.Close()
+		defer runutil.CloseWithLogOnErr(logger, f, "closing %s", p)
 
 		h := sha256.New()
 

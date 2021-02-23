@@ -495,7 +495,7 @@ func createBlock(
 		}
 
 		for _, p := range paths {
-			pHash, err := metadata.CalculateHash(blockDir+p, metadata.SHA256Func)
+			pHash, err := metadata.CalculateHash(blockDir+p, metadata.SHA256Func, log.NewNopLogger())
 			if err != nil {
 				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
 			}
