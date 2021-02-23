@@ -143,7 +143,7 @@ func TestClearsDirectoriesFilesProperly(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, f.Close())
 
-	testutil.Ok(t, DeleteAll(dir, "01EHBQRN4RF0HSRR1772KW0TN8", "01EHBQRN4RF0HSRR1772KW0TN9"))
+	testutil.Ok(t, DeleteAll(dir, "01EHBQRN4RF0HSRR1772KW0TN9", "01EHBQRN4RF0HSRR1772KW0TN8"))
 
 	_, err = os.Stat(filepath.Join(dir, "test123"))
 	testutil.Assert(t, os.IsNotExist(err))

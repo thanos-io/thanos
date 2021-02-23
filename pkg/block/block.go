@@ -66,7 +66,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 		}
 		actualHash, err := metadata.CalculateHash(filepath.Join(dst, fl.RelPath), fl.Hash.Func, logger)
 		if err != nil {
-			level.Error(logger).Log("msg", "failed to calculate hash when downloading; re-downloading", "relPath", fl.RelPath, "err", err)
+			level.Info(logger).Log("msg", "failed to calculate hash when downloading; re-downloading", "relPath", fl.RelPath, "err", err)
 			continue
 		}
 

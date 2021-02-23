@@ -291,11 +291,11 @@ func runCompact(
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
 	)
 
-	if err := os.Mkdir(compactDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "create working compact directory")
 	}
 
-	if err := os.Mkdir(downsamplingDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(downsamplingDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "create working downsample directory")
 	}
 

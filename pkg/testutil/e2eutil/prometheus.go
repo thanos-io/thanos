@@ -486,7 +486,7 @@ func createBlock(
 		paths := []string{}
 		if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
 			if info.IsDir() {
-				return filepath.SkipDir
+				return nil
 			}
 			paths = append(paths, path)
 			return nil
@@ -495,16 +495,15 @@ func createBlock(
 		}
 
 		for _, p := range paths {
-			pHash, err := metadata.CalculateHash(blockDir+p, metadata.SHA256Func, log.NewNopLogger())
+			pHash, err := metadata.CalculateHash(p, metadata.SHA256Func, log.NewNopLogger())
 			if err != nil {
 				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
 			}
 			files = append(files, metadata.File{
-				RelPath: p,
+				RelPath: strings.TrimPrefix(p, blockDir+"/"),
 				Hash:    &pHash,
 			})
 		}
-
 	}
 
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{

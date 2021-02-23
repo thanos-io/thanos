@@ -960,6 +960,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			ignoreDirs = append(ignoreDirs, gr.Key())
 		}
 
+		files, _ := ioutil.ReadDir(c.compactDir)
+		level.Warn(c.logger).Log("files", fmt.Sprintf("%+v", files), "ignoringdirs", fmt.Sprintf("%+v", ignoreDirs))
 		if err := runutil.DeleteAll(c.compactDir, ignoreDirs...); err != nil {
 			level.Warn(c.logger).Log("msg", "failed deleting non-compaction group directories/files, some disk space usage might have leaked. Continuing", "err", err, "dir", c.compactDir)
 		}
