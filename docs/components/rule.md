@@ -232,8 +232,8 @@ Full relabelling is planned to be done in future and is tracked here: https://gi
 ```$
 usage: thanos rule [<flags>]
 
-ruler evaluating Prometheus rules against given Query nodes, exposing Store API
-and storing old blocks in bucket
+Ruler evaluating Prometheus rules against given Query nodes, exposing Store API
+and storing old blocks in bucket.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try

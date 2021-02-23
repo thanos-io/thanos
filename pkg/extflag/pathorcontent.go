@@ -44,21 +44,21 @@ func RegisterPathOrContent(cmd FlagClause, flagName string, help string, require
 	}
 }
 
-// Content returns content of the file. Flag that specifies path has priority.
+// Content returns the content of the file when given or directly the content that has passed to the flag.
+// Flag that specifies path has priority.
 // It returns error if the content is empty and required flag is set to true.
 func (p *PathOrContent) Content() ([]byte, error) {
-	contentFlagName := p.flagName
 	fileFlagName := fmt.Sprintf("%s-file", p.flagName)
 
 	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return nil, errors.Errorf("both %s and %s flags set.", fileFlagName, contentFlagName)
+		return nil, errors.Errorf("both %s and %s flags set.", fileFlagName, p.flagName)
 	}
 
 	var content []byte
 	if len(*p.path) > 0 {
 		c, err := ioutil.ReadFile(*p.path)
 		if err != nil {
-			return nil, errors.Wrapf(err, "loading YAML file %s for %s", *p.path, fileFlagName)
+			return nil, errors.Wrapf(err, "loading file %s for %s", *p.path, fileFlagName)
 		}
 		content = c
 	} else {
@@ -66,7 +66,7 @@ func (p *PathOrContent) Content() ([]byte, error) {
 	}
 
 	if len(content) == 0 && p.required {
-		return nil, errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", fileFlagName, contentFlagName)
+		return nil, errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", fileFlagName, p.flagName)
 	}
 
 	return content, nil

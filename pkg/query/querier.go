@@ -255,7 +255,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
-	sms, err := storepb.TranslatePromMatchers(ms...)
+	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
@@ -265,6 +265,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
+	// TODO(bwplotka): Use inprocess gRPC.
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
 		MinTime:                 hints.Start,
@@ -332,18 +333,24 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 }
 
 // LabelValues returns all potential values for a label name.
-func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
+func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
+	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "convert matchers")
+	}
+
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseDisabled: !q.partialResponse,
 		Start:                   q.mint,
 		End:                     q.maxt,
+		Matchers:                pbMatchers,
 	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")

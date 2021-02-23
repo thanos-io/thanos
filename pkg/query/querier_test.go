@@ -27,7 +27,6 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -41,7 +40,7 @@ type sample struct {
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
-	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
+	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
 	queryableCreator := NewQueryableCreator(nil, nil, testProxy, 2, 5*time.Second)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
@@ -60,7 +59,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 
 // Tests E2E how PromQL works with downsampled data.
 func TestQuerier_DownsampledData(t *testing.T) {
-	testProxy := &storeServer{
+	testProxy := &testStoreServer{
 		resps: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}),                  // Downsampled chunk from Store.
@@ -411,7 +410,7 @@ func TestQuerier_Select(t *testing.T) {
 	}{
 		{
 			name: "select overlapping data with partial error",
-			storeAPI: &storeServer{
+			storeAPI: &testStoreServer{
 				resps: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 					storepb.NewWarnSeriesResponse(errors.New("partial error")),
@@ -1468,14 +1467,14 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	})
 }
 
-type storeServer struct {
+type testStoreServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.StoreServer
 
 	resps []*storepb.SeriesResponse
 }
 
-func (s *storeServer) Series(_ *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *testStoreServer) Series(_ *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	for _, resp := range s.resps {
 		err := srv.Send(resp)
 		if err != nil {

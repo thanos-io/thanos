@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -60,7 +61,7 @@ import (
 // registerRule registers a rule command.
 func registerRule(app *extkingpin.App) {
 	comp := component.Rule
-	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
+	cmd := app.Command(comp.String(), "Ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket.")
 
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
@@ -552,7 +553,7 @@ func runRule(
 
 	// Start gRPC server.
 	{
-		tsdbStore := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
+		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, lset)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
@@ -706,6 +707,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		}
 		lset = append(lset, labels.Label{Name: parts[0], Value: val})
 	}
+	sort.Sort(lset)
 	return lset, nil
 }
 

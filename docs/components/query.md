@@ -8,7 +8,7 @@ menu: components
 
 The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
-In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](https://github.com/thanos-io/thanos/blob/master/pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
 Querier is fully stateless and horizontally scalable.
 
@@ -219,7 +219,7 @@ option controls if storeAPI unavailability is considered critical.
 ### Concurrent Selects
 
 Thanos Querier has the ability to perform concurrent select request per query. It dissects given PromQL statement and executes selectors concurrently against the discovered StoreAPIs.
-The maximum number of concurrent requests are being made per query is controller by `query.max-concurrent-select` flag.
+The maximum number of concurrent requests are being made per query is controlled by `query.max-concurrent-select` flag.
 Keep in mind that the maximum number of concurrent queries that are handled by querier is controlled by `query.max-concurrent`. Please consider implications of combined value while tuning the querier.
 
 ### Store filtering
@@ -286,8 +286,8 @@ Example file SD file in YAML:
 ```$
 usage: thanos query [<flags>]
 
-query node exposing PromQL enabled Query API with data retrieved from multiple
-store nodes
+Query node exposing PromQL enabled Query API with data retrieved from multiple
+store nodes.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -428,6 +428,13 @@ Flags:
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
+      --query.default-step=1s    Set default step for range queries. Default
+                                 step is only used when step is not set in UI.
+                                 In such cases, Thanos UI will use default step
+                                 to calculate resolution (resolution =
+                                 max(rangeSeconds / 250, defaultStep)). This
+                                 will not work from Grafana, but Grafana has
+                                 __step variable which can be used.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

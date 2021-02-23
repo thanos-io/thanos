@@ -23,6 +23,20 @@
             },
           },
           {
+            alert: 'ThanosSidecarBucketOperationsFailed',
+            annotations: {
+              description: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} bucket operations are failing',
+              summary: 'Thanos Sidecar bucket operations are failing',
+            },
+            expr: |||
+              rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m]) > 0
+            ||| % thanos.sidecar,
+            'for': '5m',
+            labels: {
+              severity: 'critical',
+            },
+          },
+          {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
               description: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{ $value }} seconds.',

@@ -3,17 +3,17 @@
 | Name                  | Email                  | Slack                    | GitHub                                      | Company           |
 |-----------------------|------------------------|--------------------------|---------------------------------------------|-------------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
-| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Red Hat           |
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Polar Signals     |
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
 | Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)    | Red Hat           |
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
-| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@prmsrswt](https://github.com/prmsrswt)    | Atlan             |
 | Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
+| Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)        | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
-We are from different parts of Europe: Germany, Italy, Lithuania, Poland, and UK and India.
+We are from different parts of the world: Germany, Italy, Lithuania, Poland, UK, India and China.
 We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
@@ -34,7 +34,6 @@ Full list of triage persons is displayed below:
 | Name                  | Slack                    | GitHub                                                     |
 |-----------------------|--------------------------|------------------------------------------------------------|
 | Adrien Fillon         | `@Adrien F`              | [@adrien-f](https://github.com/adrien-f)                   |
-| Ben Ye                | `@yeya24`                | [@yeya24](https://github.com/yeya24)                       |
 | Martin Chodur         | `@FUSAKLA`               | [@fusakla](https://github.com/fusakla)                     |
 | Michael Dai           | `@jojohappy`             | [@jojohappy](https://github.com/jojohappy)                 |
 | Xiang Dai             | `@daixiang0`             | [@daixiang0](https://github.com/daixiang0)                 |
@@ -106,3 +105,8 @@ maintainer team.
 
 Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
 
+
+## Previous Maintainers
+
+Dominic Green
+Povilas Versockas

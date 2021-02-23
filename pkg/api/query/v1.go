@@ -23,6 +23,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ const (
 	ReplicaLabelsParam       = "replicaLabels[]"
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
+	Step                     = "step"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -76,6 +78,7 @@ type QueryAPI struct {
 	replicaLabels []string
 	storeSet      *query.StoreSet
 
+	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
 	defaultMetadataTimeRange               time.Duration
 }
@@ -92,6 +95,7 @@ func NewQueryAPI(
 	enableRulePartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
+	defaultRangeQueryStep time.Duration,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
 	gate gate.Gate,
@@ -109,6 +113,7 @@ func NewQueryAPI(
 		enableRulePartialResponse:              enableRulePartialResponse,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
+		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 	}
@@ -224,6 +229,21 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 	return defaultEnablePartialResponse, nil
 }
 
+func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (time.Duration, *api.ApiError) {
+	// Overwrite the cli flag when provided as a query parameter.
+	if val := r.FormValue(Step); val != "" {
+		var err error
+		defaultRangeQueryStep, err = parseDuration(val)
+		if err != nil {
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Step)}
+		}
+	}
+
+	// Default step is used this way to make it consistent with UI.
+	d := time.Duration(math.Max(float64(rangeSeconds/250), float64(defaultRangeQueryStep/time.Second))) * time.Second
+	return d, nil
+}
+
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -319,9 +339,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
-	step, err := parseDuration(r.FormValue("step"))
+	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep, int64(end.Sub(start)/time.Second))
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "param step")}
+		return nil, nil, apiErr
 	}
 
 	if step <= 0 {
@@ -439,16 +459,39 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
+	var matcherSets [][]*labels.Matcher
+	for _, s := range r.Form[MatcherParam] {
+		matchers, err := parser.ParseMetricSelector(s)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+		matcherSets = append(matcherSets, matchers)
+	}
+
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable labelValues")
 
-	// TODO(fabxc): add back request context.
+	var (
+		vals     []string
+		warnings storage.Warnings
+	)
+	// TODO(yeya24): push down matchers to Store level.
+	if len(matcherSets) > 0 {
+		// Get all series which match matchers.
+		var sets []storage.SeriesSet
+		for _, mset := range matcherSets {
+			s := q.Select(false, nil, mset...)
+			sets = append(sets, s)
+		}
+		vals, warnings, err = labelValuesByMatchers(sets, name)
+	} else {
+		vals, warnings, err = q.LabelValues(name)
+	}
 
-	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
@@ -544,14 +587,39 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, false).
+	var matcherSets [][]*labels.Matcher
+	for _, s := range r.Form[MatcherParam] {
+		matchers, err := parser.ParseMetricSelector(s)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+		matcherSets = append(matcherSets, matchers)
+	}
+
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable labelNames")
 
-	names, warnings, err := q.LabelNames()
+	var (
+		names    []string
+		warnings storage.Warnings
+	)
+	// TODO(yeya24): push down matchers to Store level.
+	if len(matcherSets) > 0 {
+		// Get all series which match matchers.
+		var sets []storage.SeriesSet
+		for _, mset := range matcherSets {
+			s := q.Select(false, nil, mset...)
+			sets = append(sets, s)
+		}
+		names, warnings, err = labelNamesByMatchers(sets)
+	} else {
+		names, warnings, err = q.LabelNames()
+	}
+
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}
@@ -672,4 +740,53 @@ func parseDuration(s string) (time.Duration, error) {
 		return time.Duration(d), nil
 	}
 	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
+}
+
+// Modified from https://github.com/eklockare/prometheus/blob/6178-matchers-with-label-values/web/api/v1/api.go#L571-L591.
+// labelNamesByMatchers uses matchers to filter out matching series, then label names are extracted.
+func labelNamesByMatchers(sets []storage.SeriesSet) ([]string, storage.Warnings, error) {
+	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
+	labelNamesSet := make(map[string]struct{})
+	for set.Next() {
+		series := set.At()
+		for _, lb := range series.Labels() {
+			labelNamesSet[lb.Name] = struct{}{}
+		}
+	}
+
+	warnings := set.Warnings()
+	if set.Err() != nil {
+		return nil, warnings, set.Err()
+	}
+	// Convert the map to an array.
+	labelNames := make([]string, 0, len(labelNamesSet))
+	for key := range labelNamesSet {
+		labelNames = append(labelNames, key)
+	}
+	sort.Strings(labelNames)
+	return labelNames, warnings, nil
+}
+
+// Modified from https://github.com/eklockare/prometheus/blob/6178-matchers-with-label-values/web/api/v1/api.go#L571-L591.
+// LabelValuesByMatchers uses matchers to filter out matching series, then label values are extracted.
+func labelValuesByMatchers(sets []storage.SeriesSet, name string) ([]string, storage.Warnings, error) {
+	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
+	labelValuesSet := make(map[string]struct{})
+	for set.Next() {
+		series := set.At()
+		labelValue := series.Labels().Get(name)
+		labelValuesSet[labelValue] = struct{}{}
+	}
+
+	warnings := set.Warnings()
+	if set.Err() != nil {
+		return nil, warnings, set.Err()
+	}
+	// Convert the map to an array.
+	labelValues := make([]string, 0, len(labelValuesSet))
+	for key := range labelValuesSet {
+		labelValues = append(labelValues, key)
+	}
+	sort.Strings(labelValues)
+	return labelValues, warnings, nil
 }

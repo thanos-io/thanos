@@ -154,6 +154,9 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}, nil)
 	testutil.Ok(t, err)
 
+	chunkPool, err := NewDefaultChunkBytesPool(0)
+	testutil.Ok(t, err)
+
 	store, err := NewBucketStore(
 		s.logger,
 		nil,
@@ -162,8 +165,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		s.cache,
 		nil,
-		0,
+		chunkPool,
 		NewChunksLimiterFactory(maxChunksLimit),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
 		filterConf,
@@ -468,10 +473,10 @@ func TestBucketStore_e2e(t *testing.T) {
 
 type naivePartitioner struct{}
 
-func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
+func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
 	for i := 0; i < length; i++ {
 		s, e := rng(i)
-		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
 	return parts
 }

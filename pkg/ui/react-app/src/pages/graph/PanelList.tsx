@@ -7,6 +7,7 @@ import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { StoreListProps } from '../../thanos/pages/stores/Stores';
 import { Store } from '../../thanos/pages/stores/store';
+import { FlagMap } from '../flags/Flags';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -25,7 +26,8 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
   stores: StoreListProps;
-  enableMetricAutocomplete: boolean;
+  enableAutocomplete: boolean;
+  defaultStep: string;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -34,7 +36,8 @@ export const PanelListContent: FC<PanelListProps> = ({
   pathPrefix,
   queryHistoryEnabled,
   stores = {},
-  enableMetricAutocomplete,
+  enableAutocomplete,
+  defaultStep,
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
@@ -116,10 +119,11 @@ export const PanelListContent: FC<PanelListProps> = ({
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
           stores={storeData}
-          enableMetricAutocomplete={enableMetricAutocomplete}
+          enableAutocomplete={enableAutocomplete}
+          defaultStep={defaultStep}
         />
       ))}
-      <Button className="mb-3" color="primary" onClick={addPanel}>
+      <Button className="d-block mb-3" color="primary" onClick={addPanel}>
         Add Panel
       </Button>
     </>
@@ -133,12 +137,16 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
-  const [enableMetricAutocomplete, setEnableMetricAutocomplete] = useLocalStorage('enable-metric-autocomplete', true);
+  const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-autocomplete', true);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
     `${pathPrefix}/api/v1/stores`
   );
+  const { response: flagsRes, error: flagsErr, isLoading: flagsLoading } = useFetch<FlagMap>(
+    `${pathPrefix}/api/v1/status/flags`
+  );
+  const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -184,11 +192,11 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       </Checkbox>
       <Checkbox
         wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="metric-autocomplete"
-        defaultChecked={enableMetricAutocomplete}
-        onChange={({ target }) => setEnableMetricAutocomplete(target.checked)}
+        id="autocomplete"
+        defaultChecked={enableAutocomplete}
+        onChange={({ target }) => setEnableAutocomplete(target.checked)}
       >
-        Enable metric autocomplete
+        Enable autocomplete
       </Checkbox>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">
@@ -210,15 +218,22 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
         </UncontrolledAlert>
       )}
+      {flagsErr && (
+        <UncontrolledAlert color="danger">
+          <strong>Warning: </strong>
+          Error fetching flags list: Unexpected response status when fetching flags: {flagsErr.message}
+        </UncontrolledAlert>
+      )}
       <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
         pathPrefix={pathPrefix}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
         stores={debugMode ? storesRes.data : {}}
-        enableMetricAutocomplete={enableMetricAutocomplete}
+        enableAutocomplete={enableAutocomplete}
+        defaultStep={defaultStep}
         queryHistoryEnabled={enableQueryHistory}
-        isLoading={storesLoading}
+        isLoading={storesLoading || flagsLoading}
       />
     </>
   );

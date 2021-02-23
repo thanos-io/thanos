@@ -44,6 +44,20 @@ max_item_size: 2KB
 	testutil.Ok(t, err)
 	testutil.Equals(t, uint64(1024*1024), cache.maxSizeBytes)
 	testutil.Equals(t, uint64(2*1024), cache.maxItemSizeBytes)
+
+	// Should instance an in-memory index cache with specified YAML config.s with units.
+	conf = []byte(`
+max_size: 2KB
+max_item_size: 1MB
+`)
+	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*InMemoryIndexCache)(nil), cache)
+	// testutil.Equals(t, uint64(1024*1024), cache.maxSizeBytes)
+	// testutil.Equals(t, uint64(2*1024), cache.maxItemSizeBytes)
+
+	// testutil.Equals(t, uint64(1024*1024), cache.maxItemSizeBytes)
+	// testutil.Equals(t, uint64(2*1024), cache.maxSizeBytes)
 }
 
 func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {

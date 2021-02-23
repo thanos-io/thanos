@@ -34,6 +34,12 @@ function draw() {
         dataTable.addRows(thanos.blocks
             .sort((a, b) => a.thanos.downsample.resolution - b.thanos.downsample.resolution)
             .map(function(d) {
+                if (!isThanosBlock(d)) {
+                    title = 'Prometheus'
+                    titles['Prometheus blocks with no Thanos data'] = title
+
+                    return [title, `level: ${d.compaction.level}`, generateTooltip(d), new Date(d.minTime), new Date(d.maxTime)]
+                }
                 // Title is the first column of the timeline.
                 //
                 // A unique Prometheus label that identifies each shard is used
@@ -71,6 +77,12 @@ function draw() {
     }
 }
 
+// isThanosBlock returns true if it is a block that has been processed by Thanos.
+function isThanosBlock(d) {
+    return d.thanos.labels !== null &&
+        d.thanos.source !== ""
+}
+
 function stringify(map) {
     var t = "";
     for (let [key, value] of Object.entries(map)) {
@@ -91,15 +103,19 @@ function generateTooltip(block) {
     var info = document.createElement("ul");
     info.className = "list-group list-group-flush";
 
-    var metaInfo = document.createElement("li");
-    metaInfo.className = "list-group-item";
-    metaInfo.innerHTML = "<p><b>Labels</b></p>";
-    var labelTable = document.createElement("table");
-    labelTable.className = "table table-sm mb-0";
-    for (let [key, value] of Object.entries(block.thanos.labels)) {
-        labelTable.innerHTML += `<tr><td>${key}</td><td>${value}</td></tr>`;
+
+    if (isThanosBlock(block)) {
+        var metaInfo = document.createElement("li");
+        metaInfo.className = "list-group-item";
+        metaInfo.innerHTML = "<p><b>Labels</b></p>";
+
+        var labelTable = document.createElement("table");
+        labelTable.className = "table table-sm mb-0";
+        for (let [key, value] of Object.entries(block.thanos.labels)) {
+            labelTable.innerHTML += `<tr><td>${key}</td><td>${value}</td></tr>`;
+        }
+        metaInfo.appendChild(labelTable);
     }
-    metaInfo.appendChild(labelTable);
 
     var dateInfo = document.createElement("li");
     var minTime = new Date(block.minTime);
@@ -114,18 +130,25 @@ function generateTooltip(block) {
     statsInfo.className = "list-group-item";
     statsInfo.innerHTML = generateLine("Series: ", block.stats.numSeries.toLocaleString());
     statsInfo.innerHTML += generateLine("Samples: ", block.stats.numSamples.toLocaleString());
-    statsInfo.innerHTML += generateLine("Chunks: ", block.stats.numChunks.toLocaleString());  
+    statsInfo.innerHTML += generateLine("Chunks: ", block.stats.numChunks.toLocaleString());
 
-    var compactInfo = document.createElement("li");
-    compactInfo.className = "list-group-item";
-    compactInfo.innerHTML = generateLine("Resolution: ", block.thanos.downsample.resolution);
-    compactInfo.innerHTML += generateLine("Level: ", block.compaction.level);
-    compactInfo.innerHTML += generateLine("Source: ", block.thanos.source);
 
-    info.appendChild(metaInfo);
+    if (isThanosBlock(block)) {
+        info.appendChild(metaInfo);
+    }
+
     info.appendChild(dateInfo);
     info.appendChild(statsInfo);
-    info.appendChild(compactInfo);
+
+    if (isThanosBlock(block)) {
+        var compactInfo = document.createElement("li");
+        compactInfo.className = "list-group-item";
+        compactInfo.innerHTML = generateLine("Resolution: ", block.thanos.downsample.resolution);
+        compactInfo.innerHTML += generateLine("Level: ", block.compaction.level);
+        compactInfo.innerHTML += generateLine("Source: ", block.thanos.source);
+
+        info.appendChild(compactInfo);
+    }
 
     tooltip.appendChild(title);
     tooltip.appendChild(info);

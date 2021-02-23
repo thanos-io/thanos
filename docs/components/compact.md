@@ -319,7 +319,7 @@ In order to achieve co-ordination between compactor and all object storage reade
 ```$
 usage: thanos compact [<flags>]
 
-continuously compacts blocks in an object store bucket
+Continuously compacts blocks in an object store bucket.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
@@ -381,6 +381,9 @@ Flags:
                                 a human eye anyway
       --block-sync-concurrency=20
                                 Number of goroutines to use when syncing block
+                                metadata from object storage.
+      --block-meta-fetch-concurrency=32
+                                Number of goroutines to use when fetching block
                                 metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between

@@ -17,7 +17,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -222,7 +221,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	t.Run("query frontend splitting works for labels names API", func(t *testing.T) {
 		// LabelNames and LabelValues API should still work via query frontend.
-		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -241,7 +240,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.HTTPEndpoint(), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -262,7 +261,7 @@ func TestQueryFrontend(t *testing.T) {
 	})
 
 	t.Run("query frontend splitting works for labels values API", func(t *testing.T) {
-		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -281,7 +280,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2e.WithLabelMatchers(labels.MustNewMatcher(labels.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.HTTPEndpoint(), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -306,7 +305,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {
@@ -342,7 +341,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.HTTPEndpoint(),
-			[]storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(now.Add(-24*time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			func(res []map[string]string) bool {

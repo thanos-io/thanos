@@ -4,8 +4,12 @@
 package s3
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -255,4 +259,41 @@ list_objects_version: "abcd"`)
 	if cfg2.ListObjectsVersion != "abcd" {
 		t.Errorf("parsing of list_objects_version failed: got %v, expected %v", cfg.ListObjectsVersion, "abcd")
 	}
+}
+
+func TestBucket_getServerSideEncryption(t *testing.T) {
+	// Default config should return no SSE config.
+	cfg := DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err := bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, nil, sse)
+
+	// If SSE is configured in the client config it should be used.
+	cfg = DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	cfg.SSEConfig = SSEConfig{Type: SSES3}
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.S3, sse.Type())
+
+	// If SSE is configured in the context it should win.
+	cfg = DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	cfg.SSEConfig = SSEConfig{Type: SSES3}
+	override, err := encrypt.NewSSEKMS("test", nil)
+	testutil.Ok(t, err)
+
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), sseConfigKey, override))
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.KMS, sse.Type())
 }

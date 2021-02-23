@@ -32,6 +32,7 @@ type BlockFilter struct {
 	labelSelector    labels.Selector
 	resolutionLevels map[compact.ResolutionLevel]struct{}
 	compactionLevels map[int]struct{}
+	blockIDs         []ulid.ULID
 }
 
 // NewBlockFilter returns block filter.
@@ -40,6 +41,7 @@ func NewBlockFilter(
 	labelSelector labels.Selector,
 	resolutionLevels []compact.ResolutionLevel,
 	compactionLevels []int,
+	blockIDs []ulid.ULID,
 ) *BlockFilter {
 	allowedResolutions := make(map[compact.ResolutionLevel]struct{})
 	for _, resolutionLevel := range resolutionLevels {
@@ -49,11 +51,13 @@ func NewBlockFilter(
 	for _, compactionLevel := range compactionLevels {
 		allowedCompactions[compactionLevel] = struct{}{}
 	}
+
 	return &BlockFilter{
 		labelSelector:    labelSelector,
 		logger:           logger,
 		resolutionLevels: allowedResolutions,
 		compactionLevels: allowedCompactions,
+		blockIDs:         blockIDs,
 	}
 }
 
@@ -61,6 +65,16 @@ func NewBlockFilter(
 func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	if len(b.Thanos.Labels) == 0 {
 		level.Error(bf.logger).Log("msg", "filtering block", "reason", "labels should not be empty")
+		return false
+	}
+
+	// If required block IDs are set, we only match required blocks and ignore others.
+	if len(bf.blockIDs) > 0 {
+		for _, id := range bf.blockIDs {
+			if b.ULID == id {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -265,7 +279,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
-	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewReader(originMetaFileContent)); err != nil {
+	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(originMetaFileContent)); err != nil {
 		return errors.Wrap(err, "upload meta file")
 	}
 

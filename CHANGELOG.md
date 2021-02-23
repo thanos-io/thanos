@@ -14,22 +14,55 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
-- [#3031](https://github.com/thanos-io/thanos/pull/3031) Compact/Sidecar/other writers: added `--hash-func`. If some function has been specified, writers calculate hashes using that function of each file in a block before uploading them. If those hashes exist in the `meta.json` file then Compact does a smart thing and does not download the files if they already exist on disk. This also means that the data directory passed to Thanos Compact is only *cleared once at boot* or *if everything succeeds*. So, if you, for example, use persistent volumes on k8s and your Thanos Compact crashes or fails to make an iteration properly then the last downloaded files are not wiped from the disk. The directories that were created the last time are only wiped again after a successful iteration or if the previously picked up blocks have disappeared.
-- [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
+- [#3740](https://github.com/thanos-io/thanos/pull/3740) Query: Added `--query.default-step` flag to set default step.
+- [#3700](https://github.com/thanos-io/thanos/pull/3700) ui: make old bucket viewer UI work with vanilla Prometheus blocks
+- [#2641](https://github.com/thanos-io/thanos/issues/2641) Query Frontend: Added `--query-range.request-downsampled` flag enabling additional queries for downsampled data in case of empty or incomplete response to range request.
+- [#3792](https://github.com/thanos-io/thanos/pull/3792) Receiver: Added `--tsdb.allow-overlapping-blocks` flag to allow overlapping tsdb blocks and enable vertical compaction
+- [#3031](https://github.com/thanos-io/thanos/pull/3031) Compact/Sidecar/other writers: added `--hash-func`. If some function has been specified, writers calculate hashes using that function of each file in a block before uploading them. If those hashes exist in the `meta.json` file then Compact does not download the files if they already exist on disk and with the same hash. This also means that the data directory passed to Thanos Compact is only *cleared once at boot* or *if everything succeeds*. So, if you, for example, use persistent volumes on k8s and your Thanos Compact crashes or fails to make an iteration properly then the last downloaded files are not wiped from the disk. The directories that were created the last time are only wiped again after a successful iteration or if the previously picked up blocks have disappeared.
 
 ### Fixed
 
-- [#3527](https://github.com/thanos-io/thanos/pull/3527) Query Frontend: Fix query_range behavior when start/end times are the same
+- [#3773](https://github.com/thanos-io/thanos/pull/3773) Compact: Pad compaction planner size check
+- [#3814](https://github.com/thanos-io/thanos/pull/3814) Store: Decreased memory utilisation while fetching block's chunks.
+- [#3815](https://github.com/thanos-io/thanos/pull/3815) Receive: Improve handling of empty time series from clients
 
 ### Changed
 
-- [#3496](https://github.com/thanos-io/thanos/pull/3496) s3: Respect SignatureV2 flag for all credential providers.
+- [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
+
+## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.27
+
+### Added
+
+- [#3380](https://github.com/thanos-io/thanos/pull/3380) Mixin: Add block deletion panels for compactor dashboards.
+- [#3568](https://github.com/thanos-io/thanos/pull/3568) Store: Optimized inject label stage of index lookup.
+- [#3566](https://github.com/thanos-io/thanos/pull/3566) StoreAPI: Support label matchers in labels API.
+- [#3531](https://github.com/thanos-io/thanos/pull/3531) Store: Optimized common cases for time selecting smaller amount of series by avoiding looking up symbols.
+- [#3469](https://github.com/thanos-io/thanos/pull/3469) StoreAPI: Added `hints` field to `LabelNamesRequest` and `LabelValuesRequest`. Hints are an opaque data structure that can be used to carry additional information from the store and its content is implementation-specific.
+- [#3421](https://github.com/thanos-io/thanos/pull/3421) Tools: Added `thanos tools bucket rewrite` command allowing to delete series from given block.
+- [#3509](https://github.com/thanos-io/thanos/pull/3509) Store: Added a CLI flag to limit the number of series that are touched.
+- [#3444](https://github.com/thanos-io/thanos/pull/3444) Query Frontend: Make POST request to downstream URL for labels and series API endpoints.
+- [#3388](https://github.com/thanos-io/thanos/pull/3388) Tools: Bucket replicator now can specify block IDs to copy.
+- [#3385](https://github.com/thanos-io/thanos/pull/3385) Tools: Bucket prints extra statistics for block index with debug log-level.
+- [#3121](https://github.com/thanos-io/thanos/pull/3121) Receive: Added `--receive.hashrings` alternative to `receive.hashrings-file` flag (lower priority). The flag expects the literal hashring configuration in JSON format.
+
+### Fixed
+
+- [#3567](https://github.com/thanos-io/thanos/pull/3567) Mixin: Reintroduce `thanos_objstore_bucket_operation_failures_total` alert.
+- [#3527](https://github.com/thanos-io/thanos/pull/3527) Query Frontend: Fix query_range behavior when start/end times are the same
+- [#3760](https://github.com/thanos-io/thanos/pull/3760) Store: Fix panic caused by a race condition happening on concurrent index-header reader usage and unload, when `--store.enable-index-header-lazy-reader` is enabled.
+- [#3759](https://github.com/thanos-io/thanos/pull/3759) Store: Fix panic caused by a race condition happening on concurrent index-header lazy load and unload, when `--store.enable-index-header-lazy-reader` is enabled.
+- [#3560](https://github.com/thanos-io/thanos/pull/3560) Query Frontend: Allow separate label cache
+- [#3672](https://github.com/thanos-io/thanos/pull/3672) Rule: Prevent crashing due to `no such host error` when using `dnssrv+` or `dnssrvnoa+`.
+- [#3461](https://github.com/thanos-io/thanos/pull/3461) Compact, Shipper, Store: Fixed panic when no external labels are set in block metadata.
+
+### Changed
+
+- [#3496](https://github.com/thanos-io/thanos/pull/3496) S3: Respect SignatureV2 flag for all credential providers.
 - [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support.
    By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`.
    To change the defaults see [the docs](./docs/storage.md#openstack-swift).
-
-
+- [#3626](https://github.com/thanos-io/thanos/pull/3626) Shipper: Failed upload of `meta.json` file doesn't cause block cleanup anymore. This has a potential to generate corrupted blocks under specific conditions. Partial block is left in bucket for later cleanup.
 
 ## [v0.17.2](https://github.com/thanos-io/thanos/releases/tag/v0.17.2) - 2020.12.07
 
@@ -42,7 +75,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#3480](https://github.com/thanos-io/thanos/pull/3480) Query-frontend: Fixed regression.
+- [#3480](https://github.com/thanos-io/thanos/pull/3480) Query Frontend: Fixed regression.
+- [#3734](https://github.com/thanos-io/thanos/pull/3734) pkg/rules/proxy: fix hotlooping when receiving client errors
 
 ### Changed
 
@@ -92,7 +126,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
   - `thanos_replicate_origin_partial_meta_reads_total` can be replaced by `blocks_meta_synced{state="failed"}`.
 - [#3309](https://github.com/thanos-io/thanos/pull/3309) Compact: _breaking :warning:_ Rename metrics to match naming convention. This includes metrics starting with `thanos_compactor` to `thanos_compact`, `thanos_querier` to `thanos_query` and `thanos_ruler` to `thanos_rule`.
 
-## [v0.16.0](https://github.com/thanos-io/thanos/releases) - 2020.10.26
+## [v0.16.0](https://github.com/thanos-io/thanos/releases/tag/v0.16.0) - 2020.10.26
 
 Highlights:
 
@@ -109,8 +143,8 @@ Highlights:
 
 ### Added
 
-- [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memacached cache.
-  - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
+- [#3114](https://github.com/thanos-io/thanos/pull/3114) Query Frontend: Added support for Memcached cache.
+    - **breaking** Renamed flag `log_queries_longer_than` to `log-queries-longer-than`.
 - [#3166](https://github.com/thanos-io/thanos/pull/3166) UIs: Added UI for passing a `storeMatch[]` parameter to queries.
 - [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Added debug level logging for responses between 300-399
 - [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allowed passing a `storeMatch[]` to Labels APIs; Time range metadata based store filtering is supported on Labels APIs.
@@ -132,7 +166,7 @@ Highlights:
 - [#3022](https://github.com/thanos-io/thanos/pull/3022) \*: Thanos images are now build with Go 1.15.
 - [#3205](https://github.com/thanos-io/thanos/pull/3205) \*: Updated TSDB to ~2.21
 
-## [v0.15.0](https://github.com/thanos-io/thanos/releases) - 2020.09.07
+## [v0.15.0](https://github.com/thanos-io/thanos/releases/v0.15.0) - 2020.09.07
 
 Highlights:
 
