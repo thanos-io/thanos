@@ -32,11 +32,11 @@ message MetadataRequest {
 
 message MetadataResponse {
   oneof result {
-    /// group for rule groups. It is up to server implementation to decide how many of those to put here within single frame.
+    /// A collection of metric metadata entries.
     MetricMetadata metadata = 1;
 
     /// warning is considered an information piece in place of series for warning purposes.
-    /// It is used to warn rule API users about suspicious cases or partial response (if enabled).
+    /// It is used to warn metadata API users about suspicious cases or partial response (if enabled).
     string warning = 2;
   }
 }
