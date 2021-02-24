@@ -345,7 +345,7 @@ func ValidateForTests(conf Config) error {
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {
@@ -354,7 +354,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 	opts := minio.ListObjectsOptions{
 		Prefix:    dir,
-		Recursive: false,
+		Recursive: objstore.ApplyIterOptions(options...).Recursive,
 		UseV1:     b.listObjectsV1,
 	}
 

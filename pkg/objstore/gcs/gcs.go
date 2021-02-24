@@ -86,15 +86,22 @@ func (b *Bucket) Name() string {
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
+
+	// If recursive iteration is enabled we should pass an empty delimiter.
+	delimiter := DirDelim
+	if !objstore.ApplyIterOptions(options...).Recursive {
+		delimiter = ""
+	}
+
 	it := b.bkt.Objects(ctx, &storage.Query{
 		Prefix:    dir,
-		Delimiter: DirDelim,
+		Delimiter: delimiter,
 	})
 	for {
 		select {
