@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -735,4 +736,25 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 		g.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
 	}
 	return m.Data.Groups, nil
+}
+
+func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/metadata")
+	q := u.Query()
+
+	if metric != "" {
+		q.Add("metric", metric)
+	}
+	// We only set limit when it is >= 0.
+	if limit >= 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
+
+	u.RawQuery = q.Encode()
+
+	var v struct {
+		Data map[string][]metadatapb.Meta `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/metadata HTTP[client]", &u, &v)
 }
