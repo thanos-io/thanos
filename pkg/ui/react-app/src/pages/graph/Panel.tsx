@@ -225,7 +225,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       });
   };
 
-  setOptions(opts: object): void {
+  setOptions(opts: any): void {
     const newOpts = { ...this.props.options, ...opts };
     this.props.onOptionsChanged(newOpts);
   }

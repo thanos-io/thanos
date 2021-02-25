@@ -16,7 +16,7 @@ export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
   return (
     <>
       {storePools.length > 0 ? (
-        storePools.map<JSX.Element>(storeGroup => (
+        storePools.map<JSX.Element>((storeGroup) => (
           <StorePoolPanel key={storeGroup} title={storeGroup} storePool={data[storeGroup]} />
         ))
       ) : (

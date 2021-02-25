@@ -73,7 +73,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
       </Link>
       <Collapse isOpen={isOpen} navbar style={{ justifyContent: 'space-between' }}>
         <Nav className="ml-0" navbar>
-          {navConfig[thanosComponent].map(config => {
+          {navConfig[thanosComponent].map((config) => {
             if ('uri' in config)
               return (
                 <NavItem key={config.uri}>
@@ -89,7 +89,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
                   {config.name}
                 </DropdownToggle>
                 <DropdownMenu>
-                  {config.children.map(c => (
+                  {config.children.map((c) => (
                     <DropdownItem key={c.uri} tag={Link} to={`${pathPrefix}${c.uri}`}>
                       {c.name}
                     </DropdownItem>
