@@ -65,10 +65,11 @@ func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error, 
 		if params.Recursive {
 			// Any object matching the prefix should be included.
 			unique[filename] = struct{}{}
-		} else {
-			parts := strings.SplitAfter(filename, DirDelim)
-			unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
+			continue
 		}
+
+		parts := strings.SplitAfter(filename, DirDelim)
+		unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
 	}
 	b.mtx.RUnlock()
 

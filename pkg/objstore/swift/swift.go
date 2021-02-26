@@ -200,9 +200,12 @@ func (c *Container) Iter(_ context.Context, dir string, f func(string) error, op
 		dir = strings.TrimSuffix(dir, string(DirDelim)) + string(DirDelim)
 	}
 
-	listOptions := &swift.ObjectsOpts{Prefix: dir}
-	if !objstore.ApplyIterOptions(options...).Recursive {
-		listOptions.Delimiter = DirDelim
+	listOptions := &swift.ObjectsOpts{
+		Prefix:    dir,
+		Delimiter: DirDelim,
+	}
+	if objstore.ApplyIterOptions(options...).Recursive {
+		listOptions.Delimiter = rune(0)
 	}
 
 	return c.connection.ObjectsWalk(c.name, listOptions, func(opts *swift.ObjectsOpts) (interface{}, error) {

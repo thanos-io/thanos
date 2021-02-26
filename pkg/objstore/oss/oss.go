@@ -195,9 +195,9 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 		dir = strings.TrimSuffix(dir, objstore.DirDelim) + objstore.DirDelim
 	}
 
-	var delimiter alioss.Option
-	if !objstore.ApplyIterOptions(options...).Recursive {
-		delimiter = alioss.Delimiter(objstore.DirDelim)
+	delimiter := alioss.Delimiter(objstore.DirDelim)
+	if objstore.ApplyIterOptions(options...).Recursive {
+		delimiter = nil
 	}
 
 	marker := alioss.Marker("")
