@@ -49,12 +49,14 @@ type FetcherMetrics struct {
 	Modified *extprom.TxGaugeVec
 }
 
-func (s *FetcherMetrics) submit() {
+// Submit applies new values for metrics tracked by transaction GaugeVec.
+func (s *FetcherMetrics) Submit() {
 	s.Synced.Submit()
 	s.Modified.Submit()
 }
 
-func (s *FetcherMetrics) resetTx() {
+// ResetTx starts new transaction for metrics tracked by transaction GaugeVec.
+func (s *FetcherMetrics) ResetTx() {
 	s.Synced.ResetTx()
 	s.Modified.ResetTx()
 }
@@ -83,7 +85,7 @@ const (
 	replicaRemovedMeta = "replica-label-removed"
 )
 
-func NewFetcherMetrics(reg prometheus.Registerer) *FetcherMetrics {
+func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExtraLabels [][]string) *FetcherMetrics {
 	var m FetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -110,16 +112,18 @@ func NewFetcherMetrics(reg prometheus.Registerer) *FetcherMetrics {
 			Help:      "Number of block metadata synced",
 		},
 		[]string{"state"},
-		[]string{CorruptedMeta},
-		[]string{NoMeta},
-		[]string{LoadedMeta},
-		[]string{tooFreshMeta},
-		[]string{FailedMeta},
-		[]string{labelExcludedMeta},
-		[]string{timeExcludedMeta},
-		[]string{duplicateMeta},
-		[]string{MarkedForDeletionMeta},
-		[]string{MarkedForNoCompactionMeta},
+		append([][]string{
+			{CorruptedMeta},
+			{NoMeta},
+			{LoadedMeta},
+			{tooFreshMeta},
+			{FailedMeta},
+			{labelExcludedMeta},
+			{timeExcludedMeta},
+			{duplicateMeta},
+			{MarkedForDeletionMeta},
+			{MarkedForNoCompactionMeta},
+		}, syncedExtraLabels...)...,
 	)
 	m.Modified = extprom.NewTxGaugeVec(
 		reg,
@@ -129,7 +133,9 @@ func NewFetcherMetrics(reg prometheus.Registerer) *FetcherMetrics {
 			Help:      "Number of blocks whose metadata changed",
 		},
 		[]string{"modified"},
-		[]string{replicaRemovedMeta},
+		append([][]string{
+			{replicaRemovedMeta},
+		}, modifiedExtraLabels...)...,
 	)
 	return &m
 }
@@ -200,7 +206,7 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 
 // NewMetaFetcher transforms BaseFetcher into actually usable *MetaFetcher.
 func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []MetadataFilter, modifiers []MetadataModifier, logTags ...interface{}) *MetaFetcher {
-	return &MetaFetcher{metrics: NewFetcherMetrics(reg), wrapped: f, filters: filters, modifiers: modifiers, logger: log.With(f.logger, logTags...)}
+	return &MetaFetcher{metrics: NewFetcherMetrics(reg, nil, nil), wrapped: f, filters: filters, modifiers: modifiers, logger: log.With(f.logger, logTags...)}
 }
 
 var (
@@ -417,7 +423,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 		}
 	}()
 	metrics.Syncs.Inc()
-	metrics.resetTx()
+	metrics.ResetTx()
 
 	// Run this in thread safe run group.
 	// TODO(bwplotka): Consider custom singleflight with ttl.
@@ -455,7 +461,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	}
 
 	metrics.Synced.WithLabelValues(LoadedMeta).Set(float64(len(metas)))
-	metrics.submit()
+	metrics.Submit()
 
 	if len(resp.metaErrs) > 0 {
 		return metas, resp.partial, errors.Wrap(resp.metaErrs.Err(), "incomplete view")
