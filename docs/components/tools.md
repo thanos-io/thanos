@@ -764,6 +764,9 @@ Flags:
       --rewrite.add-change-log  If specified, all modifications are written to
                                 new block directory. Disable if latency is to
                                 high.
+      --prom-blocks             If specified, we assume the blocks to be
+                                uploaded are only used with Prometheus so we
+                                don't check external labels in this case.
 
 ```
 
