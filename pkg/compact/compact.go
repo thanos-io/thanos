@@ -5,6 +5,7 @@ package compact
 
 import (
 	"context"
+	stderrors "errors" //lint:ignore faillint explicitly using stderrors.As
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
@@ -27,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -543,17 +544,7 @@ func (e HaltError) Error() string {
 // IsHaltError returns true if the base error is a HaltError.
 // If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
-	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiError); ok {
-		for _, err := range multiErr {
-			if _, ok := errors.Cause(err).(HaltError); ok {
-				return true
-			}
-		}
-		return false
-	}
-
-	_, ok := errors.Cause(err).(HaltError)
-	return ok
+	return stderrors.As(err, &HaltError{})
 }
 
 // RetryError is a type wrapper for errors that should trigger warning log and retry whole compaction loop, but aborting
@@ -576,17 +567,19 @@ func (e RetryError) Error() string {
 // IsRetryError returns true if the base error is a RetryError.
 // If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
-	if multiErr, ok := errors.Cause(err).(errutil.NonNilMultiError); ok {
-		for _, err := range multiErr {
-			if _, ok := errors.Cause(err).(RetryError); !ok {
+	if !stderrors.As(err, &RetryError{}) {
+		return false
+	}
+	// Check if it's not multi-error with some non-retry errors.
+	errs, ok := merrors.AsMulti(err)
+	if ok {
+		for _, e := range errs.Errors() {
+			if !IsRetryError(e) {
 				return false
 			}
 		}
-		return true
 	}
-
-	_, ok := errors.Cause(err).(RetryError)
-	return ok
+	return true
 }
 
 func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metadata.Meta) error {
@@ -953,12 +946,12 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		level.Info(c.logger).Log("msg", "start of compactions")
 
 		// Send all groups found during this pass to the compaction workers.
-		var groupErrs errutil.MultiError
+		errs := merrors.New()
 	groupLoop:
 		for _, g := range groups {
 			select {
 			case groupErr := <-errChan:
-				groupErrs.Add(groupErr)
+				errs.Add(groupErr)
 				break groupLoop
 			case groupChan <- g:
 			}
@@ -970,12 +963,12 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		// while we were waiting for the last batch of groups to run the compaction.
 		close(errChan)
 		for groupErr := range errChan {
-			groupErrs.Add(groupErr)
+			errs.Add(groupErr)
 		}
 
 		workCtxCancel()
-		if len(groupErrs) > 0 {
-			return groupErrs.Err()
+		if err := errs.Err(); err != nil {
+			return err
 		}
 
 		if finishedAllGroups {

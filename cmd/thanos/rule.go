@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -29,7 +30,6 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -811,10 +811,11 @@ func reloadRules(logger log.Logger,
 	ruleFiles []string,
 	ruleMgr *thanosrules.Manager,
 	evalInterval time.Duration,
-	metrics *RuleMetrics) error {
+	metrics *RuleMetrics,
+) error {
 	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 	var (
-		errs      errutil.MultiError
+		errs      = merrors.New()
 		files     []string
 		seenFiles = make(map[string]struct{})
 	)

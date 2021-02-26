@@ -7,14 +7,13 @@ import (
 	"context"
 	"sync"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -59,7 +58,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		return errors.Wrap(err, "get appender")
 	}
 
-	var errs errutil.MultiError
+	errs := merrors.New()
 	for _, t := range wreq.Timeseries {
 		lset := make(labels.Labels, len(t.Labels))
 		for j := range t.Labels {

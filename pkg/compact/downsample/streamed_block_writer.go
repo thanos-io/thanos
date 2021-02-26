@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -19,7 +20,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -61,12 +61,11 @@ func NewStreamedBlockWriter(
 	// We should close any opened Closer up to an error.
 	defer func() {
 		if err != nil {
-			var merr errutil.MultiError
-			merr.Add(err)
+			errs := merrors.New(err)
 			for _, cl := range closers {
-				merr.Add(cl.Close())
+				errs.Add(cl.Close())
 			}
-			err = merr.Err()
+			err = errs.Err()
 		}
 	}()
 
@@ -143,20 +142,19 @@ func (w *streamedBlockWriter) Close() error {
 	}
 	w.finalized = true
 
-	merr := errutil.MultiError{}
-
+	errs := merrors.New()
 	if w.ignoreFinalize {
 		// Close open file descriptors anyway.
 		for _, cl := range w.closers {
-			merr.Add(cl.Close())
+			errs.Add(cl.Close())
 		}
-		return merr.Err()
+		return errs.Err()
 	}
 
 	// Finalize saves prepared index and metadata to corresponding files.
 
 	for _, cl := range w.closers {
-		merr.Add(cl.Close())
+		errs.Add(cl.Close())
 	}
 
 	if err := w.writeMetaFile(); err != nil {
@@ -167,7 +165,7 @@ func (w *streamedBlockWriter) Close() error {
 		return errors.Wrap(err, "sync blockDir")
 	}
 
-	if err := merr.Err(); err != nil {
+	if err := errs.Err(); err != nil {
 		return errors.Wrap(err, "finalize")
 	}
 

@@ -56,13 +56,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-
-	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
+// TODO(bwplotka): Replace with github.com/efficientgo/tools/core
 // Repeat executes f every interval seconds until stopc is closed or f returns an error.
 // It executes f once right after being called.
 func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error {
@@ -137,12 +137,12 @@ func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string,
 // CloseWithErrCapture runs function and on error return error by argument including the given error (usually
 // from caller function).
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
-	merr := errutil.MultiError{}
+	errs := merrors.New()
 
-	merr.Add(*err)
-	merr.Add(errors.Wrapf(closer.Close(), format, a...))
+	errs.Add(*err)
+	errs.Add(errors.Wrapf(closer.Close(), format, a...))
 
-	*err = merr.Err()
+	*err = errs.Err()
 }
 
 // ExhaustCloseWithErrCapture closes the io.ReadCloser with error capture but exhausts the reader before.
@@ -152,9 +152,9 @@ func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ..
 	CloseWithErrCapture(err, r, format, a...)
 
 	// Prepend the io.Copy error.
-	merr := errutil.MultiError{}
-	merr.Add(copyErr)
-	merr.Add(*err)
+	errs := merrors.New()
+	errs.Add(copyErr)
+	errs.Add(*err)
 
-	*err = merr.Err()
+	*err = errs.Err()
 }

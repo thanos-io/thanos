@@ -10,9 +10,12 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/efficientgo/tools/core/pkg/merrors"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -25,7 +28,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -43,10 +45,6 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			name: "nil",
 		},
 		{
-			name: "nil multierror",
-			err:  errutil.NonNilMultiError([]error{}),
-		},
-		{
 			name:      "matching simple",
 			err:       errConflict,
 			threshold: 1,
@@ -54,81 +52,81 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "non-matching multierror",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				errors.New("foo"),
 				errors.New("bar"),
-			}),
+			).Err(),
 			exp: errors.New("2 errors: foo; bar"),
 		},
 		{
 			name: "nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
+			err: errors.Wrap(merrors.New(
 				errors.New("foo"),
 				errors.New("bar"),
-			}), "baz"),
+			).Err(), "baz"),
 			threshold: 1,
 			exp:       errors.New("baz: 2 errors: foo; bar"),
 		},
 		{
 			name: "deep nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
+			err: errors.Wrap(merrors.New(
 				errors.New("foo"),
-				errutil.NonNilMultiError([]error{
+				merrors.New(
 					errors.New("bar"),
 					errors.New("qux"),
-				}),
-			}), "baz"),
+				).Err(),
+			).Err(), "baz"),
 			threshold: 1,
-			exp:       errors.New("baz: 2 errors: foo; 2 errors: bar; qux"),
+			exp:       errors.New("baz: 3 errors: foo; bar; qux"),
 		},
 		{
 			name: "matching multierror",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
-			}),
+			).Err(),
 			threshold: 1,
 			exp:       errConflict,
 		},
 		{
 			name: "matching but below threshold multierror",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
-			}),
+			).Err(),
 			threshold: 2,
 			exp:       errors.New("3 errors: out of order sample; foo; bar"),
 		},
 		{
 			name: "matching multierror many",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				status.Error(codes.AlreadyExists, "conflict"),
 				errors.New("foo"),
 				errors.New("bar"),
-			}),
+			).Err(),
 			threshold: 1,
 			exp:       errConflict,
 		},
 		{
 			name: "matching multierror many, one above threshold",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				errors.New("foo"),
-			}),
+			).Err(),
 			threshold: 2,
 			exp:       errNotReady,
 		},
 		{
 			name: "matching multierror many, both above threshold, conflict have precedence",
-			err: errutil.NonNilMultiError([]error{
+			err: merrors.New(
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				tsdb.ErrNotReady,
@@ -136,73 +134,74 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				tsdb.ErrNotReady,
 				status.Error(codes.AlreadyExists, "conflict"),
 				errors.New("foo"),
-			}),
+			).Err(),
 			threshold: 2,
 			exp:       errConflict,
 		},
 		{
 			name: "nested matching multierror",
-			err: errors.Wrap(errors.Wrap(errutil.NonNilMultiError([]error{
+			err: errors.Wrap(errors.Wrap(merrors.New(
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
-			}), "baz"), "qux"),
+			).Err(), "baz"), "qux"),
 			threshold: 1,
 			exp:       errConflict,
 		},
 		{
 			name: "deep nested matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errutil.NonNilMultiError([]error{
+			err: errors.Wrap(merrors.New(
+				merrors.New(
 					errors.New("qux"),
 					status.Error(codes.AlreadyExists, "conflict"),
 					status.Error(codes.AlreadyExists, "conflict"),
-				}),
+				).Err(),
 				errors.New("foo"),
 				errors.New("bar"),
-			}), "baz"),
+			).Err(), "baz"),
 			threshold: 1,
-			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
+			exp:       errConflict,
 		},
 	} {
-		err := determineWriteErrorCause(tc.err, tc.threshold)
-		if tc.exp != nil {
-			testutil.NotOk(t, err)
-			testutil.Equals(t, tc.exp.Error(), err.Error())
-			continue
-		}
-		testutil.Ok(t, err)
+		t.Run(tc.name, func(t *testing.T) {
+			err := determineWriteErrorCause(tc.err, tc.threshold)
+			if tc.exp != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.exp.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+		})
 	}
 }
 
 func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
-	cfg := []HashringConfig{
-		{
-			Hashring: "test",
-		},
-	}
-	var handlers []*Handler
-	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
-	// This removes the network from the tests and creates a more consistent testing harness.
-	peers := &peerGroup{
-		dialOpts: nil,
-		m:        sync.RWMutex{},
-		cache:    map[string]storepb.WriteableStoreClient{},
-		dialer: func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
-			// dialer should never be called since we are creating fake clients with fake addresses
-			// this protects against some leaking test that may attempt to dial random IP addresses
-			// which may pose a security risk.
-			return nil, errors.New("unexpected dial called in testing")
-		},
-	}
+	var (
+		cfg      = []HashringConfig{{Hashring: "test"}}
+		handlers []*Handler
+		// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
+		// This removes the network from the tests and creates a more consistent testing harness.
+		peers = &peerGroup{
+			dialOpts: nil,
+			m:        sync.RWMutex{},
+			cache:    map[string]storepb.WriteableStoreClient{},
+			dialer: func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
+				// dialer should never be called since we are creating fake clients with fake addresses
+				// this protects against some leaking test that may attempt to dial random IP addresses
+				// which may pose a security risk.
+				return nil, errors.New("unexpected dial called in testing")
+			},
+		}
+	)
 
+	logger := log.NewLogfmtLogger(os.Stdout)
 	for i := range appendables {
-		h := NewHandler(nil, &Options{
+		h := NewHandler(logger, &Options{
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
-			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			Writer:            NewWriter(logger, newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -226,24 +225,12 @@ func TestReceiveQuorum(t *testing.T) {
 		Timeseries: []prompb.TimeSeries{
 			{
 				Labels: []labelpb.ZLabel{
-					{
-						Name:  "foo",
-						Value: "bar",
-					},
+					{Name: "foo", Value: "bar"},
 				},
 				Samples: []prompb.Sample{
-					{
-						Value:     1,
-						Timestamp: 1,
-					},
-					{
-						Value:     2,
-						Timestamp: 2,
-					},
-					{
-						Value:     3,
-						Timestamp: 3,
-					},
+					{Value: 1, Timestamp: 1},
+					{Value: 2, Timestamp: 2},
+					{Value: 3, Timestamp: 3},
 				},
 			},
 		},

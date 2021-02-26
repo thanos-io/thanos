@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/golang/groupcache/singleflight"
@@ -28,7 +29,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -285,7 +285,7 @@ type response struct {
 	metas   map[ulid.ULID]*metadata.Meta
 	partial map[ulid.ULID]error
 	// If metaErr > 0 it means incomplete view, so some metas, failed to be loaded.
-	metaErrs errutil.MultiError
+	metaErrs merrors.NilOrMultiError
 
 	noMetas        float64
 	corruptedMetas float64
@@ -362,7 +362,8 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 		return nil, errors.Wrap(err, "BaseFetcher: iter bucket")
 	}
 
-	if len(resp.metaErrs) > 0 {
+	if resp.metaErrs.Err() != nil {
+		// Incomplete view is fine, errors are handled by metric, but we stil return success.
 		return resp, nil
 	}
 
@@ -433,7 +434,12 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 		metas[id] = m
 	}
 
-	metrics.synced.WithLabelValues(failedMeta).Set(float64(len(resp.metaErrs)))
+	if errs := resp.metaErrs.Err(); errs != nil {
+		metrics.synced.WithLabelValues(failedMeta).Set(float64(len(errs.Errors())))
+	} else {
+		metrics.synced.WithLabelValues(failedMeta).Set(0)
+	}
+
 	metrics.synced.WithLabelValues(noMeta).Set(resp.noMetas)
 	metrics.synced.WithLabelValues(corruptedMeta).Set(resp.corruptedMetas)
 
@@ -454,8 +460,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *fetcherMetrics, filter
 	metrics.synced.WithLabelValues(loadedMeta).Set(float64(len(metas)))
 	metrics.submit()
 
-	if len(resp.metaErrs) > 0 {
-		return metas, resp.partial, errors.Wrap(resp.metaErrs.Err(), "incomplete view")
+	if errs := resp.metaErrs.Err(); errs != nil {
+		return metas, resp.partial, errors.Wrap(errs, "incomplete view")
 	}
 
 	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))

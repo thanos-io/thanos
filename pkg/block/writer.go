@@ -9,13 +9,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunks"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 )
@@ -56,6 +56,14 @@ type DiskWriter struct {
 
 const tmpForCreationBlockDirSuffix = ".tmp-for-creation"
 
+func closeAll(closers []io.Closer) error {
+	errs := merrors.New()
+	for _, c := range closers {
+		errs.Add(c.Close())
+	}
+	return errs.Err()
+}
+
 // NewDiskWriter allows to write single TSDB block to disk and returns statistics.
 // Destination block directory has to exists.
 func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *DiskWriter, err error) {
@@ -68,7 +76,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 	}
 	defer func() {
 		if err != nil {
-			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
+			err = merrors.New(err, closeAll(d.closers)).Err()
 			if err := os.RemoveAll(bTmp); err != nil {
 				level.Error(logger).Log("msg", "removed tmp folder after failed compaction", "err", err.Error())
 			}
@@ -102,7 +110,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	defer func() {
 		if err != nil {
-			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
+			err = merrors.New(err, closeAll(d.closers)).Err()
 			if err := os.RemoveAll(d.bTmp); err != nil {
 				level.Error(d.logger).Log("msg", "removed tmp folder failed after block(s) write", "err", err.Error())
 			}
@@ -114,7 +122,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}
 	defer func() {
 		if df != nil {
-			err = tsdb_errors.NewMulti(err, df.Close()).Err()
+			err = merrors.New(err, df.Close()).Err()
 		}
 	}()
 
@@ -128,7 +136,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}
 	df = nil
 
-	if err := tsdb_errors.CloseAll(d.closers); err != nil {
+	if err := closeAll(d.closers); err != nil {
 		d.closers = nil
 		return tsdb.BlockStats{}, err
 	}
@@ -180,5 +188,5 @@ func (s *statsGatheringSeriesWriter) WriteChunks(chks ...chunks.Meta) error {
 }
 
 func (s statsGatheringSeriesWriter) Close() error {
-	return tsdb_errors.NewMulti(s.iw.Close(), s.cw.Close()).Err()
+	return merrors.New(s.iw.Close(), s.cw.Close()).Err()
 }

@@ -299,6 +299,7 @@ go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
 github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
+github.com/prometheus/prometheus/tsdb/errors=github.com/efficientgo/tools/core/pkg/merrors,\
 github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
 github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\

@@ -14,6 +14,7 @@ require (
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.7.1-0.20210224085859-66d6fb5b0d42
 	github.com/davecgh/go-spew v1.1.1
+	github.com/efficientgo/tools/core v0.0.0-20210201224146-3d78f4d30648
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
 	github.com/felixge/fgprof v0.9.1

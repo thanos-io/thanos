@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -33,7 +34,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/thanos-io/thanos/pkg/errutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
@@ -333,7 +333,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
-		level.Error(h.logger).Log("err", err, "msg", "internal server error")
+		level.Error(h.logger).Log("err", err, "msg", "internal server error while handling receive request")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -394,7 +394,7 @@ func (h *Handler) writeQuorum() int {
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
 func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
-	var errs errutil.MultiError
+	errs := merrors.New()
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
 	defer func() {
@@ -691,11 +691,12 @@ func determineWriteErrorCause(err error, threshold int) error {
 		return nil
 	}
 
-	unwrappedErr := errors.Cause(err)
-	errs, ok := unwrappedErr.(errutil.NonNilMultiError)
-	if !ok {
-		errs = []error{unwrappedErr}
+	errs := []error{err}
+	merrs, ok := merrors.AsMulti(err)
+	if ok {
+		errs = merrs.Errors()
 	}
+
 	if len(errs) == 0 {
 		return nil
 	}
@@ -717,12 +718,12 @@ func determineWriteErrorCause(err error, threshold int) error {
 			}
 		}
 	}
-	// Determine which error occurred most.
+
+	// Determine which error occurred the most.
 	sort.Sort(sort.Reverse(expErrs))
 	if exp := expErrs[0]; exp.count >= threshold {
 		return exp.err
 	}
-
 	return err
 }
 

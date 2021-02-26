@@ -9,6 +9,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
@@ -21,7 +22,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -168,11 +168,11 @@ func (s *tenantSeriesSetServer) Delegate(closer io.Closer) {
 }
 
 func (s *tenantSeriesSetServer) Close() error {
-	var merr errutil.MultiError
+	errs := merrors.New()
 	for _, c := range s.closers {
-		merr.Add(c.Close())
+		errs.Add(c.Close())
 	}
-	return merr.Err()
+	return errs.Err()
 }
 
 func (s *tenantSeriesSetServer) Next() (ok bool) {

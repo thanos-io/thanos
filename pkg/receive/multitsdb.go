@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -20,7 +21,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -144,7 +144,7 @@ func (t *MultiTSDB) Flush() error {
 	defer t.mtx.RUnlock()
 
 	errmtx := &sync.Mutex{}
-	merr := errutil.MultiError{}
+	errs := merrors.New()
 	wg := &sync.WaitGroup{}
 	for id, tenant := range t.tenants {
 		db := tenant.readyStorage().Get()
@@ -158,7 +158,7 @@ func (t *MultiTSDB) Flush() error {
 			head := db.Head()
 			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1)); err != nil {
 				errmtx.Lock()
-				merr.Add(err)
+				errs.Add(err)
 				errmtx.Unlock()
 			}
 			wg.Done()
@@ -166,14 +166,14 @@ func (t *MultiTSDB) Flush() error {
 	}
 
 	wg.Wait()
-	return merr.Err()
+	return errs.Err()
 }
 
 func (t *MultiTSDB) Close() error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	merr := errutil.MultiError{}
+	errs := merrors.New()
 	for id, tenant := range t.tenants {
 		db := tenant.readyStorage().Get()
 		if db == nil {
@@ -181,9 +181,9 @@ func (t *MultiTSDB) Close() error {
 			continue
 		}
 		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
-		merr.Add(db.Close())
+		errs.Add(db.Close())
 	}
-	return merr.Err()
+	return errs.Err()
 }
 
 func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
@@ -196,7 +196,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 
 	var (
 		errmtx   = &sync.Mutex{}
-		merr     = errutil.MultiError{}
+		errs     = merrors.New()
 		wg       = &sync.WaitGroup{}
 		uploaded atomic.Int64
 	)
@@ -212,7 +212,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 			up, err := s.Sync(ctx)
 			if err != nil {
 				errmtx.Lock()
-				merr.Add(errors.Wrap(err, "upload"))
+				errs.Add(errors.Wrap(err, "upload"))
 				errmtx.Unlock()
 			}
 			uploaded.Add(int64(up))
@@ -220,7 +220,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 		}()
 	}
 	wg.Wait()
-	return int(uploaded.Load()), merr.Err()
+	return int(uploaded.Load()), errs.Err()
 }
 
 func (t *MultiTSDB) RemoveLockFilesIfAny() error {
@@ -232,7 +232,7 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 		return err
 	}
 
-	merr := errutil.MultiError{}
+	errs := merrors.New()
 	for _, fi := range fis {
 		if !fi.IsDir() {
 			continue
@@ -241,12 +241,12 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 			if os.IsNotExist(err) {
 				continue
 			}
-			merr.Add(err)
+			errs.Add(err)
 			continue
 		}
 		level.Info(t.logger).Log("msg", "a leftover lockfile found and removed", "tenant", fi.Name())
 	}
-	return merr.Err()
+	return errs.Err()
 }
 
 func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {

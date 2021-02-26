@@ -6,12 +6,12 @@ package main
 import (
 	"os"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/rules"
 )
@@ -35,7 +35,7 @@ func registerCheckRules(app extkingpin.AppClause) {
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
-	var failed errutil.MultiError
+	failed := merrors.New()
 
 	for _, fn := range *files {
 		level.Info(logger).Log("msg", "checking", "filename", fn)
@@ -51,7 +51,7 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 		n, errs := rules.ValidateAndCount(f)
 		if errs.Err() != nil {
 			level.Error(logger).Log("result", "FAILED")
-			for _, e := range errs {
+			for _, e := range errs.Err().Errors() {
 				level.Error(logger).Log("error", e.Error())
 				failed.Add(e)
 			}

@@ -6,11 +6,10 @@ package compact
 import (
 	"testing"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -32,7 +31,7 @@ func TestHaltMultiError(t *testing.T) {
 	haltErr := halt(errors.New("halt error"))
 	nonHaltErr := errors.New("not a halt error")
 
-	errs := errutil.MultiError{nonHaltErr}
+	errs := merrors.New(nonHaltErr)
 	testutil.Assert(t, !IsHaltError(errs.Err()), "should not be a halt error")
 
 	errs.Add(haltErr)
@@ -45,15 +44,14 @@ func TestRetryMultiError(t *testing.T) {
 	retryErr := retry(errors.New("retry error"))
 	nonRetryErr := errors.New("not a retry error")
 
-	errs := errutil.MultiError{nonRetryErr}
+	errs := merrors.New(nonRetryErr)
 	testutil.Assert(t, !IsRetryError(errs.Err()), "should not be a retry error")
 
-	errs = errutil.MultiError{retryErr}
+	errs = merrors.New(retryErr)
 	testutil.Assert(t, IsRetryError(errs.Err()), "if all errors are retriable this should return true")
-
 	testutil.Assert(t, IsRetryError(errors.Wrap(errs.Err(), "wrap")), "retry error with wrap")
 
-	errs = errutil.MultiError{nonRetryErr, retryErr}
+	errs = merrors.New(nonRetryErr, retryErr)
 	testutil.Assert(t, !IsRetryError(errs.Err()), "mixed errors should return false")
 }
 

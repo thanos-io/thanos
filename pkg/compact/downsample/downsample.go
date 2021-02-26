@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/merrors"
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -20,7 +21,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -73,10 +73,7 @@ func Downsample(
 	// Remove blockDir in case of errors.
 	defer func() {
 		if err != nil {
-			var merr errutil.MultiError
-			merr.Add(err)
-			merr.Add(os.RemoveAll(blockDir))
-			err = merr.Err()
+			err = merrors.New(err, os.RemoveAll(blockDir)).Err()
 		}
 	}()
 
