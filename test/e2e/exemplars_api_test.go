@@ -57,6 +57,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()},
 		nil,
 		nil,
+		nil,
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()},
 		"",
 		"",

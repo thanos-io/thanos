@@ -70,6 +70,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		nil,
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
 		nil,
+		nil,
 		"",
 		"",
 	)
