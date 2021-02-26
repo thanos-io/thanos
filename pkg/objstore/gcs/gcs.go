@@ -100,7 +100,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 
 	// If recursive iteration is enabled we should pass an empty delimiter.
 	delimiter := DirDelim
-	if !objstore.ApplyIterOptions(options...).Recursive {
+	if objstore.ApplyIterOptions(options...).Recursive {
 		delimiter = ""
 	}
 

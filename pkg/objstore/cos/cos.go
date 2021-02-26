@@ -229,7 +229,7 @@ func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, options .
 
 	// If recursive iteration is enabled we should pass an empty delimiter.
 	delimiter := dirDelim
-	if !objstore.ApplyIterOptions(options...).Recursive {
+	if objstore.ApplyIterOptions(options...).Recursive {
 		delimiter = ""
 	}
 

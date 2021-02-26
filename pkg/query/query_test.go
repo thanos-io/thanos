@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -23,28 +22,6 @@ import (
 func TestMain(m *testing.M) {
 	testutil.TolerantVerifyLeakMain(m)
 }
-
-type inProcessClient struct {
-	t testing.TB
-
-	name string
-
-	storepb.StoreClient
-	extLset labels.Labels
-}
-
-func (i inProcessClient) LabelSets() []labels.Labels {
-	return []labels.Labels{i.extLset}
-}
-
-func (i inProcessClient) TimeRange() (mint int64, maxt int64) {
-	r, err := i.Info(context.TODO(), &storepb.InfoRequest{})
-	testutil.Ok(i.t, err)
-	return r.MinTime, r.MaxTime
-}
-
-func (i inProcessClient) String() string { return i.name }
-func (i inProcessClient) Addr() string   { return i.name }
 
 func TestQuerier_Proxy(t *testing.T) {
 	files, err := filepath.Glob("testdata/promql/**/*.test")

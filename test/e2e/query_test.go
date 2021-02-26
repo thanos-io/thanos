@@ -38,7 +38,11 @@ const queryUpWithoutInstance = "sum(up) without (instance)"
 // * expose 2 external labels, source and replica.
 // * scrape fake target. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func defaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string) string {
+func defaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
+	targets := "localhost:9090"
+	if len(scrapeTargets) > 0 {
+		targets = strings.Join(scrapeTargets, ",")
+	}
 	config := fmt.Sprintf(`
 global:
   external_labels:
@@ -50,8 +54,8 @@ scrape_configs:
   scrape_interval: 1s
   scrape_timeout: 1s
   static_configs:
-  - targets: ['localhost:9090']
-`, name, replica)
+  - targets: [%s]
+`, name, replica, targets)
 
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
