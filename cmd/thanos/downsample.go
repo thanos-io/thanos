@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -194,7 +195,17 @@ func downsampleBucket(
 		}
 	}
 
-	for _, m := range metas {
+	metasULIDS := make([]ulid.ULID, 0, len(metas))
+	for k := range metas {
+		metasULIDS = append(metasULIDS, k)
+	}
+	sort.Slice(metasULIDS, func(i, j int) bool {
+		return metasULIDS[i].Compare(metasULIDS[j]) < 0
+	})
+
+	for _, mk := range metasULIDS {
+		m := metas[mk]
+
 		switch m.Thanos.Downsample.Resolution {
 		case downsample.ResLevel0:
 			missing := false
