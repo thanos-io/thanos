@@ -196,6 +196,8 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 // TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
+	t.Helper()
+
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)
