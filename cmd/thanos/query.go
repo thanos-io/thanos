@@ -556,7 +556,7 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 	for _, spec := range specs {
 		addr := spec.Addr()
 		if _, ok := set[addr]; ok {
-			level.Warn(logger).Log("msg", "Duplicate store address is provided - %v", addr)
+			level.Warn(logger).Log("msg", "Duplicate store address is provided", "addr", addr)
 			duplicatedStores.Inc()
 		}
 		set[addr] = spec

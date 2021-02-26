@@ -721,7 +721,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 	deduplicated := make([]*url.URL, 0, len(urls))
 	for _, u := range urls {
 		if _, ok := set[u.String()]; ok {
-			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", u.String())
+			level.Warn(logger).Log("msg", "duplicate query address is provided", "addr", u.String())
 			duplicatedQueriers.Inc()
 			continue
 		}
