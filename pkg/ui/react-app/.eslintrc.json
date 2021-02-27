@@ -6,7 +6,7 @@
     "plugin:prettier/recommended"
   ],
   "rules": {
-    "camelcase": 0,
+    "camelcase": "warn",
     "eol-last": [
       "error",
       "always"

@@ -1,3 +1,5 @@
+/* eslint-disable camelcase */
+
 import { sampleApiResponse } from './__testdata__/testdata';
 import { groupTargets, Target, ScrapePools, getColor } from './target';
 

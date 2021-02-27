@@ -1,3 +1,5 @@
+/* eslint-disable camelcase */
+
 import { ScrapePools } from '../target';
 
 export const targetGroups: ScrapePools = Object.freeze({
