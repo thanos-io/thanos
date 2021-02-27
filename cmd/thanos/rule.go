@@ -24,13 +24,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"gopkg.in/yaml.v3"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
@@ -70,6 +73,9 @@ func registerRule(app *extkingpin.App) {
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
 	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
+	remoteFlushDeadline := extkingpin.ModelDuration(cmd.Flag("storage.remote.flush-deadline", "How long to wait flushing sample on shutdown or config reload.").
+		Default("1m"))
+	remoteWriteConfig := extflag.RegisterPathOrContent(cmd, "storage.remote.config", "YAML file that contains remote write configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration.", false)
 
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
@@ -201,6 +207,8 @@ func registerRule(app *extkingpin.App) {
 			time.Duration(*resendDelay),
 			time.Duration(*evalInterval),
 			*dataDir,
+			time.Duration(*remoteFlushDeadline),
+			remoteWriteConfig,
 			*ruleFiles,
 			objStoreConfig,
 			tsdbOpts,
@@ -291,6 +299,8 @@ func runRule(
 	resendDelay time.Duration,
 	evalInterval time.Duration,
 	dataDir string,
+	remoteFlushDeadline time.Duration,
+	remoteWriteConfig *extflag.PathOrContent,
 	ruleFiles []string,
 	objStoreConfig *extflag.PathOrContent,
 	tsdbOpts *tsdb.Options,
@@ -361,6 +371,11 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, dnsSDInterval)
 	}
 
+	rwConfig, err := loadRemoteWrite(logger, remoteWriteConfig, lset)
+	if err != nil {
+		return errors.Wrap(err, "Unable to read remotewrite config")
+	}
+
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
@@ -427,9 +442,11 @@ func runRule(
 	}
 
 	var (
-		ruleMgr *thanosrules.Manager
-		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
+		ruleMgr       *thanosrules.Manager
+		alertQ        = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
+		remoteStorage = remote.NewWriteStorage(log.With(logger, "component", "remote"), prometheus.DefaultRegisterer, dataDir, time.Duration(remoteFlushDeadline), nil)
 	)
+	remoteStorage.ApplyConfig(rwConfig)
 	{
 		// Run rule evaluation and alert notifications.
 		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -527,6 +544,12 @@ func runRule(
 					err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, metrics)
 					if err != nil {
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
+					} else {
+						rwConfig, err := loadRemoteWrite(logger, remoteWriteConfig, lset)
+						if err != nil {
+							return errors.Wrap(err, "Unable to read remotewrite config")
+						}
+						remoteStorage.ApplyConfig(rwConfig)
 					}
 					reloadMsg <- err
 				case <-ctx.Done():
@@ -805,6 +828,33 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 	}, func(error) {
 		cancel()
 	})
+}
+
+type remoteWriteConfigs struct {
+	RemoteWriteConfigs []*config.RemoteWriteConfig
+}
+
+func loadRemoteWrite(logger log.Logger,
+	remoteWriteConfig *extflag.PathOrContent,
+	lset labels.Labels) (*config.Config, error) {
+	level.Info(logger).Log("msg", "loading remote write config")
+	remoteWriteConfigYaml, err := remoteWriteConfig.Content()
+	rwConf := &config.DefaultConfig
+	if err != nil {
+		level.Error(logger).Log("msg", "error reading remote write config", "error", err)
+		return nil, err
+	}
+
+	if len(remoteWriteConfigYaml) > 0 {
+		var remoteWriteConfig remoteWriteConfigs
+		if err = yaml.Unmarshal(remoteWriteConfigYaml, &remoteWriteConfig); err != nil {
+			level.Error(logger).Log("msg", "error parsing remote write config", "error", err)
+			return nil, errors.Wrap(err, "Invalide RemoteWrite Cdonfig")
+		}
+		rwConf.RemoteWriteConfigs = remoteWriteConfig.RemoteWriteConfigs
+		rwConf.GlobalConfig.ExternalLabels = lset
+	}
+	return rwConf, nil
 }
 
 func reloadRules(logger log.Logger,
