@@ -83,7 +83,7 @@ Copy your company's logo in [`website/static/logos`](/website/static/logos), mak
 * Greyscale is preferred but color is fine
 * Keep it under 50KB
 
-and create PR against Thanos `master` branch.
+and create PR against Thanos `main` branch.
 
 ## White noise
 
@@ -108,9 +108,9 @@ make web-serve
 
 We use [Netlify](https://www.netlify.com/) for hosting. We are using Open Source license (PRO). Thanks Netlify for this!
 
-On every commit to `master` netlify runs CI that invokes `make web` (defined in [netlify.toml](/netlify.toml))
+On every commit to `main` netlify runs CI that invokes `make web` (defined in [netlify.toml](/netlify.toml))
 
 NOTE: Check for status badge in README for build status on the page.
 
-If master build for netlify succeed, the new content is published automatically.
+If main build for netlify succeed, the new content is published automatically.
 

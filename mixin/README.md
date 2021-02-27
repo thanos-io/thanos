@@ -35,7 +35,7 @@ To install:
 go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
 ```
 
-> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin@master`.
+> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin@main`.
 
 ## Use as a library
 
@@ -44,7 +44,7 @@ To use the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` inst
 $ mkdir thanos-mixin; cd thanos-mixin
 $ jb init  # Creates the initial/empty `jsonnetfile.json`
 # Install the thanos-mixin dependency
-$ jb install github.com/thanos-io/thanos/mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
+$ jb install github.com/thanos-io/thanos/mixin@main # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
 ```
 
 To update the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` update functionality:
