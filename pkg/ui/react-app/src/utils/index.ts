@@ -5,9 +5,7 @@ import { PanelMeta } from '../pages/graph/PanelList';
 import { queryURL } from '../thanos/config';
 
 export const generateID = () => {
-  return `_${Math.random()
-    .toString(36)
-    .substr(2, 9)}`;
+  return `_${Math.random().toString(36).substr(2, 9)}`;
 };
 
 export const byEmptyString = (p: string) => p.length > 0;
@@ -24,7 +22,7 @@ export const escapeHTML = (str: string): string => {
     '/': '&#x2F;',
   };
 
-  return String(str).replace(/[&<>"'/]/g, function(s) {
+  return String(str).replace(/[&<>"'/]/g, function (s) {
     return entityMap[s];
   });
 };
@@ -242,5 +240,5 @@ export const mapObjEntries = <T, key extends keyof T, Z>(
 
 export const callAll = (...fns: Array<(...args: any) => void>) => (...args: any) => {
   // eslint-disable-next-line prefer-spread
-  fns.filter(Boolean).forEach(fn => fn.apply(null, args));
+  fns.filter(Boolean).forEach((fn) => fn.apply(null, args));
 };

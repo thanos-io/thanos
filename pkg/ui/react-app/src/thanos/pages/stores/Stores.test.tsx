@@ -31,8 +31,8 @@ describe('Stores', () => {
       expect(panels).toHaveLength(2);
 
       const storePools = Object.keys(sampleAPIResponse.data);
-      storePools.forEach(title => {
-        const panel = stores.find(StorePoolPanel).filterWhere(panel => panel.prop('title') === title);
+      storePools.forEach((title) => {
+        const panel = stores.find(StorePoolPanel).filterWhere((panel) => panel.prop('title') === title);
         expect(panel).toHaveLength(1);
       });
     });

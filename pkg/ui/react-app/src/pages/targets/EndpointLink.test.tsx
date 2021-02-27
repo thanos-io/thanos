@@ -24,9 +24,9 @@ describe('EndpointLink', () => {
     expect(anchor.children().text()).toEqual('http://100.99.128.71:9115/probe');
     expect(endpointLink.find('br')).toHaveLength(1);
     expect(badges).toHaveLength(2);
-    const moduleLabel = badges.filterWhere(badge => badge.hasClass('module'));
+    const moduleLabel = badges.filterWhere((badge) => badge.hasClass('module'));
     expect(moduleLabel.children().text()).toEqual('module="http_2xx"');
-    const targetLabel = badges.filterWhere(badge => badge.hasClass('target'));
+    const targetLabel = badges.filterWhere((badge) => badge.hasClass('target'));
     expect(targetLabel.children().text()).toEqual('target="http://some-service"');
   });
 

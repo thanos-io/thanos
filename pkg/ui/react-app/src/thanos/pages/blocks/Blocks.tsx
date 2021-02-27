@@ -29,7 +29,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     if (!err && blocks.length > 0) {
       let gridMinTime = blocks[0].minTime;
       let gridMaxTime = blocks[0].maxTime;
-      blocks.forEach(block => {
+      blocks.forEach((block) => {
         if (block.minTime < gridMinTime) {
           gridMinTime = block.minTime;
         }
@@ -62,7 +62,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
         <div className={styles.container}>
           <div className={styles.grid}>
             <div className={styles.sources}>
-              {Object.keys(blockPools).map(pk => (
+              {Object.keys(blockPools).map((pk) => (
                 <SourceView
                   key={pk}
                   data={blockPools[pk]}

@@ -10,7 +10,7 @@ interface StatusIndicatorProps {
   componentTitle?: string;
 }
 
-export const withStatusIndicator = <T extends {}>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> => ({
+export const withStatusIndicator = <T extends any>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> => ({
   error,
   isLoading,
   customErrorMsg,

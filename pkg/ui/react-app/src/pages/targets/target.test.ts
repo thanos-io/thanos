@@ -1,4 +1,4 @@
-/* eslint @typescript-eslint/camelcase: 0 */
+/* eslint-disable camelcase */
 
 import { sampleApiResponse } from './__testdata__/testdata';
 import { groupTargets, Target, ScrapePools, getColor } from './target';
@@ -8,7 +8,7 @@ describe('groupTargets', () => {
   const targetGroups: ScrapePools = groupTargets(targets);
 
   it('groups a list of targets by scrape job', () => {
-    ['blackbox', 'prometheus/test', 'node_exporter'].forEach(scrapePool => {
+    ['blackbox', 'prometheus/test', 'node_exporter'].forEach((scrapePool) => {
       expect(Object.keys(targetGroups)).toContain(scrapePool);
     });
     Object.keys(targetGroups).forEach((scrapePool: string): void => {
