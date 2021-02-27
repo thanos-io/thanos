@@ -98,7 +98,7 @@ for file in ${ALL_DOC_CONTENT_FILES}; do
 ---
 
 Found a typo, inconsistency or missing information in our docs?
-Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/master/docs/${relFile}) :heart:
+Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/${relFile}) :heart:
 
 EOF
   )" >>${file}
