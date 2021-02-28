@@ -371,7 +371,12 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, dnsSDInterval)
 	}
 
-	rwConfig, err := loadRemoteWrite(logger, remoteWriteConfig, lset)
+	remoteWriteConfigYaml, err := remoteWriteConfig.Content()
+	if err != nil {
+		level.Error(logger).Log("msg", "error reading remote write config", "error", err)
+		return err
+	}
+	rwConfig, err := loadRemoteWrite(logger, remoteWriteConfigYaml, lset)
 	if err != nil {
 		return errors.Wrap(err, "Unable to read remotewrite config")
 	}
@@ -545,11 +550,16 @@ func runRule(
 					if err != nil {
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					} else {
-						rwConfig, err := loadRemoteWrite(logger, remoteWriteConfig, lset)
+						remoteWriteConfigYaml, err = remoteWriteConfig.Content()
 						if err != nil {
-							return errors.Wrap(err, "Unable to read remotewrite config")
+							level.Error(logger).Log("msg", "error reading remote write config", "error", err)
+						} else {
+							rwConfig, err := loadRemoteWrite(logger, remoteWriteConfigYaml, lset)
+							if err == nil {
+								remoteStorage.ApplyConfig(rwConfig)
+							}
 						}
-						remoteStorage.ApplyConfig(rwConfig)
+
 					}
 					reloadMsg <- err
 				case <-ctx.Done():
@@ -831,25 +841,21 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 }
 
 type remoteWriteConfigs struct {
-	RemoteWriteConfigs []*config.RemoteWriteConfig
+	RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write"`
 }
 
 func loadRemoteWrite(logger log.Logger,
-	remoteWriteConfig *extflag.PathOrContent,
+	remoteWriteConfigYaml []byte,
 	lset labels.Labels) (*config.Config, error) {
-	level.Info(logger).Log("msg", "loading remote write config")
-	remoteWriteConfigYaml, err := remoteWriteConfig.Content()
+	level.Info(logger).Log("msg", "loading remotewrite config")
 	rwConf := &config.DefaultConfig
-	if err != nil {
-		level.Error(logger).Log("msg", "error reading remote write config", "error", err)
-		return nil, err
-	}
 
 	if len(remoteWriteConfigYaml) > 0 {
+		level.Info(logger).Log("msg", "reading remotewrite config")
 		var remoteWriteConfig remoteWriteConfigs
-		if err = yaml.Unmarshal(remoteWriteConfigYaml, &remoteWriteConfig); err != nil {
+		if err := yaml.Unmarshal(remoteWriteConfigYaml, &remoteWriteConfig); err != nil {
 			level.Error(logger).Log("msg", "error parsing remote write config", "error", err)
-			return nil, errors.Wrap(err, "Invalide RemoteWrite Cdonfig")
+			return nil, errors.Wrap(err, "Invalide RemoteWrite Config")
 		}
 		rwConf.RemoteWriteConfigs = remoteWriteConfig.RemoteWriteConfigs
 		rwConf.GlobalConfig.ExternalLabels = lset
