@@ -451,7 +451,9 @@ func runRule(
 	if err != nil {
 		return errors.Wrap(err, "Unable to read remotewrite config")
 	}
-	remoteStorage.ApplyConfig(rwConfig)
+	if err := remoteStorage.ApplyConfig(rwConfig); err != nil {
+		return errors.Wrap(err, "Unable to apply remotewrite config")
+	}
 
 	{
 		// Run rule evaluation and alert notifications.
@@ -552,8 +554,12 @@ func runRule(
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					} else {
 						rwConfig, err := remoteWriter.load()
-						if err == nil {
-							remoteStorage.ApplyConfig(rwConfig)
+						if err != nil {
+							level.Error(logger).Log("msg", "reload remotewrite config by webhandler failed", "err", err)
+						} else {
+							if err = remoteStorage.ApplyConfig(rwConfig); err != nil {
+								level.Error(logger).Log("msg", "reload remotewrite config by webhandler failed", "err", err)
+							}
 						}
 					}
 					reloadMsg <- err
