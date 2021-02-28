@@ -70,9 +70,6 @@ func Test_LoadRemoteWriteConfig(t *testing.T) {
     batch_send_deadline: 30s
     min_backoff: 30ms
     max_backoff: 100ms
-  metadata_config:
-    send: true
-    send_interval: 1m
 `
 	remoteWriter := &remoteWriteConfigs{
 		logger:      log.NewNopLogger(),

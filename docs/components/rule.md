@@ -21,18 +21,45 @@ Read more about Ruler in HA [here](rule.md#ruler-ha)
 
 ```bash
 thanos rule \
-    --data-dir             "/path/to/data" \
-    --eval-interval        "30s" \
-    --rule-file            "/path/to/rules/*.rules.yaml" \
-    --alert.query-url      "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
-    --alertmanagers.url    "http://alert.thanos.io" \
-    --query                "query.example.org" \
-    --query                "query2.example.org" \
-    --objstore.config-file "bucket.yml" \
-    --label                'monitor_cluster="cluster1"'
-    --label                'replica="A"'
+    --data-dir                   "/path/to/data" \
+    --eval-interval              "30s" \
+    --rule-file                  "/path/to/rules/*.rules.yaml" \
+    --alert.query-url            "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
+    --alertmanagers.url          "http://alert.thanos.io" \
+    --query                      "query.example.org" \
+    --query                      "query2.example.org" \
+    --storage.remote.config-file "/path/to/remotewrite.config.yaml" \
+    --objstore.config-file       "bucket.yml" \
+    --label                      'monitor_cluster="cluster1"'
+    --label                      'replica="A"'
 ```
+## RemoteWrite Config
 
+The `--storage.remote.config` and `--storage.remote.config-file` flags allow specifying remotewrite config. All the labels defined by `--label` will be transfered to remote storage as an external.
+
+The configuration format is the following:
+
+[embedmd]:# (../flags/config_rule_remotewrite.txt yaml)
+```yaml
+remote_write:
+- url: ""
+  remote_timeout: ""
+  write_relabel_configs:
+  - source_labels: [""]
+    separator: ";"
+    regex: ""
+    replacement: ""
+    action: ""
+  bearer_token: ""
+  queue_config:
+    capacity: 500
+    max_shards: 10
+    min_shards: 5
+    max_samples_per_send: 100
+    batch_send_deadline: 30s
+    min_backoff: 30ms
+    max_backoff: 100ms
+```
 ## Risk
 
 Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on
