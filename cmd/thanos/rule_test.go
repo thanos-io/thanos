@@ -74,11 +74,16 @@ func Test_LoadRemoteWriteConfig(t *testing.T) {
     send: true
     send_interval: 1m
 `
+	remoteWriter := &remoteWriteConfigs{
+		logger:      log.NewNopLogger(),
+		yamlContent: []byte(config),
+		externalLabels: labels.New(labels.Label{
+			Name:  "external",
+			Value: "1",
+		}),
+	}
 
-	conf, err := loadRemoteWrite(log.NewNopLogger(), []byte(config), labels.New(labels.Label{
-		Name:  "external",
-		Value: "1",
-	}))
+	conf, err := remoteWriter.load()
 	testutil.Equals(t, err, nil)
 	testutil.Equals(t, len(conf.RemoteWriteConfigs), 1)
 	testutil.Equals(t, conf.RemoteWriteConfigs[0].URL.String(), "http://remote-url/api/prom/push")

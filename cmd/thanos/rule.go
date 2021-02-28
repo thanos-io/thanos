@@ -371,16 +371,6 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, dnsSDInterval)
 	}
 
-	remoteWriteConfigYaml, err := remoteWriteConfig.Content()
-	if err != nil {
-		level.Error(logger).Log("msg", "error reading remote write config", "error", err)
-		return err
-	}
-	rwConfig, err := loadRemoteWrite(logger, remoteWriteConfigYaml, lset)
-	if err != nil {
-		return errors.Wrap(err, "Unable to read remotewrite config")
-	}
-
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
@@ -450,8 +440,19 @@ func runRule(
 		ruleMgr       *thanosrules.Manager
 		alertQ        = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
 		remoteStorage = remote.NewWriteStorage(log.With(logger, "component", "remote"), prometheus.DefaultRegisterer, dataDir, time.Duration(remoteFlushDeadline), nil)
+		remoteWriter  = &remoteWriteConfigs{
+			logger:         logger,
+			pathOrContent:  remoteWriteConfig,
+			externalLabels: lset,
+		}
 	)
+	// Loading remote write storage config.
+	rwConfig, err := remoteWriter.load()
+	if err != nil {
+		return errors.Wrap(err, "Unable to read remotewrite config")
+	}
 	remoteStorage.ApplyConfig(rwConfig)
+
 	{
 		// Run rule evaluation and alert notifications.
 		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -550,16 +551,10 @@ func runRule(
 					if err != nil {
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					} else {
-						remoteWriteConfigYaml, err = remoteWriteConfig.Content()
-						if err != nil {
-							level.Error(logger).Log("msg", "error reading remote write config", "error", err)
-						} else {
-							rwConfig, err := loadRemoteWrite(logger, remoteWriteConfigYaml, lset)
-							if err == nil {
-								remoteStorage.ApplyConfig(rwConfig)
-							}
+						rwConfig, err := remoteWriter.load()
+						if err == nil {
+							remoteStorage.ApplyConfig(rwConfig)
 						}
-
 					}
 					reloadMsg <- err
 				case <-ctx.Done():
@@ -841,24 +836,46 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 }
 
 type remoteWriteConfigs struct {
+	logger             log.Logger
+	pathOrContent      *extflag.PathOrContent
+	yamlContent        []byte
+	externalLabels     labels.Labels
 	RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write"`
 }
 
-func loadRemoteWrite(logger log.Logger,
-	remoteWriteConfigYaml []byte,
-	lset labels.Labels) (*config.Config, error) {
-	level.Info(logger).Log("msg", "loading remotewrite config")
-	rwConf := &config.DefaultConfig
+func (rw *remoteWriteConfigs) readContent() ([]byte, error) {
+	if len(rw.yamlContent) > 0 {
+		return rw.yamlContent, nil
+	}
+	return rw.pathOrContent.Content()
 
+}
+
+func (rw *remoteWriteConfigs) load() (*config.Config, error) {
+	level.Info(rw.logger).Log("msg", "loading remotewrite config")
+	remoteWriteConfigYaml, err := rw.readContent()
+	if err != nil {
+		level.Error(rw.logger).Log("msg", "error reading remote write config", "error", err)
+		return nil, err
+	}
+
+	rwConf := &config.DefaultConfig
 	if len(remoteWriteConfigYaml) > 0 {
-		level.Info(logger).Log("msg", "reading remotewrite config")
+		level.Info(rw.logger).Log("msg", "reading remotewrite config")
 		var remoteWriteConfig remoteWriteConfigs
 		if err := yaml.Unmarshal(remoteWriteConfigYaml, &remoteWriteConfig); err != nil {
-			level.Error(logger).Log("msg", "error parsing remote write config", "error", err)
-			return nil, errors.Wrap(err, "Invalide RemoteWrite Config")
+			level.Error(rw.logger).Log("msg", "error parsing remote write config", "error", err)
+			return nil, errors.Wrap(err, "invalide RemoteWrite Config")
 		}
+
+		if len(remoteWriteConfig.RemoteWriteConfigs) == 0 {
+			err := errors.New("empty RemoteWrite config")
+			level.Error(rw.logger).Log("msg", "error parsing remote write config", "error", err)
+			return nil, err
+		}
+
 		rwConf.RemoteWriteConfigs = remoteWriteConfig.RemoteWriteConfigs
-		rwConf.GlobalConfig.ExternalLabels = lset
+		rwConf.GlobalConfig.ExternalLabels = rw.externalLabels
 	}
 	return rwConf, nil
 }
