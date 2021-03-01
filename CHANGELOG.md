@@ -41,6 +41,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
+- [#3854](https://github.com/thanos-io/thanos/pull/3854) Mixin: Remove assumed metrics. Use `thanos_info` instead of `kube_pod_info` for dashboard selectors.
 
 ## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.27
 
