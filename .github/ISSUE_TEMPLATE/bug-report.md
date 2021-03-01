@@ -14,7 +14,7 @@ about what components it touches e.g "query:" or ".*:"
 -->
 
 <!--
-In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/thanos-io/thanos/blob/master/docs/storage.md
+In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/thanos-io/thanos/blob/main/docs/storage.md
 -->
 
 **Thanos, Prometheus and Golang version used**:
@@ -23,7 +23,7 @@ In case of issues related to exact bucket implementation, please ping correspond
 Output of "thanos --version" or docker image:tag used.
 (Double-check if all deployed components/services have expected versions)
 
-If you are using custom build from master branch, have you checked out the tip of the master?
+If you are using custom build from main branch, have you checked out the tip of the main?
 -->
 
 **Object Storage Provider**:

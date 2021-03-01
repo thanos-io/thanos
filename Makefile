@@ -294,7 +294,7 @@ lint: go-lint react-app-lint shell-lint
 # to debug big allocations during linting.
 .PHONY: go-lint
 go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
-	$(call require_clean_work_tree,'detected not clean master before running lint, previous job changed something?')
+	$(call require_clean_work_tree,'detected not clean work tree before running lint, previous job changed something?')
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\

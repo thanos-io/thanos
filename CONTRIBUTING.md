@@ -99,7 +99,7 @@ $ git clone https://github.com/<your_github_id>/thanos.git
 $ cd thanos
 $ git remote add upstream https://github.com/thanos-io/thanos.git
 $ git remote update
-$ git merge upstream/master
+$ git merge upstream/main
 $ make build
 $ export PATH=$PATH:$GOPATH/bin
 $ thanos -h
@@ -118,13 +118,13 @@ You can also alias ``commit`` as `commit -s` in your `~/.gitconfig` to signoff a
 
 If you have authored an unsigned commit, you can update it using ``git commit --amend --signoff``. If you've pushed your changes to GitHub already you'll need to force push your branch after this with ``git push -f``.
 
-1. Keep PRs as small as possible. For each of your PRs, you create a new branch based on the latest master.
+1. Keep PRs as small as possible. For each of your PRs, you create a new branch based on the latest main.
 Chain them if needed (base one PR on other PRs). You can read more details about the workflow from [here](https://gist.github.com/Chaser324/ce0505fbed06b947d962).
 
 ```console
-$ git checkout master
+$ git checkout main
 $ git remote update
-$ git merge upstream/master
+$ git merge upstream/main
 $ git checkout -b <your_branch_for_new_pr>
 $ make build
 $ <Iterate your development>
