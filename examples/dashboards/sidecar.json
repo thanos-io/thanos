@@ -989,7 +989,7 @@
                      "expr": "go_memstats_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc all {{pod}}",
+                     "legendFormat": "alloc all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -997,7 +997,7 @@
                      "expr": "go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc heap {{pod}}",
+                     "legendFormat": "alloc heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1005,7 +1005,7 @@
                      "expr": "rate(go_memstats_alloc_bytes_total{namespace=\"$namespace\",job=~\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate all {{pod}}",
+                     "legendFormat": "alloc rate all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1013,7 +1013,7 @@
                      "expr": "rate(go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate heap {{pod}}",
+                     "legendFormat": "alloc rate heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1021,7 +1021,7 @@
                      "expr": "go_memstats_stack_inuse_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse stack {{pod}}",
+                     "legendFormat": "inuse stack {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1029,7 +1029,7 @@
                      "expr": "go_memstats_heap_inuse_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse heap {{pod}}",
+                     "legendFormat": "inuse heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1105,7 +1105,7 @@
                      "expr": "go_goroutines{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{pod}}",
+                     "legendFormat": "{{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1181,7 +1181,7 @@
                      "expr": "go_gc_duration_seconds{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{quantile}} {{pod}}",
+                     "legendFormat": "{{quantile}} {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }

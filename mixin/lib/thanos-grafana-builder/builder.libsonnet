@@ -161,12 +161,12 @@ local template = grafana.template;
           'go_memstats_heap_inuse_bytes{namespace="$namespace",job=~"$job"}',
         ],
         [
-          'alloc all {{pod}}',
-          'alloc heap {{pod}}',
-          'alloc rate all {{pod}}',
-          'alloc rate heap {{pod}}',
-          'inuse stack {{pod}}',
-          'inuse heap {{pod}}',
+          'alloc all {{instance}}',
+          'alloc heap {{instance}}',
+          'alloc rate all {{instance}}',
+          'alloc rate heap {{instance}}',
+          'inuse stack {{instance}}',
+          'inuse heap {{instance}}',
         ]
       ) +
       { yaxes: $.yaxes('bytes') },
@@ -175,14 +175,14 @@ local template = grafana.template;
       $.panel('Goroutines') +
       $.queryPanel(
         'go_goroutines{namespace="$namespace",job=~"$job"}',
-        '{{pod}}'
+        '{{instance}}'
       )
     )
     .addPanel(
       $.panel('GC Time Quantiles') +
       $.queryPanel(
         'go_gc_duration_seconds{namespace="$namespace",job=~"$job"}',
-        '{{quantile}} {{pod}}'
+        '{{quantile}} {{instance}}'
       )
     ) +
     $.collapse,

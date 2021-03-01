@@ -125,15 +125,15 @@ rules:
     severity: info
 - alert: ThanosRuleRuleEvaluationLatencyHigh
   annotations:
-    description: Thanos Rule {{$labels.job}}/{{$labels.pod}} has higher evaluation
+    description: Thanos Rule {{$labels.job}}/{{$labels.instance}} has higher evaluation
       latency than interval for {{$labels.rule_group}}.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosruleruleevaluationlatencyhigh
     summary: Thanos Rule has high rule evaluation latency.
   expr: |
     (
-      sum by (job, pod, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-rule.*"})
+      sum by (job, instance, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-rule.*"})
     >
-      sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
+      sum by (job, instance, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
     )
   for: 5m
   labels:
@@ -302,18 +302,18 @@ name: thanos-sidecar
 rules:
 - alert: ThanosSidecarPrometheusDown
   annotations:
-    description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to
-      Prometheus.
+    description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} cannot connect
+      to Prometheus.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
     summary: Thanos Sidecar cannot connect to Prometheus
   expr: |
-    sum by (job, pod) (thanos_sidecar_prometheus_up{job=~"thanos-sidecar.*"} == 0)
+    sum by (job, instance) (thanos_sidecar_prometheus_up{job=~"thanos-sidecar.*"} == 0)
   for: 5m
   labels:
     severity: critical
 - alert: ThanosSidecarBucketOperationsFailed
   annotations:
-    description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} bucket operations
+    description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} bucket operations
       are failing
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed
     summary: Thanos Sidecar bucket operations are failing
@@ -324,12 +324,12 @@ rules:
     severity: critical
 - alert: ThanosSidecarUnhealthy
   annotations:
-    description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{
-      $value }} seconds.
+    description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} is unhealthy
+      for {{ $value }} seconds.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
     summary: Thanos Sidecar is unhealthy.
   expr: |
-    time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, pod) >= 600
+    time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, instance) >= 600
   labels:
     severity: critical
 ```
