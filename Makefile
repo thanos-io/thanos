@@ -360,6 +360,11 @@ jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
+.PHONY: jsonnet-lint
+jsonnet-lint: $(JSONNET_LINT) ${JSONNET_VENDOR_DIR}
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
+
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml

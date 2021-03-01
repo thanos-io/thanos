@@ -1,4 +1,4 @@
-# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.3.0. DO NOT EDIT.
+# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.3.1. DO NOT EDIT.
 # All tools are designed to be build inside $GOBIN.
 BINGO_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 GOPATH ?= $(shell go env GOPATH)
@@ -77,17 +77,23 @@ $(JB): $(BINGO_DIR)/jb.mod
 	@echo "(re)installing $(GOBIN)/jb-v0.4.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jb.mod -o=$(GOBIN)/jb-v0.4.0 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
 
-JSONNET := $(GOBIN)/jsonnet-v0.16.0
+JSONNET_LINT := $(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0
+$(JSONNET_LINT): $(BINGO_DIR)/jsonnet-lint.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet-lint.mod -o=$(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0 "github.com/google/go-jsonnet/cmd/jsonnet-lint"
+
+JSONNET := $(GOBIN)/jsonnet-v0.17.0
 $(JSONNET): $(BINGO_DIR)/jsonnet.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jsonnet-v0.16.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet.mod -o=$(GOBIN)/jsonnet-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnet"
+	@echo "(re)installing $(GOBIN)/jsonnet-v0.17.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet.mod -o=$(GOBIN)/jsonnet-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnet"
 
-JSONNETFMT := $(GOBIN)/jsonnetfmt-v0.16.0
+JSONNETFMT := $(GOBIN)/jsonnetfmt-v0.17.0
 $(JSONNETFMT): $(BINGO_DIR)/jsonnetfmt.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.16.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
+	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.17.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): $(BINGO_DIR)/minio.mod
