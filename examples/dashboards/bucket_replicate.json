@@ -421,7 +421,7 @@
             "multi": false,
             "name": "namespace",
             "options": [ ],
-            "query": "label_values(kube_pod_info{}, namespace)",
+            "query": "label_values(thanos_status{}, namespace)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -444,7 +444,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\", job=~\"thanos-bucket-replicate.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -502,6 +502,6 @@
    },
    "timezone": "UTC",
    "title": "Thanos / BucketReplicate",
-   "uid": "65ffb86cd2688b9e4db4d1ea231a5a9a",
+   "uid": "49f644ecf8e31dd1a5084ae2a5f10e80",
    "version": 0
 }
