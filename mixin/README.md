@@ -100,7 +100,7 @@ This project is intended to be used as a library. You can extend and customize d
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
-    namespaceQuery: 'kube_pod_info',
+    namespaceQuery: 'thanos_status',
   },
 }
 ```

@@ -80,7 +80,7 @@ name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
   annotations:
-    description: Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to queue alerts.
+    description: Thanos Rule {{$labels.job}} is failing to queue alerts.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulequeueisdroppingalerts
     summary: Thanos Rule is failing to queue alerts.
   expr: |
@@ -90,8 +90,7 @@ rules:
     severity: critical
 - alert: ThanosRuleSenderIsFailingAlerts
   annotations:
-    description: Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to send alerts
-      to alertmanager.
+    description: Thanos Rule {{$labels.job}} is failing to send alerts to alertmanager.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulesenderisfailingalerts
     summary: Thanos Rule is failing to send alerts to alertmanager.
   expr: |
@@ -101,8 +100,7 @@ rules:
     severity: critical
 - alert: ThanosRuleHighRuleEvaluationFailures
   annotations:
-    description: Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to evaluate
-      rules.
+    description: Thanos Rule {{$labels.job}} is failing to evaluate rules.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulehighruleevaluationfailures
     summary: Thanos Rule is failing to evaluate rules.
   expr: |
@@ -117,8 +115,7 @@ rules:
     severity: critical
 - alert: ThanosRuleHighRuleEvaluationWarnings
   annotations:
-    description: Thanos Rule {{$labels.job}} {{$labels.pod}} has high number of evaluation
-      warnings.
+    description: Thanos Rule {{$labels.job}} has high number of evaluation warnings.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulehighruleevaluationwarnings
     summary: Thanos Rule has high number of evaluation warnings.
   expr: |

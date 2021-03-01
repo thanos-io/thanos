@@ -2003,7 +2003,7 @@
             "multi": false,
             "name": "namespace",
             "options": [ ],
-            "query": "label_values(kube_pod_info{}, namespace)",
+            "query": "label_values(thanos_status{}, namespace)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
