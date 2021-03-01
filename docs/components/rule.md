@@ -394,6 +394,12 @@ Flags:
                                  Interval between DNS resolutions.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
+      --hash-func=               Specify which hash function to use when
+                                 calculating the hashes of produced files. If no
+                                 function has been specified, it does not
+                                 happen. This permits avoiding downloading some
+                                 files twice albeit at some performance cost.
+                                 Possible values are: "", "SHA256".
 
 ```
 

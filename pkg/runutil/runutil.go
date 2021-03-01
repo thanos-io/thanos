@@ -54,6 +54,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -157,4 +158,42 @@ func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ..
 	merr.Add(*err)
 
 	*err = merr.Err()
+}
+
+// DeleteAll deletes all files and directories inside the given
+// dir except for the ignoreDirs directories.
+func DeleteAll(dir string, ignoreDirs ...string) error {
+	entries, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	var groupErrs errutil.MultiError
+
+	for _, d := range entries {
+		if !d.IsDir() {
+			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil {
+				groupErrs.Add(err)
+			}
+			continue
+		}
+
+		var found bool
+		for _, id := range ignoreDirs {
+			if id == d.Name() {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil {
+				groupErrs.Add(err)
+			}
+		}
+	}
+
+	if groupErrs != nil {
+		return errors.Wrap(groupErrs.Err(), "delete file/dir")
+	}
+	return nil
 }
