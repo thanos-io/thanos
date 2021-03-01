@@ -275,6 +275,19 @@ Flags:
                                  Prometheus, used to identify ruler and its
                                  blocks as unique source.
       --data-dir="data/"         data directory
+      --storage.remote.flush-deadline=1m
+                                 How long to wait flushing sample on shutdown or
+                                 config reload.
+      --storage.remote.config-file=<file-path>
+                                 Path to YAML file that contains remote write
+                                 configuration. See format details:
+                                 https://thanos.io/tip/components/rule.md/#configuration.
+      --storage.remote.config=<content>
+                                 Alternative to 'storage.remote.config-file'
+                                 flag (lower priority). Content of YAML file
+                                 that contains remote write configuration. See
+                                 format details:
+                                 https://thanos.io/tip/components/rule.md/#configuration.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
       --resend-delay=1m          Minimum amount of time to wait before resending
