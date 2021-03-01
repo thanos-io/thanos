@@ -286,15 +286,9 @@ groups:
   rules:
   - alert: ThanosSidecarPrometheusDown
     annotations:
-<<<<<<< HEAD
-      description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to
-        Prometheus.
-      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
-=======
       description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} cannot connect
         to Prometheus.
-      runbook_url: https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarprometheusdown
->>>>>>> 6c19f141 (Rename pod to instance)
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
       summary: Thanos Sidecar cannot connect to Prometheus
     expr: |
       sum by (job, instance) (thanos_sidecar_prometheus_up{job=~"thanos-sidecar.*"} == 0)
@@ -314,15 +308,9 @@ groups:
       severity: critical
   - alert: ThanosSidecarUnhealthy
     annotations:
-<<<<<<< HEAD
-      description: Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for
-        {{ $value }} seconds.
-      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
-=======
       description: Thanos Sidecar {{$labels.job}} {{$labels.instance}} is unhealthy
         for {{ $value }} seconds.
-      runbook_url: https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-thanossidecarunhealthy
->>>>>>> 6c19f141 (Rename pod to instance)
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
       summary: Thanos Sidecar is unhealthy.
     expr: |
       time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, instance) >= 600
