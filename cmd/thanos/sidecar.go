@@ -275,6 +275,9 @@ func runSidecar(
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
+					statusProber.NotHealthy(err)
+				} else {
+					statusProber.Healthy()
 				}
 
 				minTime, _, err := s.Timestamps()
