@@ -101,7 +101,7 @@ class GraphControls extends Component<GraphControlsProps> {
 
   render() {
     return (
-      <Form inline className="graph-controls" onSubmit={e => e.preventDefault()}>
+      <Form inline className="graph-controls" onSubmit={(e) => e.preventDefault()}>
         <InputGroup className="range-input" size="sm">
           <InputGroupAddon addonType="prepend">
             <Button title="Decrease range" onClick={this.decreaseRange}>

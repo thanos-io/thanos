@@ -563,7 +563,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
-				return errs
+				return errs.Err()
 			}
 			if err == nil {
 				success++
@@ -692,7 +692,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 	}
 
 	unwrappedErr := errors.Cause(err)
-	errs, ok := unwrappedErr.(errutil.MultiError)
+	errs, ok := unwrappedErr.(errutil.NonNilMultiError)
 	if !ok {
 		errs = []error{unwrappedErr}
 	}

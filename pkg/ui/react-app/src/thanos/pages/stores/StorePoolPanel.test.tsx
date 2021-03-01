@@ -17,7 +17,7 @@ describe('StorePoolPanel', () => {
   const storePoolPanel = mount(<StorePoolPanel {...defaultProps} />);
 
   it('renders a container', () => {
-    const div = storePoolPanel.find('div').filterWhere(elem => elem.hasClass('container-fluid'));
+    const div = storePoolPanel.find('div').filterWhere((elem) => elem.hasClass('container-fluid'));
     expect(div).toHaveLength(1);
   });
 

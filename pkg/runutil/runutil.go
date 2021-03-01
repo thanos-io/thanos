@@ -193,7 +193,7 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 	}
 
 	if groupErrs != nil {
-		return errors.Wrap(groupErrs, "delete file/dir")
+		return errors.Wrap(groupErrs.Err(), "delete file/dir")
 	}
 	return nil
 }

@@ -190,9 +190,14 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 
 // Iter calls f for each entry in the given directory (not recursive). The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, objstore.DirDelim) + objstore.DirDelim
+	}
+
+	delimiter := alioss.Delimiter(objstore.DirDelim)
+	if objstore.ApplyIterOptions(options...).Recursive {
+		delimiter = nil
 	}
 
 	marker := alioss.Marker("")
@@ -200,7 +205,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "context closed while iterating bucket")
 		}
-		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
+		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), delimiter, marker)
 		if err != nil {
 			return errors.Wrap(err, "listing aliyun oss bucket failed")
 		}

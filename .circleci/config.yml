@@ -68,7 +68,7 @@ jobs:
           paths:
             - .build
 
-  publish_master:
+  publish_main:
     executor: golang
     steps:
       - checkout
@@ -116,12 +116,12 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - publish_master:
+      - publish_main:
           requires:
             - test
           filters:
             branches:
-              only: master
+              only: main
       - cross_build:
           requires:
             - test

@@ -10,7 +10,6 @@ import (
 	"github.com/NYTimes/gziphandler"
 	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend"
 	"github.com/cortexproject/cortex/pkg/frontend/transport"
-	cortexfrontendv1 "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
@@ -174,12 +173,6 @@ func runQueryFrontend(
 	if err := cfg.Validate(); err != nil {
 		return errors.Wrap(err, "error validating the config")
 	}
-
-	fe, err := cortexfrontendv1.New(cortexfrontendv1.Config{}, nil, logger, reg)
-	if err != nil {
-		return errors.Wrap(err, "setup query frontend")
-	}
-	defer fe.Close()
 
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {

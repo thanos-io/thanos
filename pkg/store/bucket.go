@@ -61,8 +61,9 @@ const (
 	// because you barely get any improvements in compression when the number of samples is beyond this.
 	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 	MaxSamplesPerChunk = 120
-	maxChunkSize       = 16000
-	maxSeriesSize      = 64 * 1024
+	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
+	EstimatedMaxChunkSize = 16000
+	maxSeriesSize         = 64 * 1024
 
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
@@ -258,7 +259,7 @@ type BucketStore struct {
 	dir             string
 	indexCache      storecache.IndexCache
 	indexReaderPool *indexheader.ReaderPool
-	chunkPool       pool.BytesPool
+	chunkPool       pool.Bytes
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
 	mtx       sync.RWMutex
@@ -283,14 +284,33 @@ type BucketStore struct {
 	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
+	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
 }
 
+type noopCache struct{}
+
+func (noopCache) StorePostings(context.Context, ulid.ULID, labels.Label, []byte) {}
+func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+	return map[labels.Label][]byte{}, keys
+}
+
+func (noopCache) StoreSeries(context.Context, ulid.ULID, uint64, []byte) {}
+func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+	return map[uint64][]byte{}, ids
+}
+
+type noopGate struct{}
+
+func (noopGate) Start(context.Context) error { return nil }
+func (noopGate) Done()                       {}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
+// TODO(bwplotka): Move to config at this point.
 func NewBucketStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
@@ -299,7 +319,7 @@ func NewBucketStore(
 	dir string,
 	indexCache storecache.IndexCache,
 	queryGate gate.Gate,
-	chunkPool pool.BytesPool,
+	chunkPool pool.Bytes,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	partitioner Partitioner,
@@ -314,6 +334,16 @@ func NewBucketStore(
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+
+	if chunkPool == nil {
+		chunkPool = pool.NoopBytes{}
+	}
+	if indexCache == nil {
+		indexCache = noopCache{}
+	}
+	if queryGate == nil {
+		queryGate = noopGate{}
 	}
 
 	s := &BucketStore{
@@ -1369,7 +1399,7 @@ type bucketBlock struct {
 	meta       *metadata.Meta
 	dir        string
 	indexCache storecache.IndexCache
-	chunkPool  pool.BytesPool
+	chunkPool  pool.Bytes
 	extLset    labels.Labels
 
 	indexHeaderReader indexheader.Reader
@@ -1393,7 +1423,7 @@ func newBucketBlock(
 	bkt objstore.BucketReader,
 	dir string,
 	indexCache storecache.IndexCache,
-	chunkPool pool.BytesPool,
+	chunkPool pool.Bytes,
 	indexHeadReader indexheader.Reader,
 	p Partitioner,
 ) (b *bucketBlock, err error) {
@@ -2228,7 +2258,7 @@ func (r *bucketChunkReader) preload() error {
 			return offsets[i] < offsets[j]
 		})
 		parts := r.block.partitioner.Partition(len(offsets), func(i int) (start, end uint64) {
-			return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
+			return uint64(offsets[i]), uint64(offsets[i]) + EstimatedMaxChunkSize
 		})
 
 		seq := seq
@@ -2337,7 +2367,7 @@ func chunkOffsetsToByteRanges(offsets []uint32, start uint32) byteRanges {
 		ranges[idx] = byteRange{
 			// The byte range offset is required to be relative to the start of the read slice.
 			offset: int(offsets[idx] - start),
-			length: maxChunkSize,
+			length: EstimatedMaxChunkSize,
 		}
 
 		if idx > 0 {
@@ -2480,6 +2510,6 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 }
 
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
-func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.BytesPool, error) {
-	return pool.NewBucketedBytesPool(maxChunkSize, 50e6, 2, maxChunkPoolBytes)
+func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
+	return pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, maxChunkPoolBytes)
 }

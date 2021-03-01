@@ -41,18 +41,6 @@ var (
 	}
 )
 
-type noopCache struct{}
-
-func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return map[labels.Label][]byte{}, keys
-}
-
-func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return map[uint64][]byte{}, ids
-}
-
 type swappableCache struct {
 	ptr storecache.IndexCache
 }
@@ -154,9 +142,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}, nil)
 	testutil.Ok(t, err)
 
-	chunkPool, err := NewDefaultChunkBytesPool(0)
-	testutil.Ok(t, err)
-
 	store, err := NewBucketStore(
 		s.logger,
 		nil,
@@ -165,7 +150,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		s.cache,
 		nil,
-		chunkPool,
+		nil,
 		NewChunksLimiterFactory(maxChunksLimit),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -196,6 +181,8 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 // TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
+	t.Helper()
+
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)

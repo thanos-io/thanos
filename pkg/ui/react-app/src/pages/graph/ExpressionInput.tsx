@@ -45,9 +45,9 @@ class ExpressionInput extends Component<ExpressionInputProps, ExpressionInputSta
     this.setValue(this.exprInputRef.current!.value);
   };
 
-  setValue = (value: string) => {
+  setValue = (value: string | null) => {
     const { onExpressionChange } = this.props;
-    onExpressionChange(value);
+    onExpressionChange(value as string);
     this.setState({ height: 'auto' }, this.setHeight);
   };
 
@@ -130,7 +130,7 @@ class ExpressionInput extends Component<ExpressionInputProps, ExpressionInputSta
     const { height } = this.state;
     return (
       <Downshift onSelect={this.setValue}>
-        {downshift => (
+        {(downshift) => (
           <div>
             <InputGroup className="expression-input">
               <InputGroupAddon addonType="prepend">
