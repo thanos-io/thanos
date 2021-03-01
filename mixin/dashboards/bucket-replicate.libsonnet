@@ -1,6 +1,7 @@
 local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 
 {
+  local thanos = self,
   bucket_replicate+:: {
     jobPrefix: error 'must provide job prefix for Thanos Bucket Replicate dashboard',
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
