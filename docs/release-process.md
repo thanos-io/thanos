@@ -31,8 +31,10 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.20.0   | (planned) 2021.03.31     | `@kakkoyun`              |
-| v0.19.0   | (planned) 2021.02.17     | `@bwplotka`              |
+| v0.22.0   | (planned) 2021.07.06     | TBD                      |
+| v0.21.0   | (planned) 2021.05.25     | TBD                      |
+| v0.20.0   | (planned) 2021.04.13     | `@kakkoyun`              |
+| v0.19.0   | 2021.03.02               | `@bwplotka`              |
 | v0.18.0   | 2021.01.06               | `@squat`                 |
 | v0.17.0   | 2020.11.18               | `@metalmatze`            |
 | v0.16.0   | 2020.10.26               | `@bwplotka`              |
@@ -70,7 +72,12 @@ Release is happening on separate `release-<major>.<minor>` branch.
 
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
 
-1. Create small PR to main (!) to cut CHANGELOG. This helps to maintain new changelog on main. For example: https://github.com/thanos-io/thanos/pull/2627
+1. Create small PR to `main` (!) to cut CHANGELOG. This helps to maintain new changelog on main.
+
+   1. Add entry to CHANGELOG indicating release in progress. This reduces risk for the new PRs to add changelog entries to already released release.
+   1. Update `VERSION` file to version one minor version higher than the released one and `dev` suffix. This allows CI to build thanos binary with the version indicating potential next minor release, showing that someone uses non-released binary (which is fine, just better to know this!).
+
+Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
