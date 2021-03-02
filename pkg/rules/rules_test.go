@@ -36,7 +36,7 @@ func testRulesAgainstExamples(t *testing.T, dir string, server rulespb.RulesServ
 		{
 			Name:                    "thanos-bucket-replicate",
 			File:                    filepath.Join(dir, "alerts.yaml"),
-			Rules:                   []*rulespb.Rule{someAlert, someAlert, someAlert},
+			Rules:                   []*rulespb.Rule{someAlert, someAlert},
 			Interval:                60,
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		},

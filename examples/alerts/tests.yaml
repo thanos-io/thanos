@@ -51,6 +51,7 @@ tests:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
           value: 240
   alert_rule_test:
+<<<<<<< HEAD
     - eval_time: 1m
       alertname: ThanosSidecarUnhealthy
     - eval_time: 2m
@@ -80,3 +81,74 @@ tests:
           summary: 'Thanos Sidecar is unhealthy.'
     - eval_time: 10m
       alertname: ThanosSidecarUnhealthy
+=======
+  - eval_time: 1m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 2m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 3m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 10m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-0 is unhealthy for 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-1 is unhealthy for 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+  - eval_time: 11m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-0 is unhealthy for 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-1 is unhealthy for 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+  - eval_time: 12m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-0 is unhealthy for 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+      exp_annotations:
+        description: 'Thanos Sidecar production/thanos-sidecar/thanos-sidecar-1 is unhealthy for 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+>>>>>>> 03e314dd (Add namespaces to alerts)

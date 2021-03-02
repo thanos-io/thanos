@@ -11,11 +11,11 @@
           {
             alert: 'ThanosSidecarPrometheusDown',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.job}} {{$labels.instance}} cannot connect to Prometheus.',
+              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} cannot connect to Prometheus.',
               summary: 'Thanos Sidecar cannot connect to Prometheus',
             },
             expr: |||
-              sum by (job, instance) (thanos_sidecar_prometheus_up{%(selector)s} == 0)
+              thanos_sidecar_prometheus_up{%(selector)s} == 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
@@ -25,11 +25,11 @@
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.job}} {{$labels.instance}} bucket operations are failing',
+              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} bucket operations are failing',
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
-              rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m]) > 0
+              sum by (namespace, job, instance) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
@@ -39,11 +39,11 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.job}} {{$labels.instance}} is unhealthy for more than {{$value}} seconds.',
+              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} is unhealthy for {{ $value }} seconds.',
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s})) >= 240
+              time() - max by (namespace, job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
             ||| % thanos.sidecar,
             labels: {
               severity: 'critical',
