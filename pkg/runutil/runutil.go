@@ -164,6 +164,9 @@ func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ..
 // dir except for the ignoreDirs directories.
 func DeleteAll(dir string, ignoreDirs ...string) error {
 	entries, err := ioutil.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
@@ -171,7 +174,7 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 
 	for _, d := range entries {
 		if !d.IsDir() {
-			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil {
+			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil && !os.IsNotExist(err) {
 				groupErrs.Add(err)
 			}
 			continue
@@ -186,7 +189,7 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 		}
 
 		if !found {
-			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil {
+			if err := os.RemoveAll(filepath.Join(dir, d.Name())); err != nil && !os.IsNotExist(err) {
 				groupErrs.Add(err)
 			}
 		}
