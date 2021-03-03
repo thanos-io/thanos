@@ -126,6 +126,9 @@ type ObjectAttributes struct {
 }
 
 // TryToGetSize tries to get upfront size from reader.
+// Some implementations may return only size of unread data in the reader, so it's best to call this method before
+// doing any reading.
+//
 // TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
 func TryToGetSize(r io.Reader) (int64, error) {
 	switch f := r.(type) {
@@ -136,6 +139,9 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		}
 		return fileInfo.Size(), nil
 	case *bytes.Buffer:
+		return int64(f.Len()), nil
+	case *bytes.Reader:
+		// Returns length of unread data only.
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
@@ -150,6 +156,8 @@ type ReaderWithSize interface {
 	io.Reader
 
 	// Size returns size of the object read by this reader, or error, if size is not available.
+	// It is best to call Size before reading the object, as some implementations may only return
+	// length of unread data.
 	Size() (int64, error)
 }
 
