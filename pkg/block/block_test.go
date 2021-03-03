@@ -211,6 +211,24 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 	}
 	{
+		// Upload block without debug meta files.
+		b3, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+			{{Name: "a", Value: "1"}},
+			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "3"}},
+			{{Name: "a", Value: "4"}},
+			{{Name: "b", Value: "1"}},
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
+		testutil.Ok(t, err)
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b3.String()), metadata.NoneFunc, false))
+
+		// 4 files from b1 + 3 files from b3.
+		testutil.Equals(t, 7, len(bkt.Objects()))
+		testutil.Equals(t, 3736, len(bkt.Objects()[path.Join(b3.String(), ChunksDirname, "000001")]))
+		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b3.String(), IndexFilename)]))
+		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b3.String(), MetaFilename)]))
+	}
+	{
 		// No external labels with UploadPromBlocks.
 		b2, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
