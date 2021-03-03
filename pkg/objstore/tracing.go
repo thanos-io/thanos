@@ -118,6 +118,10 @@ type tracingReadCloser struct {
 	read int
 }
 
+func (t *tracingReadCloser) Size() (int64, error) {
+	return TryToGetSize(t.r)
+}
+
 func (t *tracingReadCloser) Read(p []byte) (int, error) {
 	n, err := t.r.Read(p)
 	if n > 0 {

@@ -139,8 +139,29 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
+	case ReaderWithSize:
+		return f.Size()
 	}
 	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
+}
+
+// ReaderWithSize is a Reader that can also return size of the read object.
+type ReaderWithSize interface {
+	io.Reader
+
+	// Size returns size of the object read by this reader, or error, if size is not available.
+	Size() (int64, error)
+}
+
+type nopCloserWithSize struct{ io.Reader }
+
+func (nopCloserWithSize) Close() error           { return nil }
+func (n nopCloserWithSize) Size() (int64, error) { return TryToGetSize(n.Reader) }
+
+// NopCloserWithSize returns a ReadCloser with a no-op Close method wrapping
+// the provided Reader r. Returned ReadCloser also implements Size method.
+func NopCloserWithSize(r io.Reader) io.ReadCloser {
+	return nopCloserWithSize{r}
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
