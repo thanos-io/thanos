@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Bucket Replicate dashboard',
   },
   grafanaDashboards+:: {
-    'bucket-replicate.json':
+    'bucket_replicate.json':
       g.dashboard(thanos.bucket_replicate.title)
       .addRow(
         g.row('Bucket Replicate Runs')
@@ -50,7 +50,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       +
-      g.template('namespace', 'kube_pod_info') +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.bucket_replicate, true, '%(jobPrefix)s.*' % thanos.bucket_replicate),
+      g.template('namespace', thanos.dashboard.namespaceQuery) +
+      g.template('job', 'up', 'namespace="$namespace", %(selector)s' % thanos.bucket_replicate, true, '%(jobPrefix)s.*' % thanos.bucket_replicate),
   },
 }

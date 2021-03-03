@@ -15,7 +15,7 @@
           {
             alert: 'ThanosRuleQueueIsDroppingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to queue alerts.',
+              description: 'Thanos Rule {{$labels.job}} is failing to queue alerts.',
               summary: 'Thanos Rule is failing to queue alerts.',
             },
             expr: |||
@@ -29,7 +29,7 @@
           {
             alert: 'ThanosRuleSenderIsFailingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to send alerts to alertmanager.',
+              description: 'Thanos Rule {{$labels.job}} is failing to send alerts to alertmanager.',
               summary: 'Thanos Rule is failing to send alerts to alertmanager.',
             },
             expr: |||
@@ -43,7 +43,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.',
+              description: 'Thanos Rule {{$labels.job}} is failing to evaluate rules.',
               summary: 'Thanos Rule is failing to evaluate rules.',
             },
             expr: |||
@@ -63,7 +63,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationWarnings',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}} {{$labels.pod}} has high number of evaluation warnings.',
+              description: 'Thanos Rule {{$labels.job}} has high number of evaluation warnings.',
               summary: 'Thanos Rule has high number of evaluation warnings.',
             },
             expr: |||
@@ -78,14 +78,14 @@
           {
             alert: 'ThanosRuleRuleEvaluationLatencyHigh',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}/{{$labels.pod}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
+              description: 'Thanos Rule {{$labels.job}}/{{$labels.instance}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
               summary: 'Thanos Rule has high rule evaluation latency.',
             },
             expr: |||
               (
-                sum by (job, pod, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
+                sum by (job, instance, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
               >
-                sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
+                sum by (job, instance, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )
             ||| % thanos.rule,
             'for': '5m',
