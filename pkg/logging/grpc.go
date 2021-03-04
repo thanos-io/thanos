@@ -28,7 +28,7 @@ func NewRequestConfig(configYAML []byte) (*RequestConfig, error) {
 	return reqLogConfig, nil
 }
 
-// Checks if the OptionsConfig struct is empty and valid.
+// checkOptionsConfigEmpty checks if the OptionsConfig struct is empty and valid.
 // If invalid combination is present, return an error.
 func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 	if len(optcfg.Level) == 0 && !optcfg.Decision.LogEnd && !optcfg.Decision.LogStart {
@@ -40,7 +40,7 @@ func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 	return false, nil
 }
 
-// This function configures all the method to have global config for logging.
+// fillGlobalOptionConfig configures all the method to have global config for logging.
 func fillGlobalOptionConfig(reqLogConfig *RequestConfig, isgRPC bool) (string, bool, bool, error) {
 	globalLevel := "ERROR"
 	globalStart, globalEnd := false, false
@@ -78,7 +78,7 @@ func fillGlobalOptionConfig(reqLogConfig *RequestConfig, isgRPC bool) (string, b
 	return globalLevel, globalStart, globalEnd, nil
 }
 
-// Returns the logging ENUM based on logStart and logEnd values.
+// getGRPCLoggingOption returns the logging ENUM based on logStart and logEnd values.
 func getGRPCLoggingOption(logStart bool, logEnd bool) (grpc_logging.Decision, error) {
 	if !logStart && !logEnd {
 		return grpc_logging.NoLogCall, nil
@@ -92,7 +92,7 @@ func getGRPCLoggingOption(logStart bool, logEnd bool) (grpc_logging.Decision, er
 	return -1, fmt.Errorf("log start call is not supported.")
 }
 
-// Validate the list of level entries.
+// validateLevel validates the list of level entries.
 // Raise an error if empty or log level not in uppercase.
 func validateLevel(level string) error {
 	if len(level) == 0 {
@@ -144,7 +144,6 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 	}
 
 	globalLevel, globalStart, globalEnd, err := fillGlobalOptionConfig(reqLogConfig, true)
-
 	// If global options have invalid entries.
 	if err != nil {
 		return tagOpts, logOpts, err

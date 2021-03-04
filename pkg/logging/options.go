@@ -61,6 +61,8 @@ func WithLevels(f CodeToLevel) Option {
 	}
 }
 
+// WithFilter customizes the function for deciding which level of logging should be allowed.
+// Follows go-kit Allow<level of log> convention.
 func WithFilter(f FilterLogging) Option {
 	return func(o *options) {
 		o.filterLog = f
@@ -79,6 +81,7 @@ type Fields []string
 // for the http response.
 type ErrorToCode func(err error) int
 
+// DefaultErrorToCode returns an InternalServerError.
 func DefaultErrorToCode(_ error) int {
 	return 500
 }
@@ -203,7 +206,7 @@ func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []tags.Option{}, logOpts, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+		return []tags.Option{}, logOpts, fmt.Errorf("Both log.request.decision and request.logging-config has been enabled. Please use one of the flags!")
 	}
 
 	// If the old flag is empty, use the new YAML config.

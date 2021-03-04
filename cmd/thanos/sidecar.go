@@ -51,10 +51,9 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		// Check if the YAML configuration of request.logging is correct.
-		tagOpts, GRPCLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Wrapf(err, "error while parsing config for request logging")
+			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
 		rl := reloader.New(log.With(logger, "component", "reloader"),
@@ -68,7 +67,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, GRPCLogOpts, tagOpts)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, grpcLogOpts, tagOpts)
 	})
 }
 
@@ -80,7 +79,7 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
-	GRPCLogOpts []grpc_logging.Option,
+	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
 	var m = &promMetadata{
@@ -227,7 +226,7 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),

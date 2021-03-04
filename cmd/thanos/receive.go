@@ -117,10 +117,9 @@ func registerReceive(app *extkingpin.App) {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
-		// Check if the YAML configuration of request.logging is correct. .
-		tagOpts, GRPCLogOpts, err := logging.ParsegRPCOptions("", reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", reqLogConfig)
 		if err != nil {
-			return errors.Wrapf(err, "error while parsing config for request logging")
+			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -149,7 +148,7 @@ func registerReceive(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			GRPCLogOpts, tagOpts,
+			grpcLogOpts, tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -192,7 +191,7 @@ func runReceive(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	GRPCLogOpts []grpc_logging.Option,
+	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
@@ -508,7 +507,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, GRPCLogOpts, tagOpts, comp, grpcProbe,
+				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 					grpcserver.WithServer(store.RegisterStoreServer(rw)),
 					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 					grpcserver.WithListen(grpcBindAddr),

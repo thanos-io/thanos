@@ -126,15 +126,14 @@ func registerStore(app *extkingpin.App) {
 				minTime, maxTime)
 		}
 
-		// Check if the YAML configuration of request.logging is correct.
 		httpLogOpts, err := logging.ParseHTTPOptions("", reqLogConfig)
 		if err != nil {
-			return errors.Wrapf(err, "error while parsing config for request logging")
+			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", reqLogConfig)
 		if err != nil {
-			return errors.Wrapf(err, "error while parsing config for request logging")
+			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
 		return runStore(g,

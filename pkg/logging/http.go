@@ -59,6 +59,7 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 	}
 }
 
+// NewHTTPServerMiddleware returns an http middleware.
 func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddleware {
 	o := evaluateOpt(opts)
 	return &HTTPServerMiddleware{
@@ -67,7 +68,7 @@ func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddl
 	}
 }
 
-// Returns the logging ENUM based on logStart and logEnd values.
+// getHTTPLoggingOption returns the logging ENUM based on logStart and logEnd values.
 func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	if !logStart && !logEnd {
 		return NoLogCall, nil
@@ -81,6 +82,7 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	return -1, fmt.Errorf("log start call is not supported.")
 }
 
+// getLevel returns the level based logger.
 func getLevel(lvl string) level.Option {
 	switch lvl {
 	case "INFO":
@@ -96,6 +98,7 @@ func getLevel(lvl string) level.Option {
 	}
 }
 
+// NewHTTPOption returns a http config option.
 func NewHTTPOption(configYAML []byte) ([]Option, error) {
 	// Define a black config option.
 	logOpts := []Option{

@@ -140,14 +140,14 @@ Flags:
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
-      --request.logging-file=<file-path>
+      --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging=<content>
-                                 Alternative to 'request.logging-file' flag
-                                 (lower priority). Content of YAML file with
-                                 request logging configuration. See format
+      --request.logging-config=<content>
+                                 Alternative to 'request.logging-config-file'
+                                 flag (lower priority). Content of YAML file
+                                 with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
