@@ -351,7 +351,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		api := v1.NewBlocksAPI(logger, *label, flagsMap)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)

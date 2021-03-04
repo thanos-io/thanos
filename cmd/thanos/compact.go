@@ -464,7 +464,7 @@ func runCompact(
 		global.Register(r, false, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
