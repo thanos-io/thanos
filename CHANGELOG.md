@@ -24,7 +24,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#3862](https://github.com/thanos-io/thanos/pull/3862), [#3361](https://github.com/thanos-io/thanos/pull/3361) Sidecar, Store, Query, Ruler, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
+- [#3862](https://github.com/thanos-io/thanos/pull/3862) Sidecar, Store, Query, Ruler, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
 - [#3740](https://github.com/thanos-io/thanos/pull/3740) Query: Added `--query.default-step` flag to set default step.
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) ui: make old bucket viewer UI work with vanilla Prometheus blocks
 - [#2641](https://github.com/thanos-io/thanos/issues/2641) Query Frontend: Added `--query-range.request-downsampled` flag enabling additional queries for downsampled data in case of empty or incomplete response to range request.
