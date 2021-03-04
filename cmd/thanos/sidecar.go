@@ -52,7 +52,7 @@ func registerSidecar(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Check if the YAML configuration of request.logging is correct.
-		tagOpts, GRPCLogOpts, err := logging.DecideGRPCFlag("", conf.reqLogConfig)
+		tagOpts, GRPCLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrapf(err, "error while parsing config for request logging")
 		}

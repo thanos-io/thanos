@@ -185,12 +185,12 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		// Check if the YAML configuration of request.logging is correct.
-		httpLogOpts, err := logging.DecideHTTPFlag(*reqLogDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.DecideGRPCFlag(*reqLogDecision, reqLogConfig)
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrapf(err, "error while parsing config for request logging")
 		}

@@ -158,7 +158,7 @@ var MapAllowedLevels = map[string][]string{
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]Option, error) {
+func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]Option, error) {
 	// Default Option: No Logging.
 	logOpts := []Option{WithDecider(func(_ string, _ error) Decision {
 		return NoLogCall
@@ -190,7 +190,7 @@ func DecideHTTPFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
-func DecideGRPCFlag(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
+func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) ([]tags.Option, []grpc_logging.Option, error) {
 	// Default Option: No Logging.
 	logOpts := []grpc_logging.Option{grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
 		return grpc_logging.NoLogCall

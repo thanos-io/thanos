@@ -130,7 +130,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Check if the YAML configuration of request.logging is correct.
-		httpLogOpts, err := logging.DecideHTTPFlag(cfg.RequestLoggingDecision, reqLogConfig)
+		httpLogOpts, err := logging.ParseHTTPOptions(cfg.RequestLoggingDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
