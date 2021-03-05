@@ -39,11 +39,11 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.job}} {{$labels.instance}} is unhealthy for {{ $value }} seconds.',
+              description: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for more than {{ $value }} seconds.',
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) by (job, instance) >= 600
+              time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s})) by (job,pod) >= 240
             ||| % thanos.sidecar,
             labels: {
               severity: 'critical',
