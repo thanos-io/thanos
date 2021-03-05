@@ -15,7 +15,7 @@
           {
             alert: 'ThanosRuleQueueIsDroppingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing to queue alerts.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing to queue alerts.',
               summary: 'Thanos Rule is failing to queue alerts.',
             },
             expr: |||
@@ -29,7 +29,7 @@
           {
             alert: 'ThanosRuleSenderIsFailingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing to send alerts to alertmanager.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing to send alerts to alertmanager.',
               summary: 'Thanos Rule is failing to send alerts to alertmanager.',
             },
             expr: |||
@@ -43,7 +43,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing to evaluate rules.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing to evaluate rules.',
               summary: 'Thanos Rule is failing to evaluate rules.',
             },
             expr: |||
@@ -63,7 +63,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationWarnings',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has high number of evaluation warnings.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has high number of evaluation warnings.',
               summary: 'Thanos Rule has high number of evaluation warnings.',
             },
             expr: |||
@@ -78,7 +78,7 @@
           {
             alert: 'ThanosRuleRuleEvaluationLatencyHigh',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}}/{{$labels.instance}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
               summary: 'Thanos Rule has high rule evaluation latency.',
             },
             expr: |||
@@ -96,7 +96,7 @@
           {
             alert: 'ThanosRuleGrpcErrorRate',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing to handle {{$value | humanize}}% of requests.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing to handle {{$value | humanize}}% of requests.',
               summary: 'Thanos Rule is failing to handle grpc requests.',
             },
             expr: |||
@@ -115,7 +115,7 @@
           {
             alert: 'ThanosRuleConfigReloadFailure',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has not been able to reload its configuration.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has not been able to reload its configuration.',
               summary: 'Thanos Rule has not been able to reload configuration.',
             },
             expr: 'avg by (namespace, job) (thanos_rule_config_last_reload_successful{%(selector)s}) != 1' % thanos.rule,
@@ -127,7 +127,7 @@
           {
             alert: 'ThanosRuleQueryHighDNSFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value | humanize}}% of failing DNS queries for query endpoints.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value | humanize}}% of failing DNS queries for query endpoints.',
               summary: 'Thanos Rule is having high number of DNS failures.',
             },
             expr: |||
@@ -146,7 +146,7 @@
           {
             alert: 'ThanosRuleAlertmanagerHighDNSFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value | humanize}}% of failing DNS queries for Alertmanager endpoints.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value | humanize}}% of failing DNS queries for Alertmanager endpoints.',
               summary: 'Thanos Rule is having high number of DNS failures.',
             },
             expr: |||
@@ -166,7 +166,7 @@
             // NOTE: This alert will give false positive if no rules are configured.
             alert: 'ThanosRuleNoEvaluationFor10Intervals',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value | humanize}}% rule groups that did not evaluate for at least 10x of their expected interval.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value | humanize}}% rule groups that did not evaluate for at least 10x of their expected interval.',
               summary: 'Thanos Rule has rule groups that did not evaluate for 10 intervals.',
             },
             expr: |||
@@ -183,7 +183,7 @@
           {
             alert: 'ThanosNoRuleEvaluations',
             annotations: {
-              description: 'Thanos Rule {{$labels.namespace}}/{{$labels.instance}} did not perform any rule evaluations in the past 2 minutes.',
+              description: 'Thanos Rule {{$labels.instance}} in {{$labels.namespace}} did not perform any rule evaluations in the past 2 minutes.',
               summary: 'Thanos Rule did not perform any rule evaluations.',
             },
             expr: |||

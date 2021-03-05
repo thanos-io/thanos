@@ -128,13 +128,13 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              description: 'Thanos Receive {{ $labels.pod }} of {{$labels.namespace}}/{{$labels.job}} has not uploaded latest data to object storage.',
+              description: 'Thanos Receive {{ $labels.instance }} of {{$labels.namespace}}/{{$labels.job}} has not uploaded latest data to object storage.',
               summary: 'Thanos Receive has not uploaded latest data to object storage.',
             },
             expr: |||
               (up{%(selector)s} - 1)
-              + on (namespace, job, pod) # filters to only alert on current instance last 3h
-              (sum by (namespace, job, pod) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
+              + on (namespace, job, instance) # filters to only alert on current instance last 3h
+              (sum by (namespace, job, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
             ||| % thanos.receive,
             'for': '3h',
             labels: {

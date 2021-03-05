@@ -11,7 +11,7 @@
           {
             alert: 'ThanosSidecarPrometheusDown',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} cannot connect to Prometheus.',
+              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} cannot connect to Prometheus.',
               summary: 'Thanos Sidecar cannot connect to Prometheus',
             },
             expr: |||
@@ -25,7 +25,7 @@
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} bucket operations are failing',
+              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} bucket operations are failing',
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
@@ -39,7 +39,7 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}} is unhealthy for {{ $value }} seconds.',
+              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} is unhealthy for {{ $value }} seconds.',
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||

@@ -81,7 +81,7 @@ name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing
       to queue alerts.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulequeueisdroppingalerts
     summary: Thanos Rule is failing to queue alerts.
@@ -92,7 +92,7 @@ rules:
     severity: critical
 - alert: ThanosRuleSenderIsFailingAlerts
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing
       to send alerts to alertmanager.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulesenderisfailingalerts
     summary: Thanos Rule is failing to send alerts to alertmanager.
@@ -103,7 +103,7 @@ rules:
     severity: critical
 - alert: ThanosRuleHighRuleEvaluationFailures
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing
       to evaluate rules.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulehighruleevaluationfailures
     summary: Thanos Rule is failing to evaluate rules.
@@ -119,8 +119,8 @@ rules:
     severity: critical
 - alert: ThanosRuleHighRuleEvaluationWarnings
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has high number
-      of evaluation warnings.
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has high
+      number of evaluation warnings.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulehighruleevaluationwarnings
     summary: Thanos Rule has high number of evaluation warnings.
   expr: |
@@ -130,8 +130,8 @@ rules:
     severity: info
 - alert: ThanosRuleRuleEvaluationLatencyHigh
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}}/{{$labels.instance}}
-      has higher evaluation latency than interval for {{$labels.rule_group}}.
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has higher
+      evaluation latency than interval for {{$labels.rule_group}}.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosruleruleevaluationlatencyhigh
     summary: Thanos Rule has high rule evaluation latency.
   expr: |
@@ -145,7 +145,7 @@ rules:
     severity: warning
 - alert: ThanosRuleGrpcErrorRate
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} is failing
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} is failing
       to handle {{$value | humanize}}% of requests.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulegrpcerrorrate
     summary: Thanos Rule is failing to handle grpc requests.
@@ -161,8 +161,8 @@ rules:
     severity: warning
 - alert: ThanosRuleConfigReloadFailure
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has not been
-      able to reload its configuration.
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has not
+      been able to reload its configuration.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosruleconfigreloadfailure
     summary: Thanos Rule has not been able to reload configuration.
   expr: avg by (namespace, job) (thanos_rule_config_last_reload_successful{job=~"thanos-rule.*"})
@@ -172,7 +172,7 @@ rules:
     severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value
       | humanize}}% of failing DNS queries for query endpoints.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulequeryhighdnsfailures
     summary: Thanos Rule is having high number of DNS failures.
@@ -188,7 +188,7 @@ rules:
     severity: warning
 - alert: ThanosRuleAlertmanagerHighDNSFailures
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value
       | humanize}}% of failing DNS queries for Alertmanager endpoints.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulealertmanagerhighdnsfailures
     summary: Thanos Rule is having high number of DNS failures.
@@ -204,7 +204,7 @@ rules:
     severity: warning
 - alert: ThanosRuleNoEvaluationFor10Intervals
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} has {{$value
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} has {{$value
       | humanize}}% rule groups that did not evaluate for at least 10x of their expected
       interval.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulenoevaluationfor10intervals
@@ -218,8 +218,8 @@ rules:
     severity: info
 - alert: ThanosNoRuleEvaluations
   annotations:
-    description: Thanos Rule {{$labels.namespace}}/{{$labels.instance}} did not perform
-      any rule evaluations in the past 2 minutes.
+    description: Thanos Rule {{$labels.instance}} in {{$labels.namespace}} did not
+      perform any rule evaluations in the past 2 minutes.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations
     summary: Thanos Rule did not perform any rule evaluations.
   expr: |
@@ -309,8 +309,8 @@ name: thanos-sidecar
 rules:
 - alert: ThanosSidecarPrometheusDown
   annotations:
-    description: Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}}
-      cannot connect to Prometheus.
+    description: Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} cannot
+      connect to Prometheus.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
     summary: Thanos Sidecar cannot connect to Prometheus
   expr: |
@@ -320,8 +320,8 @@ rules:
     severity: critical
 - alert: ThanosSidecarBucketOperationsFailed
   annotations:
-    description: Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}}
-      bucket operations are failing
+    description: Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} bucket
+      operations are failing
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed
     summary: Thanos Sidecar bucket operations are failing
   expr: |
@@ -331,8 +331,8 @@ rules:
     severity: critical
 - alert: ThanosSidecarUnhealthy
   annotations:
-    description: Thanos Sidecar {{$labels.namespace}}/{{$labels.job}}/{{$labels.instance}}
-      is unhealthy for {{ $value }} seconds.
+    description: Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} is unhealthy
+      for {{ $value }} seconds.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
     summary: Thanos Sidecar is unhealthy.
   expr: |
@@ -560,14 +560,14 @@ rules:
     severity: warning
 - alert: ThanosReceiveNoUpload
   annotations:
-    description: Thanos Receive {{ $labels.pod }} of {{$labels.namespace}}/{{$labels.job}}
+    description: Thanos Receive {{ $labels.instance }} of {{$labels.namespace}}/{{$labels.job}}
       has not uploaded latest data to object storage.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivenoupload
     summary: Thanos Receive has not uploaded latest data to object storage.
   expr: |
     (up{job=~"thanos-receive.*"} - 1)
-    + on (namespace, job, pod) # filters to only alert on current instance last 3h
-    (sum by (namespace, job, pod) (increase(thanos_shipper_uploads_total{job=~"thanos-receive.*"}[3h])) == 0)
+    + on (namespace, job, instance) # filters to only alert on current instance last 3h
+    (sum by (namespace, job, instance) (increase(thanos_shipper_uploads_total{job=~"thanos-receive.*"}[3h])) == 0)
   for: 3h
   labels:
     severity: critical
