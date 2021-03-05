@@ -45,13 +45,13 @@
     local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
     $.queryPanel(
       [
-        'histogram_quantile(0.99, sum(rate(%s_handling_seconds_bucket{%s}[$interval])) by (job, grpc_method, le)) * %s' % [prefix, selector, multiplier],
+        'histogram_quantile(0.99, sum by (job, grpc_method, le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
         |||
-          sum(rate(%s_handling_seconds_sum{%s}[$interval])) by (job) * %s
+          sum by (job) (rate(%s_handling_seconds_sum{%s}[$interval])) * %s
           /
-          sum(rate(%s_handling_seconds_count{%s}[$interval])) by (job)
+          sum by (job) (rate(%s_handling_seconds_count{%s}[$interval]))
         ||| % [prefix, selector, multiplier, prefix, selector],
-        'histogram_quantile(0.50, sum(rate(%s_handling_seconds_bucket{%s}[$interval])) by (job, grpc_method, le)) * %s' % [prefix, selector, multiplier],
+        'histogram_quantile(0.50, sum by (job, grpc_method, le) (rate(%s_handling_seconds_bucket{%s}[$interval]))) * %s' % [prefix, selector, multiplier],
       ],
       [
         'P99 {{job}} {{grpc_method}}',

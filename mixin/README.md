@@ -59,39 +59,42 @@ This project is intended to be used as a library. You can extend and customize d
 [embedmd]:# (config.libsonnet)
 ```libsonnet
 {
+  local thanos = self,
+  // Hierarcies is a way to help mixin users to add high level hierarcies to their alerts and dashboards.
+  // The key in the key-value pair will be used as label name in the alerts and variable name in the dashboards.
+  // The value in the key-value pair will be used as a query to fetch available values for the given label name.
+  hierarcies+:: {
+    // For example:
+    // cluster: 'find_mi_cluster_bitte',
+    // namespace: 'thanos_status',
+  },
+
   query+:: {
-    jobPrefix: 'thanos-query',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },
   store+:: {
-    jobPrefix: 'thanos-store',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-store.*"',
     title: '%(prefix)sStore' % $.dashboard.prefix,
   },
   receive+:: {
-    jobPrefix: 'thanos-receive',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-receive.*"',
     title: '%(prefix)sReceive' % $.dashboard.prefix,
   },
   rule+:: {
-    jobPrefix: 'thanos-rule',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-rule.*"',
     title: '%(prefix)sRule' % $.dashboard.prefix,
   },
   compact+:: {
-    jobPrefix: 'thanos-compact',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-compact.*"',
     title: '%(prefix)sCompact' % $.dashboard.prefix,
   },
   sidecar+:: {
-    jobPrefix: 'thanos-sidecar',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-sidecar.*"',
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
   bucket_replicate+:: {
-    jobPrefix: 'thanos-bucket-replicate',
-    selector: 'job=~"%s.*"' % self.jobPrefix,
+    selector: 'job=~"thanos-bucket-replicate.*"',
     title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },
   overview+:: {
@@ -100,7 +103,7 @@ This project is intended to be used as a library. You can extend and customize d
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
-    namespaceQuery: 'thanos_status',
+    commonSelector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
   },
 }
 ```

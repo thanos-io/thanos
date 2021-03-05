@@ -11,7 +11,7 @@
     },
     targets: [
       {
-        expr: 'sum(label_replace(rate(%s{%s}[$interval]),"status_code", "${1}xx", "code", "([0-9])..")) by (job, handler, status_code)' % [metricName, selector],
+        expr: 'sum by (job, handler, status_code) (label_replace(rate(%s{%s}[$interval]),"status_code", "${1}xx", "code", "([0-9]).."))' % [metricName, selector],
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: '{{job}} {{handler}} {{status_code}}',

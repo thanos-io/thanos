@@ -22,37 +22,6 @@ local template = grafana.template;
     ],
   },
 
-  template(name, metricName, selector='', includeAll=false, allValues='')::
-    local t = if includeAll then
-      template.new(
-        name,
-        '$datasource',
-        'label_values(%s{%s}, %s)' % [metricName, selector, name],
-        label=name,
-        refresh=1,
-        sort=2,
-        current='all',
-        allValues=allValues,
-        includeAll=true
-      )
-    else
-      template.new(
-        name,
-        '$datasource',
-        'label_values(%s{%s}, %s)' % [metricName, selector, name],
-        label=name,
-        refresh=1,
-        sort=2,
-      );
-
-    {
-      templating+: {
-        list+: [
-          t,
-        ],
-      },
-    },
-
   spanSize(size):: {
     span: size,
   },
@@ -147,18 +116,18 @@ local template = grafana.template;
     yaxes: $.yaxes({ format: 'percentunit', max: 1 }),
   } + $.stack,
 
-  resourceUtilizationRow()::
+  resourceUtilizationRow(selector)::
     $.row('Resources')
     .addPanel(
       $.panel('Memory Used') +
       $.queryPanel(
         [
-          'go_memstats_alloc_bytes{namespace="$namespace",job=~"$job"}',
-          'go_memstats_heap_alloc_bytes{namespace="$namespace",job=~"$job"}',
-          'rate(go_memstats_alloc_bytes_total{namespace="$namespace",job=~"$job"}[30s])',
-          'rate(go_memstats_heap_alloc_bytes{namespace="$namespace",job=~"$job"}[30s])',
-          'go_memstats_stack_inuse_bytes{namespace="$namespace",job=~"$job"}',
-          'go_memstats_heap_inuse_bytes{namespace="$namespace",job=~"$job"}',
+          'go_memstats_alloc_bytes{%s}' % selector,
+          'go_memstats_heap_alloc_bytes{%s}' % selector,
+          'rate(go_memstats_alloc_bytes_total{%s}[30s])' % selector,
+          'rate(go_memstats_heap_alloc_bytes{%s}[30s])' % selector,
+          'go_memstats_stack_inuse_bytes{%s}' % selector,
+          'go_memstats_heap_inuse_bytes{%s}' % selector,
         ],
         [
           'alloc all {{instance}}',
@@ -174,14 +143,14 @@ local template = grafana.template;
     .addPanel(
       $.panel('Goroutines') +
       $.queryPanel(
-        'go_goroutines{namespace="$namespace",job=~"$job"}',
+        'go_goroutines{%s}' % selector,
         '{{instance}}'
       )
     )
     .addPanel(
       $.panel('GC Time Quantiles') +
       $.queryPanel(
-        'go_gc_duration_seconds{namespace="$namespace",job=~"$job"}',
+        'go_gc_duration_seconds{%s}' % selector,
         '{{quantile}} {{instance}}'
       )
     ) +
