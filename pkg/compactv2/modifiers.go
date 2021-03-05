@@ -68,7 +68,7 @@ SeriesLoop:
 
 				// Only if all matchers in the deletion request are matched can we proceed to deletion.
 				if !m.Matches(v) {
-					break DeletionsLoop
+					continue DeletionsLoop
 				}
 			}
 			if len(deletions.Intervals) > 0 {
