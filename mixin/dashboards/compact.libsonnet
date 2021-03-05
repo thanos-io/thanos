@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Compact dashboard',
   },
   grafanaDashboards+:: {
-    'compact.json':
+    [if thanos.compact != null then 'compact.json']:
       g.dashboard(thanos.compact.title)
       .addRow(
         g.row('Group Compaction')

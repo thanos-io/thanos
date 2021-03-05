@@ -8,7 +8,7 @@
     evalErrorThreshold: 5,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.rule == null then [] else [
       {
         name: 'thanos-rule',
         rules: [

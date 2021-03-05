@@ -4,7 +4,7 @@
     selector: error 'must provide selector for Thanos Sidecar alerts',
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.sidecar == null then [] else [
       {
         name: 'thanos-sidecar',
         rules: [

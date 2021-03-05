@@ -6,7 +6,7 @@
     p99LatencyThreshold: 20,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.bucket_replicate == null then [] else [
       {
         name: 'thanos-bucket-replicate',
         rules: [

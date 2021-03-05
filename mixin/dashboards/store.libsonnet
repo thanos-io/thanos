@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Store dashboard',
   },
   grafanaDashboards+:: {
-    'store.json':
+    [if thanos.store != null then 'store.json']:
       g.dashboard(thanos.store.title)
       .addRow(
         g.row('gRPC (Unary)')

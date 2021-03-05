@@ -8,7 +8,7 @@
     p99LatencyThreshold: 10,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.receive == null then [] else [
       {
         name: 'thanos-receive',
         rules: [
