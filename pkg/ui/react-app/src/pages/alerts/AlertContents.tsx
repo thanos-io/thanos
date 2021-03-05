@@ -81,11 +81,11 @@ const AlertsContent: FC<AlertsProps> = ({ groups = [], statsCount }) => {
         </Checkbox>
       </div>
       {groups.map((group, i) => {
-        const hasFilterOn = group.rules.some(rule => filter[rule.state]);
+        const hasFilterOn = group.rules.some((rule) => filter[rule.state]);
         return hasFilterOn ? (
           <Fragment key={i}>
             <GroupInfo rules={group.rules}>
-              {group.file} > {group.name}
+              {group.file} &gt {group.name}
             </GroupInfo>
             {group.rules.map((rule, j) => {
               return (

@@ -10,7 +10,6 @@ import (
 	"github.com/NYTimes/gziphandler"
 	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend"
 	"github.com/cortexproject/cortex/pkg/frontend/transport"
-	cortexfrontendv1 "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
@@ -43,7 +42,7 @@ type queryFrontendConfig struct {
 
 func registerQueryFrontend(app *extkingpin.App) {
 	comp := component.QueryFrontend
-	cmd := app.Command(comp.String(), "query frontend")
+	cmd := app.Command(comp.String(), "Query frontend command implements a service deployed in front of queriers to improve query parallelization and caching.")
 	cfg := &queryFrontendConfig{
 		Config: queryfrontend.Config{
 			// Max body size is 10 MiB.
@@ -64,6 +63,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
+
+	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
@@ -123,10 +125,16 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"If multiple headers match the request, the first matching arg specified will take precedence. "+
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
-	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
+		httpLogOpts, err := logging.ParseHTTPOptions(cfg.RequestLoggingDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
+		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)
 	})
 }
 
@@ -135,6 +143,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	httpLogOpts []logging.Option,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -172,12 +181,6 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontendv1.New(cortexfrontendv1.Config{}, nil, logger, reg)
-	if err != nil {
-		return errors.Wrap(err, "setup query frontend")
-	}
-	defer fe.Close()
-
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
 		return errors.Wrap(err, "setup tripperwares")
@@ -193,7 +196,7 @@ func runQueryFrontend(
 	roundTripper = tripperWare(roundTripper)
 
 	// Create the query frontend transport.
-	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger)
+	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
 	if cfg.CompressResponses {
 		handler = gziphandler.GzipHandler(handler)
 	}
@@ -205,10 +208,7 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-		return logging.LogDecision[cfg.RequestLoggingDecision]
-	})}
-	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 	ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 	// Start metrics HTTP server.

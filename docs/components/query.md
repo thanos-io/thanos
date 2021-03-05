@@ -8,7 +8,7 @@ menu: components
 
 The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
-In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](https://github.com/thanos-io/thanos/blob/main/pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
 Querier is fully stateless and horizontally scalable.
 
@@ -286,8 +286,8 @@ Example file SD file in YAML:
 ```$
 usage: thanos query [<flags>]
 
-query node exposing PromQL enabled Query API with data retrieved from multiple
-store nodes
+Query node exposing PromQL enabled Query API with data retrieved from multiple
+store nodes.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -357,13 +357,15 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --log.request.decision=LogFinishCall
-                                 Request Logging for logging the start and end
-                                 of requests. LogFinishCall is enabled by
-                                 default. LogFinishCall : Logs the finish call
-                                 of the requests. LogStartAndFinishCall : Logs
-                                 the start and finish call of the requests.
-                                 NoLogCall : Disable request logging.
+      --log.request.decision=    Deprecation Warning - This flag would be soon
+                                 deprecated, and replaced with
+                                 `request.logging-config`. Request Logging for
+                                 logging the start and end of requests. By
+                                 default this flag is disabled. LogFinishCall:
+                                 Logs the finish call of the requests.
+                                 LogStartAndFinishCall: Logs the start and
+                                 finish call of the requests. NoLogCall: Disable
+                                 request logging.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
@@ -428,10 +430,27 @@ Flags:
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
+      --query.default-step=1s    Set default step for range queries. Default
+                                 step is only used when step is not set in UI.
+                                 In such cases, Thanos UI will use default step
+                                 to calculate resolution (resolution =
+                                 max(rangeSeconds / 250, defaultStep)). This
+                                 will not work from Grafana, but Grafana has
+                                 __step variable which can be used.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored
                                  and partial data will be returned if it's
                                  enabled. 0 disables timeout.
+      --request.logging-config-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging-config=<content>
+                                 Alternative to 'request.logging-config-file'
+                                 flag (lower priority). Content of YAML file
+                                 with request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
 
 ```

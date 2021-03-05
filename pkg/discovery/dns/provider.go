@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/thanos-io/thanos/pkg/discovery/dns/godns"
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -43,12 +44,12 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 	var r ipLookupResolver
 	switch t {
 	case GolangResolverType:
-		r = net.DefaultResolver
+		r = &godns.Resolver{Resolver: net.DefaultResolver}
 	case MiekgdnsResolverType:
 		r = &miekgdns.Resolver{ResolvConf: miekgdns.DefaultResolvConfPath}
 	default:
 		level.Warn(logger).Log("msg", "no such resolver type, defaulting to golang", "type", t)
-		r = net.DefaultResolver
+		r = &godns.Resolver{Resolver: net.DefaultResolver}
 	}
 	return r
 }

@@ -109,12 +109,12 @@ export const getOptions = (stacked: boolean, useLocalTime: boolean): jquery.flot
         return `
             <div class="date">${dateTime.format('YYYY-MM-DD HH:mm:ss Z')}</div>
             <div>
-              <span class="detail-swatch" style="background-color: ${color}" />
+              <span class="detail-swatch" style="background-color: ${color}"></span>
               <span>${labels.__name__ || 'value'}: <strong>${yval}</strong></span>
             <div>
             <div class="labels mt-1">
               ${Object.keys(labels)
-                .map(k =>
+                .map((k) =>
                   k !== '__name__' ? `<div class="mb-1"><strong>${k}</strong>: ${escapeHTML(labels[k])}</div>` : ''
                 )
                 .join('')}

@@ -38,7 +38,7 @@ func main() {
 		runtime.SetBlockProfileRate(10)
 	}
 
-	app := extkingpin.NewApp(kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus").Version(version.Print("thanos")))
+	app := extkingpin.NewApp(kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus.").Version(version.Print("thanos")))
 	debugName := app.Flag("debug.name", "Name to add as prefix to log lines.").Hidden().String()
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")

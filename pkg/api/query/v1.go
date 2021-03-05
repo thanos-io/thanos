@@ -43,6 +43,8 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/metadata"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -58,6 +60,7 @@ const (
 	ReplicaLabelsParam       = "replicaLabels[]"
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
+	Step                     = "step"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -69,14 +72,17 @@ type QueryAPI struct {
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
 	queryEngine func(int64) *promql.Engine
 	ruleGroups  rules.UnaryClient
+	metadatas   metadata.UnaryClient
 
-	enableAutodownsampling     bool
-	enableQueryPartialResponse bool
-	enableRulePartialResponse  bool
+	enableAutodownsampling              bool
+	enableQueryPartialResponse          bool
+	enableRulePartialResponse           bool
+	enableMetricMetadataPartialResponse bool
 
 	replicaLabels []string
 	storeSet      *query.StoreSet
 
+	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
 	defaultMetadataTimeRange               time.Duration
 }
@@ -88,11 +94,14 @@ func NewQueryAPI(
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
+	metadatas metadata.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
+	enableMetricMetadataPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
+	defaultRangeQueryStep time.Duration,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
 	gate gate.Gate,
@@ -104,12 +113,15 @@ func NewQueryAPI(
 		queryableCreate: c,
 		gate:            gate,
 		ruleGroups:      ruleGroups,
+		metadatas:       metadatas,
 
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
+		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
+		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 	}
@@ -138,6 +150,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 	r.Get("/stores", instr("stores", qapi.stores))
 
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
+
+	r.Get("/metadata", instr("metadata", NewMetricMetadataHandler(qapi.metadatas, qapi.enableMetricMetadataPartialResponse)))
 }
 
 type queryData struct {
@@ -223,6 +237,21 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 		}
 	}
 	return defaultEnablePartialResponse, nil
+}
+
+func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (time.Duration, *api.ApiError) {
+	// Overwrite the cli flag when provided as a query parameter.
+	if val := r.FormValue(Step); val != "" {
+		var err error
+		defaultRangeQueryStep, err = parseDuration(val)
+		if err != nil {
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Step)}
+		}
+	}
+
+	// Default step is used this way to make it consistent with UI.
+	d := time.Duration(math.Max(float64(rangeSeconds/250), float64(defaultRangeQueryStep/time.Second))) * time.Second
+	return d, nil
 }
 
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
@@ -320,9 +349,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
-	step, err := parseDuration(r.FormValue("step"))
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "param step")}
+	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep, int64(end.Sub(start)/time.Second))
+	if apiErr != nil {
+		return nil, nil, apiErr
 	}
 
 	if step <= 0 {
@@ -611,7 +640,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	return names, warnings, nil
 }
 
-func (qapi *QueryAPI) stores(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiError) {
 	statuses := make(map[string][]query.StoreStatus)
 	for _, status := range qapi.storeSet.GetStoreStatus() {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
@@ -770,4 +799,36 @@ func labelValuesByMatchers(sets []storage.SeriesSet, name string) ([]string, sto
 	}
 	sort.Strings(labelValues)
 	return labelValues, warnings, nil
+}
+
+func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		req := &metadatapb.MetadataRequest{
+			// By default we use -1, which means no limit.
+			Limit:                   -1,
+			Metric:                  r.URL.Query().Get("metric"),
+			PartialResponseStrategy: ps,
+		}
+
+		limitStr := r.URL.Query().Get("limit")
+		if limitStr != "" {
+			limit, err := strconv.ParseInt(limitStr, 10, 32)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid metric metadata limit='%v'", limit)}
+			}
+			req.Limit = int32(limit)
+		}
+
+		t, warnings, err := client.Metadata(r.Context(), req)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
+		}
+
+		return t, warnings, nil
+	}
 }

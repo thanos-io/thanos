@@ -91,32 +91,32 @@ func TestUpload(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "b", Value: "1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	testutil.Ok(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String()), os.ModePerm))
 
 	{
 		// Wrong dir.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "not-existing"))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "not-existing"), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/not-existing: no such file or directory"), "")
 	}
 	{
 		// Wrong existing dir (not a block).
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test"))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test"), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "not a block dir: ulid: bad data size when unmarshaling", err.Error())
 	}
 	{
 		// Empty block dir.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Missing chunks.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/chunks: no such file or directory"), err.Error())
 	}
@@ -124,7 +124,7 @@ func TestUpload(t *testing.T) {
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), ChunksDirname, "000001"), path.Join(tmpDir, "test", b1.String(), ChunksDirname, "000001"))
 	{
 		// Missing index file.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/index: no such file or directory"), "")
 	}
@@ -132,14 +132,14 @@ func TestUpload(t *testing.T) {
 	testutil.Ok(t, os.Remove(path.Join(tmpDir, "test", b1.String(), MetaFilename)))
 	{
 		// Missing meta.json file.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
+		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Full block.
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String())))
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
@@ -189,7 +189,7 @@ func TestUpload(t *testing.T) {
 	}
 	{
 		// Test Upload is idempotent.
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String())))
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
@@ -203,9 +203,9 @@ func TestUpload(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, nil, 124)
+		}, 100, 0, 1000, nil, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		err = Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()))
+		err = Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "empty external labels are not allowed for Thanos block.", err.Error())
 		testutil.Equals(t, 4, len(bkt.Objects()))
@@ -228,10 +228,13 @@ func TestDelete(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String())))
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 4, len(bkt.Objects()))
+
+		markedForDeletion := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
+		testutil.Ok(t, MarkForDeletion(ctx, log.NewNopLogger(), bkt, b1, "", markedForDeletion))
 
 		// Full delete.
 		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b1))
@@ -245,9 +248,9 @@ func TestDelete(t *testing.T) {
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String())))
+		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc))
 		testutil.Equals(t, 5, len(bkt.Objects()))
 
 		// Remove meta.json and check if delete can delete it.
@@ -299,12 +302,12 @@ func TestMarkForDeletion(t *testing.T) {
 				{{Name: "a", Value: "3"}},
 				{{Name: "a", Value: "4"}},
 				{{Name: "b", Value: "1"}},
-			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 			testutil.Ok(t, err)
 
 			tcase.preUpload(t, id, bkt)
 
-			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String())))
+			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String()), metadata.NoneFunc))
 
 			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, "", c)
@@ -355,18 +358,117 @@ func TestMarkForNoCompact(t *testing.T) {
 				{{Name: "a", Value: "3"}},
 				{{Name: "a", Value: "4"}},
 				{{Name: "b", Value: "1"}},
-			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 			testutil.Ok(t, err)
 
 			tcase.preUpload(t, id, bkt)
 
-			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String())))
+			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String()), metadata.NoneFunc))
 
 			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			err = MarkForNoCompact(ctx, log.NewNopLogger(), bkt, id, metadata.ManualNoCompactReason, "", c)
 			testutil.Ok(t, err)
 			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
 		})
+	}
+}
+
+// TestHashDownload uploads an empty block to in-memory storage
+// and tries to download it to the same dir. It should not try
+// to download twice.
+func TestHashDownload(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	ctx := context.Background()
+
+	tmpDir, err := ioutil.TempDir("", "test-block-download")
+	testutil.Ok(t, err)
+	t.Cleanup(func() {
+		testutil.Ok(t, os.RemoveAll(tmpDir))
+	})
+
+	bkt := objstore.NewInMemBucket()
+	r := prometheus.NewRegistry()
+	instrumentedBkt := objstore.BucketWithMetrics("test", bkt, r)
+
+	b1, err := e2eutil.CreateBlockWithTombstone(ctx, tmpDir, []labels.Labels{
+		{{Name: "a", Value: "1"}},
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 42, metadata.SHA256Func)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, Upload(ctx, log.NewNopLogger(), instrumentedBkt, path.Join(tmpDir, b1.String()), metadata.SHA256Func))
+	testutil.Equals(t, 4, len(bkt.Objects()))
+
+	m, err := DownloadMeta(ctx, log.NewNopLogger(), bkt, b1)
+	testutil.Ok(t, err)
+
+	for _, fl := range m.Thanos.Files {
+		if fl.RelPath == MetaFilename {
+			continue
+		}
+		testutil.Assert(t, fl.Hash != nil, "expected a hash for %s but got nil", fl.RelPath)
+	}
+
+	// Remove the hash from one file to check if we always download it.
+	m.Thanos.Files[1].Hash = nil
+
+	metaEncoded := strings.Builder{}
+	testutil.Ok(t, m.Write(&metaEncoded))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(b1.String(), MetaFilename), strings.NewReader(metaEncoded.String())))
+
+	// Only downloads MetaFile and IndexFile.
+	{
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 2
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 2
+        thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+		`), `thanos_objstore_bucket_operations_total`))
+	}
+
+	// Ensures that we always download MetaFile.
+	{
+		testutil.Ok(t, os.Remove(path.Join(tmpDir, b1.String(), MetaFilename)))
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 4
+        thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 4
+        thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+		`), `thanos_objstore_bucket_operations_total`))
+	}
+
+	// Remove chunks => gets redownloaded.
+	// Always downloads MetaFile.
+	// Finally, downloads the IndexFile since we have removed its hash.
+	{
+		testutil.Ok(t, os.RemoveAll(path.Join(tmpDir, b1.String(), ChunksDirname)))
+		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
+		testutil.Ok(t, err)
+		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+			# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+			# TYPE thanos_objstore_bucket_operations_total counter
+			thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 7
+			thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+			thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 6
+			thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 4
+			`), `thanos_objstore_bucket_operations_total`))
 	}
 }
 
@@ -386,13 +488,13 @@ func TestUploadCleanup(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "b", Value: "1"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/index"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()))
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of index fails, block is deleted.
@@ -403,7 +505,7 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/meta.json"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()))
+		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of meta.json fails, nothing is cleaned up.

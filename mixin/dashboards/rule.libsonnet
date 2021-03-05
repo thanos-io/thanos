@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Rule dashboard',
   },
   grafanaDashboards+:: {
-    'rule.json':
+    [if thanos.rule != null then 'rule.json']:
       g.dashboard(thanos.rule.title)
       .addRow(
         g.row('Rule Group Evaluations')
@@ -78,8 +78,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Push Rate', 'Shows rate of queued alerts.') +
           g.queryPanel(
-            'sum(rate(thanos_alert_queue_alerts_dropped_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, pod)',
-            '{{pod}}'
+            'sum(rate(thanos_alert_queue_alerts_dropped_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            '{{job}}'
           )
         )
         .addPanel(
@@ -124,8 +124,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.rule, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace", %(selector)s' % thanos.rule, true, '%(jobPrefix)s.*' % thanos.rule),
 
     __overviewRows__+:: [
       g.row('Rule')

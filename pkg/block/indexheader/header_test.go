@@ -5,10 +5,12 @@ package indexheader
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/go-kit/kit/log"
@@ -18,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -54,10 +57,10 @@ func TestReaders(t *testing.T) {
 		{{Name: "a", Value: "13"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "1"}},
 		{{Name: "a", Value: "1"}, {Name: "longer-string", Value: "2"}},
-	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124)
+	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String())))
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
 	// Copy block index version 1 for backward compatibility.
 	/* The block here was produced at the commit
@@ -86,7 +89,7 @@ func TestReaders(t *testing.T) {
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String())))
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
 
 	for _, id := range []ulid.ULID{id1, m.ULID} {
 		t.Run(id.String(), func(t *testing.T) {
@@ -322,7 +325,7 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(context.Background(), log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String())))
+	testutil.Ok(t, block.Upload(context.Background(), log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
 
 	return m
 }
@@ -365,6 +368,63 @@ func BenchmarkBinaryReader(t *testing.B) {
 		br, err := newFileBinaryReader(fn, 32)
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
+	}
+}
+
+func BenchmarkBinaryReader_LookupSymbol(b *testing.B) {
+	for _, numSeries := range []int{valueSymbolsCacheSize, valueSymbolsCacheSize * 10} {
+		b.Run(fmt.Sprintf("num series = %d", numSeries), func(b *testing.B) {
+			benchmarkBinaryReaderLookupSymbol(b, numSeries)
+		})
+	}
+}
+
+func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
+	const postingOffsetsInMemSampling = 32
+
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+
+	tmpDir, err := ioutil.TempDir("", "benchmark-lookupsymbol")
+	testutil.Ok(b, err)
+	defer func() { testutil.Ok(b, os.RemoveAll(tmpDir)) }()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(b, err)
+	defer func() { testutil.Ok(b, bkt.Close()) }()
+
+	// Generate series labels.
+	seriesLabels := make([]labels.Labels, 0, numSeries)
+	for i := 0; i < numSeries; i++ {
+		seriesLabels = append(seriesLabels, labels.Labels{{Name: "a", Value: strconv.Itoa(i)}})
+	}
+
+	// Create a block.
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
+	testutil.Ok(b, err)
+	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
+
+	// Create an index reader.
+	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling)
+	testutil.Ok(b, err)
+
+	// Get the offset of each label value symbol.
+	symbolsOffsets := make([]uint32, numSeries)
+	for i := 0; i < numSeries; i++ {
+		o, err := reader.symbols.ReverseLookup(strconv.Itoa(i))
+		testutil.Ok(b, err)
+
+		symbolsOffsets[i] = o
+	}
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < len(symbolsOffsets); i++ {
+			if _, err := reader.LookupSymbol(symbolsOffsets[i]); err != nil {
+				b.Fail()
+			}
+		}
 	}
 }
 

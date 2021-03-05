@@ -15,9 +15,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -34,8 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
 )
 
 var (
@@ -48,6 +50,7 @@ var (
 		client.ALIYUNOSS:  oss.Config{},
 		client.FILESYSTEM: filesystem.Config{},
 	}
+
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
 		trclient.JAEGER:      jaeger.Config{},
 		trclient.STACKDRIVER: stackdriver.Config{},
@@ -81,6 +84,12 @@ func main() {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
+	}
+
+	if err := generate(logging.RequestConfig{}, generateName("logging_", "request"), *outputDir); err != nil {
+		level.Error(logger).Log("msg", "failed to generate", "type", "request_logging", "err", err)
+		os.Exit(1)
+
 	}
 
 	for typ, config := range tracingConfigs {

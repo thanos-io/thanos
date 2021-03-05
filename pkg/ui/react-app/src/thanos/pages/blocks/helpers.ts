@@ -8,29 +8,72 @@ const stringify = (map: LabelSet): string => {
   return t;
 };
 
+export const isOverlapping = (a: Block, b: Block): boolean => {
+  if (a.minTime <= b.minTime) return b.minTime < a.maxTime;
+  else return a.minTime < b.maxTime;
+};
+
+const determineRow = (block: Block, rows: Block[][], startWithRow: number): number => {
+  if (rows.length === 0) return 0;
+
+  const len = rows[startWithRow]?.length || 0;
+  if (len === 0) return startWithRow;
+
+  if (isOverlapping(rows[startWithRow][len - 1], block)) {
+    // Blocks are overlapping, try next row.
+    return determineRow(block, rows, startWithRow + 1);
+  }
+  return startWithRow;
+};
+
+const splitOverlappingBlocks = (blocks: Block[]): Block[][] => {
+  const rows: Block[][] = [[]];
+  if (blocks.length === 0) return rows;
+
+  blocks.forEach((b) => {
+    const r = determineRow(b, rows, 0);
+    if (!rows[r]) rows[r] = [];
+    rows[r].push(b);
+  });
+  return rows;
+};
+
 const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
-  const pool: BlocksPool = {};
+  const poolWithOverlaps: { [key: string]: Block[] } = {};
 
   blocks
-    .sort((a, b) => a.thanos.downsample.resolution - b.thanos.downsample.resolution)
-    .forEach(b => {
-      if (!pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`])
-        pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`] = [];
+    .sort((a, b) => {
+      if (a.compaction.level - b.compaction.level) {
+        return a.compaction.level - b.compaction.level;
+      }
+      if (a.thanos.downsample.resolution - b.thanos.downsample.resolution) {
+        return a.thanos.downsample.resolution - b.thanos.downsample.resolution;
+      }
+      return a.minTime - b.minTime;
+    })
+    .forEach((b) => {
+      const key = `${b.compaction.level}-${b.thanos.downsample.resolution}`;
+      if (!poolWithOverlaps[key]) poolWithOverlaps[key] = [];
 
-      pool[`${b.compaction.level}-${b.thanos.downsample.resolution}`].push(b);
+      poolWithOverlaps[key].push(b);
     });
+
+  const pool: BlocksPool = {};
+  Object.entries(poolWithOverlaps).forEach(([key, blks]) => {
+    pool[key] = splitOverlappingBlocks(blks);
+  });
 
   return pool;
 };
 
 export const sortBlocks = (blocks: Block[], label: string): { [source: string]: BlocksPool } => {
   const titles: { [key: string]: string } = {};
-  const pool: BlocksPool = {};
+  const pool: { [key: string]: Block[] } = {};
 
   blocks
     .sort((a, b) => a.compaction.level - b.compaction.level)
-    .forEach(b => {
-      const title = (function(): string {
+    .forEach((b) => {
+      const title = (function (): string {
         const key = label !== '' && b.thanos.labels[label];
 
         if (key) {
@@ -49,7 +92,7 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
     });
 
   const sortedPool: { [source: string]: BlocksPool } = {};
-  Object.keys(pool).forEach(k => {
+  Object.keys(pool).forEach((k) => {
     sortedPool[k] = sortBlocksInRows(pool[k]);
   });
   return sortedPool;

@@ -42,23 +42,23 @@ Subcommands:
     disk.
 
   tools bucket ls [<flags>]
-    List all blocks in the bucket
+    List all blocks in the bucket.
 
   tools bucket inspect [<flags>]
-    Inspect all blocks in the bucket in detailed, table-like way
+    Inspect all blocks in the bucket in detailed, table-like way.
 
   tools bucket web [<flags>]
-    Web interface for remote storage bucket
+    Web interface for remote storage bucket.
 
   tools bucket replicate [<flags>]
     Replicate data from one object storage to another. NOTE: Currently it works
     only with Thanos blocks (meta.json has to have Thanos metadata).
 
   tools bucket downsample [<flags>]
-    continuously downsamples blocks in an object store bucket
+    Continuously downsamples blocks in an object store bucket.
 
   tools bucket cleanup [<flags>]
-    Cleans up all blocks marked for deletion
+    Cleans up all blocks marked for deletion.
 
   tools bucket mark --id=ID --marker=MARKER --details=DETAILS
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
@@ -148,23 +148,23 @@ Subcommands:
     disk.
 
   tools bucket ls [<flags>]
-    List all blocks in the bucket
+    List all blocks in the bucket.
 
   tools bucket inspect [<flags>]
-    Inspect all blocks in the bucket in detailed, table-like way
+    Inspect all blocks in the bucket in detailed, table-like way.
 
   tools bucket web [<flags>]
-    Web interface for remote storage bucket
+    Web interface for remote storage bucket.
 
   tools bucket replicate [<flags>]
     Replicate data from one object storage to another. NOTE: Currently it works
     only with Thanos blocks (meta.json has to have Thanos metadata).
 
   tools bucket downsample [<flags>]
-    continuously downsamples blocks in an object store bucket
+    Continuously downsamples blocks in an object store bucket.
 
   tools bucket cleanup [<flags>]
-    Cleans up all blocks marked for deletion
+    Cleans up all blocks marked for deletion.
 
   tools bucket mark --id=ID --marker=MARKER --details=DETAILS
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
@@ -209,7 +209,7 @@ thanos tools bucket web --objstore.config-file="..."
 ```$
 usage: thanos tools bucket web [<flags>]
 
-Web interface for remote storage bucket
+Web interface for remote storage bucket.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
@@ -364,7 +364,7 @@ thanos tools bucket ls -o json --objstore.config-file="..."
 ```$
 usage: thanos tools bucket ls [<flags>]
 
-List all blocks in the bucket
+List all blocks in the bucket.
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
@@ -410,7 +410,7 @@ thanos tools bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```$
 usage: thanos tools bucket inspect [<flags>]
 
-Inspect all blocks in the bucket in detailed, table-like way
+Inspect all blocks in the bucket in detailed, table-like way.
 
 Flags:
   -h, --help                 Show context-sensitive help (also try --help-long
@@ -563,7 +563,7 @@ config:
 ```$
 usage: thanos tools bucket downsample [<flags>]
 
-continuously downsamples blocks in an object store bucket
+Continuously downsamples blocks in an object store bucket.
 
 Flags:
   -h, --help                  Show context-sensitive help (also try --help-long
@@ -596,6 +596,12 @@ Flags:
                               Server.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --hash-func=            Specify which hash function to use when
+                              calculating the hashes of produced files. If no
+                              function has been specified, it does not happen.
+                              This permits avoiding downloading some files twice
+                              albeit at some performance cost. Possible values
+                              are: "", "SHA256".
 
 ```
 
@@ -732,6 +738,12 @@ Flags:
                                 flag).
       --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
+      --hash-func=              Specify which hash function to use when
+                                calculating the hashes of produced files. If no
+                                function has been specified, it does not happen.
+                                This permits avoiding downloading some files
+                                twice albeit at some performance cost. Possible
+                                values are: "", "SHA256".
       --dry-run                 Prints the series changes instead of doing them.
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.

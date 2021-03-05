@@ -3,6 +3,7 @@ import { mount, ReactWrapper } from 'enzyme';
 import { FetchMock } from 'jest-fetch-mock/types';
 import { UncontrolledAlert } from 'reactstrap';
 import Blocks from './Blocks';
+import { QueryParamProvider } from 'use-query-params';
 import { SourceView } from './SourceView';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { act } from 'react-dom/test-utils';
@@ -22,7 +23,11 @@ describe('Blocks', () => {
 
     it('renders sources', async () => {
       await act(async () => {
-        blocks = mount(<Blocks />);
+        blocks = mount(
+          <QueryParamProvider>
+            <Blocks />
+          </QueryParamProvider>
+        );
       });
       blocks.update();
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=global', { cache: 'no-store', credentials: 'same-origin' });
@@ -33,7 +38,11 @@ describe('Blocks', () => {
 
     it('fetched data with different view', async () => {
       await act(async () => {
-        blocks = mount(<Blocks view="loaded" />);
+        blocks = mount(
+          <QueryParamProvider>
+            <Blocks view="loaded" />
+          </QueryParamProvider>
+        );
       });
       blocks.update();
       expect(mock).toHaveBeenCalledWith('/api/v1/blocks?view=loaded', { cache: 'no-store', credentials: 'same-origin' });
@@ -56,7 +65,11 @@ describe('Blocks', () => {
 
       let blocks: any;
       await act(async () => {
-        blocks = mount(<Blocks />);
+        blocks = mount(
+          <QueryParamProvider>
+            <Blocks />
+          </QueryParamProvider>
+        );
       });
       blocks.update();
 
@@ -74,7 +87,11 @@ describe('Blocks', () => {
 
       let blocks: any;
       await act(async () => {
-        blocks = mount(<Blocks />);
+        blocks = mount(
+          <QueryParamProvider>
+            <Blocks />
+          </QueryParamProvider>
+        );
       });
       blocks.update();
 

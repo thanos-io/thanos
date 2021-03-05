@@ -986,50 +986,50 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "go_memstats_alloc_bytes{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}",
+                     "expr": "go_memstats_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc all {{pod}}",
+                     "legendFormat": "alloc all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}",
+                     "expr": "go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc heap {{pod}}",
+                     "legendFormat": "alloc heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_alloc_bytes_total{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}[30s])",
+                     "expr": "rate(go_memstats_alloc_bytes_total{namespace=\"$namespace\",job=~\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate all {{pod}}",
+                     "legendFormat": "alloc rate all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}[30s])",
+                     "expr": "rate(go_memstats_heap_alloc_bytes{namespace=\"$namespace\",job=~\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate heap {{pod}}",
+                     "legendFormat": "alloc rate heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_stack_inuse_bytes{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}",
+                     "expr": "go_memstats_stack_inuse_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse stack {{pod}}",
+                     "legendFormat": "inuse stack {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_heap_inuse_bytes{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}",
+                     "expr": "go_memstats_heap_inuse_bytes{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse heap {{pod}}",
+                     "legendFormat": "inuse heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1105,7 +1105,7 @@
                      "expr": "go_goroutines{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{pod}}",
+                     "legendFormat": "{{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1178,10 +1178,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "go_gc_duration_seconds{namespace=\"$namespace\",job=~\"$job\",kubernetes_pod_name=~\"$pod\"}",
+                     "expr": "go_gc_duration_seconds{namespace=\"$namespace\",job=~\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{quantile}} {{pod}}",
+                     "legendFormat": "{{quantile}} {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1262,7 +1262,7 @@
             "multi": false,
             "name": "namespace",
             "options": [ ],
-            "query": "label_values(kube_pod_info{}, namespace)",
+            "query": "label_values(thanos_status{}, namespace)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -1285,30 +1285,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-sidecar.*\"}, job)",
-            "refresh": 1,
-            "regex": "",
-            "sort": 2,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": ".*",
-            "current": {
-               "text": "all",
-               "value": "$__all"
-            },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": true,
-            "label": "pod",
-            "multi": false,
-            "name": "pod",
-            "options": [ ],
-            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-sidecar.*\"}, pod)",
+            "query": "label_values(up{namespace=\"$namespace\", job=~\"thanos-sidecar.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

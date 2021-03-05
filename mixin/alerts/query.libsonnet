@@ -9,7 +9,7 @@
     p99QueryRangeLatencyThreshold: 90,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.query == null then [] else [
       {
         name: 'thanos-query',
         rules: [

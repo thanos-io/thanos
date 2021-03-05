@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -25,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -36,6 +38,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
@@ -50,7 +53,7 @@ import (
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
-	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
@@ -65,7 +68,7 @@ func registerQuery(app *extkingpin.App) {
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -96,6 +99,9 @@ func registerQuery(app *extkingpin.App) {
 	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<rule>").Strings()
 
+	metadataEndpoints := cmd.Flag("metadata", "Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<metadata>").Strings()
+
 	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticstore>").Strings()
 
@@ -123,9 +129,16 @@ func registerQuery(app *extkingpin.App) {
 	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
+		Hidden().Default("true").Bool()
+
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
+	defaultRangeQueryStep := extkingpin.ModelDuration(cmd.Flag("query.default-step", "Set default step for range queries. Default step is only used when step is not set in UI. In such cases, Thanos UI will use default step to calculate resolution (resolution = max(rangeSeconds / 250, defaultStep)). This will not work from Grafana, but Grafana has __step variable which can be used.").
+		Default("1s"))
+
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -139,6 +152,20 @@ func registerQuery(app *extkingpin.App) {
 
 		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
 			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
+		}
+
+		if dup := firstDuplicate(*metadataEndpoints); dup != "" {
+			return errors.Errorf("Address %s is duplicated for --metadata flag.", dup)
+		}
+
+		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
 		var fileSD *file.Discovery
@@ -163,7 +190,9 @@ func registerQuery(app *extkingpin.App) {
 			logger,
 			reg,
 			tracer,
-			*requestLoggingDecision,
+			httpLogOpts,
+			grpcLogOpts,
+			tagOpts,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -181,6 +210,7 @@ func registerQuery(app *extkingpin.App) {
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			*maxConcurrentSelects,
+			time.Duration(*defaultRangeQueryStep),
 			time.Duration(*queryTimeout),
 			*lookbackDelta,
 			*dynamicLookbackDelta,
@@ -191,9 +221,11 @@ func registerQuery(app *extkingpin.App) {
 			getFlagsMap(cmd.Flags()),
 			*stores,
 			*ruleEndpoints,
+			*metadataEndpoints,
 			*enableAutodownsampling,
 			*enableQueryPartialResponse,
 			*enableRulePartialResponse,
+			*enableMetricMetadataPartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -213,7 +245,9 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	requestLoggingDecision string,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -231,6 +265,7 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	maxConcurrentSelects int,
+	defaultRangeQueryStep time.Duration,
 	queryTimeout time.Duration,
 	lookbackDelta time.Duration,
 	dynamicLookbackDelta bool,
@@ -241,9 +276,11 @@ func runQuery(
 	flagsMap map[string]string,
 	storeAddrs []string,
 	ruleAddrs []string,
+	metadataAddrs []string,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
+	enableMetricMetadataPartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -283,6 +320,12 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	dnsMetadataProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_metadata_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
@@ -309,11 +352,19 @@ func runQuery(
 
 				return specs
 			},
+			func() (specs []query.MetadataSpec) {
+				for _, addr := range dnsMetadataProvider.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+				}
+
+				return specs
+			},
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
+		metadataProxy    = metadata.NewProxy(logger, stores.GetMetadataClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -376,6 +427,7 @@ func runQuery(
 					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 					}
+
 					// Rules apis do not support file service discovery as of now.
 				case <-ctxUpdate.Done():
 					return nil
@@ -398,6 +450,9 @@ func runQuery(
 				}
 				if err := dnsRuleProvider.Resolve(resolveCtx, ruleAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for rulesAPIs", "err", err)
+				}
+				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs); err != nil {
+					level.Error(logger).Log("msg", "failed to resolve addresses for metadataAPIs", "err", err)
 				}
 				return nil
 			})
@@ -433,10 +488,7 @@ func runQuery(
 		}
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.LogDecision[requestLoggingDecision]
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
@@ -449,11 +501,14 @@ func runQuery(
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
+			metadata.NewGRPCClient(metadataProxy),
 			enableAutodownsampling,
 			enableQueryPartialResponse,
 			enableRulePartialResponse,
+			enableMetricMetadataPartialResponse,
 			queryReplicaLabels,
 			flagsMap,
+			defaultRangeQueryStep,
 			instantDefaultMaxSourceResolution,
 			defaultMetadataTimeRange,
 			gate.New(
@@ -488,9 +543,10 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
+			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -514,7 +570,7 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 	for _, spec := range specs {
 		addr := spec.Addr()
 		if _, ok := set[addr]; ok {
-			level.Warn(logger).Log("msg", "Duplicate store address is provided - %v", addr)
+			level.Warn(logger).Log("msg", "Duplicate store address is provided", "addr", addr)
 			duplicatedStores.Inc()
 		}
 		set[addr] = spec

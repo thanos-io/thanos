@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -38,11 +40,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
-const fetcherConcurrency = 32
-
 // registerStore registers a store command.
 func registerStore(app *extkingpin.App) {
-	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
+	cmd := app.Command(component.Store.String(), "Store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift, Tencent COS and Aliyun OSS.")
 
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
@@ -67,6 +67,9 @@ func registerStore(app *extkingpin.App) {
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
+	maxTouchedSeriesCount := cmd.Flag("store.grpc.touched-series-limit",
+		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
 
@@ -77,6 +80,9 @@ func registerStore(app *extkingpin.App) {
 
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage.").
 		Default("20").Int()
+
+	blockMetaFetchConcurrency := cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
+		Default("32").Int()
 
 	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
@@ -112,6 +118,7 @@ func registerStore(app *extkingpin.App) {
 
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
@@ -119,10 +126,23 @@ func registerStore(app *extkingpin.App) {
 				minTime, maxTime)
 		}
 
+		httpLogOpts, err := logging.ParseHTTPOptions("", reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
 		return runStore(g,
 			logger,
 			reg,
 			tracer,
+			httpLogOpts,
+			grpcLogOpts,
+			tagOpts,
 			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
@@ -136,11 +156,13 @@ func registerStore(app *extkingpin.App) {
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
+			uint64(*maxTouchedSeriesCount),
 			*maxConcurrent,
 			component.Store,
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
+			*blockMetaFetchConcurrency,
 			&store.FilterConfig{
 				MinTime: *minTime,
 				MaxTime: *maxTime,
@@ -166,6 +188,9 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
@@ -173,12 +198,13 @@ func runStore(
 	grpcGracePeriod time.Duration,
 	grpcCert, grpcKey, grpcClientCA, httpBindAddr string,
 	httpGracePeriod time.Duration,
-	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount uint64,
+	indexCacheSizeBytes, chunkPoolSizeBytes, maxSampleCount, maxSeriesCount uint64,
 	maxConcurrency int,
 	component component.Component,
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
+	metaFetchConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
@@ -273,8 +299,8 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, fetcherConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, ignoreDeletionMarksDelay, metaFetchConcurrency)
+	metaFetcher, err := block.NewMetaFetcher(logger, metaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -293,6 +319,11 @@ func runStore(
 
 	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), maxConcurrency)
 
+	chunkPool, err := store.NewDefaultChunkBytesPool(chunkPoolSizeBytes)
+	if err != nil {
+		return errors.Wrap(err, "create chunk pool")
+	}
+
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -301,8 +332,10 @@ func runStore(
 		dataDir,
 		indexCache,
 		queriesGate,
-		chunkPoolSizeBytes,
+		chunkPool,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
+		store.NewSeriesLimiterFactory(maxSeriesCount),
+		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
@@ -352,7 +385,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, component, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
@@ -377,10 +410,7 @@ func runStore(
 		compactorView.Register(r, true, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.NoLogCall
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 		api := blocksAPI.NewBlocksAPI(logger, "", flagsMap)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 

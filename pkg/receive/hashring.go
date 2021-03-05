@@ -11,6 +11,7 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -158,14 +159,14 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 	return m
 }
 
-// HashringFromConfig creates multi-tenant hashrings from a
+// HashringFromConfigWatcher creates multi-tenant hashrings from a
 // hashring configuration file watcher.
 // The configuration file is watched for updates.
 // Hashrings are returned on the updates channel.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
-func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
+func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
 	defer close(updates)
 	go cw.Run(ctx)
 
@@ -180,4 +181,19 @@ func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *Config
 			return ctx.Err()
 		}
 	}
+}
+
+// HashringFromConfig loads raw configuration content and returns a Hashring if the given configuration is not valid.
+func HashringFromConfig(content string) (Hashring, error) {
+	config, err := parseConfig([]byte(content))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse configuration")
+	}
+
+	// If hashring is empty, return an error.
+	if len(config) == 0 {
+		return nil, errors.Wrapf(err, "failed to load configuration")
+	}
+
+	return newMultiHashring(config), err
 }

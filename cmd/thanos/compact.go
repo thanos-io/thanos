@@ -81,7 +81,7 @@ func (cs compactionSet) maxLevel() int {
 }
 
 func registerCompact(app *extkingpin.App) {
-	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
+	cmd := app.Command(component.Compact.String(), "Continuously compacts blocks in an object store bucket.")
 	conf := &compactConfig{}
 	conf.registerFlag(cmd)
 
@@ -98,7 +98,7 @@ func runCompact(
 	component component.Component,
 	conf compactConfig,
 	flagsMap map[string]string,
-) error {
+) (rerr error) {
 	deleteDelay := time.Duration(conf.deleteDelay)
 	halted := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compact_halted",
@@ -201,10 +201,10 @@ func runCompact(
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, fetcherConcurrency)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
 	duplicateBlocksFilter := block.NewDeduplicateFilter()
 
-	baseMetaFetcher, err := block.NewBaseFetcher(logger, fetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
@@ -273,11 +273,16 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	defer func() {
+		if rerr != nil {
+			cancel()
+		}
+	}()
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
 	if err != nil {
-		cancel()
 		return errors.Wrap(err, "create compactor")
 	}
 
@@ -286,9 +291,12 @@ func runCompact(
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
 	)
 
-	if err := os.RemoveAll(downsamplingDir); err != nil {
-		cancel()
-		return errors.Wrap(err, "clean working downsample directory")
+	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
+		return errors.Wrap(err, "create working compact directory")
+	}
+
+	if err := os.MkdirAll(downsamplingDir, os.ModePerm); err != nil {
+		return errors.Wrap(err, "create working downsample directory")
 	}
 
 	grouper := compact.NewDefaultGrouper(
@@ -299,6 +307,7 @@ func runCompact(
 		reg,
 		blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
 		garbageCollectedBlocks,
+		metadata.HashFunc(conf.hashFunc),
 	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, blocksCleaned, blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(
@@ -317,7 +326,6 @@ func runCompact(
 		conf.compactionConcurrency,
 	)
 	if err != nil {
-		cancel()
 		return errors.Wrap(err, "create bucket compactor")
 	}
 
@@ -376,7 +384,7 @@ func runCompact(
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, metadata.HashFunc(conf.hashFunc)); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
@@ -384,7 +392,7 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, metadata.HashFunc(conf.hashFunc)); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -456,7 +464,7 @@ func runCompact(
 		global.Register(r, false, ins)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
+		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
 			return logging.NoLogCall
 		})}
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
@@ -523,6 +531,7 @@ type compactConfig struct {
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
 	blockSyncConcurrency                           int
+	blockMetaFetchConcurrency                      int
 	blockViewerSyncBlockInterval                   time.Duration
 	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
@@ -532,6 +541,7 @@ type compactConfig struct {
 	webConf                                        webConfig
 	label                                          string
 	maxBlockIndexSize                              units.Base2Bytes
+	hashFunc                                       string
 	enableVerticalCompaction                       bool
 }
 
@@ -574,6 +584,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&cc.blockSyncConcurrency)
+	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
+		Default("32").IntVar(&cc.blockMetaFetchConcurrency)
 	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
 		Default("1m").DurationVar(&cc.blockViewerSyncBlockInterval)
 	cmd.Flag("compact.cleanup-interval", "How often we should clean up partially uploaded blocks and blocks with deletion mark in the background when --wait has been enabled. Setting it to \"0s\" disables it - the cleaning will only happen at the end of an iteration.").
@@ -606,6 +618,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"block is marked for no compaction (no-compact-mark.json is uploaded) which causes this block to be excluded from any compaction. "+
 		"Default is due to https://github.com/thanos-io/thanos/issues/1424, but it's overall recommended to keeps block size to some reasonable size.").
 		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
+
+	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
+		Default("").EnumVar(&cc.hashFunc, "SHA256", "")
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 

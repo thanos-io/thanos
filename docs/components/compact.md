@@ -319,7 +319,7 @@ In order to achieve co-ordination between compactor and all object storage reade
 ```$
 usage: thanos compact [<flags>]
 
-continuously compacts blocks in an object store bucket
+Continuously compacts blocks in an object store bucket.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
@@ -382,6 +382,9 @@ Flags:
       --block-sync-concurrency=20
                                 Number of goroutines to use when syncing block
                                 metadata from object storage.
+      --block-meta-fetch-concurrency=32
+                                Number of goroutines to use when fetching block
+                                metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
@@ -405,6 +408,12 @@ Flags:
                                 loaded, or compactor is ignoring the deletion
                                 because it's compacting the block at the same
                                 time.
+      --hash-func=              Specify which hash function to use when
+                                calculating the hashes of produced files. If no
+                                function has been specified, it does not happen.
+                                This permits avoiding downloading some files
+                                twice albeit at some performance cost. Possible
+                                values are: "", "SHA256".
       --selector.relabel-config-file=<file-path>
                                 Path to YAML file that contains relabeling
                                 configuration that allows selecting blocks. It

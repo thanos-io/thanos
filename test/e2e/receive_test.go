@@ -102,7 +102,83 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom2",
+				"receive":    "1",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom3",
+				"receive":    "2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+		})
+	})
+
+	t.Run("hashring with config watcher", func(t *testing.T) {
+		t.Parallel()
+
+		s, err := e2e.NewScenario("e2e_test_receive_hashring")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		r1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		testutil.Ok(t, err)
+		r2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+		testutil.Ok(t, err)
+		r3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
+		testutil.Ok(t, err)
+
+		h := receive.HashringConfig{
+			Endpoints: []string{
+				r1.GRPCNetworkEndpointFor(s.NetworkName()),
+				r2.GRPCNetworkEndpointFor(s.NetworkName()),
+				r3.GRPCNetworkEndpointFor(s.NetworkName()),
+			},
+		}
+
+		// Recreate again, but with hashring config.
+		// TODO(kakkoyun): Update config file and wait config watcher to reconcile hashring.
+		r1, err = e2ethanos.NewReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		testutil.Ok(t, err)
+		r2, err = e2ethanos.NewReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "2", 1, h)
+		testutil.Ok(t, err)
+		r3, err = e2ethanos.NewReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "3", 1, h)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
+
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -177,7 +253,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -249,7 +325,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -324,7 +400,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 		testutil.Ok(t, s.StartAndWaitReady(prom2))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

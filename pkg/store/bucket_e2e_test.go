@@ -41,18 +41,6 @@ var (
 	}
 )
 
-type noopCache struct{}
-
-func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return map[labels.Label][]byte{}, keys
-}
-
-func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return map[uint64][]byte{}, ids
-}
-
 type swappableCache struct {
 	ptr storecache.IndexCache
 }
@@ -102,9 +90,9 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
+		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
+		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
@@ -115,8 +103,8 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
 		testutil.Ok(t, meta.WriteToDir(logger, dir2))
 
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1, metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2, metadata.NoneFunc))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -162,8 +150,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		s.cache,
 		nil,
-		0,
+		nil,
 		NewChunksLimiterFactory(maxChunksLimit),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
 		filterConf,
@@ -191,6 +181,8 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 // TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
+	t.Helper()
+
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)
@@ -468,10 +460,10 @@ func TestBucketStore_e2e(t *testing.T) {
 
 type naivePartitioner struct{}
 
-func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
+func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
 	for i := 0; i < length; i++ {
 		s, e := rng(i)
-		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
 	return parts
 }

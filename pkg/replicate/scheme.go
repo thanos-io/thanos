@@ -279,7 +279,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
-	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewReader(originMetaFileContent)); err != nil {
+	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(originMetaFileContent)); err != nil {
 		return errors.Wrap(err, "upload meta file")
 	}
 
