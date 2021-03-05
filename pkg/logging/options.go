@@ -13,6 +13,7 @@ import (
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"google.golang.org/grpc/codes"
 )
@@ -170,12 +171,12 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 	// If flag is incorrectly parsed.
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return logOpts, fmt.Errorf("getting request logging config failed. %v", err)
+		return logOpts, errors.Errorf("getting request logging config failed. %v", err)
 	}
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return logOpts, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+		return logOpts, errors.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
 	}
 	// If old flag is enabled.
 	if len(flagDecision) > 0 {
@@ -201,12 +202,12 @@ func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	configYAML, err := reqLogConfig.Content()
 	if err != nil {
-		return []tags.Option{}, logOpts, fmt.Errorf("getting request logging config failed. %v", err)
+		return []tags.Option{}, logOpts, errors.Errorf("getting request logging config failed. %v", err)
 	}
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []tags.Option{}, logOpts, fmt.Errorf("Both log.request.decision and request.logging-config has been enabled. Please use one of the flags!")
+		return []tags.Option{}, logOpts, errors.Errorf("Both log.request.decision and request.logging-config has been enabled. Please use one of the flags!")
 	}
 
 	// If the old flag is empty, use the new YAML config.

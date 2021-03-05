@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 	httputil "github.com/thanos-io/thanos/pkg/server/http"
 )
 
@@ -79,7 +80,7 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	if logStart && logEnd {
 		return LogStartAndFinishCall, nil
 	}
-	return -1, fmt.Errorf("log start call is not supported.")
+	return -1, errors.Errorf("log start call is not supported.")
 }
 
 // getLevel returns the level based logger.

@@ -249,7 +249,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	if _, ok := set[g.group.Name]; ok {
 		errs = append(
 			errs,
-			fmt.Errorf("groupname: %q is repeated in the same file", g.group.Name),
+			errors.Errorf("groupname: %q is repeated in the same file", g.group.Name),
 		)
 	}
 

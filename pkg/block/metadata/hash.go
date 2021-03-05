@@ -6,7 +6,6 @@ package metadata
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 
@@ -57,6 +56,6 @@ func CalculateHash(p string, hf HashFunc, logger log.Logger) (ObjectHash, error)
 			Value: hex.EncodeToString(h.Sum(nil)),
 		}, nil
 	}
-	return ObjectHash{}, fmt.Errorf("hash function %v is not supported", hf)
+	return ObjectHash{}, errors.Errorf("hash function %v is not supported", hf)
 
 }

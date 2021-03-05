@@ -153,7 +153,7 @@ func ensureContainer(connection *swift.Connection, name string, createIfNotExist
 			return errors.Wrapf(err, "verify container %s", name)
 		}
 		if !createIfNotExist {
-			return fmt.Errorf("unable to find the expected container %s", name)
+			return errors.Errorf("unable to find the expected container %s", name)
 		}
 		if err = connection.ContainerCreate(name, swift.Headers{}); err != nil {
 			return errors.Wrapf(err, "create container %s", name)

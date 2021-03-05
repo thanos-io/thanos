@@ -4,7 +4,6 @@
 package logging
 
 import (
-	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v2"
 )
@@ -35,7 +35,7 @@ func checkOptionsConfigEmpty(optcfg OptionsConfig) (bool, error) {
 		return true, nil
 	}
 	if len(optcfg.Level) == 0 && (optcfg.Decision.LogStart || optcfg.Decision.LogEnd) {
-		return false, fmt.Errorf("level field is empty.")
+		return false, errors.Errorf("level field is empty.")
 	}
 	return false, nil
 }
@@ -89,19 +89,19 @@ func getGRPCLoggingOption(logStart bool, logEnd bool) (grpc_logging.Decision, er
 	if logStart && logEnd {
 		return grpc_logging.LogStartAndFinishCall, nil
 	}
-	return -1, fmt.Errorf("log start call is not supported.")
+	return -1, errors.Errorf("log start call is not supported.")
 }
 
 // validateLevel validates the list of level entries.
 // Raise an error if empty or log level not in uppercase.
 func validateLevel(level string) error {
 	if len(level) == 0 {
-		return fmt.Errorf("level field in YAML file is empty.")
+		return errors.Errorf("level field in YAML file is empty.")
 	}
 	if level == "INFO" || level == "DEBUG" || level == "ERROR" || level == "WARNING" {
 		return nil
 	}
-	return fmt.Errorf("The format of level is invalid. Expected INFO/DEBUG/ERROR/WARNING, got this %v", level)
+	return errors.Errorf("The format of level is invalid. Expected INFO/DEBUG/ERROR/WARNING, got this %v", level)
 }
 
 // NewGRPCOption adds in the config options and returns tags for logging middleware.

@@ -399,7 +399,7 @@ func checkNetworkRequests(t *testing.T, addr string) {
 		}
 
 		if len(networkErrors) > 0 {
-			err = fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+			err = errors.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
 		}
 		return err
 	}))
