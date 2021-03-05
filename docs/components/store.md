@@ -297,14 +297,14 @@ Currently only memcached "backend" is supported:
 type: MEMCACHED # Case-insensitive
 config:
   addresses: []
-  timeout: 0s
-  max_idle_connections: 0
-  max_async_concurrency: 0
-  max_async_buffer_size: 0
-  max_get_multi_concurrency: 0
-  max_item_size: 0
+  timeout: 500ms
+  max_idle_connections: 100
+  max_async_concurrency: 20
+  max_async_buffer_size: 10000
+  max_item_size: 1MiB
+  max_get_multi_concurrency: 100
   max_get_multi_batch_size: 0
-  dns_provider_update_interval: 0s
+  dns_provider_update_interval: 10s
 chunk_subrange_size: 16000
 max_chunks_get_range_requests: 3
 chunk_object_attrs_ttl: 24h
