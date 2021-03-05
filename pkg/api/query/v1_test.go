@@ -465,18 +465,20 @@ func TestQueryEndpoints(t *testing.T) {
 			query: url.Values{
 				"query": []string{"time()"},
 				"start": []string{"0"},
-				"end":   []string{"2"},
+				"end":   []string{"500"},
 				"step":  []string{"1"},
 			},
 			response: &queryData{
 				ResultType: parser.ValueTypeMatrix,
 				Result: promql.Matrix{
 					promql.Series{
-						Points: []promql.Point{
-							{V: 0, T: timestamp.FromTime(start)},
-							{V: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
-							{V: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
-						},
+						Points: func(end, step int64) []promql.Point {
+							var res []promql.Point
+							for v := int64(0); v <= end; v += step {
+								res = append(res, promql.Point{V: float64(v), T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+							}
+							return res
+						}(500, 1),
 						Metric: nil,
 					},
 				},
