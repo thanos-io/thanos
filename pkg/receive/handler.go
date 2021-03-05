@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 
-
 	"github.com/go-kit/kit/log"
 
 	"github.com/opentracing/opentracing-go"
@@ -52,11 +51,11 @@ var (
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	writer            *Writer
-	registry          prometheus.Registerer
-	defaultTenantID   string
-	tracer            opentracing.Tracer
-	logger   log.Logger
+	writer          *Writer
+	registry        prometheus.Registerer
+	defaultTenantID string
+	tracer          opentracing.Tracer
+	logger          log.Logger
 }
 
 func NewHandler(
@@ -65,18 +64,17 @@ func NewHandler(
 	defaultTenantID string,
 	tracer opentracing.Tracer,
 	logger log.Logger,
-	) *Handler {
+) *Handler {
 	return &Handler{
-		writer: writer,
-		registry: registry,
+		writer:          writer,
+		registry:        registry,
 		defaultTenantID: defaultTenantID,
-		tracer: tracer,
-		logger: logger,
+		tracer:          tracer,
+		logger:          logger,
 	}
 }
 
 func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
-
 	var err error
 	tracing.DoInSpan(ctx, "receive_tsdb_write", func(_ context.Context) {
 		err = h.writer.Write(ctx, tenant, wreq)
@@ -93,7 +91,7 @@ func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb
 				err = errors.New(errs.Error())
 			}
 		}
-		return errors.Wrap(err, "storing locally")
+		return err
 	}
 	return nil
 }
@@ -104,7 +102,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	defer span.Finish()
 
 	err := h.handleRequest(ctx, r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
-	switch err {
+	switch errors.Cause(err) {
 	case nil:
 		return &storepb.WriteResponse{}, nil
 	case errNotReady:

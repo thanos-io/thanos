@@ -59,7 +59,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		return errors.Wrap(err, "get appender")
 	}
 
-	var errs errutil.MultiError
+	errs := &errutil.MultiError{}
 	for _, t := range wreq.Timeseries {
 		lset := make(labels.Labels, len(t.Labels))
 		for j := range t.Labels {
@@ -108,38 +108,38 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	return errs.Err()
 }
 
-type fakeTenantAppendable struct {
-	f *fakeAppendable
+type FakeTenantAppendable struct {
+	f *FakeAppendable
 }
 
-func newFakeTenantAppendable(f *fakeAppendable) *fakeTenantAppendable {
-	return &fakeTenantAppendable{f: f}
+func NewFakeTenantAppendable(f *FakeAppendable) *FakeTenantAppendable {
+	return &FakeTenantAppendable{f: f}
 }
 
-func (t *fakeTenantAppendable) TenantAppendable(tenantID string) (Appendable, error) {
+func (t *FakeTenantAppendable) TenantAppendable(tenantID string) (Appendable, error) {
 	return t.f, nil
 }
 
-type fakeAppendable struct {
-	appender    storage.Appender
-	appenderErr func() error
+type FakeAppendable struct {
+	App         storage.Appender
+	AppenderErr func() error
 }
 
-var _ Appendable = &fakeAppendable{}
+var _ Appendable = &FakeAppendable{}
 
 func nilErrFn() error {
 	return nil
 }
 
-func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
-	errf := f.appenderErr
+func (f *FakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
+	errf := f.AppenderErr
 	if errf == nil {
 		errf = nilErrFn
 	}
-	return f.appender, errf()
+	return f.App, errf()
 }
 
-type fakeAppender struct {
+type FakeAppender struct {
 	sync.Mutex
 	samples     map[uint64][]prompb.Sample
 	addErr      func() error
@@ -148,10 +148,10 @@ type fakeAppender struct {
 	rollbackErr func() error
 }
 
-var _ storage.Appender = &fakeAppender{}
+var _ storage.Appender = &FakeAppender{}
 
 // TODO(kakkoyun): Linter - `addFastErr` always receives `nil`.
-func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
+func NewFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *FakeAppender { //nolint:unparam
 	if addErr == nil {
 		addErr = nilErrFn
 	}
@@ -164,7 +164,7 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 	if rollbackErr == nil {
 		rollbackErr = nilErrFn
 	}
-	return &fakeAppender{
+	return &FakeAppender{
 		samples:     make(map[uint64][]prompb.Sample),
 		addErr:      addErr,
 		addFastErr:  addFastErr,
@@ -173,7 +173,7 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 	}
 }
 
-func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
+func (f *FakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
 	s := f.samples[l.Hash()]
@@ -182,7 +182,7 @@ func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	return res
 }
 
-func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
+func (f *FakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
 	f.Lock()
 	defer f.Unlock()
 	ref := l.Hash()
@@ -190,17 +190,17 @@ func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) 
 	return ref, f.addErr()
 }
 
-func (f *fakeAppender) AddFast(ref uint64, t int64, v float64) error {
+func (f *FakeAppender) AddFast(ref uint64, t int64, v float64) error {
 	f.Lock()
 	defer f.Unlock()
 	f.samples[ref] = append(f.samples[ref], prompb.Sample{Value: v, Timestamp: t})
 	return f.addFastErr()
 }
 
-func (f *fakeAppender) Commit() error {
+func (f *FakeAppender) Commit() error {
 	return f.commitErr()
 }
 
-func (f *fakeAppender) Rollback() error {
+func (f *FakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
