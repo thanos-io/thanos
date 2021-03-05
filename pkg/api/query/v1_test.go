@@ -472,10 +472,10 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeMatrix,
 				Result: promql.Matrix{
 					promql.Series{
-						Points: func(end, step int64) []promql.Point {
+						Points: func(end, step float64) []promql.Point {
 							var res []promql.Point
-							for v := int64(0); v <= end; v += step {
-								res = append(res, promql.Point{V: float64(v), T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+							for v := float64(0); v <= end; v += step {
+								res = append(res, promql.Point{V: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
 							}
 							return res
 						}(500, 1),
