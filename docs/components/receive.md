@@ -6,7 +6,7 @@ menu: components
 
 # Receiver
 
-The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It builds on top of existing Prometheus TSDB and retains their usefulness while extending their functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
+The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It receives metrics from the [thanos router](./receive_route.md) and writes them to the TSDB. It builds on top of existing Prometheus TSDB and retains their usefulness while extending their functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
 
 We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
@@ -24,23 +24,12 @@ thanos receive \
     --tsdb.path "/path/to/receive/data/dir" \
     --grpc-address 0.0.0.0:10907 \
     --http-address 0.0.0.0:10909 \
-    --receive.replication-factor 1 \
     --label "receive_replica=\"0\"" \
     --label "receive_cluster=\"eu1\"" \
     --receive.local-endpoint 127.0.0.1:10907 \
-    --receive.hashrings-file ./data/hashring.json \
     --remote-write.address 0.0.0.0:10908 \
     --objstore.config-file "bucket.yml"
 ```
-
-The example of `remote_write` Prometheus configuration:
-
-```yaml
-remote_write:
-- url: http://<thanos-receive-container-ip>:10908/api/v1/receive
-```
-
-where `<thanos-receive-containter-ip>` is an IP address reachable by Prometheus Server.
 
 The example content of `bucket.yml`:
 
@@ -49,22 +38,6 @@ type: GCS
 config:
   bucket: example-bucket
 ```
-
-The example content of `hashring.json`:
-
-```json
-[
-    {
-        "endpoints": [
-            "127.0.0.1:10907",
-            "127.0.0.1:11907",
-            "127.0.0.1:12907"
-        ]
-    }
-]
-```
-With such configuration any receive is listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
-for tenancy and replication.
 
 ## Flags
 
@@ -108,8 +81,6 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --remote-write.address="0.0.0.0:19291"
-                                 Address to listen on for remote write requests.
       --remote-write.server-tls-cert=""
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.
@@ -120,17 +91,6 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --remote-write.client-tls-cert=""
-                                 TLS Certificates to use to identify this client
-                                 to the server.
-      --remote-write.client-tls-key=""
-                                 TLS Key for the client's certificate.
-      --remote-write.client-tls-ca=""
-                                 TLS CA Certificates to use to verify servers.
-      --remote-write.client-server-name=""
-                                 Server name to verify the hostname on the
-                                 returned gRPC certificates. See
-                                 https://tools.ietf.org/html/rfc4366#section-3.1
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
@@ -147,34 +107,17 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
-      --receive.hashrings-file=<path>
-                                 Path to file that contains the hashring
-                                 configuration.
-      --receive.hashrings-file-refresh-interval=5m
-                                 Refresh interval to re-read the hashring
-                                 configuration file. (used as a fallback)
-      --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
-                                 Endpoint of local receive node. Used to
-                                 identify the local node in the hashring
-                                 configuration.
-      --receive.tenant-header="THANOS-TENANT"
-                                 HTTP header to determine tenant for write
-                                 requests.
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
       --receive.tenant-label-name="tenant_id"
                                  Label name through which the tenant will be
                                  announced.
-      --receive.replica-header="THANOS-REPLICA"
-                                 HTTP header specifying the replica number of a
-                                 write request.
-      --receive.replication-factor=1
-                                 How many times to replicate incoming write
-                                 requests.
       --tsdb.wal-compression     Compress the tsdb WAL.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
 
 ```
+
+
