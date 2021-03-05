@@ -58,6 +58,7 @@ SeriesLoop:
 		lbls := s.Labels()
 
 		var intervals tombstones.Intervals
+	DeletionsLoop:
 		for _, deletions := range d.d.deletions {
 			for _, m := range deletions.Matchers {
 				v := lbls.Get(m.Name)
@@ -65,34 +66,35 @@ SeriesLoop:
 					continue
 				}
 
+				// Only if all matchers in the deletion request are matched can we proceed to deletion.
 				if !m.Matches(v) {
-					continue
+					break DeletionsLoop
 				}
-				if len(deletions.Intervals) > 0 {
-					for _, in := range deletions.Intervals {
-						intervals = intervals.Add(in)
-					}
-					break
-				}
-
-				// Special case: Delete whole series.
-				chksIter := s.Iterator()
-				var chks []chunks.Meta
-				for chksIter.Next() {
-					chks = append(chks, chksIter.At())
-				}
-				if d.err = chksIter.Err(); d.err != nil {
-					return false
-				}
-
-				var deleted tombstones.Intervals
-				if len(chks) > 0 {
-					deleted = deleted.Add(tombstones.Interval{Mint: chks[0].MinTime, Maxt: chks[len(chks)-1].MaxTime})
-				}
-				d.log.DeleteSeries(lbls, deleted)
-				d.p.SeriesProcessed()
-				continue SeriesLoop
 			}
+			if len(deletions.Intervals) > 0 {
+				for _, in := range deletions.Intervals {
+					intervals = intervals.Add(in)
+				}
+				continue
+			}
+
+			// Special case: Delete whole series.
+			chksIter := s.Iterator()
+			var chks []chunks.Meta
+			for chksIter.Next() {
+				chks = append(chks, chksIter.At())
+			}
+			if d.err = chksIter.Err(); d.err != nil {
+				return false
+			}
+
+			var deleted tombstones.Intervals
+			if len(chks) > 0 {
+				deleted = deleted.Add(tombstones.Interval{Mint: chks[0].MinTime, Maxt: chks[len(chks)-1].MaxTime})
+			}
+			d.log.DeleteSeries(lbls, deleted)
+			d.p.SeriesProcessed()
+			continue SeriesLoop
 		}
 
 		d.curr = &storage.ChunkSeriesEntry{
