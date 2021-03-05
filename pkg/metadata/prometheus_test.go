@@ -84,7 +84,7 @@ scrape_configs:
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			meta, w, err := NewGRPCClient(prom).Metadata(context.Background(), &metadatapb.MetadataRequest{
+			meta, w, err := NewGRPCClient(prom).MetricMetadata(context.Background(), &metadatapb.MetricMetadataRequest{
 				Metric: tcase.metric,
 				Limit:  tcase.limit,
 			})
