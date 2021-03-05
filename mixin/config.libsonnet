@@ -8,7 +8,6 @@
     // cluster: 'find_mi_cluster_bitte',
     // namespace: 'thanos_status',
   },
-
   query+:: {
     selector: 'job=~"thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,

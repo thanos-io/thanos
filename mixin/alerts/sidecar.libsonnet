@@ -2,16 +2,18 @@
   local thanos = self,
   sidecar+:: {
     selector: error 'must provide selector for Thanos Sidecar alerts',
+    aggregators: std.join(', ', std.objectFields(thanos.hierarcies) + ['job', 'instance']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.sidecar == null then [] else [
+      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
       {
         name: 'thanos-sidecar',
         rules: [
           {
             alert: 'ThanosSidecarPrometheusDown',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} cannot connect to Prometheus.',
+              description: 'Thanos Sidecar {{$labels.instance}}%scannot connect to Prometheus.' % location,
               summary: 'Thanos Sidecar cannot connect to Prometheus',
             },
             expr: |||
@@ -25,11 +27,11 @@
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} bucket operations are failing',
+              description: 'Thanos Sidecar {{$labels.instance}}%sbucket operations are failing' % location,
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
-              sum by (namespace, job, instance) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
+              sum by (%(aggregators)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
@@ -39,11 +41,11 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}} in {{$labels.namespace}} is unhealthy for {{ $value }} seconds.',
+              description: 'Thanos Sidecar {{$labels.instance}}%sis unhealthy for {{$value}} seconds.' % location,
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (namespace, job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
+              time() - max by (%(aggregators)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
             ||| % thanos.sidecar,
             labels: {
               severity: 'critical',

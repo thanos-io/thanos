@@ -6,23 +6,25 @@
     forwardErrorThreshold: 20,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
+    aggregators: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.receive == null then [] else [
+      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
       {
         name: 'thanos-receive',
         rules: [
           {
             alert: 'ThanosReceiveHttpRequestErrorRateHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} is failing to handle {{$value | humanize}}% of requests.',
+              description: 'Thanos Receive {{$labels.job}}%sis failing to handle {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is failing to handle requests.',
             },
             expr: |||
               (
-                sum by (namespace, job) (rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
+                sum by (%(aggregators)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
               /
-                sum by (namespace, job) (rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
+                sum by (%(aggregators)s) (rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
               ) * 100 > %(httpErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
@@ -33,14 +35,14 @@
           {
             alert: 'ThanosReceiveHttpRequestLatencyHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for requests.',
+              description: 'Thanos Receive {{$labels.job}}%shas a 99th percentile latency of {{ $value }} seconds for requests.' % location,
               summary: 'Thanos Receive has high HTTP requests latency.',
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (namespace, job, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(aggregators)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(p99LatencyThreshold)s
               and
-                sum by (namespace, job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
+                sum by (%(aggregators)s) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
             ||| % thanos.receive,
             'for': '10m',
@@ -51,7 +53,7 @@
           {
             alert: 'ThanosReceiveHighReplicationFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} is failing to replicate {{$value | humanize}}% of requests.',
+              description: 'Thanos Receive {{$labels.job}}%sis failing to replicate {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is having high number of replication failures.',
             },
             expr: |||
@@ -59,15 +61,15 @@
                 and
               (
                 (
-                  sum by (namespace, job) (rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
+                  sum by (%(aggregators)s) (rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
                 /
-                  sum by (namespace, job) (rate(thanos_receive_replications_total{%(selector)s}[5m]))
+                  sum by (%(aggregators)s) (rate(thanos_receive_replications_total{%(selector)s}[5m]))
                 )
                 >
                 (
-                  max by (namespace, job) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
+                  max by (%(aggregators)s) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
                 /
-                  max by (namespace, job) (thanos_receive_hashring_nodes{%(selector)s})
+                  max by (%(aggregators)s) (thanos_receive_hashring_nodes{%(selector)s})
                 )
               ) * 100
             ||| % thanos.receive,
@@ -79,14 +81,14 @@
           {
             alert: 'ThanosReceiveHighForwardRequestFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} is failing to forward {{$value | humanize}}% of requests.',
+              description: 'Thanos Receive {{$labels.job}}%sis failing to forward {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is failing to forward requests.',
             },
             expr: |||
               (
-                sum by (namespace, job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
+                sum by (%(aggregators)s) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
-                sum by (namespace, job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
+                sum by (%(aggregators)s) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               ) * 100 > %(forwardErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
@@ -97,14 +99,14 @@
           {
             alert: 'ThanosReceiveHighHashringFileRefreshFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} is failing to refresh hashring file, {{$value | humanize}} of attempts failed.',
+              description: 'Thanos Receive {{$labels.job}}%sis failing to refresh hashring file, {{$value | humanize}} of attempts failed.' % location,
               summary: 'Thanos Receive is failing to refresh hasring file.',
             },
             expr: |||
               (
-                sum by (namespace, job) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
+                sum by (%(aggregators)s) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
               /
-                sum by (namespace, job) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
+                sum by (%(aggregators)s) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               > %(refreshErrorThreshold)s
               )
             ||| % thanos.receive,
@@ -116,10 +118,10 @@
           {
             alert: 'ThanosReceiveConfigReloadFailure',
             annotations: {
-              description: 'Thanos Receive {{$labels.namespace}}/{{$labels.job}} has not been able to reload hashring configurations.',
+              description: 'Thanos Receive {{$labels.job}}%shas not been able to reload hashring configurations.' % location,
               summary: 'Thanos Receive has not been able to reload configuration.',
             },
-            expr: 'avg by (namespace, job) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
+            expr: 'avg by (%(aggregators)s) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'warning',
@@ -128,13 +130,13 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              description: 'Thanos Receive {{ $labels.instance }} of {{$labels.namespace}}/{{$labels.job}} has not uploaded latest data to object storage.',
+              description: 'Thanos Receive {{ $labels.instance }} of {{$labels.job}}%shas not uploaded latest data to object storage.' % location,
               summary: 'Thanos Receive has not uploaded latest data to object storage.',
             },
             expr: |||
               (up{%(selector)s} - 1)
-              + on (namespace, job, instance) # filters to only alert on current instance last 3h
-              (sum by (namespace, job, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
+              + on (%(aggregators)s, instance) # filters to only alert on current instance last 3h
+              (sum by (%(aggregators)s, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
             ||| % thanos.receive,
             'for': '3h',
             labels: {

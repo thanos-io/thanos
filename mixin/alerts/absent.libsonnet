@@ -11,6 +11,7 @@ local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
   },
 
   prometheusAlerts+:: {
+    local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' from ' + std.join('/', ['{{labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else '',
     groups+: [
       {
         name: 'thanos-component-absent',
@@ -25,8 +26,8 @@ local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
               severity: 'critical',
             },
             annotations: {
-              description: '%s has disappeared from {{$labels.namespace}}. Prometheus target for the component cannot be discovered.' % name,
-              summary: 'Thanos component has disappeared from {{$labels.namespace}}.',
+              description: '%s has disappeared%s. Prometheus target for the component cannot be discovered.' % [name, location],
+              summary: 'Thanos component has disappeared%s.' % location,
             },
           }
           for name in std.objectFields(thanos.jobs)
