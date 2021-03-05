@@ -13,10 +13,10 @@ import (
 
 var _ UnaryClient = &GRPCClient{}
 
-// UnaryClient is gRPC metadatapb.Metadata client which expands streaming metadata API. Useful for consumers that does not
+// UnaryClient is a gRPC metadatapb.Metadata client which expands streaming metadata API. Useful for consumers that does not
 // support streaming.
 type UnaryClient interface {
-	Metadata(ctx context.Context, req *metadatapb.MetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error)
+	MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error)
 }
 
 // GRPCClient allows to retrieve metadata from local gRPC streaming server implementation.
@@ -31,7 +31,7 @@ func NewGRPCClient(ts metadatapb.MetadataServer) *GRPCClient {
 	}
 }
 
-func (rr *GRPCClient) Metadata(ctx context.Context, req *metadatapb.MetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error) {
+func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error) {
 	srv := &metadataServer{ctx: ctx, metric: req.Metric, limit: int(req.Limit)}
 
 	if req.Limit >= 0 {
@@ -46,8 +46,8 @@ func (rr *GRPCClient) Metadata(ctx context.Context, req *metadatapb.MetadataRequ
 		srv.metadataMap = make(map[string][]metadatapb.Meta)
 	}
 
-	if err := rr.proxy.Metadata(req, srv); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Metadata")
+	if err := rr.proxy.MetricMetadata(req, srv); err != nil {
+		return nil, nil, errors.Wrap(err, "proxy MetricMetadata")
 	}
 
 	return srv.metadataMap, srv.warnings, nil
@@ -55,7 +55,7 @@ func (rr *GRPCClient) Metadata(ctx context.Context, req *metadatapb.MetadataRequ
 
 type metadataServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
-	metadatapb.Metadata_MetadataServer
+	metadatapb.Metadata_MetricMetadataServer
 	ctx context.Context
 
 	metric string
@@ -65,7 +65,7 @@ type metadataServer struct {
 	metadataMap map[string][]metadatapb.Meta
 }
 
-func (srv *metadataServer) Send(res *metadatapb.MetadataResponse) error {
+func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 	if res.GetWarning() != "" {
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil

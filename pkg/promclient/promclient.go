@@ -738,7 +738,8 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 	return m.Data.Groups, nil
 }
 
-func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
+// MetricMetadataInGRPC returns the metadata from Prometheus metric metadata API. It uses gRPC errors.
+func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/metadata")
 	q := u.Query()
@@ -756,5 +757,5 @@ func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric strin
 	var v struct {
 		Data map[string][]metadatapb.Meta `json:"data"`
 	}
-	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/metadata HTTP[client]", &u, &v)
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v)
 }
