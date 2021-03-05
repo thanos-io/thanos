@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Query dashboard',
   },
   grafanaDashboards+:: {
-    'query.json':
+    [if thanos.query != null then 'query.json']:
       g.dashboard(thanos.query.title)
       .addRow(
         g.row('Instant Query API')

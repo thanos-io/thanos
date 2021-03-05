@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Sidecar dashboard',
   },
   grafanaDashboards+:: {
-    'sidecar.json':
+    [if thanos.sidecar != null then 'sidecar.json']:
       g.dashboard(thanos.sidecar.title)
       .addRow(
         g.row('gRPC (Unary)')

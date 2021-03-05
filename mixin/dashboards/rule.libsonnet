@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Rule dashboard',
   },
   grafanaDashboards+:: {
-    'rule.json':
+    [if thanos.rule != null then 'rule.json']:
       g.dashboard(thanos.rule.title)
       .addRow(
         g.row('Rule Group Evaluations')
