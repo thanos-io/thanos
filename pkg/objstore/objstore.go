@@ -117,6 +117,10 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
+	case *tracingReadCloser:
+		return TryToGetSize(f.r)
+	case *timingReadCloser:
+		return TryToGetSize(f.ReadCloser)
 	}
 	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
 }
