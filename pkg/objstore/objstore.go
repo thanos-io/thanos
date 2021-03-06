@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/minio/minio-go/v7"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -121,6 +122,12 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return TryToGetSize(f.r)
 	case *timingReadCloser:
 		return TryToGetSize(f.ReadCloser)
+	case *minio.Object:
+		s, err := f.Stat()
+		if err != nil {
+			return 0, errors.Wrap(err, "minio.Object.Stat()")
+		}
+		return s.Size, nil
 	}
 	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
 }
