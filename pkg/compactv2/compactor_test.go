@@ -306,6 +306,44 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 				NumChunks:  2,
 			},
 		},
+		{
+			name: "1 blocks + delete modifier. For deletion request, full match is required. Delete the first two series",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "foo", Value: "bar"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "b", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "c", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithDeletionModifier(
+				metadata.DeletionRequest{
+					Matchers: []*labels.Matcher{
+						labels.MustNewMatcher(labels.MatchEqual, "a", "1"),
+						labels.MustNewMatcher(labels.MatchEqual, "b", "2"),
+					},
+				})},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "b", Value: "2"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "c", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\", b=\"2\"} [{0 20}]\nDeleted {a=\"1\", b=\"2\", foo=\"bar\"} [{0 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 18,
+				NumSeries:  3,
+				NumChunks:  3,
+			},
+		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			tmpDir, err := ioutil.TempDir("", "test-series-writer")
