@@ -98,7 +98,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 // It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
+func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, retryCounter int) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
@@ -127,22 +127,33 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
-
 	metaEncoded := strings.Builder{}
 	if err := meta.Write(&metaEncoded); err != nil {
 		return errors.Wrap(err, "encode meta file")
 	}
 
 	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String())); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
+		if retryCounter == 5 {
+			return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
+		} else {
+			return Upload(ctx, logger, bkt, bdir, hf, retryCounter+1)
+		}
 	}
 
 	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
+		if retryCounter == 5 {
+			return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
+		} else {
+			return Upload(ctx, logger, bkt, bdir, hf, retryCounter+1)
+		}
 	}
 
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
+		if retryCounter == 5 {
+			return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
+		} else {
+			return Upload(ctx, logger, bkt, bdir, hf, retryCounter+1)
+		}
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
