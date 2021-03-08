@@ -1,5 +1,5 @@
 ---
-title: Receive-route
+title: receive-route
 type: docs
 menu: components
 ---
@@ -7,7 +7,7 @@ menu: components
 # Receive-route
 
 The `thanos receive-route` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It receives metrics from the target and forwards them to the right [receiver](./receive.md) in the hashring. It also buffers the incoming requests and handles changes in hashring configurations.
-We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
+We recommend this component to users who can only push into a Thanos due to air-gapped or egress-only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
 
@@ -25,10 +25,10 @@ The example of `remote_write` Prometheus configuration:
 
 ```yaml
 remote_write:
-- url: http://<thanos-receive-container-ip>:10908/api/v1/receive
+- url: http://<thanos-receive-route-container-ip>:10908/api/v1/receive
 ```
 
-where `<thanos-receive-containter-ip>` is an IP address reachable by Prometheus Server.
+where `<thanos-receive-route-container-ip>` is an IP address reachable by Prometheus Server.
 
 The example content of `hashring.json`:
 
@@ -43,12 +43,12 @@ The example content of `hashring.json`:
     }
 ]
 ```
-With such configuration, router listens for remote write on `<ip>10908/api/v1/receive` and will forward to the correct receiver in hashring
+With such configuration, the router will listen for remote write requests on `<ip>10908/api/v1/receive` and will forward to the correct receiver in the hashring
 for tenancy and replication.
 
 ## Flags
 
-[embedmd]:# (flags/receive.txt $)
+[embedmd]:# (flags/receive-route.txt $)
 ```$
 usage: thanos receive-route [<flags>]
 
@@ -117,5 +117,3 @@ Flags:
                               requests.
 
 ```
-
-
