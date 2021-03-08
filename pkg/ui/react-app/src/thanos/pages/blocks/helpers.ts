@@ -30,7 +30,7 @@ const splitOverlappingBlocks = (blocks: Block[]): Block[][] => {
   const rows: Block[][] = [[]];
   if (blocks.length === 0) return rows;
 
-  blocks.forEach(b => {
+  blocks.forEach((b) => {
     const r = determineRow(b, rows, 0);
     if (!rows[r]) rows[r] = [];
     rows[r].push(b);
@@ -51,7 +51,7 @@ const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
       }
       return a.minTime - b.minTime;
     })
-    .forEach(b => {
+    .forEach((b) => {
       const key = `${b.compaction.level}-${b.thanos.downsample.resolution}`;
       if (!poolWithOverlaps[key]) poolWithOverlaps[key] = [];
 
@@ -72,8 +72,8 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
 
   blocks
     .sort((a, b) => a.compaction.level - b.compaction.level)
-    .forEach(b => {
-      const title = (function(): string {
+    .forEach((b) => {
+      const title = (function (): string {
         const key = label !== '' && b.thanos.labels[label];
 
         if (key) {
@@ -92,7 +92,7 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
     });
 
   const sortedPool: { [source: string]: BlocksPool } = {};
-  Object.keys(pool).forEach(k => {
+  Object.keys(pool).forEach((k) => {
     sortedPool[k] = sortBlocksInRows(pool[k]);
   });
   return sortedPool;

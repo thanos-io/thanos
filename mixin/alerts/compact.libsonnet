@@ -6,7 +6,7 @@
     bucketOpsErrorThreshold: 5,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.compact == null then [] else [
       {
         name: 'thanos-compact',
         rules: [

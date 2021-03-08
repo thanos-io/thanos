@@ -596,6 +596,12 @@ Flags:
                               Server.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --hash-func=            Specify which hash function to use when
+                              calculating the hashes of produced files. If no
+                              function has been specified, it does not happen.
+                              This permits avoiding downloading some files twice
+                              albeit at some performance cost. Possible values
+                              are: "", "SHA256".
 
 ```
 
@@ -732,6 +738,12 @@ Flags:
                                 flag).
       --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
+      --hash-func=              Specify which hash function to use when
+                                calculating the hashes of produced files. If no
+                                function has been specified, it does not happen.
+                                This permits avoiding downloading some files
+                                twice albeit at some performance cost. Possible
+                                values are: "", "SHA256".
       --dry-run                 Prints the series changes instead of doing them.
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.

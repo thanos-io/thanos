@@ -255,6 +255,7 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 		if err != nil {
 			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Step)}
 		}
+		return defaultRangeQueryStep, nil
 	}
 
 	// Default step is used this way to make it consistent with UI.

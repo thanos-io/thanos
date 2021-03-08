@@ -7,7 +7,7 @@ helm upgrade --version="8.6.0" --install --namespace="my-lovely-namespace" --val
 Take a note that you need to replace two placeholders in the values: `BUCKET_REPLACE_ME` and `CLUSTER_NAME`. Also adjust all the other values according to your infrastructure requirements.
 
 An example of the `values.yaml` file:
-```
+```yaml
 rbac:
   create: true
 
@@ -63,9 +63,9 @@ server:
         topologyKey: "kubernetes.io/hostname"
   sidecarContainers:
   - name: thanos-sidecar
-    # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
+    # Always use explicit image tags (release or main-<date>-sha) instead of ambigous `latest` or `main`.
     # Check https://quay.io/repository/thanos/thanos?tab=tags to get latest tag.
-    image: quay.io/thanos/thanos:master-2019-11-26-82c005d9
+    image: quay.io/thanos/thanos:main-2021-03-01-1bbad3b5
     resources:
       requests:
         memory: "4Gi"

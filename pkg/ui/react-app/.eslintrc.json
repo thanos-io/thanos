@@ -6,7 +6,7 @@
     "plugin:prettier/recommended"
   ],
   "rules": {
-    "@typescript-eslint/camelcase": "warn",
+    "camelcase": "warn",
     "eol-last": [
       "error",
       "always"
