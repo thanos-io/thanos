@@ -315,8 +315,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	begin = time.Now()
 
-	err = block.Upload(ctx, logger, bkt, resdir, hashFunc)
-	if err != nil {
+	if err := block.Upload(ctx, logger, bkt, resdir, hashFunc, true); err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}
 
