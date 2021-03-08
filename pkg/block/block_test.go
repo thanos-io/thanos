@@ -207,7 +207,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, err)
 		err = Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
 		testutil.NotOk(t, err)
-		testutil.Equals(t, "empty external labels are not allowed for Thanos block.", err.Error())
+		testutil.Equals(t, "empty external labels are not allowed for Thanos block", err.Error())
 		testutil.Equals(t, 4, len(bkt.Objects()))
 	}
 }
