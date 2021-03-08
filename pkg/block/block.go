@@ -98,7 +98,13 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 // It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, retryCounter int) error {
+func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
+	return UploadWithRetry(ctx, logger, bkt, bdir, hf, 0)
+}
+
+// UploadWithRetry is a utility function for upload and acts as a
+// workaround for absence of default parameters (which in this case is retryCounter = 0)
+func UploadWithRetry(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, retryCounter int) error {
 	var flag bool = false
 	df, err := os.Stat(bdir)
 	if err != nil {
@@ -154,7 +160,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		flag = true
 	}
 	if flag && retryCounter < 5 {
-		return Upload(ctx, logger, bkt, bdir, hf, retryCounter+1)
+		return UploadWithRetry(ctx, logger, bkt, bdir, hf, retryCounter+1)
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
