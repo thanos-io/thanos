@@ -102,8 +102,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	return UploadWithRetry(ctx, logger, bkt, bdir, hf, 0)
 }
 
-// UploadWithRetry is a utility function for upload and acts as a
-// workaround for absence of default parameters (which in this case is retryCounter = 0)
+// UploadWithRetry is a utility function for upload and acts as a workaround for absence of default parameters (which in this case is retryCounter = 0).
 func UploadWithRetry(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, retryCounter int) error {
 	var flag bool = false
 	df, err := os.Stat(bdir)
