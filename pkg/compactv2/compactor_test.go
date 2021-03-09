@@ -282,7 +282,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
 					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
 						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
-					{lset: labels.Labels{{Name: "a", Value: "3"}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
 						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
 				},
 			},
@@ -294,10 +294,10 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 					},
 				})},
 			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
 				{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
 					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
-				{lset: labels.Labels{{Name: "a", Value: "3"}},
-					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
 			},
 			expectedChanges: "Deleted {a=\"1\", b=\"2\"} [{0 20}]\n",
 			expectedStats: tsdb.BlockStats{
