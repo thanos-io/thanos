@@ -348,9 +348,6 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			end: func() int64 {
 				return timestamp.FromTime(maxTime)
 			},
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test"},
-			},
 		},
 		{
 			title:          "add another label value",
@@ -366,10 +363,24 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			},
 		},
 		{
-			title:          "add another label value",
-			addedLabels:    []string{"foo", "test2"},
+			title:          "check label value matcher",
 			queryLabel:     "foo",
-			expectedValues: []string{"test2"},
+			expectedValues: []string{"test1"},
+			timestamp:      now.Unix(),
+			start: func() int64 {
+				return timestamp.FromTime(minTime)
+			},
+			end: func() int64 {
+				return timestamp.FromTime(maxTime)
+			},
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test1"},
+			},
+		},
+		{
+			title:          "check another label value matcher",
+			queryLabel:     "foo",
+			expectedValues: []string{},
 			timestamp:      now.Unix(),
 			start: func() int64 {
 				return timestamp.FromTime(minTime)
