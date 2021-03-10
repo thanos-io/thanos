@@ -159,14 +159,14 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 	return m
 }
 
-// HashringFromConfigWatcher creates multi-tenant hashrings from a
+// HashringFromConfig creates multi-tenant hashrings from a
 // hashring configuration file watcher.
 // The configuration file is watched for updates.
 // Hashrings are returned on the updates channel.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
-func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
+func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) error {
 	defer close(updates)
 	go cw.Run(ctx)
 
@@ -181,19 +181,4 @@ func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw 
 			return ctx.Err()
 		}
 	}
-}
-
-// HashringFromConfig loads raw configuration content and returns a Hashring if the given configuration is not valid.
-func HashringFromConfig(content string) (Hashring, error) {
-	config, err := parseConfig([]byte(content))
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse configuration")
-	}
-
-	// If hashring is empty, return an error.
-	if len(config) == 0 {
-		return nil, errors.Wrapf(err, "failed to load configuration")
-	}
-
-	return newMultiHashring(config), err
 }

@@ -159,7 +159,7 @@ func runReceiveRoute(
 		{
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				return route.HashringFromConfigWatcher(ctx, updates, cw)
+				return route.HashringFromConfig(ctx, updates, cw)
 			}, func(error) {
 				cancel()
 			})

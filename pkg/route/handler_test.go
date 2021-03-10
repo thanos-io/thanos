@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
 	"github.com/golang/snappy"
 	"github.com/jpillora/backoff"
 	"github.com/pkg/errors"
@@ -26,7 +27,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -185,6 +185,7 @@ func newHandlerHashring(appendables []*receive.FakeAppendable, replicationFactor
 			Hashring: "test",
 		},
 	}
+	var handlers []*receive.Handler
 	var endpoints []string
 	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
 	// This removes the network from the tests and creates a more consistent testing harness.
@@ -208,6 +209,7 @@ func newHandlerHashring(appendables []*receive.FakeAppendable, replicationFactor
 			nil,
 			nil,
 		)
+		handlers = append(handlers, h)
 		addr := randomAddr()
 		cfg[0].Endpoints = append(cfg[0].Endpoints, addr)
 		endpoints = append(endpoints, addr)
