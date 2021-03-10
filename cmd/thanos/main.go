@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/go-kit/kit/log"
@@ -28,6 +29,10 @@ import (
 )
 
 func main() {
+	// We use mmaped resources in most of the components so hardcode PanicOnFault to true. This allows us to recover (if we can e.g if queries
+	// are temporarily accessing unmapped memory).
+	debug.SetPanicOnFault(true)
+
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetMutexProfileFraction(10)
 		runtime.SetBlockProfileRate(10)
@@ -48,7 +53,6 @@ func main() {
 	registerCompact(app)
 	registerTools(app)
 	registerReceive(app)
-	registerReceiveRoute(app)
 	registerQueryFrontend(app)
 
 	cmd, setup := app.Parse()
