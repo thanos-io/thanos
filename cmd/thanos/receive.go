@@ -82,10 +82,6 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
-		if len(lset) == 0 {
-			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
-		}
-
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -154,11 +150,13 @@ func runReceive(
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
+
 	var bkt objstore.Bucket
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
+
 	upload := len(confContentYaml) > 0
 	if upload {
 		if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
@@ -225,8 +223,7 @@ func runReceive(
 		)
 		g.Add(func() error {
 			statusProber.Healthy()
-			err := srv.ListenAndServe()
-			return err
+			return srv.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
 			defer statusProber.NotHealthy(err)
