@@ -166,7 +166,7 @@ describe('GraphControls', () => {
       const btn = group.find(Button).filterWhere((btn) => btn.prop('title') === testCase.title);
       const onClick = btn.prop('onClick');
       if (onClick) {
-        onClick({} as React.MouseEvent);
+        onClick({} as React.MouseEvent<HTMLButtonElement, MouseEvent>);
         expect(results).toHaveLength(1);
         expect(results[0]).toBe(!testCase.active);
         results.pop();
