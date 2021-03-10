@@ -6,6 +6,9 @@ package receive
 import (
 	"context"
 
+	"net/http"
+	"strconv"
+
 	"github.com/go-kit/kit/log"
 
 	"github.com/opentracing/opentracing-go"
@@ -32,11 +35,15 @@ const (
 	DefaultTenant = "default-tenant"
 	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
 	DefaultTenantLabel = "tenant_id"
+	// Labels for metrics.
+	labelSuccess = "success"
+	labelError   = "error"
 )
 
 var (
 	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr    = errors.New("conflict")
+	conflictErr = errors.New("conflict")
+
 	errBadReplica  = errors.New("replica count exceeds replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
@@ -138,6 +145,7 @@ func isConflict(err error) bool {
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
+		err.Error() == strconv.Itoa(http.StatusConflict) ||
 		status.Code(err) == codes.AlreadyExists
 }
 
