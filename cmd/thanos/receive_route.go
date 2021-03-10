@@ -194,9 +194,7 @@ func runReceiveRoute(
 			httpserver.WithGracePeriod(httpGracePeriod),
 		)
 		g.Add(func() error {
-			statusProber.Ready()
-			defer statusProber.Healthy()
-
+			statusProber.Healthy()
 			return srv.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
