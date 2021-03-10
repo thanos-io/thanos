@@ -13,6 +13,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
+- [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
 
 ### Fixed
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
