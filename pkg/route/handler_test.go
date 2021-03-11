@@ -21,6 +21,7 @@ import (
 	"github.com/jpillora/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -233,19 +234,19 @@ func newHandlerHashring(appendables []*receive.FakeAppendable, replicationFactor
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		forwardRequests: prometheus.NewCounterVec(
+		forwardRequests: promauto.With(nil).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
-		replications: prometheus.NewCounterVec(
+		replications: promauto.With(nil).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
 				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
-		replicationFactor: prometheus.NewGauge(
+		replicationFactor: promauto.With(nil).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
