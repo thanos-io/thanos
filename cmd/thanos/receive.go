@@ -156,7 +156,6 @@ func runReceive(
 	if err != nil {
 		return err
 	}
-
 	upload := len(confContentYaml) > 0
 	if upload {
 		if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
@@ -229,7 +228,6 @@ func runReceive(
 			defer statusProber.NotHealthy(err)
 			srv.Shutdown(err)
 		})
-
 	}
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
@@ -306,7 +304,6 @@ func runReceive(
 
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
-
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
 					uploaded, err := dbs.Sync(ctx)
