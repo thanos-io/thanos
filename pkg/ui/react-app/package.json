@@ -44,7 +44,7 @@
     "sanitize-html": "^2.3.2",
     "tempusdominus-bootstrap-4": "^5.39.0",
     "tempusdominus-core": "^5.19.0",
-    "typescript": "^4.1.5",
+    "typescript": "3.9.9",
     "use-query-params": "^1.1.9"
   },
   "scripts": {
