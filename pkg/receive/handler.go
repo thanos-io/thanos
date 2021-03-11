@@ -35,9 +35,6 @@ const (
 	DefaultTenant = "default-tenant"
 	// DefaultTenantLabel is the default label-name used for when no tenant is passed via the tenant header.
 	DefaultTenantLabel = "tenant_id"
-	// Labels for metrics.
-	labelSuccess = "success"
-	labelError   = "error"
 )
 
 var (
