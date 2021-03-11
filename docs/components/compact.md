@@ -447,6 +447,9 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
+      --web.disable-cors        Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
       --bucket-web-label=BUCKET-WEB-LABEL
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
