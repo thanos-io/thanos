@@ -82,7 +82,7 @@ func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb
 	if err != nil {
 		// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 		// To avoid breaking the counting logic, we need to flatten the error.
-		if errs, ok := err.(errutil.MultiError); ok {
+		if errs, ok := err.(errutil.NonNilMultiError); ok {
 			if countCause(errs, isConflict) > 0 {
 				err = errors.Wrap(conflictErr, errs.Error())
 			} else if countCause(errs, isNotReady) > 0 {
@@ -123,7 +123,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 // countCause will inspect the error's cause or, if the error is a MultiError,
 // the cause of each contained error but will not traverse any deeper.
 func countCause(err error, f func(error) bool) int {
-	errs, ok := err.(errutil.MultiError)
+	errs, ok := err.(errutil.NonNilMultiError)
 	if !ok {
 		errs = []error{err}
 	}
