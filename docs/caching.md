@@ -12,9 +12,9 @@ Thanos can implement caching layers on multiple components. In general this shou
 However it is possible to give guidance on what each component tries to achieve, what it is used for and how you could configure this.
 
 <sub>
-1. service level agreement<br />
-2. service level objective<br />
-3. service level indicator
+- service level agreement
+- service level objective
+- service level indicator
 </sub>
 
 # Types of cache
@@ -71,13 +71,13 @@ Additional options to configure various aspects of [chunks](../design.md/#chunk)
 - `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
-Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
+Following options are used for metadata caching (`meta.json` files, deletion mark files, iteration result):
 
 - `blocks_iter_ttl`: how long to cache result of iterating blocks.
 - `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
-- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
-- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
-- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether `meta.json` or deletion mark file doesn't exist.
+- `metafile_content_ttl`: how long to cache content of `meta.json` and deletion mark files.
+- `metafile_max_size`: maximum size of cached `meta.json` and deletion mark file. Larger files are not cached.
 
 A full example would be: 
 
@@ -107,7 +107,7 @@ metafile_max_size: 1MiB
 
 ## Query frontend specific
 
-`expiration` specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
+`expiration` specifies how long memcached itself keeps items. After that time, memcached evicts those items. `0s` means the default duration of `24h`.
 
 Full example:
 
