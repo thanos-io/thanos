@@ -260,6 +260,9 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
+      --web.disable-cors        Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --timeout=5m              Timeout to download metadata from remote storage

@@ -230,7 +230,7 @@ func runCompact(
 		"/loaded",
 		component,
 	)
-	api := blocksAPI.NewBlocksAPI(logger, conf.label, flagsMap)
+	api := blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt)
 	var sy *compact.Syncer
 	{
