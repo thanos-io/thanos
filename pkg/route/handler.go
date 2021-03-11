@@ -316,7 +316,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 	// to every other node in the hashring, rather than
 	// one request per time series.
 	for i := range wreq.Timeseries {
-		endpoint, err := h.hashring.Get(tenant, wreq.Timeseries[i].Labels)
+		endpoint, err := h.hashring.Get(tenant, &wreq.Timeseries[i])
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -521,7 +521,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 
 	for i = 0; i < h.options.ReplicationFactor; i++ {
-		endpoint, err := h.hashring.GetN(tenant, wreq.Timeseries[0].Labels, i)
+		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err

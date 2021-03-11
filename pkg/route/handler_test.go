@@ -934,7 +934,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 // for a given time series, tenant, and replication factor.
 func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, timeSeries *prompb.TimeSeries) bool {
 	for i := uint64(0); i < rf; i++ {
-		e, err := h.GetN(tenant, timeSeries.Labels, i)
+		e, err := h.GetN(tenant, timeSeries, i)
 		if err != nil {
 			t.Fatalf("got unexpected error querying hashring: %v", err)
 		}
