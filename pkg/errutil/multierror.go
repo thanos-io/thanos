@@ -32,11 +32,6 @@ func (es MultiError) Err() error {
 	return NonNilMultiError(es)
 }
 
-// Error implements the error interface.
-func (es MultiError) Error() string {
-	return es.Err().Error()
-}
-
 type NonNilMultiError MultiError
 
 // Returns a concatenated string of the contained errors.

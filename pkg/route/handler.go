@@ -486,7 +486,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
-				return errs
+				return errs.Err()
 			}
 			if err == nil {
 				success++

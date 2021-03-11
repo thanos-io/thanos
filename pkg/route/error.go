@@ -38,7 +38,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 	}
 
 	unwrappedErr := errors.Cause(err)
-	errs, ok := unwrappedErr.(errutil.MultiError)
+	errs, ok := unwrappedErr.(errutil.NonNilMultiError)
 	if !ok {
 		errs = []error{unwrappedErr}
 	}
