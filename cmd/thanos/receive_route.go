@@ -46,6 +46,8 @@ func registerReceiveRoute(app *extkingpin.App) {
 	refreshInterval := extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
+	localEndpoint := cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").String()
+
 	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).String()
 
 	defaultTenantID := cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).String()
@@ -80,6 +82,7 @@ func registerReceiveRoute(app *extkingpin.App) {
 			*rwClientServerCA,
 			*rwClientServerName,
 			cw,
+			*localEndpoint,
 			*tenantHeader,
 			*defaultTenantID,
 			*replicationFactor,
@@ -105,6 +108,7 @@ func runReceiveRoute(
 	rwClientServerCA string,
 	rwClientServerName string,
 	cw *route.ConfigWatcher,
+	endpoint string,
 	tenantHeader string,
 	defaultTenantID string,
 	replicationFactor uint64,
@@ -142,6 +146,7 @@ func runReceiveRoute(
 
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
+
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
 		// Note: the hashring configuration watcher
@@ -188,21 +193,21 @@ func runReceiveRoute(
 	}
 
 	level.Debug(logger).Log("msg", "setting up http server")
-	{
-		srv := httpserver.New(logger, reg, comp, httpProbe,
-			httpserver.WithListen(httpBindAddr),
-			httpserver.WithGracePeriod(httpGracePeriod),
-		)
-		g.Add(func() error {
-			statusProber.Healthy()
-			return srv.ListenAndServe()
-		}, func(err error) {
-			statusProber.NotReady(err)
-			defer statusProber.NotHealthy(err)
+	srv := httpserver.New(logger, reg, comp, httpProbe,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
+	)
+	g.Add(func() error {
+		statusProber.Healthy()
 
-			srv.Shutdown(err)
-		})
-	}
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+
+		srv.Shutdown(err)
+	})
+
 	level.Debug(logger).Log("msg", "setting up receive http handler")
 	{
 		g.Add(
