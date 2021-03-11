@@ -135,7 +135,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
@@ -181,7 +181,7 @@ Flags:
       --query-range.response-cache-config=<content>
                                  Alternative to
                                  'query-range.response-cache-config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains response cache configuration.
       --labels.split-interval=24h
                                  Split labels requests by an interval and
@@ -211,9 +211,9 @@ Flags:
                                  configuration.
       --labels.response-cache-config=<content>
                                  Alternative to
-                                 'labels.response-cache-config-file' flag (lower
-                                 priority). Content of YAML file that contains
-                                 response cache configuration.
+                                 'labels.response-cache-config-file' flag
+                                 (mutually exclusive). Content of YAML file that
+                                 contains response cache configuration.
       --cache-compression-type=""
                                  Use compression in results cache. Supported
                                  values are: 'snappy' and ” (disable
@@ -250,7 +250,7 @@ Flags:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (lower priority). Content of YAML file
+                                 flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
