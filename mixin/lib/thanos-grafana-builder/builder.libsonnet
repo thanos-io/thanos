@@ -38,30 +38,34 @@ local template = grafana.template;
     },
   },
 
-  latencyPanel(metricName, selector, multiplier='1'):: {
+  latencyPanel(metricName, selector, aggregator, multiplier='1'):: {
+    local aggregatedLabels = std.split(aggregator, ','),
+    local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
+    local params = { metricName: metricName, selector: selector, aggregator: aggregator, multiplier: multiplier },
+
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(0.99, sum(rate(%s_bucket{%s}[$interval])) by (job, le)) * %s' % [metricName, selector, multiplier],
+        expr: 'histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P99 {{job}}',
+        legendFormat: 'P99 ' + aggregatorTemplate,
         refId: 'A',
         step: 10,
       },
       {
-        expr: 'sum(rate(%s_sum{%s}[$interval])) by (job) * %s / sum(rate(%s_count{%s}[$interval])) by (job)' % [metricName, selector, multiplier, metricName, selector],
+        expr: 'sum by (%(aggregator)s) (rate(%(metricName)s_sum{%(selector)s}[$interval])) * %(multiplier)s / sum by (%(aggregator)s) (rate(%(metricName)s_count{%(selector)s}[$interval]))' % params,
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'mean {{job}}',
+        legendFormat: 'mean ' + aggregatorTemplate,
         refId: 'B',
         step: 10,
       },
       {
-        expr: 'histogram_quantile(0.50, sum(rate(%s_bucket{%s}[$interval])) by (job, le)) * %s' % [metricName, selector, multiplier],
+        expr: 'histogram_quantile(0.50, sum by (%(aggregator)s, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P50 {{job}}',
+        legendFormat: 'P50 ' + aggregatorTemplate,
         refId: 'C',
         step: 10,
       },
@@ -69,8 +73,8 @@ local template = grafana.template;
     yaxes: $.yaxes('s'),
   },
 
-  qpsErrTotalPanel(selectorErr, selectorTotal):: {
-    local expr(selector) = 'sum(rate(' + selector + '[$interval]))',  // {{job}}
+  qpsErrTotalPanel(selectorErr, selectorTotal, aggregator):: {
+    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [aggregator, selector],
 
     aliasColors: {
       'error': '#E24D42',
@@ -88,8 +92,8 @@ local template = grafana.template;
     yaxes: $.yaxes({ format: 'percentunit' }),
   } + $.stack,
 
-  qpsSuccErrRatePanel(selectorErr, selectorTotal):: {
-    local expr(selector) = 'sum(rate(' + selector + '[$interval]))',  // {{job}}
+  qpsSuccErrRatePanel(selectorErr, selectorTotal, aggregator):: {
+    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [aggregator, selector],
 
     aliasColors: {
       success: '#7EB26D',

@@ -133,7 +133,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{job=\"$job\", handler=\"query\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -210,7 +210,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99 {{job}}",
@@ -218,7 +218,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(http_request_duration_seconds_sum{job=\"$job\", handler=\"query\"}[$interval])) by (job) * 1 / sum(rate(http_request_duration_seconds_count{job=\"$job\", handler=\"query\"}[$interval])) by (job)",
+                     "expr": "sum by (job) (rate(http_request_duration_seconds_sum{job=\"$job\", handler=\"query\"}[$interval])) * 1 / sum by (job) (rate(http_request_duration_seconds_count{job=\"$job\", handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "mean {{job}}",
@@ -226,7 +226,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50 {{job}}",
@@ -402,7 +402,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{job=\"$job\", handler=\"query_range\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query_range\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -479,7 +479,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query_range\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query_range\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99 {{job}}",
@@ -487,7 +487,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(http_request_duration_seconds_sum{job=\"$job\", handler=\"query_range\"}[$interval])) by (job) * 1 / sum(rate(http_request_duration_seconds_count{job=\"$job\", handler=\"query_range\"}[$interval])) by (job)",
+                     "expr": "sum by (job) (rate(http_request_duration_seconds_sum{job=\"$job\", handler=\"query_range\"}[$interval])) * 1 / sum by (job) (rate(http_request_duration_seconds_count{job=\"$job\", handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "mean {{job}}",
@@ -495,7 +495,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query_range\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query_range\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50 {{job}}",
@@ -603,7 +603,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval])) by (job, grpc_method, grpc_code)",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -682,7 +682,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum(rate(grpc_client_started_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_client_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_client_started_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -883,7 +883,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval])) by (job, grpc_method, grpc_code)",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -962,7 +962,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_client_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"server_stream\"}[$interval])) / sum(rate(grpc_client_started_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_client_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"server_stream\"}[$interval])) / sum by (job) (rate(grpc_client_started_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1223,7 +1223,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_query_store_apis_dns_failures_total{job=\"$job\"}[$interval])) / sum(rate(thanos_query_store_apis_dns_lookups_total{job=\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=\"$job\"}[$interval])) / sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",

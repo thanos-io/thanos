@@ -1,9 +1,12 @@
 {
-  sloLatency(title, description, selector, quantile, warning, critical)::
+  sloLatency(title, description, selector, aggregator, quantile, warning, critical)::
+    local aggregatedLabels = std.split(aggregator, ',');
+    local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]);
+
     $.panel(title, description) +
     $.queryPanel(
-      'histogram_quantile(%.2f, sum(rate(%s[$interval])) by (job, le))' % [quantile, selector],
-      '{{job}} P' + quantile * 100
+      'histogram_quantile(%.2f, sum by (%s, le) (rate(%s[$interval])))' % [quantile, aggregator, selector],
+      aggregatorTemplate + ' P' + quantile * 100
     ) +
     {
       yaxes: $.yaxes('s'),

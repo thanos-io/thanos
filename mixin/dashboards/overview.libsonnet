@@ -14,7 +14,6 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   local grafanaDashboards = super.grafanaDashboards,
   grafanaDashboards+:: {
     'overview.json'+: {
-
       __enumeratedRows__+:: std.foldl(
         function(acc, row)
           local n = std.length(row.panels);

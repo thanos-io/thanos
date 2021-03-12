@@ -2,7 +2,7 @@
   local thanos = self,
   sidecar+:: {
     selector: error 'must provide selector for Thanos Sidecar alerts',
-    aggregators: std.join(', ', std.objectFields(thanos.hierarcies) + ['job', 'instance']),
+    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job', 'instance']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.sidecar == null then [] else [
@@ -31,7 +31,7 @@
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
-              sum by (%(aggregators)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
+              sum by (%(aggregator)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
@@ -45,7 +45,7 @@
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (%(aggregators)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
+              time() - max by (%(aggregator)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
             ||| % thanos.sidecar,
             labels: {
               severity: 'critical',

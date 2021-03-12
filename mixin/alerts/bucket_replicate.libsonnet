@@ -4,7 +4,7 @@
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     errorThreshold: 10,
     p99LatencyThreshold: 20,
-    aggregators: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.bucket_replicate == null then [] else [
@@ -20,9 +20,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregators)s) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
-              / on (%(aggregators)s) group_left
-                sum by (%(aggregators)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
+                sum by (%(aggregator)s) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
+              / on (%(aggregator)s) group_left
+                sum by (%(aggregator)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= %(errorThreshold)s
             ||| % thanos.bucket_replicate,
             'for': '5m',
@@ -38,9 +38,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregators)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(aggregator)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
               and
-                sum by (%(aggregators)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
+                sum by (%(aggregator)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
             ||| % thanos.bucket_replicate,
             'for': '5m',

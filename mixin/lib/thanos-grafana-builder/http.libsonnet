@@ -1,5 +1,8 @@
 {
-  httpQpsPanel(metricName, selector):: {
+  httpQpsPanel(metricName, selector, aggregator):: {
+    local aggregatedLabels = std.split(aggregator, ','),
+    local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
+
     aliasColors: {
       '1xx': '#EAB839',
       '2xx': '#7EB26D',
@@ -11,19 +14,20 @@
     },
     targets: [
       {
-        expr: 'sum by (job, handler, status_code) (label_replace(rate(%s{%s}[$interval]),"status_code", "${1}xx", "code", "([0-9]).."))' % [metricName, selector],
+        expr: 'sum by (%s, handler, status_code) (label_replace(rate(%s{%s}[$interval]),"status_code", "${1}xx", "code", "([0-9]).."))' % [aggregator, metricName, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: '{{job}} {{handler}} {{status_code}}',
+        legendFormat: aggregatorTemplate + ' {{handler}} {{status_code}}',
         refId: 'A',
         step: 10,
       },
     ],
   } + $.stack,
 
-  httpErrPanel(metricName, selector)::
+  httpErrPanel(metricName, selector, aggregator)::
     $.qpsErrTotalPanel(
       '%s{%s,code=~"5.."}' % [metricName, selector],
       '%s{%s}' % [metricName, selector],
+      aggregator
     ),
 }
