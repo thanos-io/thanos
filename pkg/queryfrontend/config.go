@@ -9,15 +9,16 @@ import (
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/frontend/transport"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/thanos-io/thanos/pkg/cacheutil"
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"gopkg.in/yaml.v2"
-
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/cacheutil"
+	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/model"
 )
 
 type ResponseCacheProvider string
@@ -36,6 +37,7 @@ var (
 			MaxAsyncBufferSize:        10000,
 			MaxGetMultiConcurrency:    100,
 			MaxGetMultiBatchSize:      0,
+			MaxItemSize:               model.Bytes(1024 * 1024),
 			DNSProviderUpdateInterval: 10 * time.Second,
 		},
 		Expiration: 24 * time.Hour,
@@ -98,11 +100,6 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
 		}
-		// TODO(krasi) Add support for it in the cortex module.
-		if config.Memcached.MaxItemSize > 0 {
-			level.Warn(logger).Log("message", "MaxItemSize is not yet supported by the memcached client")
-		}
-
 		if config.Expiration == 0 {
 			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
 			config.Expiration = 24 * time.Hour
@@ -129,6 +126,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 				MaxIdleConns:   config.Memcached.MaxIdleConnections,
 				Addresses:      strings.Join(config.Memcached.Addresses, ","),
 				UpdateInterval: config.Memcached.DNSProviderUpdateInterval,
+				MaxItemSize:    int(config.Memcached.MaxItemSize),
 			},
 			Background: cortexcache.BackgroundConfig{
 				WriteBackBuffer:     config.Memcached.MaxAsyncBufferSize,

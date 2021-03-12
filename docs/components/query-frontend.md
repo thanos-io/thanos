@@ -85,7 +85,9 @@ config:
   expiration: 0s
 ```
 
-`expiration` specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
+`expiration` specifies memcached cache valid time.  If set to 0s, so using a default of 24 hours expiration time.
+
+If a `set` operation is skipped because of the item size is larger than `max_item_size`, this event is tracked by a counter metric `cortex_memcache_client_set_skip_total`.
 
 Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
 
@@ -97,6 +99,7 @@ config:
   addresses: [your-memcached-addresses]
   timeout: 500ms
   max_idle_connections: 100
+  max_item_size: 1MiB
   max_async_concurrency: 10
   max_async_buffer_size: 10000
   max_get_multi_concurrency: 100
