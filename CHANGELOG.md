@@ -18,6 +18,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Fixed
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
+- [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
 
 ### Changed
 
