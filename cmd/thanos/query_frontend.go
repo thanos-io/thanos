@@ -35,7 +35,8 @@ import (
 )
 
 type queryFrontendConfig struct {
-	http httpConfig
+	http           httpConfig
+	webDisableCORS bool
 	queryfrontend.Config
 	orgIdHeaders []string
 }
@@ -59,6 +60,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	}
 
 	cfg.http.registerFlag(cmd)
+
+	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
+		Default("false").BoolVar(&cfg.webDisableCORS)
 
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
@@ -222,7 +226,9 @@ func runQueryFrontend(
 			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				orgId := extractOrgId(cfg, r)
 				name := "query-frontend"
-				api.SetCORS(w)
+				if !cfg.webDisableCORS {
+					api.SetCORS(w)
+				}
 				ins.NewHandler(
 					name,
 					logMiddleware.HTTPMiddleware(

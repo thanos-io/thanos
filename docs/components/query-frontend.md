@@ -142,6 +142,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --web.disable-cors         Whether to disable CORS headers to be set by
+                                 Thanos. By default Thanos sets CORS headers to
+                                 be allowed by all.
       --query-range.align-range-with-step
                                  Mutate incoming queries to align their start
                                  and end with their step for better
