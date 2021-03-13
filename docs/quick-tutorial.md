@@ -46,13 +46,15 @@ See those components on this diagram:
 
 <img src="../img/arch.jpg" class="img-fluid" alt="architecture overview" />
 
-## [Sidecar](components/sidecar.md)
+### Sidecar
 
 Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server.
 
 The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
 
 The Sidecar makes use of the `reload` Prometheus endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
+
+[Component sidecar documentation](../components/sidecar.md)
 
 ### External storage
 
@@ -92,7 +94,7 @@ thanos sidecar \
 
 * _[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)_
 
-## Uploading old metrics.
+### Uploading old metrics.
 
 When sidecar is run with the `--shipper.upload-compacted` flag it will sync all older existing blocks from the Prometheus local storage on startup.
 NOTE: This assumes you never run sidecar with block uploading against this bucket. Otherwise manual steps are needed to remove overlapping blocks from the bucket.
@@ -112,7 +114,7 @@ global:
     replica: A
 ```
 
-## [Querier/Query](components/query.md)
+## Querier/Query
 
 Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](../components/query.md) to evaluate PromQL queries against all instances at once.
 
@@ -131,6 +133,8 @@ thanos query \
 ```
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus. If the cluster formed correctly you can now query across all Prometheus instances within the cluster. You can also check the Stores page to check up on your stores.
+
+[Query documentation](../components/query.md)
 
 ### Deduplicating Data from Prometheus HA pairs
 
@@ -185,7 +189,7 @@ Read more details [here](service-discovery.md).
 
 * _[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)_
 
-## [Store Gateway](components/store.md)
+## Store Gateway
 
 As the sidecar backs up data into the object storage of your choice, you can decrease Prometheus retention and store less locally. However we need a way to query all that historical data again.
 The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
@@ -203,7 +207,9 @@ The store gateway occupies small amounts of disk space for caching basic informa
 
 * _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-store-statefulSet.yaml)_
 
-## [Compactor](components/compact.md)
+[Store Gateway documentation](../components/store.md)
+
+## Compactor
 
 A local Prometheus installation periodically compacts older data to improve query efficiency. Since the sidecar backs up data as soon as possible, we need a way to apply the same process to data in the object storage.
 
@@ -222,9 +228,11 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 
 * _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compact-statefulSet.yaml)_
 
-## [Ruler/Rule](components/rule.md)
+[Compactor documentation](../components/compact.md)
+
+## Ruler/Rule
 
 In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](../components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
-
+[Rule documentation](../components/rule.md)
