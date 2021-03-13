@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -149,6 +150,9 @@ type memcachedClient struct {
 	client   memcachedClientBackend
 	selector *MemcachedJumpHashSelector
 
+	// Name provides an identifier for the instantiated Client
+	name string
+
 	// DNS provider used to keep the memcached servers list updated.
 	dnsProvider *dns.Provider
 
@@ -205,7 +209,7 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 	if reg != nil {
 		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
 	}
-	return newMemcachedClient(logger, client, selector, config, reg)
+	return newMemcachedClient(logger, client, selector, config, reg, name)
 }
 
 func newMemcachedClient(
@@ -214,6 +218,7 @@ func newMemcachedClient(
 	selector *MemcachedJumpHashSelector,
 	config MemcachedClientConfig,
 	reg prometheus.Registerer,
+	name string,
 ) (*memcachedClient, error) {
 	dnsProvider := dns.NewProvider(
 		logger,
@@ -222,6 +227,7 @@ func newMemcachedClient(
 	)
 
 	c := &memcachedClient{
+		name:        name,
 		logger:      logger,
 		config:      config,
 		client:      client,
@@ -366,7 +372,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 
 	if err == errMemcachedAsyncBufferFull {
 		c.skipped.WithLabelValues(opSet, reasonAsyncBufferFull).Inc()
-		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.asyncQueue))
+		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.asyncQueue), "name", c.name)
 		return nil
 	}
 	return err
@@ -379,7 +385,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err, "name", c.name)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
@@ -465,7 +471,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
 		if err := c.getMultiGate.Start(ctx); err != nil {
-			return nil, errors.Wrapf(err, "failed to wait for turn")
+			return nil, errors.Wrapf(err, "failed to wait for turn", "name", c.name)
 		}
 		defer c.getMultiGate.Done()
 	}
@@ -474,7 +480,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	c.operations.WithLabelValues(opGetMulti).Inc()
 	items, err = c.client.GetMulti(keys)
 	if err != nil {
-		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
+		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err, "name", c.name)
 		c.trackError(opGetMulti, err)
 	} else {
 		var total int
@@ -542,7 +548,7 @@ func (c *memcachedClient) resolveAddrsLoop() {
 		case <-ticker.C:
 			err := c.resolveAddrs()
 			if err != nil {
-				level.Warn(c.logger).Log("msg", "failed update memcached servers list", "err", err)
+				level.Warn(c.logger).Log("msg", "failed update memcached servers list", "err", err, "name", c.name)
 			}
 		case <-c.stop:
 			return
@@ -557,12 +563,12 @@ func (c *memcachedClient) resolveAddrs() error {
 
 	// If some of the dns resolution fails, log the error.
 	if err := c.dnsProvider.Resolve(ctx, c.config.Addresses); err != nil {
-		level.Error(c.logger).Log("msg", "failed to resolve addresses for memcached", "addresses", strings.Join(c.config.Addresses, ","), "err", err)
+		level.Error(c.logger).Log("msg", "failed to resolve addresses for memcached", "addresses", strings.Join(c.config.Addresses, ","), "err", err, "name", c.name)
 	}
 	// Fail in case no server address is resolved.
 	servers := c.dnsProvider.Addresses()
 	if len(servers) == 0 {
-		return errors.New("no server address resolved")
+		return fmt.Errorf("no server address resolved for %s", c.name)
 	}
 
 	return c.selector.SetServers(servers...)
