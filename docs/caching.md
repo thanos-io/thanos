@@ -171,7 +171,7 @@ config:
   expiration: 0s  
  ``` 
 
-# Configurations specific for in-memory
+# Configurations for in-memory
 
 ## [in-memory] Base configuration 
 
