@@ -21,6 +21,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
 
 ### Changed
+- [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info
 
 ### Removed
 
