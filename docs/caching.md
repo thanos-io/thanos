@@ -12,9 +12,9 @@ Thanos can implement caching layers on multiple components. In general this shou
 However it is possible to give guidance on what each component tries to achieve, what it is used for and how you could configure this.
 
 <sub>
-- service level agreement
-- service level objective
-- service level indicator
+<sup>1</sup> service level agreement
+<sup>2</sup> service level objective
+<sup>3</sup> service level indicator
 </sub>
 
 # Types of cache
@@ -22,7 +22,7 @@ However it is possible to give guidance on what each component tries to achieve,
 | Caching type                                                                                           | Component           | Backends             | Configuration | Extra             |
 | -------------------------------------------------------------------------------------------------- | ------------------ | --------------------- | ----------------- | ----------------------- |
 | Index cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration | Enabled by default `in_memory`
-| Bucket cache | [Store gateway](components/store.md) | `memcached` only | base configuration + specific bucket cache extra's | Has extra metadata and chunk configuration options
+| Bucket cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration + specific bucket cache extra's | Has extra metadata and chunk configuration options
 | Query frontend cache | [Query-frontend](components/query-frontend.md)  | `in_memory` and `memcached` | base configuration + extra field `expiration` | `max_item_size` is currently not supported
 
 
@@ -36,11 +36,11 @@ Thanos Store Gateway supports a “caching bucket” with chunks and metadata ca
 
 ## Query frontend cache
 
-Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
+Query Frontend supports caching query results and label requests. Query results are reuses on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
 
-# Configuration for memcached
+# Configurations for memcached
 
-## Base configuration
+## [memcached] Base configuration
 
 Each component can be configured with the following base configuration.
 
@@ -58,11 +58,51 @@ config:
   dns_provider_update_interval: 10s
 ```
 
-## Index cache specific for memcached
+The **required** settings are:
 
-The index cache has no exceptions on the base configuration
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
 
-## Caching bucket specific for memcached
+While the remaining settings are **optional**:
+
+- `timeout`: the socket read/write timeout.
+- `max_idle_connections`: maximum number of idle connections that will be maintained per address.
+- `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
+- `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
+- `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
+- `dns_provider_update_interval`: the DNS discovery update interval.
+
+
+
+## [memcached] Index cache
+
+The index cache has no exceptions on the [base configuration](caching.md/#memcached-base-configuration).
+
+The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly
+
+Full example:
+
+```yaml
+type: MEMCACHED # Case-insensitive
+config:
+  addresses: []
+  timeout: 500ms
+  max_idle_connections: 100
+  max_async_concurrency: 20
+  max_async_buffer_size: 10000
+  max_item_size: 1MiB
+  max_get_multi_concurrency: 100
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 10s
+```
+
+
+## [memcached] Caching bucket
+
+This cache type is configured using `--store.caching-bucket.config=<yaml content>` to reference to the configuration file or `--store.caching-bucket.config-file=<file.yaml>` to put yaml config directly.
+
+Uses the [base configuration](caching.md/#memcached-base-configuration).
 
 Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
 
@@ -78,6 +118,8 @@ Following options are used for metadata caching (`meta.json` files, deletion mar
 - `metafile_doesnt_exist_ttl`: how long to cache information about whether `meta.json` or deletion mark file doesn't exist.
 - `metafile_content_ttl`: how long to cache content of `meta.json` and deletion mark files.
 - `metafile_max_size`: maximum size of cached `meta.json` and deletion mark file. Larger files are not cached.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 A full example would be: 
 
@@ -105,9 +147,12 @@ metafile_content_ttl: 24h
 metafile_max_size: 1MiB  
 ```
 
-## Query frontend specific
+## [memcached] Query frontend
+
+Uses the [base configuration](caching.md/#memcached-base-configuration).
 
 `expiration` specifies how long memcached itself keeps items. After that time, memcached evicts those items. `0s` means the default duration of `24h`.
+
 
 Full example:
 
@@ -126,8 +171,9 @@ config:
   expiration: 0s  
  ``` 
 
+# Configurations specific for in-memory
 
-# Base configuration for in-memory
+## [in-memory] Base configuration 
 
 ```yaml
 type: IN-MEMORY
@@ -136,17 +182,82 @@ config:
   max_item_size: 0
 ```
 
-## Index cache specific for in-memory
+All the settings are **optional**:
 
-The index cache has no exceptions on the base configuration
+- `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
+- `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
 
-## Bucket cache specific for in-memory
+**_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
 
-`in-memory` bucket cache is not supported. This is only possible with `memcached` as backend.
+If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
+For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
 
-## Query frontend specific for in-memory
 
-`validity` specifies cache valid time , If set to 0s, so using a default of 24 hours expiration time
+## [in-memory] Index cache
+
+The `in-memory` index cache is enabled by default and its max size can be configured through the flag `--index-cache-size`.
+
+Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly.
+
+The index cache has no exceptions on the [base configuration](caching.md/#in-memory-base-configuration).
+
+Full example:
+
+```yaml
+type: IN-MEMORY
+config:
+  max_size: 0
+  max_item_size: 0
+```
+
+## [in-memory] Bucket cache
+
+This cache type is configured using `--store.caching-bucket.config=<yaml content>` to reference to the configuration file or `--store.caching-bucket.config-file=<file.yaml>` to put yaml config directly.
+
+Uses the [base configuration](caching.md/#in-memory-base-configuration).
+
+Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
+
+- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
+- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
+- `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
+
+Following options are used for metadata caching (`meta.json` files, deletion mark files, iteration result):
+
+- `blocks_iter_ttl`: how long to cache result of iterating blocks.
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether `meta.json` or deletion mark file doesn't exist.
+- `metafile_content_ttl`: how long to cache content of `meta.json` and deletion mark files.
+- `metafile_max_size`: maximum size of cached `meta.json` and deletion mark file. Larger files are not cached.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+
+A full example would be: 
+
+
+```yaml
+type: IN-MEMORY
+config:
+  max_size: 0
+  max_item_size: 0
+chunk_subrange_size: 16000
+max_chunks_get_range_requests: 3
+chunk_object_attrs_ttl: 24h
+chunk_subrange_ttl: 24h
+blocks_iter_ttl: 5m
+metafile_exists_ttl: 2h
+metafile_doesnt_exist_ttl: 15m
+metafile_content_ttl: 24h
+metafile_max_size: 1MiB
+```
+
+## [in-memory] Query frontend
+
+Uses the [base configuration](caching.md/#in-memory-base-configuration).
+
+`validity` specifies cache valid time , If set to 0s, so using a default of 24 hours expiration time.
+
 
 Full example:
 
@@ -163,7 +274,7 @@ config:
 
 When implementing memcached as caching backend, one should be familiar with such setup. There are some key points to understand when configuring for memcached
 
-## How to set addresses
+## How to implement memcached node addresses
 
 The `addresses` is an array configuration option. Such as:
 
@@ -181,6 +292,8 @@ or
 ```
 
 The Thanos memcached client does **not** support autodiscovery of memcached instances. Therefore it is vital to either define each memcached host by itself or via `dnssrv`. 
+
+#
 
 **Do not use a Loadbalancer as address**
 
@@ -220,11 +333,10 @@ spec:
 
 Which would result in the following address:
 
-```
-dnssrv+_memcached._tcp.memcached-service.memcached.cluster.local
-```
+`dnssrv+_memcached._tcp.memcached-service.memcached.cluster.local`
 
-# Max item size
+
+## Max item size
 
 The Thanos configuration option: ` max_item_size` such as:
 
@@ -236,3 +348,16 @@ should be lower or equal to the max item size that memcached allows.
 Memcached can be configured to allow larger items sizes than the default `1MiB` by setting the `-I` flag, such as `-I 16M` to allow up to `16MiB`
 
 It is not required to increase this, as Thanos simply ignores larger objects. This however decreases the cache hitrate. One could use the metric `thanos_memcached_operation_skipped_total` to observe this behaviour.
+
+## One or multiple memcached instances?
+
+There is no technical limit on using just one instance as backend for all the Thanos caching components. However it might be useful to spread the load over seperated instances to lower the impact in case of incidents. 
+
+It however is not possible to use one memcached instance for multiple store backends as this provides conflicts on index keys.
+
+
+# In-memory versus memcached
+
+- In-memory causes each replica to have it's own cache. If multiple replica's are required it could be more logical by cost/benefit to implement memcached. 
+- Memcached adds extra complexity which should be used in consideration
+
