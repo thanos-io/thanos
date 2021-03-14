@@ -354,6 +354,13 @@ func WithFilterConfig(filter *FilterConfig) BucketStoreOption {
 	}
 }
 
+// WithDebugLogging enables debug logging.
+func WithDebugLogging() BucketStoreOption {
+	return func(s *BucketStore) {
+		s.debugLogging = true
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -363,7 +370,6 @@ func NewBucketStore(
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	partitioner Partitioner,
-	debugLogging bool,
 	blockSyncConcurrency int,
 	enableCompatibilityLabel bool,
 	postingOffsetsInMemSampling int,
@@ -381,7 +387,6 @@ func NewBucketStore(
 		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
-		debugLogging:                debugLogging,
 		blockSyncConcurrency:        blockSyncConcurrency,
 		queryGate:                   noopGate{},
 		chunksLimiterFactory:        chunksLimiterFactory,

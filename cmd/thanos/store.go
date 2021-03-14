@@ -327,6 +327,19 @@ func runStore(
 		return errors.Wrap(err, "create chunk pool")
 	}
 
+	options := []store.BucketStoreOption{
+		store.WithLogger(logger),
+		store.WithRegistry(reg),
+		store.WithIndexCache(indexCache),
+		store.WithQueryGate(queriesGate),
+		store.WithChunkPool(chunkPool),
+		store.WithFilterConfig(filterConf),
+	}
+
+	if verbose {
+		options = append(options, store.WithDebugLogging())
+	}
+
 	bs, err := store.NewBucketStore(
 		bkt,
 		metaFetcher,
@@ -334,19 +347,13 @@ func runStore(
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(maxSeriesCount),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
-		verbose,
 		blockSyncConcurrency,
 		advertiseCompatibilityLabel,
 		postingOffsetsInMemSampling,
 		false,
 		lazyIndexReaderEnabled,
 		lazyIndexReaderIdleTimeout,
-		store.WithLogger(logger),
-		store.WithRegistry(reg),
-		store.WithIndexCache(indexCache),
-		store.WithQueryGate(queriesGate),
-		store.WithChunkPool(chunkPool),
-		store.WithFilterConfig(filterConf),
+		options...,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")
