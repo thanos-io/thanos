@@ -570,7 +570,6 @@ func TestBucketStore_Info(t *testing.T) {
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
-		nil,
 		dir,
 		nil,
 		nil,
@@ -820,7 +819,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, err)
 
 			bucketStore, err := NewBucketStore(
-				nil,
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
@@ -1258,7 +1256,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
-		nil,
 		ibkt,
 		f,
 		tmpDir,
@@ -1638,7 +1635,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
@@ -1735,7 +1731,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
@@ -1884,7 +1879,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
@@ -2049,7 +2043,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,

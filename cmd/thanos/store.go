@@ -328,8 +328,6 @@ func runStore(
 	}
 
 	bs, err := store.NewBucketStore(
-		logger,
-		reg,
 		bkt,
 		metaFetcher,
 		dataDir,
@@ -347,6 +345,8 @@ func runStore(
 		false,
 		lazyIndexReaderEnabled,
 		lazyIndexReaderIdleTimeout,
+		store.WithLogger(logger),
+		store.WithRegistry(reg),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

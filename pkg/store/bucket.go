@@ -253,6 +253,7 @@ type FilterConfig struct {
 // When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
 	logger          log.Logger
+	reg             prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
 	metrics         *bucketStoreMetrics
 	bkt             objstore.InstrumentedBucketReader
 	fetcher         block.MetadataFetcher
@@ -318,11 +319,16 @@ func WithLogger(logger log.Logger) BucketStoreOption {
 	}
 }
 
+// WithRegistry sets a registry that BucketStore uses to register metrics with.
+func WithRegistry(reg prometheus.Registerer) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.reg = reg
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
-// TODO(bwplotka): Move to config at this point.
 func NewBucketStore(
-	reg prometheus.Registerer,
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
@@ -371,7 +377,6 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
-		metrics:                     newBucketStoreMetrics(reg),
 	}
 
 	for _, option := range options {
@@ -379,7 +384,8 @@ func NewBucketStore(
 	}
 
 	// Depend on the options
-	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", reg))
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
+	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
