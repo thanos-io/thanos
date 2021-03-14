@@ -571,7 +571,6 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		dir,
 		nil,
 		nil,
@@ -821,7 +820,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, err)
 
 			bucketStore, err := NewBucketStore(
-				logger,
 				nil,
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
@@ -840,6 +838,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				false,
 				0,
+				WithLogger(logger),
 			)
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -1259,7 +1258,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
-		logger,
 		nil,
 		ibkt,
 		f,
@@ -1278,6 +1276,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		false,
 		false,
 		0,
+		WithLogger(logger),
 	)
 	testutil.Ok(t, err)
 
@@ -1639,7 +1638,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
 		nil,
 		instrBkt,
 		fetcher,
@@ -1658,6 +1656,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		true,
 		false,
 		0,
+		WithLogger(logger),
 	)
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -1736,7 +1735,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
 		nil,
 		instrBkt,
 		fetcher,
@@ -1755,6 +1753,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		true,
 		false,
 		0,
+		WithLogger(logger),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1885,7 +1884,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		logger,
 		nil,
 		instrBkt,
 		fetcher,
@@ -1904,6 +1902,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		true,
 		false,
 		0,
+		WithLogger(logger),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -2050,7 +2049,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
 		nil,
 		instrBkt,
 		fetcher,
@@ -2069,6 +2067,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		true,
 		false,
 		0,
+		WithLogger(logger),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))

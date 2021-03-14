@@ -180,7 +180,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		s.logger,
 		nil,
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
@@ -199,6 +198,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		true,
 		time.Minute,
+		WithLogger(s.logger),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()

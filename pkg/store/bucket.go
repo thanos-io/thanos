@@ -308,11 +308,20 @@ type noopGate struct{}
 func (noopGate) Start(context.Context) error { return nil }
 func (noopGate) Done()                       {}
 
+// BucketStoreOption are functions that configure BucketStore.
+type BucketStoreOption func(s *BucketStore)
+
+// WithLogger sets the BucketStore logger to the one you pass.
+func WithLogger(logger log.Logger) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.logger = logger
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 // TODO(bwplotka): Move to config at this point.
 func NewBucketStore(
-	logger log.Logger,
 	reg prometheus.Registerer,
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
@@ -331,11 +340,8 @@ func NewBucketStore(
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
 	lazyIndexReaderIdleTimeout time.Duration,
+	options ...BucketStoreOption,
 ) (*BucketStore, error) {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-
 	if chunkPool == nil {
 		chunkPool = pool.NoopBytes{}
 	}
@@ -347,12 +353,11 @@ func NewBucketStore(
 	}
 
 	s := &BucketStore{
-		logger:                      logger,
+		logger:                      log.NewNopLogger(),
 		bkt:                         bkt,
 		fetcher:                     fetcher,
 		dir:                         dir,
 		indexCache:                  indexCache,
-		indexReaderPool:             indexheader.NewReaderPool(logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", reg)),
 		chunkPool:                   chunkPool,
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
@@ -368,6 +373,13 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		metrics:                     newBucketStoreMetrics(reg),
 	}
+
+	for _, option := range options {
+		option(s)
+	}
+
+	// Depend on the options
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", reg))
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
