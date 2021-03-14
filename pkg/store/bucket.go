@@ -340,9 +340,17 @@ func WithQueryGate(queryGate gate.Gate) BucketStoreOption {
 	}
 }
 
+// WithChunkPool sets a pool.Bytes to use for chunks.
 func WithChunkPool(chunkPool pool.Bytes) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.chunkPool = chunkPool
+	}
+}
+
+// WithFilterConfig sets a filter which Store uses for filtering metrics based on time.
+func WithFilterConfig(filter *FilterConfig) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.filterConfig = filter
 	}
 }
 
@@ -357,7 +365,6 @@ func NewBucketStore(
 	partitioner Partitioner,
 	debugLogging bool,
 	blockSyncConcurrency int,
-	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
@@ -376,7 +383,6 @@ func NewBucketStore(
 		blockSets:                   map[uint64]*bucketBlockSet{},
 		debugLogging:                debugLogging,
 		blockSyncConcurrency:        blockSyncConcurrency,
-		filterConfig:                filterConfig,
 		queryGate:                   noopGate{},
 		chunksLimiterFactory:        chunksLimiterFactory,
 		seriesLimiterFactory:        seriesLimiterFactory,

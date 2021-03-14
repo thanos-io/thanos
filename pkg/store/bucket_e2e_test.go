@@ -188,7 +188,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		false,
 		20,
-		filterConf,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
@@ -196,6 +195,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		time.Minute,
 		WithLogger(s.logger),
 		WithIndexCache(s.cache),
+		WithFilterConfig(filterConf),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()

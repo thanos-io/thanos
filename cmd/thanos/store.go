@@ -336,7 +336,6 @@ func runStore(
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		verbose,
 		blockSyncConcurrency,
-		filterConf,
 		advertiseCompatibilityLabel,
 		postingOffsetsInMemSampling,
 		false,
@@ -347,6 +346,7 @@ func runStore(
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
+		store.WithFilterConfig(filterConf),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")
