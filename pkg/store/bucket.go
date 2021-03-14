@@ -333,13 +333,19 @@ func WithIndexCache(cache storecache.IndexCache) BucketStoreOption {
 	}
 }
 
+// WithQueryGate sets a queryGate to use instead of a noopGate.
+func WithQueryGate(queryGate gate.Gate) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.queryGate = queryGate
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
-	queryGate gate.Gate,
 	chunkPool pool.Bytes,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
@@ -357,9 +363,6 @@ func NewBucketStore(
 	if chunkPool == nil {
 		chunkPool = pool.NoopBytes{}
 	}
-	if queryGate == nil {
-		queryGate = noopGate{}
-	}
 
 	s := &BucketStore{
 		logger:                      log.NewNopLogger(),
@@ -373,7 +376,7 @@ func NewBucketStore(
 		debugLogging:                debugLogging,
 		blockSyncConcurrency:        blockSyncConcurrency,
 		filterConfig:                filterConfig,
-		queryGate:                   queryGate,
+		queryGate:                   noopGate{},
 		chunksLimiterFactory:        chunksLimiterFactory,
 		seriesLimiterFactory:        seriesLimiterFactory,
 		partitioner:                 partitioner,
