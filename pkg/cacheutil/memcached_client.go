@@ -471,7 +471,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	// concurrency should be enforced.
 	if c.config.MaxGetMultiConcurrency > 0 {
 		if err := c.getMultiGate.Start(ctx); err != nil {
-			return nil, errors.Wrapf(err, "failed to wait for turn", "name", c.name)
+			return nil, errors.Wrapf(err, "failed to wait for turn. Instance: %s", c.name)
 		}
 		defer c.getMultiGate.Done()
 	}
