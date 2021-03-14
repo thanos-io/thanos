@@ -326,13 +326,19 @@ func WithRegistry(reg prometheus.Registerer) BucketStoreOption {
 	}
 }
 
+// WithIndexCache sets a indexCache to use instead of a noopCache.
+func WithIndexCache(cache storecache.IndexCache) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.indexCache = cache
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
-	indexCache storecache.IndexCache,
 	queryGate gate.Gate,
 	chunkPool pool.Bytes,
 	chunksLimiterFactory ChunksLimiterFactory,
@@ -351,9 +357,6 @@ func NewBucketStore(
 	if chunkPool == nil {
 		chunkPool = pool.NoopBytes{}
 	}
-	if indexCache == nil {
-		indexCache = noopCache{}
-	}
 	if queryGate == nil {
 		queryGate = noopGate{}
 	}
@@ -363,7 +366,7 @@ func NewBucketStore(
 		bkt:                         bkt,
 		fetcher:                     fetcher,
 		dir:                         dir,
-		indexCache:                  indexCache,
+		indexCache:                  noopCache{},
 		chunkPool:                   chunkPool,
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},

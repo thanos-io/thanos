@@ -331,7 +331,6 @@ func runStore(
 		bkt,
 		metaFetcher,
 		dataDir,
-		indexCache,
 		queriesGate,
 		chunkPool,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
@@ -347,6 +346,7 @@ func runStore(
 		lazyIndexReaderIdleTimeout,
 		store.WithLogger(logger),
 		store.WithRegistry(reg),
+		store.WithIndexCache(indexCache),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

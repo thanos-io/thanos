@@ -183,7 +183,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		dir,
-		s.cache,
+
 		nil,
 		nil,
 		chunksLimiterFactory,
@@ -198,6 +198,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		true,
 		time.Minute,
 		WithLogger(s.logger),
+		WithIndexCache(s.cache),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()

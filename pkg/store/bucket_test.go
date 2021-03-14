@@ -572,7 +572,6 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		dir,
 		nil,
-		nil,
 		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
@@ -822,7 +821,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
-				nil,
 				nil,
 				nil,
 				NewChunksLimiterFactory(0),
@@ -1260,7 +1258,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		f,
 		tmpDir,
 		nil,
-		nil,
 		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
@@ -1638,7 +1635,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
 		nil,
 		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
@@ -1653,6 +1649,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		false,
 		0,
 		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -1734,7 +1731,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
 		nil,
 		nil,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
@@ -1749,6 +1745,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		false,
 		0,
 		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1882,7 +1879,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
 		nil,
 		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
@@ -1897,6 +1893,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		false,
 		0,
 		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -2046,7 +2043,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
 		nil,
 		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
@@ -2061,6 +2057,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		false,
 		0,
 		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
