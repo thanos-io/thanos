@@ -161,9 +161,9 @@ store-specific tests to be run against memory and filesystem object storage type
 
 **Updating your branch**
 
-It is a good practice to keep your branch updated by rebasing your branch to master.
-* Update your master - `git checkout master; git pull <remote_name> master`
-* Rebase your master - `git rebase -i master`
+It is a good practice to keep your branch updated by rebasing your branch to main.
+* Update your main - `git checkout main; git pull <remote_name> main`
+* Rebase your main - `git rebase -i main`
 
 **Changelog and Review Procedure**
 
