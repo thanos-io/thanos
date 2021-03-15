@@ -3,21 +3,20 @@
     local aggregatedLabels = std.split(aggregator, ','),
     local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
 
-    aliasColors: {
-      '1xx': '#EAB839',
-      '2xx': '#7EB26D',
-      '3xx': '#6ED0E0',
-      '4xx': '#EF843C',
-      '5xx': '#E24D42',
-      success: '#7EB26D',
-      'error': '#E24D42',
-    },
+    seriesOverrides: [
+      { alias: '/1../', color: '#EAB839' },
+      { alias: '/2../', color: '#37872D' },
+      { alias: '/3../', color: '#E0B400' },
+      { alias: '/4../', color: '#1F60C4' },
+      { alias: '/5../', color: '#C4162A' },
+    ],
+
     targets: [
       {
-        expr: 'sum by (%s, handler, status_code) (label_replace(rate(%s{%s}[$interval]),"status_code", "${1}xx", "code", "([0-9]).."))' % [aggregator, metricName, selector],
+        expr: 'sum by (%s, code) (rate(%s{%s}[$interval]))' % [aggregator, metricName, selector],  // handler
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{handler}} {{status_code}}',
+        legendFormat: aggregatorTemplate + ' {{code}}',  // handler
         refId: 'A',
         step: 10,
       },

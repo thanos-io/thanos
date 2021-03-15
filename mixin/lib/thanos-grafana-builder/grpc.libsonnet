@@ -1,67 +1,44 @@
 {
-  grpcQpsPanel(type, selector, aggregator):: {
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server',
+  grpcRequestsPanel(metric, selector, aggregator):: {
     local aggregatedLabels = std.split(aggregator, ','),
     local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
 
-    aliasColors: {
-      Aborted: '#EAB839',
-      AlreadyExists: '#7EB26D',
-      FailedPrecondition: '#6ED0E0',
-      Unimplemented: '#6ED0E0',
-      InvalidArgument: '#EF843C',
-      NotFound: '#EF843C',
-      PermissionDenied: '#EF843C',
-      Unauthenticated: '#EF843C',
-      Canceled: '#E24D42',
-      DataLoss: '#E24D42',
-      DeadlineExceeded: '#E24D42',
-      Internal: '#E24D42',
-      OutOfRange: '#E24D42',
-      ResourceExhausted: '#E24D42',
-      Unavailable: '#E24D42',
-      Unknown: '#E24D42',
-      OK: '#7EB26D',
-      'error': '#E24D42',
-    },
+    seriesOverrides: [
+      { alias: '/Aborted/', color: '#EAB839' },
+      { alias: '/AlreadyExists/', color: '#37872D' },
+      { alias: '/FailedPrecondition/', color: '#E0B400' },
+      { alias: '/Unimplemented/', color: '#E0B400' },
+      { alias: '/InvalidArgument/', color: '#1F60C4' },
+      { alias: '/NotFound/', color: '#1F60C4' },
+      { alias: '/PermissionDenied/', color: '#1F60C4' },
+      { alias: '/Unauthenticated/', color: '#1F60C4' },
+      { alias: '/Canceled/', color: '#C4162A' },
+      { alias: '/DataLoss/', color: '#C4162A' },
+      { alias: '/DeadlineExceeded/', color: '#C4162A' },
+      { alias: '/Internal/', color: '#C4162A' },
+      { alias: '/OutOfRange/', color: '#C4162A' },
+      { alias: '/ResourceExhausted/', color: '#C4162A' },
+      { alias: '/Unavailable/', color: '#C4162A' },
+      { alias: '/Unknown/', color: '#C4162A' },
+      { alias: '/OK/', color: '#37872D' },
+      { alias: 'error', color: '#C4162A' },
+    ],
     targets: [
       {
-        expr: 'sum by (%s, grpc_method, grpc_code) (rate(%s_handled_total{%s}[$interval]))' % [aggregator, prefix, selector],
+        expr: 'sum by (%s, grpc_code) (rate(%s{%s}[$interval]))' % [metric, metric, selector],  // grpc_method
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{grpc_method}} {{grpc_code}}',
+        legendFormat: aggregatorTemplate + ' {{grpc_code}}',  // {{grpc_method}}
         refId: 'A',
         step: 10,
       },
     ],
   } + $.stack,
 
-  grpcErrorsPanel(type, selector, aggregator)::
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
+  grpcErrorsPanel(metric, selector, aggregator)::
     $.qpsErrTotalPanel(
-      '%s_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [prefix, selector],
-      '%s_started_total{%s}' % [prefix, selector],
-      aggregator,
+      '%s{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [metric, selector],
+      '%s{%s}' % [metric, selector],
+      aggregator
     ),
-
-  grpcLatencyPanel(type, selector, aggregator, multiplier='1')::
-    local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
-    local params = { prefix: prefix, selector: selector, aggregator: aggregator, multiplier: multiplier };
-    $.queryPanel(
-      [
-        'histogram_quantile(0.99, sum by (%(aggregator)s, grpc_method, le) (rate(%(prefix)s_handling_seconds_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
-        |||
-          sum by (%(aggregator)s) (rate(%(prefix)s_handling_seconds_sum{%(selector)s}[$interval])) * %(multiplier)s
-          /
-          sum by (%(aggregator)s) (rate(%(prefix)s_handling_seconds_count{%(selector)s}[$interval]))
-        ||| % params,
-        'histogram_quantile(0.50, sum by (%(aggregator)s, grpc_method, le) (rate(%(prefix)s_handling_seconds_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
-      ],
-      [
-        'P99 {{job}} {{grpc_method}}',
-        'mean {{job}} {{grpc_method}}',
-        'P50 {{job}} {{grpc_method}}',
-      ]
-    ) +
-    { yaxes: $.yaxes('s') },
 }

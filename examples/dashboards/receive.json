@@ -14,15 +14,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -47,17 +39,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, handler, status_code) (label_replace(rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\"))",
+                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
+                     "legendFormat": "{{job}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -203,34 +216,62 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "p99",
+                     "color": "#FA6400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p90",
+                     "color": "#E0B400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p50",
+                     "color": "#37872D",
+                     "fill": 10,
+                     "fillGradient": 0
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99 {{job}}",
+                     "legendFormat": "p50 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
                      "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(http_request_duration_seconds_sum{job=\"$job\", handler=\"receive\"}[$interval])) * 1 / sum by (job) (rate(http_request_duration_seconds_count{job=\"$job\", handler=\"receive\"}[$interval]))",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}}",
-                     "refId": "B",
+                     "legendFormat": "p90 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50 {{job}}",
-                     "refId": "C",
+                     "legendFormat": "p99 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -619,26 +660,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -663,17 +685,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (grpc_server_handled_total, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -749,7 +844,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval])) / sum by (job) (rate(grpc_server_started_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -819,34 +914,62 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "p99",
+                     "color": "#FA6400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p90",
+                     "color": "#E0B400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p50",
+                     "color": "#37872D",
+                     "fill": 10,
+                     "fillGradient": 0
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p50 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handling_seconds_sum{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval])) * 1\n/\nsum by (job) (rate(grpc_server_handling_seconds_count{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))\n",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p90 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p99 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -899,26 +1022,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -943,17 +1047,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (grpc_server_handled_total, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1029,7 +1206,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval])) / sum by (job) (rate(grpc_server_started_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1099,34 +1276,62 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "p99",
+                     "color": "#FA6400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p90",
+                     "color": "#E0B400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p50",
+                     "color": "#37872D",
+                     "fill": 10,
+                     "fillGradient": 0
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p50 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handling_seconds_sum{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval])) * 1\n/\nsum by (job) (rate(grpc_server_handling_seconds_count{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))\n",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p90 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p99 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1179,26 +1384,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -1223,17 +1409,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum by (grpc_server_handled_total, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1309,7 +1568,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"server_stream\"}[$interval])) / sum by (job) (rate(grpc_server_started_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"server_stream\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1379,34 +1638,62 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "p99",
+                     "color": "#FA6400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p90",
+                     "color": "#E0B400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p50",
+                     "color": "#37872D",
+                     "fill": 10,
+                     "fillGradient": 0
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p50 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handling_seconds_sum{job=\"$job\", grpc_type=\"server_stream\"}[$interval])) * 1\n/\nsum by (job) (rate(grpc_server_handling_seconds_count{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))\n",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p90 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, grpc_method, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50 {{job}} {{grpc_method}}",
-                     "legendLink": null,
+                     "legendFormat": "p99 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
+                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1503,6 +1790,7 @@
                      "dateFormat": "YYYY-MM-DD HH:mm:ss",
                      "decimals": 2,
                      "link": false,
+                     "linkTargetBlank": false,
                      "linkTooltip": "Drill down",
                      "linkUrl": "",
                      "pattern": "Value",
@@ -1614,50 +1902,50 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "go_memstats_alloc_bytes{job=\"$job\"}",
+                     "expr": "sum by (job) (go_memstats_alloc_bytes{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc all {{instance}}",
+                     "legendFormat": "alloc all {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_heap_alloc_bytes{job=\"$job\"}",
+                     "expr": "sum by (job) (go_memstats_heap_alloc_bytes{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc heap {{instance}}",
+                     "legendFormat": "alloc heap {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"}[30s])",
+                     "expr": "sum by (job) (rate(go_memstats_alloc_bytes_total{job=\"$job\"})[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate all {{instance}}",
+                     "legendFormat": "alloc rate all {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"}[30s])",
+                     "expr": "sum by (job) (rate(go_memstats_heap_alloc_bytes{job=\"$job\"})[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate heap {{instance}}",
+                     "legendFormat": "alloc rate heap {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_stack_inuse_bytes{job=\"$job\"}",
+                     "expr": "sum by (job) (go_memstats_stack_inuse_bytes{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse stack {{instance}}",
+                     "legendFormat": "inuse heap {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "go_memstats_heap_inuse_bytes{job=\"$job\"}",
+                     "expr": "sum by (job) (go_memstats_heap_inuse_bytes{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse heap {{instance}}",
+                     "legendFormat": "inuse stack {{job}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1730,10 +2018,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "go_goroutines{job=\"$job\"}",
+                     "expr": "sum by (job) (go_goroutines{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{instance}}",
+                     "legendFormat": "{{job}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1806,10 +2094,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "go_gc_duration_seconds{job=\"$job\"}",
+                     "expr": "sum by (job) (go_gc_duration_seconds{job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{quantile}} {{instance}}",
+                     "legendFormat": "{{quantile}} {{job}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1868,8 +2156,8 @@
       "list": [
          {
             "current": {
-               "text": "Prometheus",
-               "value": "Prometheus"
+               "text": "default",
+               "value": "default"
             },
             "hide": 0,
             "label": null,

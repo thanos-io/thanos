@@ -169,7 +169,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
-        g.resourceUtilizationRow(selector)
+        g.resourceUtilizationRow(selector, aggregator)
       ),
 
     __overviewRows__+:: [

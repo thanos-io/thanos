@@ -14,15 +14,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -55,17 +47,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, handler, status_code) (label_replace(rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\"))",
+                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
+                     "legendFormat": "{{job}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -308,15 +321,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -349,17 +354,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, handler, status_code) (label_replace(rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\"))",
+                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
+                     "legendFormat": "{{job}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -602,26 +628,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -654,17 +661,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (grpc_server_handled_total, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -748,7 +828,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_started_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -907,26 +987,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -959,17 +1020,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (grpc_server_handled_total, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1053,7 +1187,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_started_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1212,15 +1346,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -1253,17 +1379,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, handler, status_code) (label_replace(rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\"))",
+                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
+                     "legendFormat": "{{job}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1981,8 +2128,8 @@
       "list": [
          {
             "current": {
-               "text": "Prometheus",
-               "value": "Prometheus"
+               "text": "default",
+               "value": "default"
             },
             "hide": 0,
             "label": null,

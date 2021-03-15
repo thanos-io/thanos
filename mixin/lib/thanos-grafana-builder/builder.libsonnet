@@ -41,36 +41,43 @@ local template = grafana.template;
   latencyPanel(metricName, selector, aggregator, multiplier='1'):: {
     local aggregatedLabels = std.split(aggregator, ','),
     local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
-    local params = { metricName: metricName, selector: selector, aggregator: aggregator, multiplier: multiplier },
 
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
+        expr: 'histogram_quantile(%.2f, sum by (%s, le) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, aggregator, metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'P99 ' + aggregatorTemplate,
+        legendFormat: 'p%d %s' % [100 * percentile, aggregatorTemplate],
+        logBase: 10,
+        min: null,
+        max: null,
         refId: 'A',
         step: 10,
-      },
-      {
-        expr: 'sum by (%(aggregator)s) (rate(%(metricName)s_sum{%(selector)s}[$interval])) * %(multiplier)s / sum by (%(aggregator)s) (rate(%(metricName)s_count{%(selector)s}[$interval]))' % params,
-        format: 'time_series',
-        intervalFactor: 2,
-        legendFormat: 'mean ' + aggregatorTemplate,
-        refId: 'B',
-        step: 10,
-      },
-      {
-        expr: 'histogram_quantile(0.50, sum by (%(aggregator)s, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
-        format: 'time_series',
-        intervalFactor: 2,
-        legendFormat: 'P50 ' + aggregatorTemplate,
-        refId: 'C',
-        step: 10,
-      },
+      }
+      for percentile in [0.5, 0.9, 0.99]
     ],
     yaxes: $.yaxes('s'),
+    seriesOverrides: [
+      {
+        alias: 'p99',
+        color: '#FA6400',
+        fill: 1,
+        fillGradient: 1,
+      },
+      {
+        alias: 'p90',
+        color: '#E0B400',
+        fill: 1,
+        fillGradient: 1,
+      },
+      {
+        alias: 'p50',
+        color: '#37872D',
+        fill: 10,
+        fillGradient: 0,
+      },
+    ],
   },
 
   qpsErrTotalPanel(selectorErr, selectorTotal, aggregator):: {
@@ -120,26 +127,26 @@ local template = grafana.template;
     yaxes: $.yaxes({ format: 'percentunit', max: 1 }),
   } + $.stack,
 
-  resourceUtilizationRow(selector)::
+  resourceUtilizationRow(selector, aggregator)::
     $.row('Resources')
     .addPanel(
       $.panel('Memory Used') +
       $.queryPanel(
         [
-          'go_memstats_alloc_bytes{%s}' % selector,
-          'go_memstats_heap_alloc_bytes{%s}' % selector,
-          'rate(go_memstats_alloc_bytes_total{%s}[30s])' % selector,
-          'rate(go_memstats_heap_alloc_bytes{%s}[30s])' % selector,
-          'go_memstats_stack_inuse_bytes{%s}' % selector,
-          'go_memstats_heap_inuse_bytes{%s}' % selector,
+          'sum by (%s) (go_memstats_alloc_bytes{%s})' % [aggregator, selector],
+          'sum by (%s) (go_memstats_heap_alloc_bytes{%s})' % [aggregator, selector],
+          'sum by (%s) (rate(go_memstats_alloc_bytes_total{%s})[30s])' % [aggregator, selector],
+          'sum by (%s) (rate(go_memstats_heap_alloc_bytes{%s})[30s])' % [aggregator, selector],
+          'sum by (%s) (go_memstats_stack_inuse_bytes{%s})' % [aggregator, selector],
+          'sum by (%s) (go_memstats_heap_inuse_bytes{%s})' % [aggregator, selector],
         ],
         [
-          'alloc all {{instance}}',
-          'alloc heap {{instance}}',
-          'alloc rate all {{instance}}',
-          'alloc rate heap {{instance}}',
-          'inuse stack {{instance}}',
-          'inuse heap {{instance}}',
+          'alloc all {{job}}',
+          'alloc heap {{job}}',
+          'alloc rate all {{job}}',
+          'alloc rate heap {{job}}',
+          'inuse heap {{job}}',
+          'inuse stack {{job}}',
         ]
       ) +
       { yaxes: $.yaxes('bytes') },
@@ -147,15 +154,15 @@ local template = grafana.template;
     .addPanel(
       $.panel('Goroutines') +
       $.queryPanel(
-        'go_goroutines{%s}' % selector,
-        '{{instance}}'
+        'sum by (%s) (go_goroutines{%s})' % [aggregator, selector],
+        '{{job}}'
       )
     )
     .addPanel(
       $.panel('GC Time Quantiles') +
       $.queryPanel(
-        'go_gc_duration_seconds{%s}' % selector,
-        '{{quantile}} {{instance}}'
+        'sum by (%s) (go_gc_duration_seconds{%s})' % [aggregator, selector],
+        '{{quantile}} {{job}}'
       )
     ) +
     $.collapse,

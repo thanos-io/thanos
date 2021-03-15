@@ -94,34 +94,34 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.row('gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +
-          g.grpcQpsPanel('server', '%s, grpc_type="unary"' % selector, aggregator)
+          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator)
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrorsPanel('server', '%s, grpc_type="unary"' % selector, aggregator)
+          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator)
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles.') +
-          g.grpcLatencyPanel('server', '%s, grpc_type="unary"' % selector, aggregator)
+          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="unary"' % selector, aggregator)
         )
       )
       .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
-          g.grpcQpsPanel('server', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % selector, aggregator)
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
-          g.grpcErrorsPanel('server', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % selector, aggregator)
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
-          g.grpcLatencyPanel('server', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="server_stream"' % selector, aggregator)
         )
       )
       .addRow(
-        g.resourceUtilizationRow(selector)
+        g.resourceUtilizationRow(selector, aggregator)
       ),
 
     __overviewRows__+:: [
