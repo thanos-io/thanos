@@ -340,13 +340,18 @@ func WithQueryGate(queryGate gate.Gate) BucketStoreOption {
 	}
 }
 
+func WithChunkPool(chunkPool pool.Bytes) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.chunkPool = chunkPool
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
-	chunkPool pool.Bytes,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	partitioner Partitioner,
@@ -360,17 +365,13 @@ func NewBucketStore(
 	lazyIndexReaderIdleTimeout time.Duration,
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
-	if chunkPool == nil {
-		chunkPool = pool.NoopBytes{}
-	}
-
 	s := &BucketStore{
 		logger:                      log.NewNopLogger(),
 		bkt:                         bkt,
 		fetcher:                     fetcher,
 		dir:                         dir,
 		indexCache:                  noopCache{},
-		chunkPool:                   chunkPool,
+		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
 		debugLogging:                debugLogging,

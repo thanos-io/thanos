@@ -571,7 +571,6 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		nil,
 		dir,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -583,6 +582,7 @@ func TestBucketStore_Info(t *testing.T) {
 		false,
 		false,
 		0,
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -820,7 +820,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
-				nil,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1255,7 +1254,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		ibkt,
 		f,
 		tmpDir,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1268,6 +1266,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		false,
 		0,
 		WithLogger(logger),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 
@@ -1632,7 +1631,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1727,7 +1725,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		nil,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1874,7 +1871,6 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		instrBkt,
 		fetcher,
 		tmpDir,
-		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1888,6 +1884,7 @@ func TestBlockWithLargeChunks(t *testing.T) {
 		0,
 		WithLogger(logger),
 		WithIndexCache(indexCache),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -2037,7 +2034,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		instrBkt,
 		fetcher,
 		tmpDir,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),

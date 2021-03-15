@@ -331,7 +331,6 @@ func runStore(
 		bkt,
 		metaFetcher,
 		dataDir,
-		chunkPool,
 		store.NewChunksLimiterFactory(maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(maxSeriesCount),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
@@ -347,6 +346,7 @@ func runStore(
 		store.WithRegistry(reg),
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),
+		store.WithChunkPool(chunkPool),
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")

@@ -183,7 +183,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		dir,
-		nil,
 		chunksLimiterFactory,
 		seriesLimiterFactory,
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
