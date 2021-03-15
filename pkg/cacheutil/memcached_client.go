@@ -227,8 +227,7 @@ func newMemcachedClient(
 	)
 
 	c := &memcachedClient{
-		name:        name,
-		logger:      logger,
+		logger:      log.With(logger, "name", name),
 		config:      config,
 		client:      client,
 		selector:    selector,
@@ -372,7 +371,7 @@ func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, 
 
 	if err == errMemcachedAsyncBufferFull {
 		c.skipped.WithLabelValues(opSet, reasonAsyncBufferFull).Inc()
-		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.asyncQueue), "name", c.name)
+		level.Debug(c.logger).Log("msg", "failed to store item to memcached because the async buffer is full", "err", err, "size", len(c.asyncQueue))
 		return nil
 	}
 	return err
@@ -385,7 +384,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err, "name", c.name)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "numKeys", len(keys), "firstKey", keys[0], "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
@@ -480,7 +479,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	c.operations.WithLabelValues(opGetMulti).Inc()
 	items, err = c.client.GetMulti(keys)
 	if err != nil {
-		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err, "name", c.name)
+		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
 		c.trackError(opGetMulti, err)
 	} else {
 		var total int
@@ -548,7 +547,7 @@ func (c *memcachedClient) resolveAddrsLoop() {
 		case <-ticker.C:
 			err := c.resolveAddrs()
 			if err != nil {
-				level.Warn(c.logger).Log("msg", "failed update memcached servers list", "err", err, "name", c.name)
+				level.Warn(c.logger).Log("msg", "failed update memcached servers list", "err", err)
 			}
 		case <-c.stop:
 			return
@@ -563,7 +562,7 @@ func (c *memcachedClient) resolveAddrs() error {
 
 	// If some of the dns resolution fails, log the error.
 	if err := c.dnsProvider.Resolve(ctx, c.config.Addresses); err != nil {
-		level.Error(c.logger).Log("msg", "failed to resolve addresses for memcached", "addresses", strings.Join(c.config.Addresses, ","), "err", err, "name", c.name)
+		level.Error(c.logger).Log("msg", "failed to resolve addresses for memcached", "addresses", strings.Join(c.config.Addresses, ","), "err", err)
 	}
 	// Fail in case no server address is resolved.
 	servers := c.dnsProvider.Addresses()
