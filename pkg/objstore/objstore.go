@@ -145,18 +145,16 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
-	case ReaderWithSize:
+	case Sizer:
 		return f.Size()
 	}
 	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
 }
 
-// ReaderWithSize is a Reader that can also return size of the read data.
-type ReaderWithSize interface {
-	io.Reader
-
-	// Size returns length of the data read by this reader, or error, if it is not available.
-	// It is best to call Size before using the Reader, as some implementations may only return
+// Sizer can return size of data.
+type Sizer interface {
+	// Size returns length of the data, or error, if it is not available.
+	// It is best to call Size before calling other methods on the type, as some io.Reader implementations may only return
 	// length of unread data.
 	Size() (int64, error)
 }
