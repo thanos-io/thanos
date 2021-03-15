@@ -67,8 +67,8 @@ var DefaultConfig = Config{
 		MaxConnsPerHost:       0,
 	},
 	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-	// Set to 128 MiB as in the minio client.
-	PartSize: 1024 * 1024 * 128,
+	// Set to 16 MiB as in the minio client.
+	PartSize: 1024 * 1024 * 16,
 }
 
 // Config stores the configuration for s3 bucket.
@@ -452,7 +452,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// partSize cannot be larger than object size.
 	partSize := b.partSize
 	if size < int64(partSize) {
-		partSize = 0
+		partSize = size // set partSize to the object size
 	}
 	if _, err := b.client.PutObject(
 		ctx,
