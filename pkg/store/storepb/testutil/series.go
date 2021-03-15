@@ -39,8 +39,8 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 }
 
 type HeadGenOptions struct {
-	TSDBDir                  string
-	SamplesPerSeries, Series int
+	TSDBDir                                  string
+	SamplesPerSeries, Series, ScrapeInterval int
 
 	WithWAL       bool
 	PrependLabels labels.Labels
@@ -57,8 +57,17 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	if opts.SamplesPerSeries < 1 || opts.Series < 1 {
 		t.Fatal("samples and series has to be 1 or more")
 	}
+	if opts.ScrapeInterval == 0 {
+		opts.ScrapeInterval = 1
+	}
 
-	fmt.Printf("Creating %d %d-sample series in %s\n", opts.Series, opts.SamplesPerSeries, opts.TSDBDir)
+	fmt.Printf(
+		"Creating %d %d-sample series with %d ms interval in %s\n",
+		opts.Series,
+		opts.SamplesPerSeries,
+		opts.ScrapeInterval,
+		opts.TSDBDir,
+	)
 
 	var w *wal.WAL
 	var err error
@@ -76,12 +85,16 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 
 	app := h.Appender(context.Background())
 	for i := 0; i < opts.Series; i++ {
-		ts := int64(j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries)
-		ref, err := app.Add(labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, LabelLongSuffix)), ts, opts.Random.Float64())
+		tsLabel := j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries
+		ref, err := app.Add(
+			labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
+			int64(tsLabel*opts.ScrapeInterval),
+			opts.Random.Float64(),
+		)
 		testutil.Ok(t, err)
 
 		for is := 1; is < opts.SamplesPerSeries; is++ {
-			testutil.Ok(t, app.AddFast(ref, ts+int64(is), opts.Random.Float64()))
+			testutil.Ok(t, app.AddFast(ref, int64((tsLabel+is)*opts.ScrapeInterval), opts.Random.Float64()))
 		}
 	}
 	testutil.Ok(t, app.Commit())

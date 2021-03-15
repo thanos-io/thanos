@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
@@ -2297,6 +2298,17 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 }
 
 func BenchmarkBlockSeries(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevelRaw)
+
+	aggrs := []storepb.Aggr{storepb.Aggr_RAW}
+	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
+			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
+		})
+	}
+}
+
+func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*bucketBlock, *metadata.Meta) {
 	var (
 		ctx    = context.Background()
 		logger = log.NewNopLogger()
@@ -2318,13 +2330,13 @@ func BenchmarkBlockSeries(b *testing.B) {
 	head, _ := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
 		TSDBDir:          filepath.Join(tmpDir, "head"),
 		SamplesPerSeries: 86400 / 15, // Simulate 1 day block with 15s scrape interval.
+		ScrapeInterval:   15 * 1000,
 		Series:           1000,
 		PrependLabels:    nil,
 		Random:           rand.New(rand.NewSource(120)),
 		SkipChunks:       true,
 	})
 	blockID := createBlockFromHead(b, tmpDir, head)
-	testutil.Ok(b, head.Close())
 
 	// Upload the block to the bucket.
 	thanosMeta := metadata.Thanos{
@@ -2337,6 +2349,17 @@ func BenchmarkBlockSeries(b *testing.B) {
 	testutil.Ok(b, err)
 
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+
+	if resolutionLevel > 0 {
+		// Downsample newly-created block
+		blockID, err = downsample.Downsample(logger, blockMeta, head, tmpDir, int64(resolutionLevel))
+		testutil.Ok(b, err)
+		blockMeta, err = metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
+		testutil.Ok(b, err)
+
+		testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	}
+	testutil.Ok(b, head.Close())
 
 	// Create chunk pool and partitioner using the same production settings.
 	chunkPool, err := NewDefaultChunkBytesPool(64 * 1024 * 1024 * 1024)
@@ -2353,15 +2376,10 @@ func BenchmarkBlockSeries(b *testing.B) {
 	// Create a bucket block with only the dependencies we need for the benchmark.
 	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
 	testutil.Ok(b, err)
-
-	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
-		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
-			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk)
-		})
-	}
+	return blk, blockMeta
 }
 
-func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock) {
+func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock, aggrs []storepb.Aggr) {
 	ctx := context.Background()
 
 	// Run the same number of queries per goroutine.
@@ -2392,6 +2410,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: labelMatcher},
 					},
 					SkipChunks: false,
+					Aggregates: aggrs,
 				}
 
 				matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
@@ -2415,41 +2434,15 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	wg.Wait()
 }
 
-func TestChunkOffsetsToByteRanges(t *testing.T) {
-	tests := map[string]struct {
-		offsets  []uint32
-		start    uint32
-		expected byteRanges
-	}{
-		"no offsets in input": {
-			offsets:  nil,
-			expected: byteRanges{},
-		},
-		"no overlapping ranges in input": {
-			offsets: []uint32{1000, 20000, 45000},
-			start:   1000,
-			expected: byteRanges{
-				{offset: 0, length: 16000},
-				{offset: 19000, length: 16000},
-				{offset: 44000, length: 16000},
-			},
-		},
-		"overlapping ranges in input": {
-			offsets: []uint32{1000, 5000, 9500, 30000},
-			start:   1000,
-			expected: byteRanges{
-				{offset: 0, length: 4000},
-				{offset: 4000, length: 4500},
-				{offset: 8500, length: 16000},
-				{offset: 29000, length: 16000},
-			},
-		},
-	}
-
-	for testName, testData := range tests {
-		t.Run(testName, func(t *testing.T) {
-			testutil.Equals(t, len(testData.offsets), len(testData.expected))
-			testutil.Equals(t, testData.expected, chunkOffsetsToByteRanges(testData.offsets, testData.start))
-		})
+func BenchmarkDownsampledBlockSeries(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevel5m)
+	aggrs := []storepb.Aggr{}
+	for i := 1; i < int(storepb.Aggr_COUNTER); i++ {
+		aggrs = append(aggrs, storepb.Aggr(i))
+		for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+			b.Run(fmt.Sprintf("aggregates: %v, concurrency: %d", aggrs, concurrency), func(b *testing.B) {
+				benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
+			})
+		}
 	}
 }
