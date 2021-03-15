@@ -334,6 +334,9 @@ config:
   max_retries: 0
 ```
 
+The config parameter `endpoint` will default to `blob.core.windows.net` so unless it needs to be changed it does not need to be set.
+A SAS token can be used as the `storage_account_key` to authenticate. Follow the instructions to create a service SAS token, make sure that the token is valid for blob services: [https://docs.microsoft.com/en-us/rest/api/storageservices/create-service-sas](https://docs.microsoft.com/en-us/rest/api/storageservices/create-service-sas)
+
 #### OpenStack Swift
 
 Thanos uses [ncw/swift](https://github.com/ncw/swift) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
