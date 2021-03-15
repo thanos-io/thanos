@@ -11,7 +11,7 @@ local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
   },
 
   prometheusAlerts+:: {
-    local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' from ' + std.join('/', ['{{labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else '',
+    local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' from ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else '',
     groups+: [
       {
         name: 'thanos-component-absent',

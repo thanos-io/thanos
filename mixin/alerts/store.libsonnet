@@ -11,7 +11,7 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.store == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
       {
         name: 'thanos-store',
         rules: [
