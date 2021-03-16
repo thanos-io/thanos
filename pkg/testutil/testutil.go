@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"sync"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -19,8 +20,12 @@ import (
 	"go.uber.org/goleak"
 )
 
+var mu sync.Mutex
+
 // Assert fails the test if the condition is false.
 func Assert(tb testing.TB, condition bool, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	tb.Helper()
 	if condition {
 		return
@@ -36,6 +41,8 @@ func Assert(tb testing.TB, condition bool, v ...interface{}) {
 
 // Ok fails the test if an err is not nil.
 func Ok(tb testing.TB, err error, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	tb.Helper()
 	if err == nil {
 		return
@@ -51,6 +58,8 @@ func Ok(tb testing.TB, err error, v ...interface{}) {
 
 // NotOk fails the test if an err is nil.
 func NotOk(tb testing.TB, err error, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	tb.Helper()
 	if err != nil {
 		return
@@ -66,6 +75,8 @@ func NotOk(tb testing.TB, err error, v ...interface{}) {
 
 // Equals fails the test if exp is not equal to act.
 func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	tb.Helper()
 	if reflect.DeepEqual(exp, act) {
 		return
