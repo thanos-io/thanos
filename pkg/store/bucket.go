@@ -4,10 +4,12 @@
 package store
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -64,6 +66,7 @@ const (
 	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
 	EstimatedMaxChunkSize = 16000
 	maxSeriesSize         = 64 * 1024
+	chunkBytesPoolMinSize = 8
 
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
@@ -758,8 +761,9 @@ func blockSeries(
 			// Schedule loading chunks.
 			s.refs = make([]uint64, 0, len(chks))
 			s.chks = make([]storepb.AggrChunk, 0, len(chks))
-			for _, meta := range chks {
-				if err := chunkr.addPreload(meta.Ref); err != nil {
+			for j, meta := range chks {
+				// s is appended to res, but not at every iteration, hence len(res) is the index we need.
+				if err := chunkr.addPreload(meta.Ref, len(res), j); err != nil {
 					return nil, nil, errors.Wrap(err, "add chunk preload")
 				}
 				s.chks = append(s.chks, storepb.AggrChunk{
@@ -786,29 +790,20 @@ func blockSeries(
 		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
-	// Preload all chunks that were marked in the previous stage.
-	if err := chunkr.preload(); err != nil {
+	if err := chunkr.preload(res, req.Aggregates); err != nil {
 		return nil, nil, errors.Wrap(err, "preload chunks")
 	}
 
-	// Transform all chunks into the response format.
-	for _, s := range res {
-		for i, ref := range s.refs {
-			chk, err := chunkr.Chunk(ref)
-			if err != nil {
-				return nil, nil, errors.Wrap(err, "get chunk")
-			}
-			if err := populateChunk(&s.chks[i], chk, req.Aggregates); err != nil {
-				return nil, nil, errors.Wrap(err, "populate chunk")
-			}
-		}
-	}
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
-func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
+func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, saviour func([]byte) ([]byte, error)) error {
 	if in.Encoding() == chunkenc.EncXOR {
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: in.Bytes()}
+		b, err := saviour(in.Bytes())
+		if err != nil {
+			return err
+		}
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -824,31 +819,51 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrCount)
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			b, err := saviour(x.Bytes())
+			if err != nil {
+				return err
+			}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrSum)
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			b, err := saviour(x.Bytes())
+			if err != nil {
+				return err
+			}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrMin)
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			b, err := saviour(x.Bytes())
+			if err != nil {
+				return err
+			}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrMax)
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			b, err := saviour(x.Bytes())
+			if err != nil {
+				return err
+			}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrCounter)
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			b, err := saviour(x.Bytes())
+			if err != nil {
+				return err
+			}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		}
 	}
 	return nil
@@ -1520,6 +1535,14 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	return chunkBuffer, nil
 }
 
+func (b *bucketBlock) chunkRangeReader(ctx context.Context, seq int, off, length int64) (io.ReadCloser, error) {
+	if seq < 0 || seq >= len(b.chunkObjs) {
+		return nil, errors.Errorf("unknown segment file for index %d", seq)
+	}
+
+	return b.bkt.GetRange(ctx, b.chunkObjs[seq], off, length)
+}
+
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 	b.pendingReaders.Add(1)
 	return newBucketIndexReader(ctx, b)
@@ -2069,7 +2092,7 @@ type Partitioner interface {
 	// Partition partitions length entries into n <= length ranges that cover all
 	// input ranges
 	// It supports overlapping ranges.
-	// NOTE: It expects range to be ted by start time.
+	// NOTE: It expects range to be sorted by start time.
 	Partition(length int, rng func(int) (uint64, uint64)) []Part
 }
 
@@ -2216,11 +2239,17 @@ func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta,
 	return len(*chks) > 0, d.Err()
 }
 
+type preloadIdx struct {
+	off uint32
+	i   int
+	j   int
+}
+
 type bucketChunkReader struct {
 	ctx   context.Context
 	block *bucketBlock
 
-	preloads [][]uint32
+	preloads [][]preloadIdx
 
 	// Mutex protects access to following fields, when updated from chunks-loading goroutines.
 	// After chunks are loaded, mutex is no longer used.
@@ -2235,154 +2264,9 @@ func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkR
 		ctx:      ctx,
 		block:    block,
 		stats:    &queryStats{},
-		preloads: make([][]uint32, len(block.chunkObjs)),
+		preloads: make([][]preloadIdx, len(block.chunkObjs)),
 		chunks:   map[uint64]chunkenc.Chunk{},
 	}
-}
-
-// addPreload adds the chunk with id to the data set that will be fetched on calling preload.
-func (r *bucketChunkReader) addPreload(id uint64) error {
-	var (
-		seq = int(id >> 32)
-		off = uint32(id)
-	)
-	if seq >= len(r.preloads) {
-		return errors.Errorf("reference sequence %d out of range", seq)
-	}
-	r.preloads[seq] = append(r.preloads[seq], off)
-	return nil
-}
-
-// preload all added chunk IDs. Must be called before the first call to Chunk is made.
-func (r *bucketChunkReader) preload() error {
-	g, ctx := errgroup.WithContext(r.ctx)
-
-	for seq, offsets := range r.preloads {
-		sort.Slice(offsets, func(i, j int) bool {
-			return offsets[i] < offsets[j]
-		})
-		parts := r.block.partitioner.Partition(len(offsets), func(i int) (start, end uint64) {
-			return uint64(offsets[i]), uint64(offsets[i]) + EstimatedMaxChunkSize
-		})
-
-		seq := seq
-		offsets := offsets
-
-		for _, p := range parts {
-			s, e := uint32(p.Start), uint32(p.End)
-			m, n := p.ElemRng[0], p.ElemRng[1]
-
-			g.Go(func() error {
-				return r.loadChunks(ctx, offsets[m:n], seq, s, e)
-			})
-		}
-	}
-	return g.Wait()
-}
-
-// loadChunks will read range [start, end] from the segment file with sequence number seq.
-// This data range covers chunks starting at supplied offsets.
-func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq int, start, end uint32) error {
-	fetchBegin := time.Now()
-
-	// Compute the byte ranges of chunks we actually need. The total read data may be bigger
-	// than required because of the partitioner.
-	chunkRanges := chunkOffsetsToByteRanges(offs, start)
-
-	b, err := r.block.readChunkRange(ctx, seq, int64(start), int64(end-start), chunkRanges)
-	if err != nil {
-		return errors.Wrapf(err, "read range for %d", seq)
-	}
-
-	locked := true
-	r.mtx.Lock()
-
-	defer func() {
-		if locked {
-			r.mtx.Unlock()
-		}
-	}()
-
-	r.chunkBytes = append(r.chunkBytes, b)
-	r.stats.chunksFetchCount++
-	r.stats.chunksFetched += len(offs)
-	r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
-	r.stats.chunksFetchedSizeSum += int(end - start)
-
-	readOffset := 0
-	for idx, o := range offs {
-		chunkRange := chunkRanges[idx]
-
-		// The chunks byte ranges are stored contiguously in the data buffer.
-		cb := (*b)[readOffset : readOffset+chunkRange.length]
-		readOffset += chunkRange.length
-
-		l, n := binary.Uvarint(cb)
-		if n < 1 {
-			return errors.New("reading chunk length failed")
-		}
-
-		chunkRef := uint64(seq<<32) | uint64(o)
-
-		// Chunk length is n (number of bytes used to encode chunk data), 1 for chunk encoding and l for actual chunk data.
-		// There is also crc32 after the chunk, but we ignore that.
-		chLen := n + 1 + int(l)
-		if len(cb) >= chLen {
-			r.chunks[chunkRef] = rawChunk(cb[n:chLen])
-			continue
-		}
-
-		// If we didn't fetch enough data for the chunk, fetch more.
-		r.mtx.Unlock()
-		locked = false
-
-		fetchBegin = time.Now()
-
-		// Read entire chunk into new buffer.
-		nb, err := r.block.readChunkRange(ctx, seq, int64(o), int64(chLen), []byteRange{{offset: 0, length: chLen}})
-		if err != nil {
-			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chLen)
-		}
-
-		cb = *nb
-		if len(cb) != chLen {
-			return errors.Errorf("preloaded chunk too small, expecting %d", chLen)
-		}
-
-		r.mtx.Lock()
-		locked = true
-
-		r.chunkBytes = append(r.chunkBytes, nb)
-		r.stats.chunksFetchCount++
-		r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
-		r.stats.chunksFetchedSizeSum += len(cb)
-
-		r.chunks[chunkRef] = rawChunk(cb[n:])
-	}
-	return nil
-}
-
-// chunkOffsetsToByteRanges returns non-overlapping byte ranges with each range offset
-// relative to start. The provided input offsets must be sorted.
-func chunkOffsetsToByteRanges(offsets []uint32, start uint32) byteRanges {
-	ranges := make([]byteRange, len(offsets))
-
-	for idx := 0; idx < len(offsets); idx++ {
-		ranges[idx] = byteRange{
-			// The byte range offset is required to be relative to the start of the read slice.
-			offset: int(offsets[idx] - start),
-			length: EstimatedMaxChunkSize,
-		}
-
-		if idx > 0 {
-			// Ensure ranges are non overlapping.
-			if prev := ranges[idx-1]; prev.length > ranges[idx].offset-prev.offset {
-				ranges[idx-1].length = ranges[idx].offset - prev.offset
-			}
-		}
-	}
-
-	return ranges
 }
 
 func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
@@ -2395,6 +2279,172 @@ func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
 	r.stats.chunksTouchedSizeSum += len(c.Bytes())
 
 	return c, nil
+}
+
+func (r *bucketChunkReader) Close() error {
+	r.block.pendingReaders.Done()
+
+	for _, b := range r.chunkBytes {
+		r.block.chunkPool.Put(b)
+	}
+	return nil
+}
+
+// appPreload adds the chunk with id to the data set that will be fetched on calling preload.
+func (r *bucketChunkReader) addPreload(id uint64, i, j int) error {
+	var (
+		seq = int(id >> 32)
+		off = uint32(id)
+	)
+	if seq >= len(r.preloads) {
+		return errors.Errorf("reference sequence %d out of range", seq)
+	}
+	r.preloads[seq] = append(r.preloads[seq], preloadIdx{off, i, j})
+	return nil
+}
+
+// preload all added chunk IDs. Must be called before the first call to Chunk is made.
+func (r *bucketChunkReader) preload(res []seriesEntry, aggrs []storepb.Aggr) error {
+	g, ctx := errgroup.WithContext(r.ctx)
+
+	for seq, pIdxs := range r.preloads {
+		sort.Slice(pIdxs, func(i, j int) bool {
+			return pIdxs[i].off < pIdxs[j].off
+		})
+		parts := r.block.partitioner.Partition(len(pIdxs), func(i int) (start, end uint64) {
+			return uint64(pIdxs[i].off), uint64(pIdxs[i].off) + EstimatedMaxChunkSize
+		})
+
+		for _, p := range parts {
+			seq := seq
+			p := p
+			indices := pIdxs[p.ElemRng[0]:p.ElemRng[1]]
+			g.Go(func() error {
+				return r.loadChunks(ctx, res, aggrs, seq, p, indices)
+			})
+		}
+	}
+	return g.Wait()
+}
+
+// loadChunks will read range [start, end] from the segment file with sequence number seq.
+// This data range covers chunks starting at supplied offsets.
+func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []preloadIdx) error {
+	fetchBegin := time.Now()
+
+	// Get a reader for the required range.
+	reader, err := r.block.chunkRangeReader(ctx, seq, int64(part.Start), int64(part.End-part.Start))
+	if err != nil {
+		return errors.Wrap(err, "get range reader")
+	}
+	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
+	bufReader := bufio.NewReaderSize(reader, EstimatedMaxChunkSize)
+
+	locked := true
+	r.mtx.Lock()
+
+	defer func() {
+		if locked {
+			r.mtx.Unlock()
+		}
+	}()
+
+	r.stats.chunksFetchCount++
+	r.stats.chunksFetched += len(pIdxs)
+	r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
+	r.stats.chunksFetchedSizeSum += int(part.End - part.Start)
+
+	var (
+		buf        = make([]byte, EstimatedMaxChunkSize)
+		readOffset = int(pIdxs[0].off)
+
+		// Save a few allocations.
+		written  int64
+		diff     uint32
+		chunkLen int
+		n        int
+	)
+
+	for i, pIdx := range pIdxs {
+		// Fast forward range reader to the next chunk start in case of sparse (for our purposes) byte range.
+		for readOffset < int(pIdx.off) {
+			written, err = io.CopyN(ioutil.Discard, bufReader, int64(pIdx.off)-int64(readOffset))
+			if err != nil {
+				return errors.Wrap(err, "fast forward range reader")
+			}
+			readOffset += int(written)
+		}
+		// Presume chunk length.
+		chunkLen = EstimatedMaxChunkSize
+		if i+1 < len(pIdxs) {
+			if diff = pIdxs[i+1].off - pIdx.off; int(diff) < chunkLen {
+				chunkLen = int(diff)
+			}
+		}
+		cb := buf[:chunkLen]
+		n, err = io.ReadFull(bufReader, cb)
+		readOffset += n
+		if errors.Is(err, io.ErrUnexpectedEOF) && i == len(pIdxs)-1 {
+			// This may be a valid case.
+		} else if err != nil {
+			return errors.Wrapf(err, "read range for seq %d offset %x", seq, pIdx.off)
+		}
+
+		l, n := binary.Uvarint(cb)
+		if n < 1 {
+			return errors.New("reading chunk length failed")
+		}
+
+		// Chunk length is n (number of bytes used to encode chunk data), 1 for chunk encoding and l for actual chunk data.
+		// There is also crc32 after the chunk, but we ignore that.
+		chunkLen = n + 1 + int(l)
+		if chunkLen <= len(cb) {
+			if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk(cb[n:chunkLen]), aggrs, r.saviour); err != nil {
+				return errors.Wrap(err, "populate chunk")
+			}
+			continue
+		}
+
+		// If we didn't fetch enough data for the chunk, fetch more.
+		r.mtx.Unlock()
+		locked = false
+
+		fetchBegin = time.Now()
+
+		// Read entire chunk into new buffer.
+		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.off), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
+		if err != nil {
+			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chunkLen)
+		}
+		if len(*nb) != chunkLen {
+			return errors.Errorf("preloaded chunk too small, expecting %d", chunkLen)
+		}
+
+		r.mtx.Lock()
+		locked = true
+
+		r.stats.chunksFetchCount++
+		r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
+		r.stats.chunksFetchedSizeSum += len(*nb)
+
+		if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk((*nb)[n:]), aggrs, r.saviour); err != nil {
+			return errors.Wrap(err, "populate chunk")
+		}
+
+		r.block.chunkPool.Put(nb)
+	}
+	return nil
+}
+
+func (r *bucketChunkReader) saviour(b []byte) ([]byte, error) {
+	cb, err := r.block.chunkPool.Get(len(b))
+	if err != nil {
+		return nil, errors.Wrap(err, "allocate chunk bytes")
+	}
+	*cb = append(*cb, b...)
+
+	r.chunkBytes = append(r.chunkBytes, cb)
+	return *cb, nil
 }
 
 // rawChunk is a helper type that wraps a chunk's raw bytes and implements the chunkenc.Chunk
@@ -2421,15 +2471,6 @@ func (b rawChunk) Appender() (chunkenc.Appender, error) {
 
 func (b rawChunk) NumSamples() int {
 	panic("invalid call")
-}
-
-func (r *bucketChunkReader) Close() error {
-	r.block.pendingReaders.Done()
-
-	for _, b := range r.chunkBytes {
-		r.block.chunkPool.Put(b)
-	}
-	return nil
 }
 
 type queryStats struct {
@@ -2515,5 +2556,5 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
-	return pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, maxChunkPoolBytes)
+	return pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, maxChunkPoolBytes)
 }

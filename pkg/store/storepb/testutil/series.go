@@ -52,7 +52,7 @@ type HeadGenOptions struct {
 // CreateHeadWithSeries returns head filled with given samples and same series returned in separate list for assertion purposes.
 // Returned series list has "ext1"="1" prepended. Each series looks as follows:
 // {foo=bar,i=000001aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd} <random value> where number indicate sample number from 0.
-// Returned series are frame in same way as remote read would frame them.
+// Returned series are framed in the same way as remote read would frame them.
 func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head, []*storepb.Series) {
 	if opts.SamplesPerSeries < 1 || opts.Series < 1 {
 		t.Fatal("samples and series has to be 1 or more")

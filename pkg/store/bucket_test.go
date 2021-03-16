@@ -1256,7 +1256,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	f, err := block.NewRawMetaFetcher(logger, ibkt)
 	testutil.Ok(t, err)
 
-	chunkPool, err := pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, 1e9) // 1GB.
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, 1e9) // 1GB.
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
@@ -1319,8 +1319,10 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 
 	if !t.IsBenchmark() {
 		if !skipChunk {
+			chunksPerSeriesPerBlock := int(math.Ceil(float64(samplesPerSeriesPerBlock) / float64(MaxSamplesPerChunk)))
+			expectedChunks := numOfBlocks * seriesPerBlock * chunksPerSeriesPerBlock
 			// Make sure the pool is correctly used. This is expected for 200k numbers.
-			testutil.Equals(t, numOfBlocks, int(st.chunkPool.(*mockedPool).gets.Load()))
+			testutil.Equals(t, expectedChunks, int(st.chunkPool.(*mockedPool).gets.Load()))
 			// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
 			testutil.Equals(t, 0, int(st.chunkPool.(*mockedPool).balance.Load()))
 			st.chunkPool.(*mockedPool).gets.Store(0)
@@ -1382,7 +1384,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	chunkPool, err := pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, 100e7)
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, 100e7)
 	testutil.Ok(t, err)
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
@@ -2276,8 +2278,8 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
 
-	// Create a chunk pool with buckets between 1KB and 32KB.
-	chunkPool, err := pool.NewBucketedBytes(1024, 32*1024, 2, 1e10)
+	// Create a chunk pool with buckets between 8B and 32KB.
+	chunkPool, err := pool.NewBucketedBytes(8, 32*1024, 2, 1e10)
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
