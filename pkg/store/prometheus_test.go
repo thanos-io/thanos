@@ -45,11 +45,11 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -179,13 +179,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b", "b", "d"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "b", "d"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c", "b", "d", "job", "test"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "c", "b", "d", "job", "test"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "d", "b", "d", "job", "test"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "d", "b", "d", "job", "test"), baseT+300, 3)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("b", "d", "job", "test"), baseT+400, 4)
+	_, err = a.Append(0, labels.FromStrings("b", "d", "job", "test"), baseT+400, 4)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -359,11 +359,11 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -404,11 +404,11 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -452,9 +452,9 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("ext_a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("ext_a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -494,11 +494,11 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -574,7 +574,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 	offset := int64(2*math.MaxUint16 + 5)
 	for i := int64(0); i < offset; i++ {
-		_, err := appender.Add(labels.FromStrings("a", "b"), baseT+i, 1)
+		_, err := appender.Append(0, labels.FromStrings("a", "b"), baseT+i, 1)
 		testutil.Ok(t, err)
 	}
 

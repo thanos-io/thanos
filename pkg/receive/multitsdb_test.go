@@ -62,11 +62,11 @@ func TestMultiTSDB(t *testing.T) {
 			return err
 		}))
 
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 1, 2.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 2.41241)
 		testutil.Ok(t, err)
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
 		testutil.Ok(t, err)
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
 		testutil.Ok(t, err)
 		testutil.Ok(t, a.Commit())
 
@@ -89,11 +89,11 @@ func TestMultiTSDB(t *testing.T) {
 			return err
 		}))
 
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 1, 20.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 20.41241)
 		testutil.Ok(t, err)
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 2, 30.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 30.41241)
 		testutil.Ok(t, err)
-		_, err = a.Add(labels.FromStrings("a", "1", "b", "2"), 3, 40.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 40.41241)
 		testutil.Ok(t, err)
 		testutil.Ok(t, a.Commit())
 

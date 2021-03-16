@@ -71,7 +71,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
-			_, err = app.Add(lset, s.Timestamp, s.Value)
+			_, err = app.Append(0, lset, s.Timestamp, s.Value)
 			switch err {
 			case nil:
 				continue
@@ -142,8 +142,7 @@ func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
 type fakeAppender struct {
 	sync.Mutex
 	samples     map[uint64][]prompb.Sample
-	addErr      func() error
-	addFastErr  func() error
+	appendErr   func() error
 	commitErr   func() error
 	rollbackErr func() error
 }
@@ -151,12 +150,9 @@ type fakeAppender struct {
 var _ storage.Appender = &fakeAppender{}
 
 // TODO(kakkoyun): Linter - `addFastErr` always receives `nil`.
-func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
-	if addErr == nil {
-		addErr = nilErrFn
-	}
-	if addFastErr == nil {
-		addFastErr = nilErrFn
+func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
+	if appendErr == nil {
+		appendErr = nilErrFn
 	}
 	if commitErr == nil {
 		commitErr = nilErrFn
@@ -166,8 +162,7 @@ func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *f
 	}
 	return &fakeAppender{
 		samples:     make(map[uint64][]prompb.Sample),
-		addErr:      addErr,
-		addFastErr:  addFastErr,
+		appendErr:   appendErr,
 		commitErr:   commitErr,
 		rollbackErr: rollbackErr,
 	}
@@ -182,19 +177,14 @@ func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	return res
 }
 
-func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
+func (f *fakeAppender) Append(ref uint64, l labels.Labels, t int64, v float64) (uint64, error) {
 	f.Lock()
 	defer f.Unlock()
-	ref := l.Hash()
-	f.samples[ref] = append(f.samples[ref], prompb.Sample{Value: v, Timestamp: t})
-	return ref, f.addErr()
-}
-
-func (f *fakeAppender) AddFast(ref uint64, t int64, v float64) error {
-	f.Lock()
-	defer f.Unlock()
-	f.samples[ref] = append(f.samples[ref], prompb.Sample{Value: v, Timestamp: t})
-	return f.addFastErr()
+	if ref == 0 {
+		ref = l.Hash()
+	}
+	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v})
+	return ref, f.appendErr()
 }
 
 func (f *fakeAppender) Commit() error {
