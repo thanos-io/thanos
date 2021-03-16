@@ -441,6 +441,32 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{}, resp.Values)
+
+	// check label value matcher
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{"b"}, resp.Values)
+
+	// check another label value matcher
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "d"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Values)
 }
 
 // Test to check external label values retrieve.
