@@ -797,9 +797,9 @@ func blockSeries(
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
-func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, saviour func([]byte) ([]byte, error)) error {
+func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, savior func([]byte) ([]byte, error)) error {
 	if in.Encoding() == chunkenc.EncXOR {
-		b, err := saviour(in.Bytes())
+		b, err := savior(in.Bytes())
 		if err != nil {
 			return err
 		}
@@ -819,7 +819,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrCount)
 			}
-			b, err := saviour(x.Bytes())
+			b, err := savior(x.Bytes())
 			if err != nil {
 				return err
 			}
@@ -829,7 +829,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrSum)
 			}
-			b, err := saviour(x.Bytes())
+			b, err := savior(x.Bytes())
 			if err != nil {
 				return err
 			}
@@ -839,7 +839,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrMin)
 			}
-			b, err := saviour(x.Bytes())
+			b, err := savior(x.Bytes())
 			if err != nil {
 				return err
 			}
@@ -849,7 +849,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrMax)
 			}
-			b, err := saviour(x.Bytes())
+			b, err := savior(x.Bytes())
 			if err != nil {
 				return err
 			}
@@ -859,7 +859,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrCounter)
 			}
-			b, err := saviour(x.Bytes())
+			b, err := savior(x.Bytes())
 			if err != nil {
 				return err
 			}
@@ -2399,7 +2399,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(l)
 		if chunkLen <= len(cb) {
-			if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk(cb[n:chunkLen]), aggrs, r.saviour); err != nil {
+			if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk(cb[n:chunkLen]), aggrs, r.savior); err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
 			continue
@@ -2427,7 +2427,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
 		r.stats.chunksFetchedSizeSum += len(*nb)
 
-		if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk((*nb)[n:]), aggrs, r.saviour); err != nil {
+		if err := populateChunk(&(res[pIdx.i].chks[pIdx.j]), rawChunk((*nb)[n:]), aggrs, r.savior); err != nil {
 			return errors.Wrap(err, "populate chunk")
 		}
 
@@ -2436,7 +2436,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	return nil
 }
 
-func (r *bucketChunkReader) saviour(b []byte) ([]byte, error) {
+func (r *bucketChunkReader) savior(b []byte) ([]byte, error) {
 	cb, err := r.block.chunkPool.Get(len(b))
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
