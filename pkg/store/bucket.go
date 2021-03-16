@@ -66,7 +66,9 @@ const (
 	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
 	EstimatedMaxChunkSize = 16000
 	maxSeriesSize         = 64 * 1024
-	chunkBytesPoolMinSize = 8
+	// Relatively large in order to reduce memory waste, yet small enough to avoid excessive allocations.
+	chunkBytesPoolMinSize = 64 * 1024        // 64 KiB
+	chunkBytesPoolMaxSize = 64 * 1024 * 1024 // 64 MiB
 
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
@@ -2437,14 +2439,18 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 }
 
 func (r *bucketChunkReader) savior(b []byte) ([]byte, error) {
-	cb, err := r.block.chunkPool.Get(len(b))
-	if err != nil {
-		return nil, errors.Wrap(err, "allocate chunk bytes")
+	// Ensure we never grow slab beyond original capacity.
+	if len(r.chunkBytes) == 0 ||
+		cap(*r.chunkBytes[len(r.chunkBytes)-1])-len(*r.chunkBytes[len(r.chunkBytes)-1]) < len(b) {
+		s, err := r.block.chunkPool.Get(len(b))
+		if err != nil {
+			return nil, errors.Wrap(err, "allocate chunk bytes")
+		}
+		r.chunkBytes = append(r.chunkBytes, s)
 	}
-	*cb = append(*cb, b...)
-
-	r.chunkBytes = append(r.chunkBytes, cb)
-	return *cb, nil
+	slab := r.chunkBytes[len(r.chunkBytes)-1]
+	*slab = append(*slab, b...)
+	return (*slab)[len(*slab)-len(b):], nil
 }
 
 // rawChunk is a helper type that wraps a chunk's raw bytes and implements the chunkenc.Chunk
@@ -2556,5 +2562,5 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
-	return pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, maxChunkPoolBytes)
+	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
 }

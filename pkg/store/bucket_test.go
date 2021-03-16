@@ -1256,7 +1256,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	f, err := block.NewRawMetaFetcher(logger, ibkt)
 	testutil.Ok(t, err)
 
-	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, 1e9) // 1GB.
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 1e9) // 1GB.
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
@@ -1319,10 +1319,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 
 	if !t.IsBenchmark() {
 		if !skipChunk {
-			chunksPerSeriesPerBlock := int(math.Ceil(float64(samplesPerSeriesPerBlock) / float64(MaxSamplesPerChunk)))
-			expectedChunks := numOfBlocks * seriesPerBlock * chunksPerSeriesPerBlock
-			// Make sure the pool is correctly used. This is expected for 200k numbers.
-			testutil.Equals(t, expectedChunks, int(st.chunkPool.(*mockedPool).gets.Load()))
 			// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
 			testutil.Equals(t, 0, int(st.chunkPool.(*mockedPool).balance.Load()))
 			st.chunkPool.(*mockedPool).gets.Store(0)
@@ -1384,7 +1380,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, 50e6, 2, 100e7)
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
 	testutil.Ok(t, err)
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
