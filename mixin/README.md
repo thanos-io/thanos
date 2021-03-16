@@ -103,6 +103,7 @@ This project is intended to be used as a library. You can extend and customize d
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
     commonSelector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
+    commonAggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
   },
 }
 ```

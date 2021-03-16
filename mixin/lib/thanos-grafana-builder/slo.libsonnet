@@ -1,7 +1,7 @@
 {
   sloLatency(title, description, selector, aggregator, quantile, warning, critical)::
     local aggregatedLabels = std.split(aggregator, ',');
-    local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]);
+    local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]);
 
     $.panel(title, description) +
     $.queryPanel(

@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   },
   grafanaDashboards+:: {
     local selector = std.join(', ', thanos.dashboard.commonSelector + ['job="$job"']),
-    local aggregator = std.join(', ', thanos.dashboard.commonSelector + ['job']),
+    local aggregator = std.join(', ', thanos.dashboard.commonAggregator + ['job']),
 
     [if thanos.receive != null then 'receive.json']:
       g.dashboard(thanos.receive.title)

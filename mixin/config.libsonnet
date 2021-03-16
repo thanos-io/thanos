@@ -43,5 +43,6 @@
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
     commonSelector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
+    commonAggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
   },
 }

@@ -1,7 +1,7 @@
 {
   grpcRequestsPanel(metric, selector, aggregator):: {
     local aggregatedLabels = std.split(aggregator, ','),
-    local aggregatorTemplate = std.join(' ', ['{{%s}}' % label for label in aggregatedLabels]),
+    local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
 
     seriesOverrides: [
       { alias: '/Aborted/', color: '#EAB839' },
