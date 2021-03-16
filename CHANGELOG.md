@@ -13,21 +13,40 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
+- [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
+- [3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 
+### Fixed
+- [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
+- [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
+
+### Changed
+
+### Removed
+
+## [v0.19.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.19)
+
+### Added
+
+- [#3862](https://github.com/thanos-io/thanos/pull/3862) Sidecar, Store, Query, Ruler, Receiver, Query-Frontend: Added request logging for gRPC and HTTP in the server side.
 - [#3740](https://github.com/thanos-io/thanos/pull/3740) Query: Added `--query.default-step` flag to set default step.
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) ui: make old bucket viewer UI work with vanilla Prometheus blocks
 - [#2641](https://github.com/thanos-io/thanos/issues/2641) Query Frontend: Added `--query-range.request-downsampled` flag enabling additional queries for downsampled data in case of empty or incomplete response to range request.
 - [#3792](https://github.com/thanos-io/thanos/pull/3792) Receiver: Added `--tsdb.allow-overlapping-blocks` flag to allow overlapping tsdb blocks and enable vertical compaction
+- [#3031](https://github.com/thanos-io/thanos/pull/3031) Compact/Sidecar/other writers: added `--hash-func`. If some function has been specified, writers calculate hashes using that function of each file in a block before uploading them. If those hashes exist in the `meta.json` file then Compact does not download the files if they already exist on disk and with the same hash. This also means that the data directory passed to Thanos Compact is only *cleared once at boot* or *if everything succeeds*. So, if you, for example, use persistent volumes on k8s and your Thanos Compact crashes or fails to make an iteration properly then the last downloaded files are not wiped from the disk. The directories that were created the last time are only wiped again after a successful iteration or if the previously picked up blocks have disappeared.
+- [#3686](https://github.com/thanos-io/thanos/pull/3686) Query: Added federated metric metadata support.
 
 ### Fixed
 
 - [#3773](https://github.com/thanos-io/thanos/pull/3773) Compact: Pad compaction planner size check
-- [#3796](https://github.com/thanos-io/thanos/pull/3796) Store: Decreased memory allocations while fetching block's chunks.
+- [#3795](https://github.com/thanos-io/thanos/pull/3795) s3: A truncated "get object" response is reported as error.
+- [#3814](https://github.com/thanos-io/thanos/pull/3814) Store: Decreased memory utilisation while fetching block's chunks.
 - [#3815](https://github.com/thanos-io/thanos/pull/3815) Receive: Improve handling of empty time series from clients
 
 ### Changed
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
+- [#3854](https://github.com/thanos-io/thanos/pull/3854) Mixin: Remove assumed metrics. Use `thanos_info` instead of `kube_pod_info` for dashboard selectors.
 
 ## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.27
 

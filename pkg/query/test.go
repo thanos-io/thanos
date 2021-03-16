@@ -22,6 +22,9 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 var (
@@ -619,3 +622,34 @@ type clearCmd struct{}
 func (cmd clearCmd) String() string {
 	return "clear"
 }
+
+type inProcessClient struct {
+	t testing.TB
+
+	name string
+
+	storepb.StoreClient
+	extLset labels.Labels
+}
+
+func NewInProcessClient(t testing.TB, name string, client storepb.StoreClient, extLset labels.Labels) store.Client {
+	return inProcessClient{
+		t:           t,
+		name:        name,
+		StoreClient: client,
+		extLset:     extLset,
+	}
+}
+
+func (i inProcessClient) LabelSets() []labels.Labels {
+	return []labels.Labels{i.extLset}
+}
+
+func (i inProcessClient) TimeRange() (mint int64, maxt int64) {
+	r, err := i.Info(context.TODO(), &storepb.InfoRequest{})
+	testutil.Ok(i.t, err)
+	return r.MinTime, r.MaxTime
+}
+
+func (i inProcessClient) String() string { return i.name }
+func (i inProcessClient) Addr() string   { return i.name }

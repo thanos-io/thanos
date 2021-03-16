@@ -32,7 +32,7 @@ Thanos aims for a simple deployment and maintenance model. The only dependencies
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
-Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>` in
+Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in
 [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
@@ -90,7 +90,7 @@ If you want to add yourself to this list, let us know!
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/master/mixin/README.md)
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md)
 We also have example Grafana dashboards [here](/examples/dashboards/dashboards.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
 
 ## Talks

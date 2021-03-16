@@ -343,8 +343,9 @@ func CreateBlock(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
@@ -356,8 +357,9 @@ func CreateBlockWithTombstone(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
@@ -372,8 +374,9 @@ func CreateBlockWithBlockDelay(
 	blockDelay time.Duration,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -407,6 +410,7 @@ func createBlock(
 	extLset labels.Labels,
 	resolution int64,
 	tombstones bool,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
@@ -476,10 +480,37 @@ func createBlock(
 	}
 
 	blockDir := filepath.Join(dir, id.String())
+
+	files := []metadata.File{}
+	if hashFunc != metadata.NoneFunc {
+		paths := []string{}
+		if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			paths = append(paths, path)
+			return nil
+		}); err != nil {
+			return id, errors.Wrapf(err, "walking %s", dir)
+		}
+
+		for _, p := range paths {
+			pHash, err := metadata.CalculateHash(p, metadata.SHA256Func, log.NewNopLogger())
+			if err != nil {
+				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
+			}
+			files = append(files, metadata.File{
+				RelPath: strings.TrimPrefix(p, blockDir+"/"),
+				Hash:    &pHash,
+			})
+		}
+	}
+
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
 		Labels:     extLset.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,
+		Files:      files,
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}

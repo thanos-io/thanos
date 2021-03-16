@@ -43,6 +43,8 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/metadata"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -70,10 +72,13 @@ type QueryAPI struct {
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
 	queryEngine func(int64) *promql.Engine
 	ruleGroups  rules.UnaryClient
+	metadatas   metadata.UnaryClient
 
-	enableAutodownsampling     bool
-	enableQueryPartialResponse bool
-	enableRulePartialResponse  bool
+	enableAutodownsampling              bool
+	enableQueryPartialResponse          bool
+	enableRulePartialResponse           bool
+	enableMetricMetadataPartialResponse bool
+	disableCORS                         bool
 
 	replicaLabels []string
 	storeSet      *query.StoreSet
@@ -90,32 +95,38 @@ func NewQueryAPI(
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
+	metadatas metadata.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
+	enableMetricMetadataPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
+	disableCORS bool,
 	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
-		baseAPI:         api.NewBaseAPI(logger, flagsMap, make(map[string]string)),
+		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap, make(map[string]string)),
 		logger:          logger,
 		queryEngine:     qe,
 		queryableCreate: c,
 		gate:            gate,
 		ruleGroups:      ruleGroups,
+		metadatas:       metadatas,
 
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
+		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
+		disableCORS:                            disableCORS,
 	}
 }
 
@@ -123,7 +134,7 @@ func NewQueryAPI(
 func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	qapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, qapi.disableCORS)
 
 	r.Get("/query", instr("query", qapi.query))
 	r.Post("/query", instr("query", qapi.query))
@@ -142,6 +153,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 	r.Get("/stores", instr("stores", qapi.stores))
 
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
+
+	r.Get("/metadata", instr("metadata", NewMetricMetadataHandler(qapi.metadatas, qapi.enableMetricMetadataPartialResponse)))
 }
 
 type queryData struct {
@@ -237,6 +250,7 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 		if err != nil {
 			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Step)}
 		}
+		return defaultRangeQueryStep, nil
 	}
 
 	// Default step is used this way to make it consistent with UI.
@@ -340,7 +354,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	step, apiErr := qapi.parseStep(r, qapi.defaultRangeQueryStep, int64(end.Sub(start)/time.Second))
-	if err != nil {
+	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
@@ -630,7 +644,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	return names, warnings, nil
 }
 
-func (qapi *QueryAPI) stores(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiError) {
 	statuses := make(map[string][]query.StoreStatus)
 	for _, status := range qapi.storeSet.GetStoreStatus() {
 		statuses[status.StoreType.String()] = append(statuses[status.StoreType.String()], status)
@@ -789,4 +803,36 @@ func labelValuesByMatchers(sets []storage.SeriesSet, name string) ([]string, sto
 	}
 	sort.Strings(labelValues)
 	return labelValues, warnings, nil
+}
+
+func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		req := &metadatapb.MetadataRequest{
+			// By default we use -1, which means no limit.
+			Limit:                   -1,
+			Metric:                  r.URL.Query().Get("metric"),
+			PartialResponseStrategy: ps,
+		}
+
+		limitStr := r.URL.Query().Get("limit")
+		if limitStr != "" {
+			limit, err := strconv.ParseInt(limitStr, 10, 32)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid metric metadata limit='%v'", limit)}
+			}
+			req.Limit = int32(limit)
+		}
+
+		t, warnings, err := client.Metadata(r.Context(), req)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
+		}
+
+		return t, warnings, nil
+	}
 }

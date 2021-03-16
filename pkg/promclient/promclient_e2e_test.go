@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -92,6 +93,7 @@ func TestSnapshot_e2e(t *testing.T) {
 			timestamp.FromTime(now.Add(-4*time.Hour)),
 			nil,
 			0,
+			metadata.NoneFunc,
 		)
 		testutil.Ok(t, err)
 
@@ -162,6 +164,7 @@ func TestQueryRange_e2e(t *testing.T) {
 			timestamp.FromTime(now),
 			nil,
 			0,
+			metadata.NoneFunc,
 		)
 		testutil.Ok(t, err)
 

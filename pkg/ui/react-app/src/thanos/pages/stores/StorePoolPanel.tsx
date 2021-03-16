@@ -36,7 +36,7 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
         <Table size="sm" bordered hover>
           <thead>
             <tr key="header">
-              {columns.map(column => (
+              {columns.map((column) => (
                 <th key={column}>{column}</th>
               ))}
             </tr>

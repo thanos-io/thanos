@@ -28,6 +28,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -58,13 +59,14 @@ type blockDesc struct {
 	maxt    int64
 
 	markedForNoCompact bool
+	hashFunc           metadata.HashFunc
 }
 
-func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration) (ulid.ULID, error) {
+func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration, hf metadata.HashFunc) (ulid.ULID, error) {
 	if delay == 0*time.Second {
-		return e2eutil.CreateBlock(ctx, dir, b.series, 120, b.mint, b.maxt, b.extLset, 0)
+		return e2eutil.CreateBlock(ctx, dir, b.series, 120, b.mint, b.maxt, b.extLset, 0, hf)
 	}
-	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0)
+	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0, hf)
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {
@@ -77,6 +79,8 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	// To have deterministic compaction, let's have fixed date:
 	now, err := time.Parse(time.RFC3339, "2020-03-24T08:00:00Z")
 	testutil.Ok(t, err)
+
+	var blocksWithHashes []ulid.ULID
 
 	// Simulate real scenario, including more complex cases like overlaps if needed.
 	// TODO(bwplotka): Add blocks to downsample and test delayed delete.
@@ -104,10 +108,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	blocks = append(blocks,
 		// Non overlapping blocks, ready for compaction.
 		blockDesc{
-			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
-			extLset: labels.FromStrings("case", "compaction-ready", "replica", "1"),
-			mint:    timestamp.FromTime(now),
-			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			series:   []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset:  labels.FromStrings("case", "compaction-ready", "replica", "1"),
+			mint:     timestamp.FromTime(now),
+			maxt:     timestamp.FromTime(now.Add(2 * time.Hour)),
+			hashFunc: metadata.SHA256Func,
 		},
 		blockDesc{
 			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
@@ -345,12 +350,16 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	rawBlockIDs := map[ulid.ULID]struct{}{}
 	for _, b := range blocks {
-		id, err := b.Create(ctx, dir, justAfterConsistencyDelay)
+		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 		rawBlockIDs[id] = struct{}{}
 		if b.markedForNoCompact {
 			testutil.Ok(t, block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
+		}
+
+		if b.hashFunc != metadata.NoneFunc {
+			blocksWithHashes = append(blocksWithHashes, id)
 		}
 	}
 	{
@@ -363,33 +372,33 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		}
 
 		// New Partial block.
-		id, err := malformedBase.Create(ctx, dir, 0*time.Second)
+		id, err := malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// New Partial block + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 0*time.Second)
+		id, err = malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + old deletion mark ready to be deleted.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		deletionMark, err := json.Marshal(metadata.DeletionMark{
@@ -403,13 +412,13 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after delete threshold.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour)
+		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after delete threshold + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour)
+		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
@@ -439,7 +448,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -577,7 +586,21 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, s.Stop(c))
 	}
 
-	t.Run("dedup enabled; compactor should work as expected", func(t *testing.T) {
+	// Sequential because we want to check that Thanos Compactor does not
+	// touch files it does not need to.
+	// Dedup enabled; compactor should work as expected.
+	{
+		// Predownload block dirs with hashes. We should not try downloading them again.
+		p := filepath.Join(s.SharedDir(), "data", "compact", "working")
+
+		for _, id := range blocksWithHashes {
+			m, err := block.DownloadMeta(ctx, logger, bkt, id)
+			testutil.Ok(t, err)
+
+			delete(m.Thanos.Labels, "replica")
+			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", compact.DefaultGroupKey(m.Thanos), id.String())))
+		}
+
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
 		testutil.Ok(t, err)
@@ -607,6 +630,18 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
+
+		bucketMatcher, err := labels.NewMatcher(labels.MatchEqual, "bucket", bucket)
+		testutil.Ok(t, err)
+		operationMatcher, err := labels.NewMatcher(labels.MatchEqual, "operation", "get")
+		testutil.Ok(t, err)
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(478),
+			[]string{"thanos_objstore_bucket_operations_total"}, e2e.WithLabelMatchers(
+				bucketMatcher,
+				operationMatcher,
+			)),
+		)
+
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, s.Stop(c))
 
@@ -625,7 +660,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
-	})
+	}
 
 	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s")

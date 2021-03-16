@@ -10,7 +10,7 @@ local lower(x) =
 
 {
   _config+:: {
-    runbookURLPattern: 'https://github.com/thanos-io/thanos/tree/master/mixin/runbook.md#alert-name-%s',
+    runbookURLPattern: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-%s',
   },
 
   prometheusAlerts+::

@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Compact dashboard',
   },
   grafanaDashboards+:: {
-    'compact.json':
+    [if thanos.compact != null then 'compact.json']:
       g.dashboard(thanos.compact.title)
       .addRow(
         g.row('Group Compaction')
@@ -165,8 +165,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.compact, true, '%(jobPrefix)s.*' % thanos.compact) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.compact, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace", %(selector)s' % thanos.compact, true, '%(jobPrefix)s.*' % thanos.compact),
 
     __overviewRows__+:: [
       g.row('Compact')

@@ -100,8 +100,8 @@ export const PanelListContent: FC<PanelListProps> = ({
           key={id}
           options={options}
           id={id}
-          onOptionsChanged={opts =>
-            callAll(setPanels, updateURL)(panels.map(p => (id === p.id ? { ...p, options: opts } : p)))
+          onOptionsChanged={(opts) =>
+            callAll(setPanels, updateURL)(panels.map((p) => (id === p.id ? { ...p, options: opts } : p)))
           }
           removePanel={() =>
             callAll(

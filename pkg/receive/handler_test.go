@@ -44,7 +44,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "nil multierror",
-			err:  errutil.MultiError([]error{}),
+			err:  errutil.NonNilMultiError([]error{}),
 		},
 		{
 			name:      "matching simple",
@@ -54,7 +54,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "non-matching multierror",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				errors.New("foo"),
 				errors.New("bar"),
 			}),
@@ -62,7 +62,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "nested non-matching multierror",
-			err: errors.Wrap(errutil.MultiError([]error{
+			err: errors.Wrap(errutil.NonNilMultiError([]error{
 				errors.New("foo"),
 				errors.New("bar"),
 			}), "baz"),
@@ -71,9 +71,9 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "deep nested non-matching multierror",
-			err: errors.Wrap(errutil.MultiError([]error{
+			err: errors.Wrap(errutil.NonNilMultiError([]error{
 				errors.New("foo"),
-				errutil.MultiError([]error{
+				errutil.NonNilMultiError([]error{
 					errors.New("bar"),
 					errors.New("qux"),
 				}),
@@ -83,7 +83,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
@@ -93,7 +93,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "matching but below threshold multierror",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
@@ -103,7 +103,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror many",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				status.Error(codes.AlreadyExists, "conflict"),
@@ -115,7 +115,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror many, one above threshold",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				tsdb.ErrNotReady,
@@ -128,7 +128,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "matching multierror many, both above threshold, conflict have precedence",
-			err: errutil.MultiError([]error{
+			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				tsdb.ErrNotReady,
@@ -142,7 +142,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "nested matching multierror",
-			err: errors.Wrap(errors.Wrap(errutil.MultiError([]error{
+			err: errors.Wrap(errors.Wrap(errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errors.New("foo"),
 				errors.New("bar"),
@@ -152,8 +152,8 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		},
 		{
 			name: "deep nested matching multierror",
-			err: errors.Wrap(errutil.MultiError([]error{
-				errutil.MultiError([]error{
+			err: errors.Wrap(errutil.NonNilMultiError([]error{
+				errutil.NonNilMultiError([]error{
 					errors.New("qux"),
 					status.Error(codes.AlreadyExists, "conflict"),
 					status.Error(codes.AlreadyExists, "conflict"),

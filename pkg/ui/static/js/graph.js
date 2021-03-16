@@ -309,7 +309,7 @@ Prometheus.Graph.prototype.setDefaultStep = function(el) {
                     self.showError("Error querying flags.");
                     return;
                 } 
-                el.defaultStep = (json.data && "query.default-stp" in json.data) ? json.data["query.default-stp"] : "1s"
+                el.defaultStep = (json.data && "query.default-step" in json.data) ? json.data["query.default-step"] : "1s"
                 
             },
             error: function() {

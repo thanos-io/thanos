@@ -1,4 +1,4 @@
-# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.3.0. DO NOT EDIT.
+# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.3.1. DO NOT EDIT.
 # All tools are designed to be build inside $GOBIN.
 BINGO_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 GOPATH ?= $(shell go env GOPATH)
@@ -77,23 +77,35 @@ $(JB): $(BINGO_DIR)/jb.mod
 	@echo "(re)installing $(GOBIN)/jb-v0.4.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jb.mod -o=$(GOBIN)/jb-v0.4.0 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
 
-JSONNET := $(GOBIN)/jsonnet-v0.16.0
+JSONNET_LINT := $(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0
+$(JSONNET_LINT): $(BINGO_DIR)/jsonnet-lint.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet-lint.mod -o=$(GOBIN)/jsonnet-lint-v0.17.1-0.20210113194615-cd59751527e0 "github.com/google/go-jsonnet/cmd/jsonnet-lint"
+
+JSONNET := $(GOBIN)/jsonnet-v0.17.0
 $(JSONNET): $(BINGO_DIR)/jsonnet.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jsonnet-v0.16.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet.mod -o=$(GOBIN)/jsonnet-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnet"
+	@echo "(re)installing $(GOBIN)/jsonnet-v0.17.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet.mod -o=$(GOBIN)/jsonnet-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnet"
 
-JSONNETFMT := $(GOBIN)/jsonnetfmt-v0.16.0
+JSONNETFMT := $(GOBIN)/jsonnetfmt-v0.17.0
 $(JSONNETFMT): $(BINGO_DIR)/jsonnetfmt.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.16.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
+	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.17.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): $(BINGO_DIR)/minio.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da "github.com/minio/minio"
+
+PROMDOC := $(GOBIN)/promdoc-v0.7.0
+$(PROMDOC): $(BINGO_DIR)/promdoc.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/promdoc-v0.7.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promdoc.mod -o=$(GOBIN)/promdoc-v0.7.0 "github.com/plexsystems/promdoc"
 
 PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f
 $(PROMETHEUS_ARRAY): $(BINGO_DIR)/prometheus.mod $(BINGO_DIR)/prometheus.1.mod
@@ -115,11 +127,11 @@ $(PROMU): $(BINGO_DIR)/promu.mod
 	@echo "(re)installing $(GOBIN)/promu-v0.5.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promu.mod -o=$(GOBIN)/promu-v0.5.0 "github.com/prometheus/promu"
 
-PROTOC_GEN_GOGOFAST := $(GOBIN)/protoc-gen-gogofast-v1.3.1
+PROTOC_GEN_GOGOFAST := $(GOBIN)/protoc-gen-gogofast-v1.3.2
 $(PROTOC_GEN_GOGOFAST): $(BINGO_DIR)/protoc-gen-gogofast.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.1"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.1 "github.com/gogo/protobuf/protoc-gen-gogofast"
+	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.2"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.2 "github.com/gogo/protobuf/protoc-gen-gogofast"
 
 SHFMT := $(GOBIN)/shfmt-v3.1.2
 $(SHFMT): $(BINGO_DIR)/shfmt.mod

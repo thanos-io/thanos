@@ -9,7 +9,7 @@
     bucketOpsP99LatencyThreshold: 2,
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.store == null then [] else [
       {
         name: 'thanos-store',
         rules: [

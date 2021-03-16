@@ -8,7 +8,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Query dashboard',
   },
   grafanaDashboards+:: {
-    'query.json':
+    [if thanos.query != null then 'query.json']:
       g.dashboard(thanos.query.title)
       .addRow(
         g.row('Instant Query API')
@@ -91,8 +91,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.query, true, '%(jobPrefix)s.*' % thanos.query) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.query, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace", %(selector)s' % thanos.query, true, '%(jobPrefix)s.*' % thanos.query),
 
     __overviewRows__+:: [
       g.row('Instant Query')

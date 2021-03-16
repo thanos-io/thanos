@@ -16,13 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -46,6 +47,11 @@ type StoreSpec interface {
 
 type RuleSpec interface {
 	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+	Addr() string
+}
+
+type MetadataSpec interface {
+	// Addr returns MetadataAPI Address for the metadata spec. It is used as its ID.
 	Addr() string
 }
 
@@ -181,6 +187,7 @@ type StoreSet struct {
 	// accessible and we close gRPC client for it.
 	storeSpecs          func() []StoreSpec
 	ruleSpecs           func() []RuleSpec
+	metadataSpecs       func() []MetadataSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
@@ -203,6 +210,7 @@ func NewStoreSet(
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
 	ruleSpecs func() []RuleSpec,
+	metadataSpecs func() []MetadataSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
@@ -220,11 +228,15 @@ func NewStoreSet(
 	if ruleSpecs == nil {
 		ruleSpecs = func() []RuleSpec { return nil }
 	}
+	if metadataSpecs == nil {
+		metadataSpecs = func() []MetadataSpec { return nil }
+	}
 
 	ss := &StoreSet{
 		logger:                log.With(logger, "component", "storeset"),
 		storeSpecs:            storeSpecs,
 		ruleSpecs:             ruleSpecs,
+		metadataSpecs:         metadataSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
 		gRPCInfoCallTimeout:   5 * time.Second,
@@ -243,7 +255,8 @@ type storeRef struct {
 	cc   *grpc.ClientConn
 	addr string
 	// If rule is not nil, then this store also supports rules API.
-	rule rulespb.RulesClient
+	rule     rulespb.RulesClient
+	metadata metadatapb.MetadataClient
 
 	// Meta (can change during runtime).
 	labelSets []labels.Labels
@@ -254,7 +267,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, metadata metadatapb.MetadataClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -263,6 +276,7 @@ func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int6
 	s.minTime = minTime
 	s.maxTime = maxTime
 	s.rule = rule
+	s.metadata = metadata
 }
 
 func (s *storeRef) StoreType() component.StoreAPI {
@@ -277,6 +291,13 @@ func (s *storeRef) HasRulesAPI() bool {
 	defer s.mtx.RUnlock()
 
 	return s.rule != nil
+}
+
+func (s *storeRef) HasMetadataAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.metadata != nil
 }
 
 func (s *storeRef) LabelSets() []labels.Labels {
@@ -402,13 +423,19 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 		mtx          sync.Mutex
 		wg           sync.WaitGroup
 
-		storeAddrSet = make(map[string]struct{})
-		ruleAddrSet  = make(map[string]struct{})
+		storeAddrSet    = make(map[string]struct{})
+		ruleAddrSet     = make(map[string]struct{})
+		metadataAddrSet = make(map[string]struct{})
 	)
 
 	// Gather active stores map concurrently. Build new store if does not exist already.
 	for _, ruleSpec := range s.ruleSpecs() {
 		ruleAddrSet[ruleSpec.Addr()] = struct{}{}
+	}
+
+	// Gather active stores map concurrently. Build new store if does not exist already.
+	for _, metadataSpec := range s.metadataSpecs() {
+		metadataAddrSet[metadataSpec.Addr()] = struct{}{}
 	}
 
 	// Gather healthy stores map concurrently. Build new store if does not exist already.
@@ -446,6 +473,11 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				rule = rulespb.NewRulesClient(st.cc)
 			}
 
+			var metadata metadatapb.MetadataClient
+			if _, ok := metadataAddrSet[addr]; ok {
+				metadata = metadatapb.NewMetadataClient(st.cc)
+			}
+
 			// Check existing or new store. Is it healthy? What are current metadata?
 			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
 			if err != nil {
@@ -470,7 +502,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			s.updateStoreStatus(st, nil)
-			st.Update(labelSets, minTime, maxTime, storeType, rule)
+			st.Update(labelSets, minTime, maxTime, storeType, rule, metadata)
 
 			mtx.Lock()
 			defer mtx.Unlock()
@@ -552,6 +584,20 @@ func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 		}
 	}
 	return rules
+}
+
+// GetMetadataClients returns a list of all active metadata clients.
+func (s *StoreSet) GetMetadataClients() []metadatapb.MetadataClient {
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
+
+	metadataClients := make([]metadatapb.MetadataClient, 0, len(s.stores))
+	for _, st := range s.stores {
+		if st.HasMetadataAPI() {
+			metadataClients = append(metadataClients, st.metadata)
+		}
+	}
+	return metadataClients
 }
 
 func (s *StoreSet) Close() {
