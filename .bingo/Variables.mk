@@ -35,11 +35,11 @@ $(EMBEDMD): $(BINGO_DIR)/embedmd.mod
 	@echo "(re)installing $(GOBIN)/embedmd-v0.0.0-20181127031020-97c13d6e4160"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=embedmd.mod -o=$(GOBIN)/embedmd-v0.0.0-20181127031020-97c13d6e4160 "github.com/campoy/embedmd"
 
-FAILLINT := $(GOBIN)/faillint-v1.5.0
+FAILLINT := $(GOBIN)/faillint-v1.7.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/faillint-v1.5.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.5.0 "github.com/fatih/faillint"
+	@echo "(re)installing $(GOBIN)/faillint-v1.7.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.7.0 "github.com/fatih/faillint"
 
 GO_BINDATA := $(GOBIN)/go-bindata-v3.1.1+incompatible
 $(GO_BINDATA): $(BINGO_DIR)/go-bindata.mod
