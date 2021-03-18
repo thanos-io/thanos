@@ -940,7 +940,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p50 {{job}}",
@@ -951,7 +951,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p90 {{job}}",
@@ -962,7 +962,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p99 {{job}}",
@@ -1302,7 +1302,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p50 {{job}}",
@@ -1313,7 +1313,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p90 {{job}}",
@@ -1324,7 +1324,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p99 {{job}}",
@@ -1664,7 +1664,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p50 {{job}}",
@@ -1675,7 +1675,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p90 {{job}}",
@@ -1686,7 +1686,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "p99 {{job}}",

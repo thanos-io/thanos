@@ -76,7 +76,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="unary", grpc_method="RemoteWrite"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
+          g.latencyPanel('grpc_server_handling_seconds', '%s, grpc_type="unary", grpc_method="RemoteWrite"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
         )
       )
       .addRow(
@@ -91,7 +91,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="unary", grpc_method!="RemoteWrite"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
+          g.latencyPanel('grpc_server_handling_seconds', '%s, grpc_type="unary", grpc_method!="RemoteWrite"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
         )
       )
       .addRow(
@@ -106,7 +106,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="server_stream"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
+          g.latencyPanel('grpc_server_handling_seconds', '%s, grpc_type="server_stream"' % thanos.receive.dashboard.selector, thanos.receive.dashboard.aggregator)
         )
       )
       .addRow(
