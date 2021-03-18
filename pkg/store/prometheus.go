@@ -50,6 +50,7 @@ type PrometheusStore struct {
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
 	timestamps       func() (mint int64, maxt int64)
+	promVersion		 func() string
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -69,6 +70,7 @@ func NewPrometheusStore(
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
+	promVersion func() string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -80,6 +82,7 @@ func NewPrometheusStore(
 		component:                     component,
 		externalLabelsFn:              externalLabelsFn,
 		timestamps:                    timestamps,
+		promVersion:				   promVersion,	
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -496,10 +499,31 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
 	}
 
-	vals, err := p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Matchers, r.Start, r.End)
-	if err != nil {
-		return nil, err
+	var (
+		vals     []string
+		sers 	 []map[string]string
+		err 	 error
+	)
+
+	version := p.promVersion()
+	if version > "2.24" {
+		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+		sort.Strings(vals)
+	} else {
+		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range sers {
+			vals = append(vals, s[r.Label])
+		}
 	}
-	sort.Strings(vals)
-	return &storepb.LabelValuesResponse{Values: vals}, nil
+	return &storepb.LabelValuesResponse{Values: vals}, nil	
 }

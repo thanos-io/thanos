@@ -607,6 +607,34 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 	return v.Data, nil
 }
 
+// BuildInfo returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
+func (c *Client) BuildInfo(ctx context.Context, base *url.URL) (string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/buildinfo")
+
+	level.Debug(c.logger).Log("msg", "querying instant", "url", u.String())
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_buildinfo HTTP[client]")
+	defer span.Finish()
+
+	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
+	if err != nil {
+		return "", err
+	}
+
+	var b struct {
+		Data struct {
+			Version string `json:"version"`
+		} `json:"data"`
+	}
+
+	if err = json.Unmarshal(body, &b); err != nil {
+		return "", errors.Wrap(err, "unmarshal build info API response")
+	}
+
+	return b.Data.Version, nil
+}
+
 func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }

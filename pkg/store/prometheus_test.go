@@ -64,7 +64,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	limitMinT := int64(0)
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return limitMinT, -1 }) // Maxt does not matter.
+		func() (int64, int64) { return limitMinT, -1 }, nil) // Maxt does not matter.
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -199,7 +199,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 
 	promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
+		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 }, nil)
 	testutil.Ok(t, err)
 
 	for _, tcase := range []struct {
@@ -375,7 +375,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
@@ -420,7 +420,8 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, 
+		func() string {return "2.25"})
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -492,7 +493,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -538,7 +539,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 0, math.MaxInt64 })
+		func() (int64, int64) { return 0, math.MaxInt64 }, nil)
 	testutil.Ok(t, err)
 	srv := newStoreSeriesServer(ctx)
 
@@ -583,7 +584,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), nil, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 123, 456 })
+		func() (int64, int64) { return 123, 456 }, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
@@ -661,7 +662,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 
 		proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-			func() (int64, int64) { return 0, math.MaxInt64 })
+			func() (int64, int64) { return 0, math.MaxInt64 }, nil)
 		testutil.Ok(t, err)
 
 		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.

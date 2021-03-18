@@ -208,6 +208,33 @@ func runSidecar(
 			cancel()
 		})
 	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			// We retry infinitely until we reach and fetch BuildInfo from our Prometheus.
+			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				if err := m.BuildVersion(ctx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch prometheur version. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus version",
+					"prometheus_version", m.Version(),
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "buildinfo query")
+			}
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	{
 		t := exthttp.NewTransport()
@@ -215,7 +242,7 @@ func runSidecar(
 		t.MaxIdleConns = conf.connection.maxIdleConns
 		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -348,6 +375,7 @@ type promMetadata struct {
 	mint   int64
 	maxt   int64
 	labels labels.Labels
+	promVersion string
 
 	limitMinTime thanosmodel.TimeOrDurationValue
 
@@ -391,6 +419,26 @@ func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 	defer s.mtx.Unlock()
 
 	return s.mint, s.maxt
+}
+
+func (s *promMetadata) BuildVersion(ctx context.Context) error {
+	ver, err := s.client.BuildInfo(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.promVersion = ver
+	return nil
+}
+
+func (s *promMetadata) Version() string {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.promVersion
 }
 
 type sidecarConfig struct {
