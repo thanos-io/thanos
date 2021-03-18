@@ -739,7 +739,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (grpc_client_handled_total, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_code}}",
@@ -1101,7 +1101,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (grpc_client_handled_total, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum by (job, grpc_code) (rate(grpc_client_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_code}}",

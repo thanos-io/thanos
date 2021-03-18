@@ -1,5 +1,5 @@
 {
-  httpQpsPanel(metricName, selector, aggregator):: {
+  httpQpsPanel(metric, selector, aggregator):: {
     local aggregatedLabels = std.split(aggregator, ','),
     local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
 
@@ -13,7 +13,7 @@
 
     targets: [
       {
-        expr: 'sum by (%s, code) (rate(%s{%s}[$interval]))' % [aggregator, metricName, selector],  // handler
+        expr: 'sum by (%s, code) (rate(%s{%s}[$interval]))' % [aggregator, metric, selector],  // handler
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: aggregatorTemplate + ' {{code}}',  // handler
@@ -23,10 +23,10 @@
     ],
   } + $.stack,
 
-  httpErrPanel(metricName, selector, aggregator)::
+  httpErrPanel(metric, selector, aggregator)::
     $.qpsErrTotalPanel(
-      '%s{%s,code=~"5.."}' % [metricName, selector],
-      '%s{%s}' % [metricName, selector],
+      '%s{%s,code=~"5.."}' % [metric, selector],
+      '%s{%s}' % [metric, selector],
       aggregator
     ),
 }
