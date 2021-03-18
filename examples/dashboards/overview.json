@@ -75,10 +75,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -162,7 +162,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"query\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -247,7 +247,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -382,10 +382,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -469,7 +469,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query_range\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"query_range\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -554,7 +554,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"query_range\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query_range\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -741,7 +741,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -828,7 +828,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -913,7 +913,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1100,7 +1100,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
@@ -1187,7 +1187,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=\"$job\", grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1272,7 +1272,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=\"$job\", grpc_type=\"unary\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1407,10 +1407,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1494,7 +1494,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"receive\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"receive\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1579,7 +1579,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=\"$job\", handler=\"receive\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"receive\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1693,7 +1693,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{job=\"$job\"}[$interval]))",
+                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
@@ -1780,7 +1780,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_alert_sender_errors_total{job=\"$job\"}[$interval])) / sum by (job) (rate(thanos_alert_sender_alerts_sent_total{job=\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_alert_sender_errors_total{}[$interval])) / sum by (job) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1865,7 +1865,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_alert_sender_latency_seconds_bucket{job=\"$job\"}[$interval])))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_alert_sender_latency_seconds_bucket{}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1979,7 +1979,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{job=\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "compaction {{job}}",
@@ -2066,7 +2066,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_failures_total{job=\"$job\"}[$interval])) / sum by (job) (rate(thanos_compact_group_compactions_total{job=\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_failures_total{}[$interval])) / sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",

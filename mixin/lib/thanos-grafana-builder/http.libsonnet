@@ -1,3 +1,5 @@
+local utils = import '../utils.libsonnet';
+
 {
   httpQpsPanel(metric, selector, aggregator):: {
     local aggregatedLabels = std.split(aggregator, ','),
@@ -13,10 +15,10 @@
 
     targets: [
       {
-        expr: 'sum by (%s, code) (rate(%s{%s}[$interval]))' % [aggregator, metric, selector],  // handler
+        expr: 'sum by (%s) (rate(%s{%s}[$interval]))' % [utils.joinLabels(aggregatedLabels + ['handler', 'code']), metric, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{code}}',  // handler
+        legendFormat: aggregatorTemplate + ' {{handler}} {{code}}',
         refId: 'A',
         step: 10,
       },

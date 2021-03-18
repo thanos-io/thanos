@@ -1,3 +1,5 @@
+local utils = import '../utils.libsonnet';
+
 {
   grpcRequestsPanel(metric, selector, aggregator):: {
     local aggregatedLabels = std.split(aggregator, ','),
@@ -25,7 +27,7 @@
     ],
     targets: [
       {
-        expr: 'sum by (%s, grpc_method, grpc_code) (rate(%s{%s}[$interval]))' % [aggregator, metric, selector],
+        expr: 'sum by (%s) (rate(%s{%s}[$interval]))' % [utils.joinLabels(aggregatedLabels + ['grpc_method', 'grpc_code']), metric, selector],
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: aggregatorTemplate + ' {{grpc_method}} {{grpc_code}}',

@@ -1,5 +1,6 @@
 local grafana = import 'grafonnet/grafana.libsonnet';
 local template = grafana.template;
+local utils = import '../utils.libsonnet';
 
 (import 'grafana-builder/grafana.libsonnet') +
 {
@@ -45,7 +46,7 @@ local template = grafana.template;
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(%.2f, sum by (%s, le) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, aggregator, metricName, selector, multiplier],
+        expr: 'histogram_quantile(%.2f, sum by (%s) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, utils.joinLabels([aggregator, 'le']), metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'p%d %s' % [100 * percentile, aggregatorTemplate],

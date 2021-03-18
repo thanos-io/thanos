@@ -10,4 +10,6 @@
       for group in super.groups
     ],
   },
+
+  joinLabels(labels): std.join(', ', std.filter(function(x) std.length(x) > 0, labels)),
 }

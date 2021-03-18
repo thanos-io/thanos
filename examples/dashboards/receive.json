@@ -67,10 +67,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{job=\"$job\", handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }

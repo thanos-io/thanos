@@ -1,4 +1,5 @@
 local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
+local utils = import '../lib/utils.libsonnet';
 
 {
   local thanos = self,
@@ -181,7 +182,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
         ) +
         g.queryPanel(
-          'sum by (%(aggregator)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+          'sum by (%(aggregator)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.dashboard.overview,
           'compaction {{job}}'
         ) +
         g.stack +
@@ -193,8 +194,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           'Shows ratio of errors compared to the total number of executed compactions against blocks that are stored in the bucket.'
         ) +
         g.qpsErrTotalPanel(
-          'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
-          'thanos_compact_group_compactions_total{%(selector)s}' % thanos.compact.dashboard.selector,
+          'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.dashboard.overview.selector,
+          'thanos_compact_group_compactions_total{%(selector)s}' % thanos.dashboard.overview.selector,
           thanos.rule.dashboard.aggregator
         ) +
         g.addDashboardLink(thanos.compact.title)

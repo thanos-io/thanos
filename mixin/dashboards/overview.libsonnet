@@ -7,7 +7,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   },
   grafanaDashboards+:: {
     'overview.json':
-      g.dashboard(thanos.overview.title),
+      g.dashboard(thanos.dashboard.overview.title),
   },
 } +
 {

@@ -67,10 +67,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{job=\"$job\", handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -377,10 +377,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, code) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{job=\"$job\", handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{code}}",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "refId": "A",
                      "step": 10
                   }

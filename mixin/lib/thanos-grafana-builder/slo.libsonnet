@@ -1,3 +1,5 @@
+local utils = import '../utils.libsonnet';
+
 {
   sloLatency(title, description, selector, aggregator, quantile, warning, critical)::
     local aggregatedLabels = std.split(aggregator, ',');
@@ -5,7 +7,7 @@
 
     $.panel(title, description) +
     $.queryPanel(
-      'histogram_quantile(%.2f, sum by (%s, le) (rate(%s[$interval])))' % [quantile, aggregator, selector],
+      'histogram_quantile(%.2f, sum by (%s) (rate(%s[$interval])))' % [quantile, utils.joinLabels(aggregatedLabels + ['le']), selector],
       aggregatorTemplate + ' P' + quantile * 100
     ) +
     {

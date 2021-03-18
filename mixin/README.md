@@ -96,14 +96,17 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~"thanos-bucket-replicate.*"',
     title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },
-  overview+:: {
-    title: '%(prefix)sOverview' % $.dashboard.prefix,
-  },
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
     selector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
     aggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
+
+    overview+:: {
+      title: '%(prefix)sOverview' % $.dashboard.prefix,
+      selector: std.join(', ', thanos.dashboard.selector),
+      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+    },
   },
 }
 ```
