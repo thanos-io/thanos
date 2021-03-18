@@ -25,10 +25,10 @@
     ],
     targets: [
       {
-        expr: 'sum by (%s, grpc_code) (rate(%s{%s}[$interval]))' % [aggregator, metric, selector],  // grpc_method
+        expr: 'sum by (%s, grpc_method, grpc_code) (rate(%s{%s}[$interval]))' % [aggregator, metric, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{grpc_code}}',  // {{grpc_method}}
+        legendFormat: aggregatorTemplate + ' {{grpc_method}} {{grpc_code}}',
         refId: 'A',
         step: 10,
       },

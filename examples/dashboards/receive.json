@@ -765,10 +765,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1127,10 +1127,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
@@ -1489,10 +1489,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=\"$job\", grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{grpc_code}}",
+                     "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
                      "refId": "A",
                      "step": 10
                   }
