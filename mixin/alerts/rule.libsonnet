@@ -6,7 +6,7 @@
     rulerDnsErrorThreshold: 1,
     alertManagerDnsErrorThreshold: 1,
     evalErrorThreshold: 5,
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job', 'instance']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.rule == null then [] else [
@@ -85,9 +85,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s, instance, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
+                sum by (%(aggregator)s, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
               >
-                sum by (%(aggregator)s, instance, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
+                sum by (%(aggregator)s, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )
             ||| % thanos.rule,
             'for': '5m',
@@ -98,7 +98,7 @@
           {
             alert: 'ThanosRuleGrpcErrorRate',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sis failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Rule {{$labels.job}}%sis failing to handle {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Rule is failing to handle grpc requests.',
             },
             expr: |||
@@ -117,7 +117,7 @@
           {
             alert: 'ThanosRuleConfigReloadFailure',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas not been able to reload its configuration.' % location,
+              description: 'Thanos Rule {{$labels.job}}%shas not been able to reload its configuration.' % location,
               summary: 'Thanos Rule has not been able to reload configuration.',
             },
             expr: 'avg by (%(aggregator)s) (thanos_rule_config_last_reload_successful{%(selector)s}) != 1' % thanos.rule,
@@ -129,7 +129,7 @@
           {
             alert: 'ThanosRuleQueryHighDNSFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas {{$value | humanize}}%% of failing DNS queries for query endpoints.' % location,
+              description: 'Thanos Rule {{$labels.job}}%shas {{$value | humanize}}%% of failing DNS queries for query endpoints.' % location,
               summary: 'Thanos Rule is having high number of DNS failures.',
             },
             expr: |||
@@ -168,7 +168,7 @@
             // NOTE: This alert will give false positive if no rules are configured.
             alert: 'ThanosRuleNoEvaluationFor10Intervals',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas {{$value | humanize}}%% rule groups that did not evaluate for at least 10x of their expected interval.' % location,
+              description: 'Thanos Rule {{$labels.job}}%shas {{$value | humanize}}%% rule groups that did not evaluate for at least 10x of their expected interval.' % location,
               summary: 'Thanos Rule has rule groups that did not evaluate for 10 intervals.',
             },
             expr: |||

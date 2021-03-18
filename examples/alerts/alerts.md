@@ -85,7 +85,7 @@ rules:
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulequeueisdroppingalerts
     summary: Thanos Rule is failing to queue alerts.
   expr: |
-    sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{job=~"thanos-rule.*"}[5m])) > 0
+    sum by (job, instance) (rate(thanos_alert_queue_alerts_dropped_total{job=~"thanos-rule.*"}[5m])) > 0
   for: 5m
   labels:
     severity: critical
@@ -95,7 +95,7 @@ rules:
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulesenderisfailingalerts
     summary: Thanos Rule is failing to send alerts to alertmanager.
   expr: |
-    sum by (job) (rate(thanos_alert_sender_alerts_dropped_total{job=~"thanos-rule.*"}[5m])) > 0
+    sum by (job, instance) (rate(thanos_alert_sender_alerts_dropped_total{job=~"thanos-rule.*"}[5m])) > 0
   for: 5m
   labels:
     severity: critical
@@ -106,9 +106,9 @@ rules:
     summary: Thanos Rule is failing to evaluate rules.
   expr: |
     (
-      sum by (job) (rate(prometheus_rule_evaluation_failures_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(prometheus_rule_evaluation_failures_total{job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 5
     )
   for: 5m
@@ -120,7 +120,7 @@ rules:
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulehighruleevaluationwarnings
     summary: Thanos Rule has high number of evaluation warnings.
   expr: |
-    sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-rule.*"}[5m])) > 0
+    sum by (job, instance) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-rule.*"}[5m])) > 0
   for: 15m
   labels:
     severity: info
@@ -141,15 +141,15 @@ rules:
     severity: warning
 - alert: ThanosRuleGrpcErrorRate
   annotations:
-    description: Thanos Rule {{$labels.instance}} is failing to handle {{$value |
-      humanize}}% of requests.
+    description: Thanos Rule {{$labels.job}} is failing to handle {{$value | humanize}}%
+      of requests.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulegrpcerrorrate
     summary: Thanos Rule is failing to handle grpc requests.
   expr: |
     (
-      sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(grpc_server_started_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(grpc_server_started_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 5
     )
   for: 5m
@@ -157,26 +157,25 @@ rules:
     severity: warning
 - alert: ThanosRuleConfigReloadFailure
   annotations:
-    description: Thanos Rule {{$labels.instance}} has not been able to reload its
-      configuration.
+    description: Thanos Rule {{$labels.job}} has not been able to reload its configuration.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosruleconfigreloadfailure
     summary: Thanos Rule has not been able to reload configuration.
-  expr: avg by (job) (thanos_rule_config_last_reload_successful{job=~"thanos-rule.*"})
+  expr: avg by (job, instance) (thanos_rule_config_last_reload_successful{job=~"thanos-rule.*"})
     != 1
   for: 5m
   labels:
     severity: info
 - alert: ThanosRuleQueryHighDNSFailures
   annotations:
-    description: Thanos Rule {{$labels.instance}} has {{$value | humanize}}% of failing
+    description: Thanos Rule {{$labels.job}} has {{$value | humanize}}% of failing
       DNS queries for query endpoints.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulequeryhighdnsfailures
     summary: Thanos Rule is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_rule_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(thanos_rule_query_apis_dns_failures_total{job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(thanos_rule_query_apis_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(thanos_rule_query_apis_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 1
     )
   for: 15m
@@ -190,9 +189,9 @@ rules:
     summary: Thanos Rule is having high number of DNS failures.
   expr: |
     (
-      sum by (job) (rate(thanos_rule_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(thanos_rule_alertmanagers_dns_failures_total{job=~"thanos-rule.*"}[5m]))
     /
-      sum by (job) (rate(thanos_rule_alertmanagers_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
+      sum by (job, instance) (rate(thanos_rule_alertmanagers_dns_lookups_total{job=~"thanos-rule.*"}[5m]))
     * 100 > 1
     )
   for: 15m
@@ -200,14 +199,14 @@ rules:
     severity: warning
 - alert: ThanosRuleNoEvaluationFor10Intervals
   annotations:
-    description: Thanos Rule {{$labels.instance}} has {{$value | humanize}}% rule
-      groups that did not evaluate for at least 10x of their expected interval.
+    description: Thanos Rule {{$labels.job}} has {{$value | humanize}}% rule groups
+      that did not evaluate for at least 10x of their expected interval.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulenoevaluationfor10intervals
     summary: Thanos Rule has rule groups that did not evaluate for 10 intervals.
   expr: |
-    time() -  max by (job, group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"})
+    time() -  max by (job, instance, group) (prometheus_rule_group_last_evaluation_timestamp_seconds{job=~"thanos-rule.*"})
     >
-    10 * max by (job, group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
+    10 * max by (job, instance, group) (prometheus_rule_group_interval_seconds{job=~"thanos-rule.*"})
   for: 5m
   labels:
     severity: info
@@ -218,9 +217,9 @@ rules:
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations
     summary: Thanos Rule did not perform any rule evaluations.
   expr: |
-    sum by (job) (rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[2m])) <= 0
+    sum by (job, instance) (rate(prometheus_rule_evaluations_total{job=~"thanos-rule.*"}[2m])) <= 0
       and
-    sum by (job) (thanos_rule_loaded_rules{job=~"thanos-rule.*"}) > 0
+    sum by (job, instance) (thanos_rule_loaded_rules{job=~"thanos-rule.*"}) > 0
   for: 3m
   labels:
     severity: critical
