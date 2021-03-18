@@ -7,7 +7,6 @@ package thanos;
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
 import "gogoproto/gogo.proto";
-import "google/protobuf/timestamp.proto";
 
 option go_package = "exemplarspb";
 
@@ -30,13 +29,10 @@ service Exemplars {
 }
 
 message ExemplarsRequest {
-    enum Type {
-        ALL = 0;
-        SERIESLABELS = 1;
-        EXEMPLARS = 2;
-    }
-    Type type = 1;
-    PartialResponseStrategy partial_response_strategy = 2;
+    string query = 1;
+    int64 start = 2;
+    int64 end = 3;
+    PartialResponseStrategy partial_response_strategy = 4;
 }
 
 message ExemplarsResponse {
@@ -47,27 +43,13 @@ message ExemplarsResponse {
 }
 
 message ExemplarData {
-    ZLabelSet seriesLabels = 1 [(gogoproto.jsontag) = "seriesLabels", (gogoproto.nullable) = false ];
-    repeated Exemplar exemplars = 2 [(gogoproto.jsontag) = "exemplars" ];
-
-    // Thanos specific.
-    PartialResponseStrategy PartialResponseStrategy = 3 [(gogoproto.jsontag) = "partialResponseStrategy" ];
-}
-
-// message Label {
-//     string name = 1 [(gogoproto.jsontag) = "name"];
-//     string value = 2 [(gogoproto.jsontag) = "value"];
-// }
-
-message SeriesLabel {
-    string instance = 1 [(gogoproto.jsontag) = "instance"];
-    string job = 2 [(gogoproto.jsontag) = "job"];
-    string service = 3 [(gogoproto.jsontag) = "service"];
+    ZLabelSet seriesLabels = 1 [(gogoproto.jsontag) = "seriesLabels", (gogoproto.nullable) = false];
+    repeated Exemplar exemplars = 2 [(gogoproto.jsontag) = "exemplars"];
 }
 
 message Exemplar {
     ZLabelSet labels = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     double value = 2 [(gogoproto.jsontag) = "value"];
-    google.protobuf.Timestamp ts = 3 [(gogoproto.jsontag) = "timestamp", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
+    int64 ts = 3 [(gogoproto.jsontag) = "timestamp"];
     bool hasts = 4 [(gogoproto.jsontag) = "hasTimestamp"];
 }

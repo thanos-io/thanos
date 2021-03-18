@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
@@ -29,6 +30,10 @@ import (
 
 const infoLogLevel = "info"
 
+const (
+	ExemplarStorage = "exemplar-storage"
+)
+
 // Same as default for now.
 var defaultBackoffConfig = util.BackoffConfig{
 	MinBackoff: 300 * time.Millisecond,
@@ -38,7 +43,7 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.19.3"
+	return "quay.io/prometheus/prometheus:main"
 }
 
 func DefaultAlertmanagerImage() string {
@@ -55,7 +60,7 @@ func DefaultImage() string {
 	return "thanos"
 }
 
-func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2e.HTTPService, string, error) {
+func NewPrometheus(sharedDir string, name string, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, string, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
 	if err := os.MkdirAll(dir, 0777); err != nil {
@@ -75,6 +80,7 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 			"--storage.tsdb.max-block-duration": "2h",
 			"--log.level":                       infoLogLevel,
 			"--web.listen-address":              ":9090",
+			"--enable-feature":                  strings.Join(enableFeatures, ","),
 		})...),
 		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
 		9090,
@@ -85,8 +91,8 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string) (*e2e.HTTPService, *Service, error) {
-	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage)
+func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
+	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
 	}

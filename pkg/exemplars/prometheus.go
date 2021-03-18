@@ -5,7 +5,6 @@ package exemplars
 
 import (
 	"net/url"
-	"strings"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -13,7 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-// Prometheus implements exemplarspb.Exemplars gRPC that allows to fetch rules from Prometheus HTTP api/v1/exemplars endpoint.
+// Prometheus implements exemplarspb.Exemplars gRPC that allows to fetch exemplars from Prometheus.
 type Prometheus struct {
 	base   *url.URL
 	client *promclient.Client
@@ -32,11 +31,7 @@ func NewPrometheus(base *url.URL, client *promclient.Client, extLabels func() la
 
 // Exemplars returns all specified exemplars from Prometheus.
 func (p *Prometheus) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
-	var typeExemplars string
-	if r.Type != exemplarspb.ExemplarsRequest_ALL {
-		typeExemplars = strings.ToLower(r.Type.String())
-	}
-	exemplars, err := p.client.ExemplarsInGRPC(s.Context(), p.base, typeExemplars)
+	exemplars, err := p.client.ExemplarsInGRPC(s.Context(), p.base, r.Query, r.Start, r.End)
 	if err != nil {
 		return err
 	}

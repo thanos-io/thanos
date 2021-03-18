@@ -7,9 +7,42 @@ import (
 	"encoding/json"
 	"math/big"
 
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (m *Exemplar) UnmarshalJSON(b []byte) error {
+	v := struct {
+		Labels    labelpb.ZLabelSet
+		TimeStamp model.Time
+		Value     model.SampleValue
+	}{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+
+	m.Labels = v.Labels
+	m.Ts = int64(v.TimeStamp)
+	m.Value = float64(v.Value)
+
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.
+func (m *Exemplar) MarshalJSON() ([]byte, error) {
+	v := struct {
+		Labels    labels.Labels     `json:"labels"`
+		TimeStamp model.Time        `json:"timestamp"`
+		Value     model.SampleValue `json:"value"`
+	}{
+		Labels:    labelpb.ZLabelsToPromLabels(m.Labels.Labels),
+		TimeStamp: model.Time(m.Ts),
+		Value:     model.SampleValue(m.Ts),
+	}
+	return json.Marshal(v)
+}
 
 func NewExemplarsResponse(e *ExemplarData) *ExemplarsResponse {
 	return &ExemplarsResponse{
@@ -25,13 +58,6 @@ func NewWarningExemplarsResponse(warning error) *ExemplarsResponse {
 			Warning: warning.Error(),
 		},
 	}
-}
-
-func (s *ExemplarData) MarshalJSON() ([]byte, error) {
-	if s == nil {
-		return []byte("[]"), nil
-	}
-	return json.Marshal(s)
 }
 
 func (s1 *ExemplarData) Compare(s2 *ExemplarData) int {
@@ -66,11 +92,11 @@ func (e1 *Exemplar) Compare(e2 *Exemplar) int {
 		return d
 	}
 
-	if e1.Hasts || e2.Hasts {
-		if e1.Ts.Before(e2.Ts) {
+	if e1.Hasts && e2.Hasts {
+		if e1.Ts < e2.Ts {
 			return 1
 		}
-		if e1.Ts.After(e2.Ts) {
+		if e1.Ts > e2.Ts {
 			return -1
 		}
 	}

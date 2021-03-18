@@ -762,15 +762,15 @@ func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric strin
 
 // ExemplarsInGRPC returns the exemplars from Prometheus exemplars API. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
-func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, typeExemplars string) ([]*exemplarspb.ExemplarData, error) {
+func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, query string, startTime, endTime int64) ([]*exemplarspb.ExemplarData, error) {
 	u := *base
-	u.Path = path.Join(u.Path, "/api/v1/exemplars")
+	u.Path = path.Join(u.Path, "/api/v1/query_exemplars")
+	q := u.Query()
 
-	if typeExemplars != "" {
-		q := u.Query()
-		q.Add("type", typeExemplars)
-		u.RawQuery = q.Encode()
-	}
+	q.Add("query", query)
+	q.Add("start", formatTime(timestamp.Time(startTime)))
+	q.Add("end", formatTime(timestamp.Time(endTime)))
+	u.RawQuery = q.Encode()
 
 	var m struct {
 		Data []*exemplarspb.ExemplarData `json:"data"`
@@ -780,9 +780,5 @@ func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, typeExempla
 		return nil, err
 	}
 
-	// Prometheus does not support PartialResponseStrategy, and probably would never do. Make it Abort by default.
-	for _, g := range m.Data {
-		g.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
-	}
 	return m.Data, nil
 }
