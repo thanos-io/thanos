@@ -5,11 +5,12 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   bucket_replicate+:: {
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     title: error 'must provide title for Thanos Bucket Replicate dashboard',
+    dashboard:: {
+      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+    },
   },
   grafanaDashboards+:: {
-    local selector = std.join(', ', thanos.dashboard.commonSelector + ['job="$job"']),
-    local aggregator = std.join(', ', thanos.dashboard.commonAggregator + ['job']),
-
     [if thanos.bucket_replicate != null then 'bucket_replicate.json']:
       g.dashboard(thanos.bucket_replicate.title)
       .addRow(
@@ -17,15 +18,15 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Rate') +
           g.qpsErrTotalPanel(
-            'thanos_replicate_replication_runs_total{result="error", %s}' % selector,
-            'thanos_replicate_replication_runs_total{%s}' % selector,
-            aggregator
+            'thanos_replicate_replication_runs_total{result="error", %s}' % thanos.bucket_replicate.dashboard.selector,
+            'thanos_replicate_replication_runs_total{%s}' % thanos.bucket_replicate.dashboard.selector,
+            thanos.rule.dashboard.aggregator
           )
         )
         .addPanel(
           g.panel('Errors', 'Shows rate of errors.') +
           g.queryPanel(
-            'sum by (%s, result) (rate(thanos_replicate_replication_runs_total{result="error", %s}[$interval]))' % [aggregator, selector],
+            'sum by (%(aggregator)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
             '{{result}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -35,8 +36,8 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Duration', 'Shows how long has it taken to run a replication cycle.') +
           g.latencyPanel(
             'thanos_replicate_replication_run_duration_seconds',
-            'result="success",  %s' % selector,
-            aggregator
+            'result="success",  %s' % thanos.bucket_replicate.dashboard.selector,
+            thanos.rule.dashboard.aggregator
           )
         )
       )
@@ -46,11 +47,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Metrics') +
           g.queryPanel(
             [
-              'sum by (%s) (rate(blocks_meta_synced{state="loaded", %s}[$interval]))' % [aggregator, selector],
-              'sum by (%s) (rate(blocks_meta_synced{state="failed", %s}[$interval]))' % [aggregator, selector],
-              'sum by (%s) (rate(thanos_replicate_blocks_already_replicated_total{%s}[$interval]))' % [aggregator, selector],
-              'sum by (%s) (rate(thanos_replicate_blocks_replicated_total{%s}[$interval]))' % [aggregator, selector],
-              'sum by (%s) (rate(thanos_replicate_objects_replicated_total{%s}[$interval]))' % [aggregator, selector],
+              'sum by (%(aggregator)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(aggregator)s) (rate(blocks_meta_synced{state="failed", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(aggregator)s) (rate(thanos_replicate_blocks_already_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(aggregator)s) (rate(thanos_replicate_blocks_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(aggregator)s) (rate(thanos_replicate_objects_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
             ],
             ['meta loads', 'partial meta reads', 'already replicated blocks', 'replicated blocks', 'replicated objects']
           )

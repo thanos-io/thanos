@@ -5,41 +5,42 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   store+:: {
     selector: error 'must provide selector for Thanos Store dashboard',
     title: error 'must provide title for Thanos Store dashboard',
+    dashboard:: {
+      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+    },
   },
   grafanaDashboards+:: {
-    local selector = std.join(', ', thanos.dashboard.commonSelector + ['job="$job"']),
-    local aggregator = std.join(', ', thanos.dashboard.commonAggregator + ['job']),
-
     [if thanos.store != null then 'store.json']:
       g.dashboard(thanos.store.title)
       .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator)
+          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator)
+          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="unary"' % selector, aggregator)
+          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="unary"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
       )
       .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
-          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="server_stream"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="server_stream"' % selector, aggregator)
+          g.latencyPanel('grpc_server_handling_seconds_bucket', '%s, grpc_type="server_stream"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
       )
       .addRow(
@@ -47,7 +48,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
           g.queryPanel(
-            'sum by (%s, operation) (rate(thanos_objstore_bucket_operations_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, operation) (rate(thanos_objstore_bucket_operations_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             '{{job}} {{operation}}'
           ) +
           g.stack
@@ -55,7 +56,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of executed operations against the bucket.') +
           g.queryPanel(
-            'sum by (%(aggregator)s, operation) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[$interval])) / sum by (%(aggregator)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % { selector: selector, aggregator: aggregator },
+            'sum by (%(aggregator)s, operation) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[$interval])) / sum by (%(aggregator)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % thanos.store.dashboard,
             '{{job}} {{operation}}'
           ) +
           { yaxes: g.yaxes({ format: 'percentunit' }) } +
@@ -63,7 +64,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute operations against the bucket, in quantiles.') +
-          $.latencyByOperationPanel('thanos_objstore_bucket_operation_duration_seconds', selector, aggregator)
+          $.latencyByOperationPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
       )
       .addRow(
@@ -71,7 +72,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Block Load Rate', 'Shows rate of block loads from the bucket.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_bucket_store_block_loads_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s) (rate(thanos_bucket_store_block_loads_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             'block loads'
           ) +
           g.stack
@@ -79,15 +80,15 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Block Load Errors', 'Shows ratio of errors compared to the total number of block loads from the bucket.') +
           g.qpsErrTotalPanel(
-            'thanos_bucket_store_block_load_failures_total{%s}' % selector,
-            'thanos_bucket_store_block_loads_total{%s}' % selector,
-            aggregator
+            'thanos_bucket_store_block_load_failures_total{%s}' % thanos.store.dashboard.selector,
+            'thanos_bucket_store_block_loads_total{%s}' % thanos.store.dashboard.selector,
+            thanos.store.dashboard.aggregator
           )
         )
         .addPanel(
           g.panel('Block Drop Rate', 'Shows rate of block drops.') +
           g.queryPanel(
-            'sum by (%s, operation) (rate(thanos_bucket_store_block_drops_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, operation) (rate(thanos_bucket_store_block_drops_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             'block drops {{job}}'
           ) +
           g.stack
@@ -95,9 +96,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Block Drop Errors', 'Shows ratio of errors compared to the total number of block drops.') +
           g.qpsErrTotalPanel(
-            'thanos_bucket_store_block_drop_failures_total{%s}' % selector,
-            'thanos_bucket_store_block_drops_total{%s}' % selector,
-            aggregator
+            'thanos_bucket_store_block_drop_failures_total{%s}' % thanos.store.dashboard.selector,
+            'thanos_bucket_store_block_drops_total{%s}' % thanos.store.dashboard.selector,
+            thanos.store.dashboard.aggregator
           )
         )
       )
@@ -106,7 +107,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Requests', 'Show rate of cache requests.') +
           g.queryPanel(
-            'sum by (%s, item_type) (rate(thanos_store_index_cache_requests_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, item_type) (rate(thanos_store_index_cache_requests_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -114,7 +115,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Hits', 'Shows ratio of errors compared to the total number of cache hits.') +
           g.queryPanel(
-            'sum by (%s, item_type) (rate(thanos_store_index_cache_hits_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, item_type) (rate(thanos_store_index_cache_hits_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -122,7 +123,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Added', 'Show rate of added items to cache.') +
           g.queryPanel(
-            'sum by (%s, item_type) (rate(thanos_store_index_cache_items_added_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, item_type) (rate(thanos_store_index_cache_items_added_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -130,7 +131,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Evicted', 'Show rate of evicted items from cache.') +
           g.queryPanel(
-            'sum by (%s, item_type) (rate(thanos_store_index_cache_items_evicted_total{%s}[$interval]))' % [aggregator, selector],
+            'sum by (%s, item_type) (rate(thanos_store_index_cache_items_evicted_total{%s}[$interval]))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -142,9 +143,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Chunk Size', 'Shows size of chunks that have sent to the bucket.') +
           g.queryPanel(
             [
-              'histogram_quantile(0.99, sum by (%s, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [aggregator, selector],
-              'sum by (%(aggregator)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_count{%(selector)s}[$interval]))' % { selector: selector, aggregator: aggregator },
-              'histogram_quantile(0.99, sum by (%s, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [aggregator, selector],
+              'histogram_quantile(0.99, sum by (%s, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
+              'sum by (%(aggregator)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'histogram_quantile(0.99, sum by (%s, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [thanos.store.dashboard.aggregator, thanos.store.dashboard.selector],
             ],
             [
               'P99',
@@ -161,9 +162,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Block queried') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.99"}' % selector,
-              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_blocks_queried_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_blocks_queried_count{%(selector)s}[$interval]))' % { selector: selector, aggregator: aggregator },
-              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.50"}' % selector,
+              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
+              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_blocks_queried_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_blocks_queried_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99',
               'mean {{job}}',
@@ -175,9 +176,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Data Fetched', 'Show the size of data fetched') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_data_fetched{%s, quantile="0.99"}' % selector,
-              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_data_fetched_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_data_fetched_count{%(selector)s}[$interval]))' % { selector: selector, aggregator: aggregator },
-              'thanos_bucket_store_series_data_fetched{%s, quantile="0.50"}' % selector,
+              'thanos_bucket_store_series_data_fetched{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
+              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_data_fetched_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_data_fetched_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'thanos_bucket_store_series_data_fetched{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99',
               'mean {{job}}',
@@ -190,9 +191,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Result series') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_result_series{%s,quantile="0.99"}' % selector,
-              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_result_series_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_result_series_count{%(selector)s}[$interval]))' % { selector: selector, aggregator: aggregator },
-              'thanos_bucket_store_series_result_series{%s,quantile="0.50"}' % selector,
+              'thanos_bucket_store_series_result_series{%s,quantile="0.99"}' % thanos.store.dashboard.selector,
+              'sum by (%(aggregator)s) (rate(thanos_bucket_store_series_result_series_sum{%(selector)s}[$interval])) / sum by (%(aggregator)s) (rate(thanos_bucket_store_series_result_series_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'thanos_bucket_store_series_result_series{%s,quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99',
               'mean {{job}}',
@@ -205,39 +206,39 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.row('Series Operation Durations')
         .addPanel(
           g.panel('Get All', 'Shows how long has it taken to get all series.') +
-          g.latencyPanel('thanos_bucket_store_series_get_all_duration_seconds', selector, aggregator)
+          g.latencyPanel('thanos_bucket_store_series_get_all_duration_seconds', thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Merge', 'Shows how long has it taken to merge series.') +
-          g.latencyPanel('thanos_bucket_store_series_merge_duration_seconds', selector, aggregator)
+          g.latencyPanel('thanos_bucket_store_series_merge_duration_seconds', thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
         .addPanel(
           g.panel('Gate', 'Shows how long has it taken for a series to wait at the gate.') +
-          g.latencyPanel('thanos_bucket_store_series_gate_duration_seconds', selector, aggregator)
+          g.latencyPanel('thanos_bucket_store_series_gate_duration_seconds', thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
         )
       )
       .addRow(
-        g.resourceUtilizationRow(selector, aggregator)
+        g.resourceUtilizationRow(thanos.store.dashboard.selector, thanos.store.dashboard.aggregator)
       ),
 
     __overviewRows__+:: [
       g.row('Store')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-        g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator) +
+        g.grpcRequestsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator) +
         g.addDashboardLink(thanos.store.title)
       )
       .addPanel(
         g.panel('gPRC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-        g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % selector, aggregator) +
+        g.grpcErrorsPanel('grpc_server_handled_total', '%s, grpc_type="unary"' % thanos.store.dashboard.selector, thanos.store.dashboard.aggregator) +
         g.addDashboardLink(thanos.store.title)
       )
       .addPanel(
         g.sloLatency(
           'gRPC Latency 99th Percentile',
           'Shows how long has it taken to handle requests from queriers.',
-          'grpc_server_handling_seconds_bucket{%s, grpc_type="unary"}' % selector,
-          aggregator,
+          'grpc_server_handling_seconds_bucket{%s, grpc_type="unary"}' % thanos.store.dashboard.selector,
+          thanos.store.dashboard.aggregator,
           0.99,
           0.5,
           1

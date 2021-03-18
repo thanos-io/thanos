@@ -60,7 +60,7 @@
     } + if std.objectHas(thanos[component], 'selector') then {
       templating+: {
         local name = 'job',
-        local selector = std.join(', ', thanos.dashboard.commonSelector + [thanos[component].selector]),
+        local selector = std.join(', ', thanos.dashboard.selector + [thanos[component].selector]),
         list+: [
           template.new(
             name,

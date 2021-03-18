@@ -102,8 +102,8 @@ This project is intended to be used as a library. You can extend and customize d
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
-    commonSelector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
-    commonAggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
+    selector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
+    aggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
   },
 }
 ```

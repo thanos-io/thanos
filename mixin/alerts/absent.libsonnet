@@ -1,5 +1,7 @@
 local capitalize(str) = std.asciiUpper(std.substr(str, 0, 1)) + std.asciiLower(std.substr(str, 1, std.length(str)));
 local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
+
+local components = ['query', 'receive', 'rule', 'compact', 'store', 'bucket_replicate', 'sidecar'];
 {
   local thanos = self,
 
@@ -7,7 +9,7 @@ local titlize(str) = std.join('', std.map(capitalize, std.split(str, '_')));
   jobs:: {
     ['Thanos%s' % titlize(component)]: thanos[component].selector
     for component in std.objectFieldsAll(thanos)
-    if component != 'jobs' && std.type(thanos[component]) == 'object' && std.objectHas(thanos[component], 'selector')
+    if component != 'jobs' && std.type(thanos[component]) == 'object' && std.member(components, component)
   },
 
   prometheusAlerts+:: {
