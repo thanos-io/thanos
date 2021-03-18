@@ -11,6 +11,7 @@ describe('TimeInput', () => {
     time: 1572102237932,
     range: 60 * 60 * 7,
     placeholder: 'time input',
+    useLocalTime: true,
     onChangeTime: (): void => {
       // Do nothing.
     },

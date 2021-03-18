@@ -333,9 +333,9 @@ Flags:
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                                Alternative to 'tracing.config-file' flag (lower
-                                priority). Content of YAML file with tracing
-                                configuration. See format details:
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file with
+                                tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
@@ -349,7 +349,7 @@ Flags:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
-                                (lower priority). Content of YAML file that
+                                (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
@@ -422,10 +422,11 @@ Flags:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
-                                flag (lower priority). Content of YAML file that
-                                contains relabeling configuration that allows
-                                selecting blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
+                                flag (mutually exclusive). Content of YAML file
+                                that contains relabeling configuration that
+                                allows selecting blocks. It follows native
+                                Prometheus relabel-config syntax. See format
+                                details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
@@ -446,6 +447,9 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
+      --web.disable-cors        Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
       --bucket-web-label=BUCKET-WEB-LABEL
                                 Prometheus label to use as timeline title in the
                                 bucket web UI

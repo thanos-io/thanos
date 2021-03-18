@@ -248,7 +248,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
@@ -308,7 +308,7 @@ Flags:
                                  '--alertmanagers.send-timeout' flags.
       --alertmanagers.config=<content>
                                  Alternative to 'alertmanagers.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains alerting configuration. See format
                                  details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
@@ -349,6 +349,9 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --web.disable-cors         Whether to disable CORS headers to be set by
+                                 Thanos. By default Thanos sets CORS headers to
+                                 be allowed by all.
       --log.request.decision=    Deprecation Warning - This flag would be soon
                                  deprecated, and replaced with
                                  `request.logging-config`. Request Logging for
@@ -364,7 +367,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -379,10 +382,10 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
-      --query.config=<content>   Alternative to 'query.config-file' flag (lower
-                                 priority). Content of YAML file that contains
-                                 query API servers configuration. See format
-                                 details:
+      --query.config=<content>   Alternative to 'query.config-file' flag
+                                 (mutually exclusive). Content of YAML file that
+                                 contains query API servers configuration. See
+                                 format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
@@ -408,7 +411,7 @@ Flags:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (lower priority). Content of YAML file
+                                 flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825

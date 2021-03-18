@@ -16,7 +16,7 @@ export const withStatusIndicator = <T extends any>(Component: ComponentType<T>):
   customErrorMsg,
   componentTitle,
   ...rest
-}) => {
+}: StatusIndicatorProps) => {
   if (error) {
     return (
       <UncontrolledAlert color="danger">
@@ -42,5 +42,5 @@ export const withStatusIndicator = <T extends any>(Component: ComponentType<T>):
       />
     );
   }
-  return <Component {...(rest as T)} />;
+  return <Component {...(rest as any)} />;
 };

@@ -22,6 +22,7 @@ const defaultProps = {
     useDeduplication: true,
     usePartialResponse: false,
     storeMatches: [],
+    defaultStep: '1s',
   },
   onOptionsChanged: (): void => {
     // Do nothing.

@@ -47,7 +47,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
@@ -84,7 +84,7 @@ Flags:
                                  https://thanos.io/tip/components/store.md/#index-cache
       --index-cache.config=<content>
                                  Alternative to 'index-cache.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains index cache configuration. See format
                                  details:
                                  https://thanos.io/tip/components/store.md/#index-cache
@@ -113,7 +113,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -147,7 +147,7 @@ Flags:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
-                                 flag (lower priority). Content of YAML file
+                                 flag (mutually exclusive). Content of YAML file
                                  that contains relabeling configuration that
                                  allows selecting blocks. It follows native
                                  Prometheus relabel-config syntax. See format
@@ -201,13 +201,16 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --web.disable-cors         Whether to disable CORS headers to be set by
+                                 Thanos. By default Thanos sets CORS headers to
+                                 be allowed by all.
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (lower priority). Content of YAML file
+                                 flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825

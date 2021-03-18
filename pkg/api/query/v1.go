@@ -83,6 +83,7 @@ type QueryAPI struct {
 	enableRulePartialResponse           bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
+	disableCORS                         bool
 
 	replicaLabels []string
 	storeSet      *query.StoreSet
@@ -110,10 +111,11 @@ func NewQueryAPI(
 	defaultRangeQueryStep time.Duration,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
+	disableCORS bool,
 	gate gate.Gate,
 ) *QueryAPI {
 	return &QueryAPI{
-		baseAPI:         api.NewBaseAPI(logger, flagsMap),
+		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:          logger,
 		queryEngine:     qe,
 		queryableCreate: c,
@@ -131,6 +133,7 @@ func NewQueryAPI(
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
+		disableCORS:                            disableCORS,
 	}
 }
 
@@ -138,7 +141,7 @@ func NewQueryAPI(
 func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	qapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, qapi.disableCORS)
 
 	r.Get("/query", instr("query", qapi.query))
 	r.Post("/query", instr("query", qapi.query))
