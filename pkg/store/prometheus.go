@@ -50,7 +50,7 @@ type PrometheusStore struct {
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
 	timestamps       func() (mint int64, maxt int64)
-	promVersion		 func() string
+	promVersion      func() string
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -82,7 +82,7 @@ func NewPrometheusStore(
 		component:                     component,
 		externalLabelsFn:              externalLabelsFn,
 		timestamps:                    timestamps,
-		promVersion:				   promVersion,	
+		promVersion:                   promVersion,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -500,9 +500,9 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	var (
-		vals     []string
-		sers 	 []map[string]string
-		err 	 error
+		vals []string
+		sers []map[string]string
+		err  error
 	)
 
 	version := p.promVersion()
@@ -525,5 +525,5 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 			vals = append(vals, s[r.Label])
 		}
 	}
-	return &storepb.LabelValuesResponse{Values: vals}, nil	
+	return &storepb.LabelValuesResponse{Values: vals}, nil
 }

@@ -371,10 +371,10 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 type promMetadata struct {
 	promURL *url.URL
 
-	mtx    sync.Mutex
-	mint   int64
-	maxt   int64
-	labels labels.Labels
+	mtx         sync.Mutex
+	mint        int64
+	maxt        int64
+	labels      labels.Labels
 	promVersion string
 
 	limitMinTime thanosmodel.TimeOrDurationValue
