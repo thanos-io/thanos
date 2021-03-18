@@ -11,5 +11,5 @@
     ],
   },
 
-  joinLabels(labels): std.join(', ', std.filter(function(x) std.length(x) > 0, labels)),
+  joinLabels(labels): std.join(', ', std.filter(function(x) std.length(std.stripChars(x, ' ')) > 0, labels)),
 }
