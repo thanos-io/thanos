@@ -91,16 +91,12 @@ func (e1 *Exemplar) Compare(e2 *Exemplar) int {
 	if d := labels.Compare(e1.Labels.PromLabels(), e2.Labels.PromLabels()); d != 0 {
 		return d
 	}
-
-	if e1.Hasts && e2.Hasts {
-		if e1.Ts < e2.Ts {
-			return 1
-		}
-		if e1.Ts > e2.Ts {
-			return -1
-		}
+	if e1.Ts < e2.Ts {
+		return 1
 	}
-
+	if e1.Ts > e2.Ts {
+		return -1
+	}
 	if d := big.NewFloat(e1.Value).Cmp(big.NewFloat(e2.Value)); d != 0 {
 		return d
 	}

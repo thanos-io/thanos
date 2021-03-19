@@ -51,5 +51,4 @@ message Exemplar {
     ZLabelSet labels = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     double value = 2 [(gogoproto.jsontag) = "value"];
     int64 ts = 3 [(gogoproto.jsontag) = "timestamp"];
-    bool hasts = 4 [(gogoproto.jsontag) = "hasTimestamp"];
 }
