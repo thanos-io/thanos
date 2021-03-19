@@ -10,19 +10,20 @@ import (
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/tls"
-	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
 func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
+		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}),
 	)
 	dialOpts := []grpc.DialOption{
 		// We want to make sure that we can receive huge gRPC messages from storeAPI.
