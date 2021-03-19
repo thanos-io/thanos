@@ -19,7 +19,7 @@ import (
 )
 
 // Proxy implements exemplarspb.Exemplars gRPC that fanouts requests to
-// given exemplarspb.Exemplars and de-duplication on the way.
+// given exemplarspb.Exemplars.
 type Proxy struct {
 	logger    log.Logger
 	exemplars func() []exemplarspb.ExemplarsClient
