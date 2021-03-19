@@ -13,6 +13,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"testing"
@@ -1066,7 +1069,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		writeRequest []byte
 	}{
 		{
-			name: "typical labels under 1KB, 500 of them.",
+			name: "typical labels under 1KB, 500 of them",
 			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 500)
 				for s := 0; s < len(series); s++ {
@@ -1081,7 +1084,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			}()),
 		},
 		{
-			name: "typical labels under 1KB, 5000 of them.",
+			name: "typical labels under 1KB, 5000 of them",
 			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 5000)
 				for s := 0; s < len(series); s++ {
@@ -1173,4 +1176,23 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			})
 		})
 	}
+
+	runtime.GC()
+	// Take snapshot.
+	// TODO(bwplotka): Remove it
+	testutil.Ok(b, Heap("../../"))
+
+}
+
+func Heap(dir string) (err error) {
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return err
+	}
+
+	f, err := os.Create(filepath.Join(dir, "mem.pprof"))
+	if err != nil {
+		return err
+	}
+	defer runutil.CloseWithErrCapture(&err, f, "close")
+	return pprof.WriteHeapProfile(f)
 }
