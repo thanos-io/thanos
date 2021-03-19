@@ -445,7 +445,7 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					_, err := app.Add(lset, t, rand.Float64())
+					_, err := app.Append(0, lset, t, rand.Float64())
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
 							err = errors.Wrapf(err, "rollback failed: %v", rerr)
