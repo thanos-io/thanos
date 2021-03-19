@@ -49,12 +49,12 @@
           template.new(
             level,
             '$datasource',
-            'label_values(%s, %s)' % [thanos.hierarcies[level], level],
+            'label_values(%s, %s)' % [thanos.targetGroups[level], level],
             label=level,
             refresh=1,
             sort=2,
           )
-          for level in std.objectFields(thanos.hierarcies)
+          for level in std.objectFields(thanos.targetGroups)
         ],
       },
     } + if std.objectHas(thanos[component], 'selector') then {

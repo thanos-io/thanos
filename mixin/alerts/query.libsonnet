@@ -7,11 +7,11 @@
     dnsErrorThreshold: 1,
     p99QueryLatencyThreshold: 40,
     p99QueryRangeLatencyThreshold: 90,
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.query == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
       {
         name: 'thanos-query',
         rules: [
@@ -23,9 +23,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="query"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="query"}[5m]))
               /
-                sum by (%(aggregator)s) (rate(http_requests_total{%(selector)s, handler="query"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{%(selector)s, handler="query"}[5m]))
               ) * 100 > %(httpErrorThreshold)s
             ||| % thanos.query,
             'for': '5m',
@@ -41,9 +41,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="query_range"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="query_range"}[5m]))
               /
-                sum by (%(aggregator)s) (rate(http_requests_total{%(selector)s, handler="query_range"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{%(selector)s, handler="query_range"}[5m]))
               ) * 100 > %(httpErrorThreshold)s
             ||| % thanos.query,
             'for': '5m',
@@ -59,9 +59,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(grpc_server_started_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > %(grpcErrorThreshold)s
               )
             ||| % thanos.query,
@@ -78,9 +78,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(grpc_client_handled_total{grpc_code!="OK", %(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_client_handled_total{grpc_code!="OK", %(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(grpc_client_started_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_client_started_total{%(selector)s}[5m]))
               ) * 100 > %(grpcErrorThreshold)s
             ||| % thanos.query,
             'for': '5m',
@@ -96,9 +96,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
               ) * 100 > %(dnsErrorThreshold)s
             ||| % thanos.query,
             'for': '15m',
@@ -114,9 +114,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m]))) > %(p99QueryLatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m]))) > %(p99QueryLatencyThreshold)s
               and
-                sum by (%(aggregator)s) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
+                sum by (%(dimensions)s) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
               )
             ||| % thanos.query,
             'for': '10m',
@@ -132,9 +132,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query_range"}[5m]))) > %(p99QueryRangeLatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query_range"}[5m]))) > %(p99QueryRangeLatencyThreshold)s
               and
-                sum by (%(aggregator)s) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
+                sum by (%(dimensions)s) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
               )
             ||| % thanos.query,
             'for': '10m',

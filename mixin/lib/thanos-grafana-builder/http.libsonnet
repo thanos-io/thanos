@@ -1,9 +1,9 @@
 local utils = import '../utils.libsonnet';
 
 {
-  httpQpsPanel(metric, selector, aggregator):: {
-    local aggregatedLabels = std.split(aggregator, ','),
-    local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
+  httpQpsPanel(metric, selector, dimensions):: {
+    local aggregatedLabels = std.split(dimensions, ','),
+    local dimensionsTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
 
     seriesOverrides: [
       { alias: '/1../', color: '#EAB839' },
@@ -18,17 +18,17 @@ local utils = import '../utils.libsonnet';
         expr: 'sum by (%s) (rate(%s{%s}[$interval]))' % [utils.joinLabels(aggregatedLabels + ['handler', 'code']), metric, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{handler}} {{code}}',
+        legendFormat: dimensionsTemplate + ' {{handler}} {{code}}',
         refId: 'A',
         step: 10,
       },
     ],
   } + $.stack,
 
-  httpErrPanel(metric, selector, aggregator)::
+  httpErrPanel(metric, selector, dimensions)::
     $.qpsErrTotalPanel(
       '%s{%s,code=~"5.."}' % [metric, selector],
       '%s{%s}' % [metric, selector],
-      aggregator
+      dimensions
     ),
 }

@@ -1,9 +1,9 @@
 local utils = import '../utils.libsonnet';
 
 {
-  grpcRequestsPanel(metric, selector, aggregator):: {
-    local aggregatedLabels = std.split(aggregator, ','),
-    local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
+  grpcRequestsPanel(metric, selector, dimensions):: {
+    local aggregatedLabels = std.split(dimensions, ','),
+    local dimensionsTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
 
     seriesOverrides: [
       { alias: '/Aborted/', color: '#EAB839' },
@@ -30,17 +30,17 @@ local utils = import '../utils.libsonnet';
         expr: 'sum by (%s) (rate(%s{%s}[$interval]))' % [utils.joinLabels(aggregatedLabels + ['grpc_method', 'grpc_code']), metric, selector],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: aggregatorTemplate + ' {{grpc_method}} {{grpc_code}}',
+        legendFormat: dimensionsTemplate + ' {{grpc_method}} {{grpc_code}}',
         refId: 'A',
         step: 10,
       },
     ],
   } + $.stack,
 
-  grpcErrorsPanel(metric, selector, aggregator)::
+  grpcErrorsPanel(metric, selector, dimensions)::
     $.qpsErrTotalPanel(
       '%s{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [metric, selector],
       '%s{%s}' % [metric, selector],
-      aggregator
+      dimensions
     ),
 }

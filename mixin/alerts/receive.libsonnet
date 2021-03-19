@@ -6,11 +6,11 @@
     forwardErrorThreshold: 20,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.receive == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
       {
         name: 'thanos-receive',
         rules: [
@@ -22,9 +22,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
               /
-                sum by (%(aggregator)s) (rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
+                sum by (%(dimensions)s) (rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
               ) * 100 > %(httpErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
@@ -40,9 +40,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="receive"}[5m]))) > %(p99LatencyThreshold)s
               and
-                sum by (%(aggregator)s) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
+                sum by (%(dimensions)s) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
             ||| % thanos.receive,
             'for': '10m',
@@ -61,15 +61,15 @@
                 and
               (
                 (
-                  sum by (%(aggregator)s) (rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
+                  sum by (%(dimensions)s) (rate(thanos_receive_replications_total{result="error", %(selector)s}[5m]))
                 /
-                  sum by (%(aggregator)s) (rate(thanos_receive_replications_total{%(selector)s}[5m]))
+                  sum by (%(dimensions)s) (rate(thanos_receive_replications_total{%(selector)s}[5m]))
                 )
                 >
                 (
-                  max by (%(aggregator)s) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
+                  max by (%(dimensions)s) (floor((thanos_receive_replication_factor{%(selector)s}+1) / 2))
                 /
-                  max by (%(aggregator)s) (thanos_receive_hashring_nodes{%(selector)s})
+                  max by (%(dimensions)s) (thanos_receive_hashring_nodes{%(selector)s})
                 )
               ) * 100
             ||| % thanos.receive,
@@ -86,9 +86,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               ) * 100 > %(forwardErrorThreshold)s
             ||| % thanos.receive,
             'for': '5m',
@@ -104,9 +104,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               > %(refreshErrorThreshold)s
               )
             ||| % thanos.receive,
@@ -121,7 +121,7 @@
               description: 'Thanos Receive {{$labels.job}}%shas not been able to reload hashring configurations.' % location,
               summary: 'Thanos Receive has not been able to reload configuration.',
             },
-            expr: 'avg by (%(aggregator)s) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
+            expr: 'avg by (%(dimensions)s) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'warning',
@@ -135,8 +135,8 @@
             },
             expr: |||
               (up{%(selector)s} - 1)
-              + on (%(aggregator)s, instance) # filters to only alert on current instance last 3h
-              (sum by (%(aggregator)s, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
+              + on (%(dimensions)s, instance) # filters to only alert on current instance last 3h
+              (sum by (%(dimensions)s, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
             ||| % thanos.receive,
             'for': '3h',
             labels: {

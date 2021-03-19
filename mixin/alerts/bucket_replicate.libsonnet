@@ -4,11 +4,11 @@
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     errorThreshold: 10,
     p99LatencyThreshold: 20,
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.bucket_replicate == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
       {
         name: 'thanos-bucket-replicate',
         rules: [
@@ -20,9 +20,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
-              / on (%(aggregator)s) group_left
-                sum by (%(aggregator)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
+              / on (%(dimensions)s) group_left
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= %(errorThreshold)s
             ||| % thanos.bucket_replicate,
             'for': '5m',
@@ -38,9 +38,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
               and
-                sum by (%(aggregator)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
             ||| % thanos.bucket_replicate,
             'for': '5m',

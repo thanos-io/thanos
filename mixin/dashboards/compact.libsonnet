@@ -8,7 +8,7 @@ local utils = import '../lib/utils.libsonnet';
     title: error 'must provide title for Thanos Compact dashboard',
     dashboard:: {
       selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
-      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+      dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
     },
   },
   grafanaDashboards+:: {
@@ -22,7 +22,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s, group) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, group) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'compaction {{job}} {{group}}'
           ) +
           g.stack
@@ -35,7 +35,7 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_group_compactions_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
       )
@@ -47,7 +47,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows rate of execution for downsampling against blocks that are stored in the bucket by compaction group.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s, group) (rate(thanos_compact_downsample_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, group) (rate(thanos_compact_downsample_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'downsample {{job}} {{group}}'
           ) +
           g.stack
@@ -57,7 +57,7 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_downsample_failed_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_downsample_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
       )
@@ -69,7 +69,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows rate of execution for removals of blocks if their data is available as part of a block with a higher compaction level.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s) (rate(thanos_compact_garbage_collection_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_garbage_collection_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'garbage collection {{job}}'
           ) +
           g.stack
@@ -79,12 +79,12 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_garbage_collection_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_garbage_collection_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute garbage collection in quantiles.') +
-          g.latencyPanel('thanos_compact_garbage_collection_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.aggregator)
+          g.latencyPanel('thanos_compact_garbage_collection_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
         )
       )
       .addRow(
@@ -95,7 +95,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows deletion rate of blocks already marked for deletion.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s) (rate(thanos_compact_blocks_cleaned_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_cleaned_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'Blocks cleanup {{job}}'
           ) +
           g.stack
@@ -106,7 +106,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows deletion failures rate of blocks already marked for deletion.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s) (rate(thanos_compact_block_cleanup_failures_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_block_cleanup_failures_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'Blocks cleanup failures {{job}}'
           )
         )
@@ -116,7 +116,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows rate at which blocks are marked for deletion (from GC and retention policy).'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s) (rate(thanos_compact_blocks_marked_for_deletion_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_marked_for_deletion_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'Blocks marked {{job}}'
           )
         )
@@ -129,7 +129,7 @@ local utils = import '../lib/utils.libsonnet';
             'Shows rate of execution for all meta files from blocks in the bucket into the memory.'
           ) +
           g.queryPanel(
-            'sum by (%(aggregator)s) (rate(thanos_blocks_meta_syncs_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_blocks_meta_syncs_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             'sync {{job}}'
           ) +
           g.stack
@@ -139,12 +139,12 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_blocks_meta_sync_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_blocks_meta_syncs_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute meta file sync, in quantiles.') +
-          g.latencyPanel('thanos_blocks_meta_sync_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.aggregator)
+          g.latencyPanel('thanos_blocks_meta_sync_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
         )
       )
       .addRow(
@@ -152,7 +152,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
           g.queryPanel(
-            'sum by (%(aggregator)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
             '{{job}} {{operation}}'
           ) +
           g.stack
@@ -162,16 +162,16 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_objstore_bucket_operation_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_objstore_bucket_operations_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute operations against the bucket, in quantiles.') +
-          g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.aggregator)
+          g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
         )
       )
       .addRow(
-        g.resourceUtilizationRow(thanos.rule.dashboard.selector, thanos.rule.dashboard.aggregator)
+        g.resourceUtilizationRow(thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
       ),
 
     __overviewRows__+:: [
@@ -182,7 +182,7 @@ local utils = import '../lib/utils.libsonnet';
           'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
         ) +
         g.queryPanel(
-          'sum by (%(aggregator)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.dashboard.overview,
+          'sum by (%(dimensions)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.dashboard.overview,
           'compaction {{job}}'
         ) +
         g.stack +
@@ -196,7 +196,7 @@ local utils = import '../lib/utils.libsonnet';
         g.qpsErrTotalPanel(
           'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.dashboard.overview.selector,
           'thanos_compact_group_compactions_total{%(selector)s}' % thanos.dashboard.overview.selector,
-          thanos.rule.dashboard.aggregator
+          thanos.rule.dashboard.dimensions
         ) +
         g.addDashboardLink(thanos.compact.title)
       ) +

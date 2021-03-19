@@ -2,11 +2,11 @@
   local thanos = self,
   sidecar+:: {
     selector: error 'must provide selector for Thanos Sidecar alerts',
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job', 'instance']),
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job', 'instance']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.sidecar == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
       {
         name: 'thanos-sidecar',
         rules: [
@@ -31,7 +31,7 @@
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
-              sum by (%(aggregator)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
+              sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m])) > 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
@@ -45,7 +45,7 @@
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (%(aggregator)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
+              time() - max by (%(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
             ||| % thanos.sidecar,
             labels: {
               severity: 'critical',

@@ -7,11 +7,11 @@
     seriesGateErrorThreshold: 2,
     bucketOpsErrorThreshold: 5,
     bucketOpsP99LatencyThreshold: 2,
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
     groups+: if thanos.store == null then [] else [
-      local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
       {
         name: 'thanos-store',
         rules: [
@@ -23,9 +23,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(grpc_server_started_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > %(grpcErrorThreshold)s
               )
             ||| % thanos.store,
@@ -42,9 +42,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{%(selector)s}[5m]))) > %(seriesGateErrorThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(thanos_bucket_store_series_gate_duration_seconds_bucket{%(selector)s}[5m]))) > %(seriesGateErrorThreshold)s
               and
-                sum by (%(aggregator)s) (rate(thanos_bucket_store_series_gate_duration_seconds_count{%(selector)s}[5m])) > 0
+                sum by (%(dimensions)s) (rate(thanos_bucket_store_series_gate_duration_seconds_count{%(selector)s}[5m])) > 0
               )
             ||| % thanos.store,
             'for': '10m',
@@ -60,9 +60,9 @@
             },
             expr: |||
               (
-                sum by (%(aggregator)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[5m]))
               /
-                sum by (%(aggregator)s) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[5m]))
               * 100 > %(bucketOpsErrorThreshold)s
               )
             ||| % thanos.store,
@@ -79,9 +79,9 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (%(aggregator)s, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{%(selector)s}[5m]))) > %(bucketOpsP99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s, le) (rate(thanos_objstore_bucket_operation_duration_seconds_bucket{%(selector)s}[5m]))) > %(bucketOpsP99LatencyThreshold)s
               and
-                sum by (%(aggregator)s) (rate(thanos_objstore_bucket_operation_duration_seconds_count{%(selector)s}[5m])) > 0
+                sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operation_duration_seconds_count{%(selector)s}[5m])) > 0
               )
             ||| % thanos.store,
             'for': '10m',

@@ -39,17 +39,17 @@ local utils = import '../utils.libsonnet';
     },
   },
 
-  latencyPanel(metricName, selector, aggregator, multiplier='1'):: {
-    local aggregatedLabels = std.split(aggregator, ','),
-    local aggregatorTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
+  latencyPanel(metricName, selector, dimensions, multiplier='1'):: {
+    local aggregatedLabels = std.split(dimensions, ','),
+    local dimensionsTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]),
 
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(%.2f, sum by (%s) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, utils.joinLabels([aggregator, 'le']), metricName, selector, multiplier],
+        expr: 'histogram_quantile(%.2f, sum by (%s) (rate(%s_bucket{%s}[$interval]))) * %s' % [percentile, utils.joinLabels([dimensions, 'le']), metricName, selector, multiplier],
         format: 'time_series',
         intervalFactor: 2,
-        legendFormat: 'p%d %s' % [100 * percentile, aggregatorTemplate],
+        legendFormat: 'p%d %s' % [100 * percentile, dimensionsTemplate],
         logBase: 10,
         min: null,
         max: null,
@@ -81,8 +81,8 @@ local utils = import '../utils.libsonnet';
     ],
   },
 
-  qpsErrTotalPanel(selectorErr, selectorTotal, aggregator):: {
-    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [aggregator, selector],
+  qpsErrTotalPanel(selectorErr, selectorTotal, dimensions):: {
+    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [dimensions, selector],
 
     aliasColors: {
       'error': '#E24D42',
@@ -100,8 +100,8 @@ local utils = import '../utils.libsonnet';
     yaxes: $.yaxes({ format: 'percentunit' }),
   } + $.stack,
 
-  qpsSuccErrRatePanel(selectorErr, selectorTotal, aggregator):: {
-    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [aggregator, selector],
+  qpsSuccErrRatePanel(selectorErr, selectorTotal, dimensions):: {
+    local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [dimensions, selector],
 
     aliasColors: {
       success: '#7EB26D',
@@ -128,7 +128,7 @@ local utils = import '../utils.libsonnet';
     yaxes: $.yaxes({ format: 'percentunit', max: 1 }),
   } + $.stack,
 
-  resourceUtilizationRow(selector, aggregator)::
+  resourceUtilizationRow(selector, dimensions)::
     $.row('Resources')
     .addPanel(
       $.panel('Memory Used') +

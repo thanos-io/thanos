@@ -13,7 +13,7 @@ local components = ['query', 'receive', 'rule', 'compact', 'store', 'bucket_repl
   },
 
   prometheusAlerts+:: {
-    local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' from ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else '',
+    local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' from ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '',
     groups+: [
       {
         name: 'thanos-component-absent',

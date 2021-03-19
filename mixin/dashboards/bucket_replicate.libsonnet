@@ -7,7 +7,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Bucket Replicate dashboard',
     dashboard:: {
       selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
-      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+      dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
     },
   },
   grafanaDashboards+:: {
@@ -20,13 +20,13 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_replicate_replication_runs_total{result="error", %s}' % thanos.bucket_replicate.dashboard.selector,
             'thanos_replicate_replication_runs_total{%s}' % thanos.bucket_replicate.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Errors', 'Shows rate of errors.') +
           g.queryPanel(
-            'sum by (%(aggregator)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+            'sum by (%(dimensions)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
             '{{result}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -37,7 +37,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.latencyPanel(
             'thanos_replicate_replication_run_duration_seconds',
             'result="success",  %s' % thanos.bucket_replicate.dashboard.selector,
-            thanos.rule.dashboard.aggregator
+            thanos.rule.dashboard.dimensions
           )
         )
       )
@@ -47,11 +47,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Metrics') +
           g.queryPanel(
             [
-              'sum by (%(aggregator)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
-              'sum by (%(aggregator)s) (rate(blocks_meta_synced{state="failed", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
-              'sum by (%(aggregator)s) (rate(thanos_replicate_blocks_already_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
-              'sum by (%(aggregator)s) (rate(thanos_replicate_blocks_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
-              'sum by (%(aggregator)s) (rate(thanos_replicate_objects_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="failed", %(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_already_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_objects_replicated_total{%(selector)s}[$interval]))' % thanos.bucket_replicate.dashboard,
             ],
             ['meta loads', 'partial meta reads', 'already replicated blocks', 'replicated blocks', 'replicated objects']
           )
