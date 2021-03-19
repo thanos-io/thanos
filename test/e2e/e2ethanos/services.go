@@ -71,17 +71,21 @@ func NewPrometheus(sharedDir string, name string, config, promImage string, enab
 		return nil, "", errors.Wrap(err, "creating prom config failed")
 	}
 
+	args := e2e.BuildArgs(map[string]string{
+		"--config.file":                     filepath.Join(container, "prometheus.yml"),
+		"--storage.tsdb.path":               container,
+		"--storage.tsdb.max-block-duration": "2h",
+		"--log.level":                       infoLogLevel,
+		"--web.listen-address":              ":9090",
+	})
+	if len(enableFeatures) > 0 {
+		args = append(args, "--enable-feature="+strings.Join(enableFeatures, ","))
+	}
+
 	prom := e2e.NewHTTPService(
 		fmt.Sprintf("prometheus-%s", name),
 		promImage,
-		e2e.NewCommandWithoutEntrypoint("prometheus", e2e.BuildArgs(map[string]string{
-			"--config.file":                     filepath.Join(container, "prometheus.yml"),
-			"--storage.tsdb.path":               container,
-			"--storage.tsdb.max-block-duration": "2h",
-			"--log.level":                       infoLogLevel,
-			"--web.listen-address":              ":9090",
-			"--enable-feature":                  strings.Join(enableFeatures, ","),
-		})...),
+		e2e.NewCommandWithoutEntrypoint("prometheus", args...),
 		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
 		9090,
 	)
