@@ -61,7 +61,7 @@ func ZLabelSetsToPromLabelSets(lss ...ZLabelSet) []labels.Labels {
 
 // ZLabel is a Label (also easily transformable to Prometheus labels.Labels) that can be unmarshalled from protobuf
 // reusing the same memory address for string bytes.
-// NOTE: While unmarshal use exactly same bytes that were allocated for protobuf, this will mean that *whole* protobuf
+// NOTE: While unmarshalling it uses exactly same bytes that were allocated for protobuf. This mean that *whole* protobuf
 // bytes will be not GC-ed as long as ZLabels are referenced somewhere. Use it carefully, only for short living
 // protobuf message processing.
 type ZLabel Label

@@ -310,7 +310,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// exit early if the request contained no data
+	// Exit early if the request contained no data.
 	if len(wreq.Timeseries) == 0 {
 		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
 		return
