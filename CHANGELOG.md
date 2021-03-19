@@ -17,10 +17,13 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 
 ### Fixed
+
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
 - [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
 
 ### Changed
+
+- [#3856](https://github.com/thanos-io/thanos/pull/3856) Mixin: _breaking :warning:_ Introduce flexible multi-cluster/namespace mode for alerts and dashboards. Removes jobPrefix config option. Removes `namespace` by default.
 
 ### Removed
 
@@ -35,7 +38,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3792](https://github.com/thanos-io/thanos/pull/3792) Receiver: Added `--tsdb.allow-overlapping-blocks` flag to allow overlapping tsdb blocks and enable vertical compaction
 - [#3031](https://github.com/thanos-io/thanos/pull/3031) Compact/Sidecar/other writers: added `--hash-func`. If some function has been specified, writers calculate hashes using that function of each file in a block before uploading them. If those hashes exist in the `meta.json` file then Compact does not download the files if they already exist on disk and with the same hash. This also means that the data directory passed to Thanos Compact is only *cleared once at boot* or *if everything succeeds*. So, if you, for example, use persistent volumes on k8s and your Thanos Compact crashes or fails to make an iteration properly then the last downloaded files are not wiped from the disk. The directories that were created the last time are only wiped again after a successful iteration or if the previously picked up blocks have disappeared.
 - [#3686](https://github.com/thanos-io/thanos/pull/3686) Query: Added federated metric metadata support.
-
 ### Fixed
 
 - [#3773](https://github.com/thanos-io/thanos/pull/3773) Compact: Pad compaction planner size check
