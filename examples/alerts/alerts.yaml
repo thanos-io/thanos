@@ -271,8 +271,8 @@ groups:
       severity: warning
   - alert: ThanosReceiveNoUpload
     annotations:
-      description: Thanos Receive {{ $labels.instance }} of {{$labels.job}} has not
-        uploaded latest data to object storage.
+      description: Thanos Receive {{$labels.instance}} has not uploaded latest data
+        to object storage.
       runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivenoupload
       summary: Thanos Receive has not uploaded latest data to object storage.
     expr: |

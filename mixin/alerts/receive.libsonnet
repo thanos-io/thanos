@@ -130,7 +130,7 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              description: 'Thanos Receive {{ $labels.instance }} of {{$labels.job}}%shas not uploaded latest data to object storage.' % location,
+              description: 'Thanos Receive {{$labels.instance}}%shas not uploaded latest data to object storage.' % location,
               summary: 'Thanos Receive has not uploaded latest data to object storage.',
             },
             expr: |||

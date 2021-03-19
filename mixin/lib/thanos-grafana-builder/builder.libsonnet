@@ -134,20 +134,20 @@ local utils = import '../utils.libsonnet';
       $.panel('Memory Used') +
       $.queryPanel(
         [
-          'sum by (%s) (go_memstats_alloc_bytes{%s})' % [aggregator, selector],
-          'sum by (%s) (go_memstats_heap_alloc_bytes{%s})' % [aggregator, selector],
-          'sum by (%s) (rate(go_memstats_alloc_bytes_total{%s})[30s])' % [aggregator, selector],
-          'sum by (%s) (rate(go_memstats_heap_alloc_bytes{%s})[30s])' % [aggregator, selector],
-          'sum by (%s) (go_memstats_stack_inuse_bytes{%s})' % [aggregator, selector],
-          'sum by (%s) (go_memstats_heap_inuse_bytes{%s})' % [aggregator, selector],
+          'go_memstats_alloc_bytes{%s}' % selector,
+          'go_memstats_heap_alloc_bytes{%s}' % selector,
+          'rate(go_memstats_alloc_bytes_total{%s})[30s]' % selector,
+          'rate(go_memstats_heap_alloc_bytes{%s})[30s]' % selector,
+          'go_memstats_stack_inuse_bytes{%s}' % selector,
+          'go_memstats_heap_inuse_bytes{%s}' % selector,
         ],
         [
-          'alloc all {{job}}',
-          'alloc heap {{job}}',
-          'alloc rate all {{job}}',
-          'alloc rate heap {{job}}',
-          'inuse heap {{job}}',
-          'inuse stack {{job}}',
+          'alloc all {{instance}}',
+          'alloc heap {{instance}}',
+          'alloc rate all {{instance}}',
+          'alloc rate heap {{instance}}',
+          'inuse heap {{instance}}',
+          'inuse stack {{instance}}',
         ]
       ) +
       { yaxes: $.yaxes('bytes') },
@@ -155,15 +155,15 @@ local utils = import '../utils.libsonnet';
     .addPanel(
       $.panel('Goroutines') +
       $.queryPanel(
-        'sum by (%s) (go_goroutines{%s})' % [aggregator, selector],
-        '{{job}}'
+        'go_goroutines{%s}' % selector,
+        '{{instance}}'
       )
     )
     .addPanel(
       $.panel('GC Time Quantiles') +
       $.queryPanel(
-        'sum by (%s) (go_gc_duration_seconds{%s})' % [aggregator, selector],
-        '{{quantile}} {{job}}'
+        'go_gc_duration_seconds{%s}' % selector,
+        '{{quantile}} {{instance}}'
       )
     ) +
     $.collapse,

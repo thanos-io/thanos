@@ -1902,50 +1902,50 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (go_memstats_alloc_bytes{job=\"$job\"})",
+                     "expr": "go_memstats_alloc_bytes{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc all {{job}}",
+                     "legendFormat": "alloc all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (go_memstats_heap_alloc_bytes{job=\"$job\"})",
+                     "expr": "go_memstats_heap_alloc_bytes{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc heap {{job}}",
+                     "legendFormat": "alloc heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(go_memstats_alloc_bytes_total{job=\"$job\"})[30s])",
+                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"})[30s]",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate all {{job}}",
+                     "legendFormat": "alloc rate all {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(go_memstats_heap_alloc_bytes{job=\"$job\"})[30s])",
+                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"})[30s]",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "alloc rate heap {{job}}",
+                     "legendFormat": "alloc rate heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (go_memstats_stack_inuse_bytes{job=\"$job\"})",
+                     "expr": "go_memstats_stack_inuse_bytes{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse heap {{job}}",
+                     "legendFormat": "inuse heap {{instance}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (go_memstats_heap_inuse_bytes{job=\"$job\"})",
+                     "expr": "go_memstats_heap_inuse_bytes{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "inuse stack {{job}}",
+                     "legendFormat": "inuse stack {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -2018,10 +2018,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (go_goroutines{job=\"$job\"})",
+                     "expr": "go_goroutines{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}}",
+                     "legendFormat": "{{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -2094,10 +2094,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (go_gc_duration_seconds{job=\"$job\"})",
+                     "expr": "go_gc_duration_seconds{job=\"$job\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{quantile}} {{job}}",
+                     "legendFormat": "{{quantile}} {{instance}}",
                      "legendLink": null,
                      "step": 10
                   }
