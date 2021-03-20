@@ -61,7 +61,7 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 }
 
 // NewClientConfig provides new client TLS configuration.
-func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string) (*tls.Config, error) {
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
 		caPEM, err := ioutil.ReadFile(caCert)
@@ -89,6 +89,10 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string) (*
 
 	if serverName != "" {
 		tlsCfg.ServerName = serverName
+	}
+
+	if skipVerify {
+		tlsCfg.InsecureSkipVerify = true
 	}
 
 	if (key != "") != (cert != "") {
