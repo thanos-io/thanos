@@ -34,7 +34,8 @@ func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
 
 // ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed []ZLabel.
-// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal.
+// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
+// Prometheus Labels will hold this memory as well.
 func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
@@ -43,8 +44,8 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 func ReAllocZLabelsStrings(lset *[]ZLabel) {
 	for j, l := range *lset {
 		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
-		(*lset)[j].Name = string(*(*[]byte)(unsafe.Pointer(&l.Name)))
-		(*lset)[j].Value = string(*(*[]byte)(unsafe.Pointer(&l.Value)))
+		(*lset)[j].Name = string(noAllocBytes(l.Name))
+		(*lset)[j].Value = string(noAllocBytes(l.Value))
 	}
 }
 
