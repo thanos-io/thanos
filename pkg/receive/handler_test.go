@@ -1015,7 +1015,7 @@ func (a *tsOverrideAppender) AddFast(ref uint64, _ int64, v float64) error {
 	return a.Appender.AddFast(ref, cnt, v)
 }
 
-// serializeSeriesWithOneSample returns marshalled and compressed remote write requests like it would
+// serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
 // be send to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
 func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {

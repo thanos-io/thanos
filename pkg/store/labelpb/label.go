@@ -44,11 +44,12 @@ func CopyZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	ret := make(labels.Labels, len(lset))
 	for j := range lset {
 		ret[j] = labels.Label{
+			// NOTE: This trick converts from string to byte without copy, but copy when creating string.
 			Name:  string(*(*[]byte)(unsafe.Pointer(&lset[j].Name))),
 			Value: string(*(*[]byte)(unsafe.Pointer(&lset[j].Value))),
 		}
 	}
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
+	return ret
 }
 
 // LabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
