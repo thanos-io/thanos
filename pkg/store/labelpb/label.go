@@ -39,17 +39,13 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// CopyZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels by copying all underlying bytes.
-func CopyZLabelsToPromLabels(lset []ZLabel) labels.Labels {
-	ret := make(labels.Labels, len(lset))
-	for j := range lset {
-		ret[j] = labels.Label{
-			// NOTE: This trick converts from string to byte without copy, but copy when creating string.
-			Name:  string(*(*[]byte)(unsafe.Pointer(&lset[j].Name))),
-			Value: string(*(*[]byte)(unsafe.Pointer(&lset[j].Value))),
-		}
+// ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
+func ReAllocZLabelsStrings(lset *[]ZLabel) {
+	for j, l := range *lset {
+		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
+		(*lset)[j].Name = string(*(*[]byte)(unsafe.Pointer(&l.Name)))
+		(*lset)[j].Value = string(*(*[]byte)(unsafe.Pointer(&l.Value)))
 	}
-	return ret
 }
 
 // LabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.

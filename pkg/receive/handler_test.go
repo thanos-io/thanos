@@ -1178,8 +1178,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}
 
 	runtime.GC()
-	// Take snapshot.
-	// TODO(bwplotka): Remove it
+	// Take snapshot at the end to reveal how much memory we keep in TSDB.
 	testutil.Ok(b, Heap("../../"))
 
 }

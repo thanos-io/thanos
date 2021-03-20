@@ -194,7 +194,7 @@ func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})
-	b.Run("CopyZLabelsToPromLabels", func(b *testing.B) {
+	b.Run("ZLabelsToPromLabelsWithRealloc", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := make([]ZLabel, num)
 		for i := 0; i < num; i++ {
@@ -203,7 +203,8 @@ func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			ret = CopyZLabelsToPromLabels(lbls)
+			ReAllocZLabelsStrings(&lbls)
+			ret = ZLabelsToPromLabels(lbls)
 		}
 	})
 }

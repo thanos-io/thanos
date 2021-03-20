@@ -63,8 +63,11 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	var errs errutil.MultiError
 	for _, t := range wreq.Timeseries {
 		// Copy labels so we allocate memory only for labels, nothing else.
-		// TODO(bwplotka): Use improvement https://github.com/prometheus/prometheus/pull/8600
-		lset := labelpb.CopyZLabelsToPromLabels(t.Labels)
+		labelpb.ReAllocZLabelsStrings(&t.Labels)
+
+		// TODO(bwplotka): Use improvement https://github.com/prometheus/prometheus/pull/8600, so we do that only when
+		// we need it (when we store labels for longer).
+		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
