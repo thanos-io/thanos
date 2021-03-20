@@ -277,6 +277,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
+	// TODO(bwplotka): Optimize readAll https://github.com/thanos-io/thanos/pull/3334/files.
 	compressed, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -290,6 +291,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
+	// from the whole request. Ensure that we always copy those when we want to
+	// store them for longer time.
 	var wreq prompb.WriteRequest
 	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -310,7 +314,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// exit early if the request contained no data
+	// Exit early if the request contained no data.
 	if len(wreq.Timeseries) == 0 {
 		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
 		return
