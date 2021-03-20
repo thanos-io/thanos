@@ -325,8 +325,8 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --grpc-client-tls-secure   Use TLS when talking to the gRPC server
       --grpc-client-tls-skip-verify
-                                 Disable TLS certificate verification i.e self signed,
-                                 signed by fake CA
+                                 Disable TLS certificate verification i.e self
+                                 signed, signed by fake CA
       --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
                                  to the server
       --grpc-client-tls-key=""   TLS Key for the client's certificate

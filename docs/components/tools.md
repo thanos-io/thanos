@@ -741,7 +741,7 @@ Flags:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --id=ID ...               ID (ULID) of the blocks for rewrite (repeated
                                 flag).
-      --tmp.dir="/tmp/thanos-rewrite"
+      --tmp.dir="/var/folders/ks/bgbzxvwj7dq4kflwx6346x1c0000gp/T/thanos-rewrite"
                                 Working directory for temporary files
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files. If no
