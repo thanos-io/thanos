@@ -2457,7 +2457,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"})[30s]",
+                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "alloc rate all {{instance}}",
@@ -2465,7 +2465,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"})[30s]",
+                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "alloc rate heap {{instance}}",

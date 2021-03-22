@@ -136,8 +136,8 @@ local utils = import '../utils.libsonnet';
         [
           'go_memstats_alloc_bytes{%s}' % selector,
           'go_memstats_heap_alloc_bytes{%s}' % selector,
-          'rate(go_memstats_alloc_bytes_total{%s})[30s]' % selector,
-          'rate(go_memstats_heap_alloc_bytes{%s})[30s]' % selector,
+          'rate(go_memstats_alloc_bytes_total{%s}[30s])' % selector,
+          'rate(go_memstats_heap_alloc_bytes{%s}[30s])' % selector,
           'go_memstats_stack_inuse_bytes{%s}' % selector,
           'go_memstats_heap_inuse_bytes{%s}' % selector,
         ],
