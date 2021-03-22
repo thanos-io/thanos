@@ -7,8 +7,7 @@
     groups+: [
       {
         name: 'thanos-bucket-replicate.rules',
-        rules: [
-        ],
+        rules: [],
       },
     ],
   },
