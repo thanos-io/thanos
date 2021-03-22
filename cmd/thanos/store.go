@@ -407,7 +407,7 @@ func runStore(
 	// Add bucket UI for loaded blocks.
 	{
 		r := route.New()
-		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		compactorView := ui.NewBucketUI(logger, "", externalPrefix, prefixHeader, "/loaded", component)
 		compactorView.Register(r, true, ins)
