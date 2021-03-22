@@ -22,7 +22,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
 
 ### Changed
-
+- [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
 - [#3856](https://github.com/thanos-io/thanos/pull/3856) Mixin: _breaking :warning:_ Introduce flexible multi-cluster/namespace mode for alerts and dashboards. Removes jobPrefix config option. Removes `namespace` by default.
 
 ### Removed
