@@ -711,9 +711,9 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		}
 
 		req := &exemplarspb.ExemplarsRequest{
-			Start: start,
-			End: end,
-			Query: r.FormValue("query"),
+			Start:                   start,
+			End:                     end,
+			Query:                   r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}
 		exemplarsData, warnings, err := client.Exemplars(r.Context(), req)
