@@ -30,8 +30,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
 
@@ -127,8 +127,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -136,8 +136,8 @@ Flags:
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains object
+                           Alternative to 'objstore.config-file' flag (mutually
+                           exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
 
@@ -223,9 +223,9 @@ Flags:
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                                Alternative to 'tracing.config-file' flag (lower
-                                priority). Content of YAML file with tracing
-                                configuration. See format details:
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file with
+                                tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
@@ -233,7 +233,7 @@ Flags:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
-                                (lower priority). Content of YAML file that
+                                (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
@@ -260,6 +260,9 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
+      --web.disable-cors        Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --timeout=5m              Timeout to download metadata from remote storage
@@ -298,8 +301,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -307,8 +310,8 @@ Flags:
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains object
+                           Alternative to 'objstore.config-file' flag (mutually
+                           exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore-backup.config-file=<file-path>
@@ -319,9 +322,9 @@ Flags:
                            removal.
       --objstore-backup.config=<content>
                            Alternative to 'objstore-backup.config-file' flag
-                           (lower priority). Content of YAML file that contains
-                           object store-backup configuration. See format
-                           details:
+                           (mutually exclusive). Content of YAML file that
+                           contains object store-backup configuration. See
+                           format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
@@ -377,8 +380,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -386,8 +389,8 @@ Flags:
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains object
+                           Alternative to 'objstore.config-file' flag (mutually
+                           exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
@@ -424,8 +427,8 @@ Flags:
                              format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                             Alternative to 'tracing.config-file' flag (lower
-                             priority). Content of YAML file with tracing
+                             Alternative to 'tracing.config-file' flag (mutually
+                             exclusive). Content of YAML file with tracing
                              configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -433,9 +436,10 @@ Flags:
                              configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                             Alternative to 'objstore.config-file' flag (lower
-                             priority). Content of YAML file that contains
-                             object store configuration. See format details:
+                             Alternative to 'objstore.config-file' flag
+                             (mutually exclusive). Content of YAML file that
+                             contains object store configuration. See format
+                             details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
   -l, --selector=<name>=\"<value>\" ...
                              Selects blocks based on label, e.g. '-l
@@ -480,7 +484,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -489,7 +493,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -504,7 +508,7 @@ Flags:
                                  The object storage which replicate data to.
       --objstore-to.config=<content>
                                  Alternative to 'objstore-to.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store-to configuration. See
                                  format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -577,18 +581,19 @@ Flags:
                               format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                              Alternative to 'tracing.config-file' flag (lower
-                              priority). Content of YAML file with tracing
-                              configuration. See format details:
+                              Alternative to 'tracing.config-file' flag
+                              (mutually exclusive). Content of YAML file with
+                              tracing configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object store
                               configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                              Alternative to 'objstore.config-file' flag (lower
-                              priority). Content of YAML file that contains
-                              object store configuration. See format details:
+                              Alternative to 'objstore.config-file' flag
+                              (mutually exclusive). Content of YAML file that
+                              contains object store configuration. See format
+                              details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --http-address="0.0.0.0:10902"
                               Listen host:port for HTTP endpoints.
@@ -596,6 +601,12 @@ Flags:
                               Server.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --hash-func=            Specify which hash function to use when
+                              calculating the hashes of produced files. If no
+                              function has been specified, it does not happen.
+                              This permits avoiding downloading some files twice
+                              albeit at some performance cost. Possible values
+                              are: "", "SHA256".
 
 ```
 
@@ -638,8 +649,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
@@ -647,8 +658,8 @@ Flags:
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
-                           Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains object
+                           Alternative to 'objstore.config-file' flag (mutually
+                           exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --id=ID ...          ID (ULID) of the blocks to be marked for deletion
@@ -714,9 +725,9 @@ Flags:
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                                Alternative to 'tracing.config-file' flag (lower
-                                priority). Content of YAML file with tracing
-                                configuration. See format details:
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file with
+                                tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
@@ -724,7 +735,7 @@ Flags:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
-                                (lower priority). Content of YAML file that
+                                (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
@@ -732,6 +743,12 @@ Flags:
                                 flag).
       --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
+      --hash-func=              Specify which hash function to use when
+                                calculating the hashes of produced files. If no
+                                function has been specified, it does not happen.
+                                This permits avoiding downloading some files
+                                twice albeit at some performance cost. Possible
+                                values are: "", "SHA256".
       --dry-run                 Prints the series changes instead of doing them.
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.
@@ -741,9 +758,9 @@ Flags:
                                 to blocks
       --rewrite.to-delete-config=<content>
                                 Alternative to 'rewrite.to-delete-config-file'
-                                flag (lower priority). Content of YAML file that
-                                contains []metadata.DeletionRequest that will be
-                                applied to blocks
+                                flag (mutually exclusive). Content of YAML file
+                                that contains []metadata.DeletionRequest that
+                                will be applied to blocks
       --rewrite.add-change-log  If specified, all modifications are written to
                                 new block directory. Disable if latency is to
                                 high.
@@ -784,8 +801,8 @@ Flags:
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (lower
-                           priority). Content of YAML file with tracing
+                           Alternative to 'tracing.config-file' flag (mutually
+                           exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --rules=RULES ...    The rule files glob to check (repeated).

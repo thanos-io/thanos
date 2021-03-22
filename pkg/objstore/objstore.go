@@ -68,7 +68,7 @@ type BucketReader interface {
 	// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
 	// object name including the prefix of the inspected directory.
 	// Entries are passed to function in sorted order.
-	Iter(ctx context.Context, dir string, f func(string) error) error
+	Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error
 
 	// Get returns a reader for the given object name.
 	Get(ctx context.Context, name string) (io.ReadCloser, error)
@@ -93,6 +93,28 @@ type InstrumentedBucketReader interface {
 	// ReaderWithExpectedErrs allows to specify a filter that marks certain errors as expected, so it will not increment
 	// thanos_objstore_bucket_operation_failures_total metric.
 	ReaderWithExpectedErrs(IsOpFailureExpectedFunc) BucketReader
+}
+
+// IterOption configures the provided params.
+type IterOption func(params *IterParams)
+
+// WithRecursiveIter is an option that can be applied to Iter() to recursively list objects
+// in the bucket.
+func WithRecursiveIter(params *IterParams) {
+	params.Recursive = true
+}
+
+// IterParams holds the Iter() parameters and is used by objstore clients implementations.
+type IterParams struct {
+	Recursive bool
+}
+
+func ApplyIterOptions(options ...IterOption) IterParams {
+	out := IterParams{}
+	for _, opt := range options {
+		opt(&out)
+	}
+	return out
 }
 
 type ObjectAttributes struct {
@@ -201,7 +223,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 }
 
 // DownloadDir downloads all object found in the directory into the local directory.
-func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) error {
+func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
 	if err := os.MkdirAll(dst, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
@@ -209,7 +231,13 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 	var downloadedFiles []string
 	if err := bkt.Iter(ctx, src, func(name string) error {
 		if strings.HasSuffix(name, DirDelim) {
-			return DownloadDir(ctx, logger, bkt, name, filepath.Join(dst, filepath.Base(name)))
+			return DownloadDir(ctx, logger, bkt, originalSrc, name, filepath.Join(dst, filepath.Base(name)), ignoredPaths...)
+		}
+		for _, ignoredPath := range ignoredPaths {
+			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
+				level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+				return nil
+			}
 		}
 		if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
 			return err
@@ -308,11 +336,11 @@ func (b *metricBucket) ReaderWithExpectedErrs(fn IsOpFailureExpectedFunc) Bucket
 	return b.WithExpectedErrs(fn)
 }
 
-func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
+func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error, options ...IterOption) error {
 	const op = OpIter
 	b.ops.WithLabelValues(op).Inc()
 
-	err := b.bkt.Iter(ctx, dir, f)
+	err := b.bkt.Iter(ctx, dir, f, options...)
 	if err != nil {
 		if !b.isOpFailureExpected(err) && ctx.Err() != context.Canceled {
 			b.opsFailures.WithLabelValues(op).Inc()

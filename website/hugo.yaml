@@ -26,7 +26,18 @@ staticDir: "static"
 permalinks:
   # Generate those for every file.
   # TODO(bwplotka): Move to mdox + fixes to ensure we don't need to manually do this.
+  # For now we added few entries for advance.
   tip: "/:sections/:filename.md"
+  v0.29: "/:sections/:filename.md"
+  v0.28: "/:sections/:filename.md"
+  v0.27: "/:sections/:filename.md"
+  v0.26: "/:sections/:filename.md"
+  v0.25: "/:sections/:filename.md"
+  v0.24: "/:sections/:filename.md"
+  v0.23: "/:sections/:filename.md"
+  v0.22: "/:sections/:filename.md"
+  v0.21: "/:sections/:filename.md"
+  v0.19: "/:sections/:filename.md"
   v0.18: "/:sections/:filename.md"
   v0.17: "/:sections/:filename.md"
   v0.16: "/:sections/:filename.md"

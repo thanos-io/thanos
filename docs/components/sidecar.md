@@ -94,7 +94,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
@@ -140,13 +140,23 @@ Flags:
       --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
+      --request.logging-config-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging-config=<content>
+                                 Alternative to 'request.logging-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 with request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -156,6 +166,12 @@ Flags:
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
+      --hash-func=               Specify which hash function to use when
+                                 calculating the hashes of produced files. If no
+                                 function has been specified, it does not
+                                 happen. This permits avoiding downloading some
+                                 files twice albeit at some performance cost.
+                                 Possible values are: "", "SHA256".
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened

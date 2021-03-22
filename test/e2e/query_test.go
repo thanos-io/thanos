@@ -38,7 +38,11 @@ const queryUpWithoutInstance = "sum(up) without (instance)"
 // * expose 2 external labels, source and replica.
 // * scrape fake target. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func defaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string) string {
+func defaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
+	targets := "localhost:9090"
+	if len(scrapeTargets) > 0 {
+		targets = strings.Join(scrapeTargets, ",")
+	}
 	config := fmt.Sprintf(`
 global:
   external_labels:
@@ -50,8 +54,8 @@ scrape_configs:
   scrape_interval: 1s
   scrape_timeout: 1s
   static_configs:
-  - targets: ['localhost:9090']
-`, name, replica)
+  - targets: [%s]
+`, name, replica, targets)
 
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
@@ -104,7 +108,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, "", "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -184,6 +188,7 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		"",
 		externalPrefix,
 	)
@@ -204,6 +209,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -233,6 +239,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -272,6 +279,7 @@ func TestQueryLabelNames(t *testing.T) {
 		"1",
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
 		[]string{},
+		nil,
 		nil,
 		"",
 		"",
@@ -331,6 +339,7 @@ func TestQueryLabelValues(t *testing.T) {
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
 		[]string{},
 		nil,
+		nil,
 		"",
 		"",
 	)
@@ -368,31 +377,32 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
 
-	var networkErrors []string
+	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
+		var networkErrors []string
 
-	// Listen for failed network requests and push them to an array.
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-		case *network.EventLoadingFailed:
-			networkErrors = append(networkErrors, ev.ErrorText)
+		// Listen for failed network requests and push them to an array.
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			switch ev := ev.(type) {
+			case *network.EventLoadingFailed:
+				networkErrors = append(networkErrors, ev.ErrorText)
+			}
+		})
+
+		err := chromedp.Run(ctx,
+			network.Enable(),
+			chromedp.Navigate(addr),
+			chromedp.WaitVisible(`body`),
+		)
+
+		if err != nil {
+			return err
 		}
-	})
 
-	err := chromedp.Run(ctx,
-		network.Enable(),
-		chromedp.Navigate(addr),
-		chromedp.WaitVisible(`body`),
-	)
-	testutil.Ok(t, err)
-
-	err = func() error {
 		if len(networkErrors) > 0 {
-			return fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
+			err = fmt.Errorf("some network requests failed: %s", strings.Join(networkErrors, "; "))
 		}
-		return nil
-	}()
-
-	testutil.Ok(t, err)
+		return err
+	}))
 }
 
 func mustURLParse(t *testing.T, addr string) *url.URL {

@@ -31,5 +31,5 @@ export interface LabelSet {
 }
 
 export interface BlocksPool {
-  [key: string]: Block[];
+  [key: string]: Block[][];
 }

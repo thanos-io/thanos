@@ -58,7 +58,7 @@ PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
 REACT_APP_PATH = pkg/ui/react-app
-REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
+REACT_APP_SOURCE_FILES = $(shell find $(REACT_APP_PATH)/public/ $(REACT_APP_PATH)/src/ $(REACT_APP_PATH)/tsconfig.json)
 REACT_APP_OUTPUT_DIR = pkg/ui/static/react
 REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
 
@@ -171,7 +171,7 @@ docs: ## Regenerates flags in docs for all thanos commands.
 docs: $(EMBEDMD) build
 	@echo ">> generating docs"
 	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning whte noise"
+	@echo ">> cleaning white noise"
 	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: check-docs
@@ -294,7 +294,7 @@ lint: go-lint react-app-lint shell-lint
 # to debug big allocations during linting.
 .PHONY: go-lint
 go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
-	$(call require_clean_work_tree,'detected not clean master before running lint, previous job changed something?')
+	$(call require_clean_work_tree,'detected not clean work tree before running lint, previous job changed something?')
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
 	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
@@ -327,7 +327,7 @@ web-serve: web-pre-process $(HUGO)
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY: examples
-examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md
 	$(EMBEDMD) -w examples/alerts/alerts.md
 	$(EMBEDMD) -w ${THANOS_MIXIN}/README.md
 
@@ -348,6 +348,10 @@ examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.li
 examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/rules/*
 	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
+.PHONY: mixin/runbook.md
+mixin/runbook.md: $(PROMDOC) examples/alerts/alerts.yaml
+	$(PROMDOC) generate  examples/alerts/alerts.yaml -i mixin -o $@
+
 .PHONY: jsonnet-vendor
 jsonnet-vendor: $(JB) $(THANOS_MIXIN)/jsonnetfile.json $(THANOS_MIXIN)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
@@ -359,6 +363,11 @@ JSONNETFMT_CMD := $(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comm
 jsonnet-format: $(JSONNETFMT)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
+
+.PHONY: jsonnet-lint
+jsonnet-lint: $(JSONNET_LINT) ${JSONNET_VENDOR_DIR}
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
 
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml

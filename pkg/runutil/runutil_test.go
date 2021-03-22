@@ -5,7 +5,9 @@ package runutil
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,4 +123,37 @@ func TestCloseMoreThanOnce(t *testing.T) {
 
 	CloseWithLogOnErr(lc, r, "should be called")
 	testutil.Equals(t, true, lc.WasCalled)
+}
+
+func TestClearsDirectoriesFilesProperly(t *testing.T) {
+	dir, err := ioutil.TempDir("", "example")
+	testutil.Ok(t, err)
+
+	t.Cleanup(func() {
+		os.RemoveAll(dir)
+	})
+
+	f, err := os.Create(filepath.Join(dir, "test123"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN8"), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW1TN8"), os.ModePerm))
+	f, err = os.Create(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN9"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+
+	testutil.Ok(t, DeleteAll(dir, "01EHBQRN4RF0HSRR1772KW0TN9", "01EHBQRN4RF0HSRR1772KW0TN8"))
+
+	_, err = os.Stat(filepath.Join(dir, "test123"))
+	testutil.Assert(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN9"))
+	testutil.Assert(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW1TN8/"))
+	testutil.Assert(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN8/"))
+	testutil.Ok(t, err)
 }

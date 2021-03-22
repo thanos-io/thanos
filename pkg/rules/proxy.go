@@ -108,6 +108,9 @@ func (stream *rulesStream) receive(ctx context.Context) error {
 		}
 
 		if err != nil {
+			// An error happened in Recv(), hence the underlying stream is aborted
+			// as per https://github.com/grpc/grpc-go/blob/7f2581f910fc21497091c4109b56d310276fc943/stream.go#L117-L125.
+			// We must not continue receiving additional data from it and must return.
 			err = errors.Wrapf(err, "receiving rules from rules client %v", stream.client)
 
 			if stream.request.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
@@ -118,13 +121,15 @@ func (stream *rulesStream) receive(ctx context.Context) error {
 				return errors.Wrapf(err, "sending rules error to server %v", stream.server)
 			}
 
-			continue
+			// Return no error if response strategy is warning.
+			return nil
 		}
 
 		if w := rule.GetWarning(); w != "" {
 			if err := stream.server.Send(rulespb.NewWarningRulesResponse(errors.New(w))); err != nil {
 				return errors.Wrapf(err, "sending rules warning to server %v", stream.server)
 			}
+			// Client stream is not aborted, it is ok to receive additional data.
 			continue
 		}
 

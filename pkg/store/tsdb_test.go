@@ -48,7 +48,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 
 	app := db.Appender(context.Background())
-	_, err = app.Add(labels.FromStrings("a", "a"), 12, 0.1)
+	_, err = app.Append(0, labels.FromStrings("a", "a"), 12, 0.1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, app.Commit())
 
@@ -76,7 +76,7 @@ func TestTSDBStore_Series(t *testing.T) {
 	appender := db.Appender(context.Background())
 
 	for i := 1; i <= 3; i++ {
-		_, err = appender.Add(labels.FromStrings("a", "1"), int64(i), float64(i))
+		_, err = appender.Append(0, labels.FromStrings("a", "1"), int64(i), float64(i))
 		testutil.Ok(t, err)
 	}
 	err = appender.Commit()
@@ -200,7 +200,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
-			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
+			_, err = appender.Append(0, labels.FromStrings(lbs...), timestamp, 1)
 			testutil.Ok(t, err)
 		}
 	}
@@ -306,7 +306,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	appender := db.Appender(context.Background())
 	addLabels := func(lbs []string, timestamp int64) {
 		if len(lbs) > 0 {
-			_, err = appender.Add(labels.FromStrings(lbs...), timestamp, 1)
+			_, err = appender.Append(0, labels.FromStrings(lbs...), timestamp, 1)
 			testutil.Ok(t, err)
 		}
 	}
@@ -322,6 +322,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 		timestamp      int64
 		start          func() int64
 		end            func() int64
+		Matchers       []storepb.LabelMatcher
 	}{
 		{
 			title:       "no label in tsdb",
@@ -362,6 +363,36 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 			},
 		},
 		{
+			title:          "check label value matcher",
+			queryLabel:     "foo",
+			expectedValues: []string{"test1"},
+			timestamp:      now.Unix(),
+			start: func() int64 {
+				return timestamp.FromTime(minTime)
+			},
+			end: func() int64 {
+				return timestamp.FromTime(maxTime)
+			},
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test1"},
+			},
+		},
+		{
+			title:          "check another label value matcher",
+			queryLabel:     "foo",
+			expectedValues: []string{},
+			timestamp:      now.Unix(),
+			start: func() int64 {
+				return timestamp.FromTime(minTime)
+			},
+			end: func() int64 {
+				return timestamp.FromTime(maxTime)
+			},
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test2"},
+			},
+		},
+		{
 			title:       "query time range outside head",
 			addedLabels: []string{},
 			queryLabel:  "foo",
@@ -377,9 +408,10 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			addLabels(tc.addedLabels, tc.timestamp)
 			resp, err := tsdbStore.LabelValues(ctx, &storepb.LabelValuesRequest{
-				Label: tc.queryLabel,
-				Start: tc.start(),
-				End:   tc.end(),
+				Label:    tc.queryLabel,
+				Start:    tc.start(),
+				End:      tc.end(),
+				Matchers: tc.Matchers,
 			})
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.expectedValues, resp.Values)

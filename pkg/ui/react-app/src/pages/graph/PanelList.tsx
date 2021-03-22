@@ -7,6 +7,7 @@ import Checkbox from '../../components/Checkbox';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { StoreListProps } from '../../thanos/pages/stores/Stores';
 import { Store } from '../../thanos/pages/stores/store';
+import { FlagMap } from '../flags/Flags';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -26,6 +27,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   queryHistoryEnabled: boolean;
   stores: StoreListProps;
   enableAutocomplete: boolean;
+  defaultStep: string;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -35,6 +37,7 @@ export const PanelListContent: FC<PanelListProps> = ({
   queryHistoryEnabled,
   stores = {},
   enableAutocomplete,
+  defaultStep,
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
@@ -97,8 +100,8 @@ export const PanelListContent: FC<PanelListProps> = ({
           key={id}
           options={options}
           id={id}
-          onOptionsChanged={opts =>
-            callAll(setPanels, updateURL)(panels.map(p => (id === p.id ? { ...p, options: opts } : p)))
+          onOptionsChanged={(opts) =>
+            callAll(setPanels, updateURL)(panels.map((p) => (id === p.id ? { ...p, options: opts } : p)))
           }
           removePanel={() =>
             callAll(
@@ -117,9 +120,10 @@ export const PanelListContent: FC<PanelListProps> = ({
           pathPrefix={pathPrefix}
           stores={storeData}
           enableAutocomplete={enableAutocomplete}
+          defaultStep={defaultStep}
         />
       ))}
-      <Button className="mb-3" color="primary" onClick={addPanel}>
+      <Button className="d-block mb-3" color="primary" onClick={addPanel}>
         Add Panel
       </Button>
     </>
@@ -139,6 +143,10 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
     `${pathPrefix}/api/v1/stores`
   );
+  const { response: flagsRes, error: flagsErr, isLoading: flagsLoading } = useFetch<FlagMap>(
+    `${pathPrefix}/api/v1/status/flags`
+  );
+  const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -210,6 +218,12 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           Error fetching stores list: Unexpected response status when fetching stores: {storesErr.message}
         </UncontrolledAlert>
       )}
+      {flagsErr && (
+        <UncontrolledAlert color="danger">
+          <strong>Warning: </strong>
+          Error fetching flags list: Unexpected response status when fetching flags: {flagsErr.message}
+        </UncontrolledAlert>
+      )}
       <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
         pathPrefix={pathPrefix}
@@ -217,8 +231,9 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         metrics={metricsRes.data}
         stores={debugMode ? storesRes.data : {}}
         enableAutocomplete={enableAutocomplete}
+        defaultStep={defaultStep}
         queryHistoryEnabled={enableQueryHistory}
-        isLoading={storesLoading}
+        isLoading={storesLoading || flagsLoading}
       />
     </>
   );

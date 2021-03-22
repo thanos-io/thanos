@@ -126,6 +126,7 @@ type shipperConfig struct {
 	uploadCompacted       bool
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
+	hashFunc              string
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -140,12 +141,15 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
+	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
+		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
 	return sc
 }
 
 type webConfig struct {
 	externalPrefix   string
 	prefixHeaderName string
+	disableCORS      bool
 }
 
 func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
@@ -154,5 +158,6 @@ func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
 		Default("").StringVar(&wc.externalPrefix)
 	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").
 		Default("").StringVar(&wc.prefixHeaderName)
+	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").BoolVar(&wc.disableCORS)
 	return wc
 }

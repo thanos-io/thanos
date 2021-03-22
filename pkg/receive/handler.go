@@ -310,6 +310,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
+	// exit early if the request contained no data
+	if len(wreq.Timeseries) == 0 {
+		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
+		return
+	}
+
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
@@ -557,7 +563,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			return fctx.Err()
 		case err, more := <-ec:
 			if !more {
-				return errs
+				return errs.Err()
 			}
 			if err == nil {
 				success++
@@ -686,7 +692,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 	}
 
 	unwrappedErr := errors.Cause(err)
-	errs, ok := unwrappedErr.(errutil.MultiError)
+	errs, ok := unwrappedErr.(errutil.NonNilMultiError)
 	if !ok {
 		errs = []error{unwrappedErr}
 	}

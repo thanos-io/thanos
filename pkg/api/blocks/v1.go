@@ -22,6 +22,7 @@ type BlocksAPI struct {
 	logger           log.Logger
 	globalBlocksInfo *BlocksInfo
 	loadedBlocksInfo *BlocksInfo
+	disableCORS      bool
 }
 
 type BlocksInfo struct {
@@ -32,9 +33,9 @@ type BlocksInfo struct {
 }
 
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
-func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *BlocksAPI {
+func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string) *BlocksAPI {
 	return &BlocksAPI{
-		baseAPI: api.NewBaseAPI(logger, flagsMap),
+		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
 		globalBlocksInfo: &BlocksInfo{
 			Blocks: []metadata.Meta{},
@@ -44,13 +45,14 @@ func NewBlocksAPI(logger log.Logger, label string, flagsMap map[string]string) *
 			Blocks: []metadata.Meta{},
 			Label:  label,
 		},
+		disableCORS: disableCORS,
 	}
 }
 
 func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	bapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, bapi.disableCORS)
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 }

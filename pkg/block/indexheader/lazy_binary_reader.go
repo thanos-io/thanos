@@ -24,7 +24,8 @@ import (
 )
 
 var (
-	errNotIdle = errors.New("the reader is not idle")
+	errNotIdle              = errors.New("the reader is not idle")
+	errUnloadedWhileLoading = errors.New("the index-header has been concurrently unloaded")
 )
 
 // LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
@@ -208,7 +209,7 @@ func (r *LazyBinaryReader) LabelNames() ([]string, error) {
 
 // load ensures the underlying binary index-header reader has been successfully loaded. Returns
 // an error on failure. This function MUST be called with the read lock already acquired.
-func (r *LazyBinaryReader) load() error {
+func (r *LazyBinaryReader) load() (returnErr error) {
 	// Nothing to do if we already tried loading it.
 	if r.reader != nil {
 		return nil
@@ -221,8 +222,16 @@ func (r *LazyBinaryReader) load() error {
 	// the read lock once done.
 	r.readerMx.RUnlock()
 	r.readerMx.Lock()
-	defer r.readerMx.RLock()
-	defer r.readerMx.Unlock()
+	defer func() {
+		r.readerMx.Unlock()
+		r.readerMx.RLock()
+
+		// Between the write unlock and the subsequent read lock, the unload() may have run,
+		// so we make sure to catch this edge case.
+		if returnErr == nil && r.reader == nil {
+			returnErr = errUnloadedWhileLoading
+		}
+	}()
 
 	// Ensure none else tried to load it in the meanwhile.
 	if r.reader != nil {

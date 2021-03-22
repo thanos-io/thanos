@@ -48,6 +48,8 @@ Prometheus.Graph.prototype.initialize = function() {
 	  self.options.max_source_resolution = "0s";
   }
 
+  self.setDefaultStep(this);
+
   // Draw graph controls and container from Handlebars template.
 
   var options = {
@@ -293,6 +295,27 @@ Prometheus.Graph.prototype.initialize = function() {
   if (self.expr.val()) {
     self.submitQuery();
   }
+};
+
+Prometheus.Graph.prototype.setDefaultStep = function(el) {
+    var self = this;
+    $.ajax({
+        method: "GET",
+        url : PATH_PREFIX + "/api/v1/status/flags",
+        async: false,
+        dataType: "json",
+            success: function(json) {
+                if(json.status !== "success") {
+                    self.showError("Error querying flags.");
+                    return;
+                } 
+                el.defaultStep = (json.data && "query.default-step" in json.data) ? json.data["query.default-step"] : "1s"
+                
+            },
+            error: function() {
+                self.showError("Error loading flags.");
+            }
+    })
 };
 
 Prometheus.Graph.prototype.checkTimeDrift = function() {
@@ -545,7 +568,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
 
   var startTime = new Date().getTime();
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
-  var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
+  var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), self.parseDuration(self.defaultStep));
   var maxSourceResolution = self.maxSourceResolutionInput.val()
   var endDate = self.getEndDate() / 1000;
   var moment = self.getMoment() / 1000;

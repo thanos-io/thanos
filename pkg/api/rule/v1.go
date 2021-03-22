@@ -20,11 +20,12 @@ import (
 
 // RuleAPI is a very simple API used by Thanos Ruler.
 type RuleAPI struct {
-	baseAPI    *api.BaseAPI
-	logger     log.Logger
-	ruleGroups rules.UnaryClient
-	alerts     alertsRetriever
-	reg        prometheus.Registerer
+	baseAPI     *api.BaseAPI
+	logger      log.Logger
+	ruleGroups  rules.UnaryClient
+	alerts      alertsRetriever
+	reg         prometheus.Registerer
+	disableCORS bool
 }
 
 type alertsRetriever interface {
@@ -37,21 +38,23 @@ func NewRuleAPI(
 	reg prometheus.Registerer,
 	ruleGroups rules.UnaryClient,
 	activeAlerts alertsRetriever,
+	disableCORS bool,
 	flagsMap map[string]string,
 ) *RuleAPI {
 	return &RuleAPI{
-		baseAPI:    api.NewBaseAPI(logger, flagsMap),
-		logger:     logger,
-		ruleGroups: ruleGroups,
-		alerts:     activeAlerts,
-		reg:        reg,
+		baseAPI:     api.NewBaseAPI(logger, disableCORS, flagsMap),
+		logger:      logger,
+		ruleGroups:  ruleGroups,
+		alerts:      activeAlerts,
+		reg:         reg,
+		disableCORS: disableCORS,
 	}
 }
 
 func (rapi *RuleAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	rapi.baseAPI.Register(r, tracer, logger, ins, logMiddleware)
 
-	instr := api.GetInstr(tracer, logger, ins, logMiddleware)
+	instr := api.GetInstr(tracer, logger, ins, logMiddleware, rapi.disableCORS)
 
 	r.Get("/alerts", instr("alerts", func(r *http.Request) (interface{}, []error, *api.ApiError) {
 		return struct{ Alerts []*rulespb.AlertInstance }{Alerts: rapi.alerts.Active()}, nil, nil

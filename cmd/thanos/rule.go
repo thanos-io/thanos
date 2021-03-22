@@ -17,6 +17,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -98,8 +100,9 @@ func registerRule(app *extkingpin.App) {
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+	webDisableCORS := cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").Bool()
 
-	requestLoggingDecision := cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	objStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
@@ -128,6 +131,11 @@ func registerRule(app *extkingpin.App) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().Bool()
+
+	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
+		Default("").Enum("SHA256", "")
+
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -177,11 +185,23 @@ func registerRule(app *extkingpin.App) {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
+		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
 		return runRule(g,
 			logger,
 			reg,
 			tracer,
-			*requestLoggingDecision,
+			httpLogOpts,
+			grpcLogOpts,
+			tagOpts,
 			reload,
 			lset,
 			*alertmgrs,
@@ -198,6 +218,7 @@ func registerRule(app *extkingpin.App) {
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
+			*webDisableCORS,
 			time.Duration(*resendDelay),
 			time.Duration(*evalInterval),
 			*dataDir,
@@ -216,6 +237,7 @@ func registerRule(app *extkingpin.App) {
 			*allowOutOfOrderUpload,
 			*httpMethod,
 			getFlagsMap(cmd.Flags()),
+			metadata.HashFunc(*hashFunc),
 		)
 	})
 }
@@ -271,7 +293,9 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	requestLoggingDecision string,
+	httpLogOpts []logging.Option,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
@@ -288,6 +312,7 @@ func runRule(
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
+	disableCORS bool,
 	resendDelay time.Duration,
 	evalInterval time.Duration,
 	dataDir string,
@@ -306,6 +331,7 @@ func runRule(
 	allowOutOfOrderUpload bool,
 	httpMethod string,
 	flagsMap map[string]string,
+	hashFunc metadata.HashFunc,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -556,7 +582,7 @@ func runRule(
 		}
 
 		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
 			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 			grpcserver.WithListen(grpcBindAddr),
@@ -598,15 +624,12 @@ func runRule(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		// Configure Request Logging for HTTP calls.
-		opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-			return logging.LogDecision[requestLoggingDecision]
-		})}
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
+		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
-		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, flagsMap)
+		api := v1.NewRuleAPI(logger, reg, thanosrules.NewGRPCClient(ruleMgr), ruleMgr, disableCORS, flagsMap)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
@@ -647,7 +670,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, false, allowOutOfOrderUpload)
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource, false, allowOutOfOrderUpload, hashFunc)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -721,7 +744,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 	deduplicated := make([]*url.URL, 0, len(urls))
 	for _, u := range urls {
 		if _, ok := set[u.String()]; ok {
-			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", u.String())
+			level.Warn(logger).Log("msg", "duplicate query address is provided", "addr", u.String())
 			duplicatedQueriers.Inc()
 			continue
 		}

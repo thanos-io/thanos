@@ -162,7 +162,7 @@ func TestQueryEndpoints(t *testing.T) {
 	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
-			_, err := app.Add(lbl, i*60000, float64(i))
+			_, err := app.Append(0, lbl, i*60000, float64(i))
 			testutil.Ok(t, err)
 		}
 	}
@@ -184,7 +184,8 @@ func TestQueryEndpoints(t *testing.T) {
 		queryEngine: func(int64) *promql.Engine {
 			return qe
 		},
-		gate: gate.New(nil, 4),
+		gate:                  gate.New(nil, 4),
+		defaultRangeQueryStep: time.Second,
 	}
 
 	start := time.Unix(0, 0)
@@ -464,8 +465,32 @@ func TestQueryEndpoints(t *testing.T) {
 			query: url.Values{
 				"query": []string{"time()"},
 				"start": []string{"0"},
-				"end":   []string{"2"},
+				"end":   []string{"500"},
 				"step":  []string{"1"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeMatrix,
+				Result: promql.Matrix{
+					promql.Series{
+						Points: func(end, step float64) []promql.Point {
+							var res []promql.Point
+							for v := float64(0); v <= end; v += step {
+								res = append(res, promql.Point{V: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+							}
+							return res
+						}(500, 1),
+						Metric: nil,
+					},
+				},
+			},
+		},
+		// Use default step when missing.
+		{
+			endpoint: api.queryRange,
+			query: url.Values{
+				"query": []string{"time()"},
+				"start": []string{"0"},
+				"end":   []string{"2"},
 			},
 			response: &queryData{
 				ResultType: parser.ValueTypeMatrix,
@@ -497,15 +522,6 @@ func TestQueryEndpoints(t *testing.T) {
 				"query": []string{"time()"},
 				"start": []string{"0"},
 				"step":  []string{"1"},
-			},
-			errType: baseAPI.ErrorBadData,
-		},
-		{
-			endpoint: api.queryRange,
-			query: url.Values{
-				"query": []string{"time()"},
-				"start": []string{"0"},
-				"end":   []string{"2"},
 			},
 			errType: baseAPI.ErrorBadData,
 		},
@@ -839,7 +855,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	)
 	for _, lbl := range recent {
 		for i := int64(0); i < 10; i++ {
-			_, err := app.Add(lbl, start+(i*60_000), float64(i)) // ms
+			_, err := app.Append(0, lbl, start+(i*60_000), float64(i)) // ms
 			testutil.Ok(t, err)
 		}
 	}

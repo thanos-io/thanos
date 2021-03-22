@@ -83,10 +83,7 @@ describe('TSDB Stats', () => {
 
       for (let i = 0; i < tables.length; i++) {
         const data = tables[i].data;
-        const table = page
-          .find(Table)
-          .at(tables[i].table_index)
-          .find('tbody');
+        const table = page.find(Table).at(tables[i].table_index).find('tbody');
         const rows = table.find('tr');
         for (let i = 0; i < data.length; i++) {
           const firstRowColumns = rows

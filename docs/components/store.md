@@ -47,7 +47,7 @@ Flags:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (lower priority). Content of YAML file with
+                                 (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
@@ -84,7 +84,7 @@ Flags:
                                  https://thanos.io/tip/components/store.md/#index-cache
       --index-cache.config=<content>
                                  Alternative to 'index-cache.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains index cache configuration. See format
                                  details:
                                  https://thanos.io/tip/components/store.md/#index-cache
@@ -113,7 +113,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
-                                 (lower priority). Content of YAML file that
+                                 (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -147,7 +147,7 @@ Flags:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
-                                 flag (lower priority). Content of YAML file
+                                 flag (mutually exclusive). Content of YAML file
                                  that contains relabeling configuration that
                                  allows selecting blocks. It follows native
                                  Prometheus relabel-config syntax. See format
@@ -201,6 +201,19 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --web.disable-cors         Whether to disable CORS headers to be set by
+                                 Thanos. By default Thanos sets CORS headers to
+                                 be allowed by all.
+      --request.logging-config-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging-config=<content>
+                                 Alternative to 'request.logging-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 with request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
 
 ```
 
@@ -298,7 +311,7 @@ While the remaining settings are **optional**:
 
 Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chunk) and metadata caching to speed up loading of [chunks](../design.md/#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 
-Currently only memcached "backend" is supported:
+Both memcached and in-memory cache "backend"s are supported:
 
 ```yaml
 type: MEMCACHED # Case-insensitive
@@ -334,7 +347,9 @@ Following options are used for metadata caching (meta.json files, deletion mark 
 - `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
-Note that [chunks](../design.md/#chunk) and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+The yml structure for setting the in memory cache configs for caching bucket are the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 ## Index Header
 

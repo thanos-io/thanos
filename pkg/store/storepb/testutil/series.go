@@ -69,17 +69,20 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		testutil.Ok(t, os.MkdirAll(filepath.Join(opts.TSDBDir, "wal"), os.ModePerm))
 	}
 
-	h, err := tsdb.NewHead(nil, nil, w, tsdb.DefaultBlockDuration, opts.TSDBDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = opts.TSDBDir
+	h, err := tsdb.NewHead(nil, nil, w, headOpts)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())
 	for i := 0; i < opts.Series; i++ {
 		ts := int64(j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries)
-		ref, err := app.Add(labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, LabelLongSuffix)), ts, opts.Random.Float64())
+		ref, err := app.Append(0, labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", ts, LabelLongSuffix)), ts, opts.Random.Float64())
 		testutil.Ok(t, err)
 
 		for is := 1; is < opts.SamplesPerSeries; is++ {
-			testutil.Ok(t, app.AddFast(ref, ts+int64(is), opts.Random.Float64()))
+			_, err := app.Append(ref, nil, ts+int64(is), opts.Random.Float64())
+			testutil.Ok(t, err)
 		}
 	}
 	testutil.Ok(t, app.Commit())

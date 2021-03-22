@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -61,7 +62,7 @@ func TestStoreGateway(t *testing.T) {
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.HTTPEndpoint(), "loaded"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{s1.GRPCNetworkEndpoint()}, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{s1.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -78,13 +79,13 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(cancel)
 
 	now := time.Now()
-	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0)
+	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	id2, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset2, 0)
+	id2, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset2, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0)
+	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
+	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
@@ -182,7 +183,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(4+1), "thanos_bucket_store_series_blocks_queried"))
 	})
 	t.Run("upload block id5, similar to id1", func(t *testing.T) {
-		id5, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0)
+		id5, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset4, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id5.String()), id5.String()))
 

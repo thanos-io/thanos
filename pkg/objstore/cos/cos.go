@@ -137,12 +137,12 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 // Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
 // object name including the prefix of the inspected directory.
-func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
 	}
 
-	for object := range b.listObjects(ctx, dir) {
+	for object := range b.listObjects(ctx, dir, options...) {
 		if object.err != nil {
 			return object.err
 		}
@@ -224,8 +224,14 @@ type objectInfo struct {
 	err error
 }
 
-func (b *Bucket) listObjects(ctx context.Context, objectPrefix string) <-chan objectInfo {
+func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, options ...objstore.IterOption) <-chan objectInfo {
 	objectsCh := make(chan objectInfo, 1)
+
+	// If recursive iteration is enabled we should pass an empty delimiter.
+	delimiter := dirDelim
+	if objstore.ApplyIterOptions(options...).Recursive {
+		delimiter = ""
+	}
 
 	go func(objectsCh chan<- objectInfo) {
 		defer close(objectsCh)
@@ -235,7 +241,7 @@ func (b *Bucket) listObjects(ctx context.Context, objectPrefix string) <-chan ob
 				Prefix:    objectPrefix,
 				MaxKeys:   1000,
 				Marker:    marker,
-				Delimiter: dirDelim,
+				Delimiter: delimiter,
 			})
 			if err != nil {
 				select {

@@ -22,7 +22,7 @@ export interface RulesMap {
   groups: RuleGroup[];
 }
 
-const GraphExpressionLink: FC<{ expr: string; title: string }> = props => {
+const GraphExpressionLink: FC<{ expr: string; title: string }> = (props) => {
   return (
     <>
       <strong>{props.title}:</strong>
