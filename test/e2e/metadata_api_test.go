@@ -51,6 +51,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 		nil,
 		nil,
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()},
+		nil,
 		"",
 		"",
 	)
