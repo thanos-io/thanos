@@ -29,7 +29,6 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		"prom1",
 		defaultPromConfig("ha", 0, "", ""),
 		e2ethanos.DefaultPrometheusImage(),
-		e2ethanos.ExemplarStorage,
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
@@ -38,7 +37,6 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		"prom2",
 		defaultPromConfig("ha", 1, "", ""),
 		e2ethanos.DefaultPrometheusImage(),
-		e2ethanos.ExemplarStorage,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))

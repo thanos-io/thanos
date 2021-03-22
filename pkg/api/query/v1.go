@@ -701,16 +701,19 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
-		_, err := cortexutil.ParseTime(r.FormValue("start"))
+		start, err := cortexutil.ParseTime(r.FormValue("start"))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-		_, err = cortexutil.ParseTime(r.FormValue("end"))
+		end, err := cortexutil.ParseTime(r.FormValue("end"))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
 
 		req := &exemplarspb.ExemplarsRequest{
+			Start: start,
+			End: end,
+			Query: r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}
 		exemplarsData, warnings, err := client.Exemplars(r.Context(), req)

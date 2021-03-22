@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
@@ -29,10 +28,6 @@ import (
 )
 
 const infoLogLevel = "info"
-
-const (
-	ExemplarStorage = "exemplar-storage"
-)
 
 // Same as default for now.
 var defaultBackoffConfig = util.BackoffConfig{
@@ -60,7 +55,7 @@ func DefaultImage() string {
 	return "thanos"
 }
 
-func NewPrometheus(sharedDir string, name string, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, string, error) {
+func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2e.HTTPService, string, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
 	if err := os.MkdirAll(dir, 0777); err != nil {
@@ -78,10 +73,6 @@ func NewPrometheus(sharedDir string, name string, config, promImage string, enab
 		"--log.level":                       infoLogLevel,
 		"--web.listen-address":              ":9090",
 	})
-	if len(enableFeatures) > 0 {
-		args = append(args, "--enable-feature="+strings.Join(enableFeatures, ","))
-	}
-
 	prom := e2e.NewHTTPService(
 		fmt.Sprintf("prometheus-%s", name),
 		promImage,
@@ -95,8 +86,8 @@ func NewPrometheus(sharedDir string, name string, config, promImage string, enab
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
-	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage, enableFeatures...)
+func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string) (*e2e.HTTPService, *Service, error) {
+	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -39,7 +39,7 @@ func (m *Exemplar) MarshalJSON() ([]byte, error) {
 	}{
 		Labels:    labelpb.ZLabelsToPromLabels(m.Labels.Labels),
 		TimeStamp: model.Time(m.Ts),
-		Value:     model.SampleValue(m.Ts),
+		Value:     model.SampleValue(m.Value),
 	}
 	return json.Marshal(v)
 }
@@ -61,10 +61,7 @@ func NewWarningExemplarsResponse(warning error) *ExemplarsResponse {
 }
 
 func (s1 *ExemplarData) Compare(s2 *ExemplarData) int {
-	if d := labels.Compare(s1.SeriesLabels.PromLabels(), s2.SeriesLabels.PromLabels()); d != 0 {
-		return d
-	}
-	return 0
+	return labels.Compare(s1.SeriesLabels.PromLabels(), s2.SeriesLabels.PromLabels())
 }
 
 func (s *ExemplarData) SetSeriesLabels(ls labels.Labels) {
@@ -97,9 +94,6 @@ func (e1 *Exemplar) Compare(e2 *Exemplar) int {
 	if e1.Ts > e2.Ts {
 		return -1
 	}
-	if d := big.NewFloat(e1.Value).Cmp(big.NewFloat(e2.Value)); d != 0 {
-		return d
-	}
 
-	return 0
+	return big.NewFloat(e1.Value).Cmp(big.NewFloat(e2.Value))
 }

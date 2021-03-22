@@ -105,9 +105,9 @@ func dedupExemplarsData(exemplarsData []*exemplarspb.ExemplarData, replicaLabels
 	})
 
 	i := 0
-	removeReplicaLabels(exemplarsData[i].SeriesLabels, replicaLabels)
+	exemplarsData[i].SeriesLabels.Labels = removeReplicaLabels(exemplarsData[i].SeriesLabels.Labels, replicaLabels)
 	for j := 1; j < len(exemplarsData); j++ {
-		removeReplicaLabels(exemplarsData[j].SeriesLabels, replicaLabels)
+		exemplarsData[j].SeriesLabels.Labels = removeReplicaLabels(exemplarsData[j].SeriesLabels.Labels, replicaLabels)
 		if exemplarsData[i].Compare(exemplarsData[j]) != 0 {
 			// Effectively retain exemplarsData[j] in the resulting slice.
 			i++
@@ -135,9 +135,9 @@ func dedupExemplars(exemplars []*exemplarspb.Exemplar, replicaLabels map[string]
 	})
 
 	i := 0
-	removeReplicaLabels(exemplars[i].Labels, replicaLabels)
+	exemplars[i].Labels.Labels = removeReplicaLabels(exemplars[i].Labels.Labels, replicaLabels)
 	for j := 1; j < len(exemplars); j++ {
-		removeReplicaLabels(exemplars[j].Labels, replicaLabels)
+		exemplars[j].Labels.Labels = removeReplicaLabels(exemplars[j].Labels.Labels, replicaLabels)
 		if exemplars[i].Compare(exemplars[j]) != 0 {
 			// Effectively retain exemplars[j] in the resulting slice.
 			i++
@@ -148,13 +148,13 @@ func dedupExemplars(exemplars []*exemplarspb.Exemplar, replicaLabels map[string]
 	return exemplars[:i+1]
 }
 
-func removeReplicaLabels(labelSet labelpb.ZLabelSet, replicaLabels map[string]struct{}) {
-	newLabels := make([]labelpb.ZLabel, 0, len(labelSet.Labels))
-	for _, l := range labelSet.Labels {
+func removeReplicaLabels(labels []labelpb.ZLabel, replicaLabels map[string]struct{}) []labelpb.ZLabel {
+	newLabels := make([]labelpb.ZLabel, 0, len(labels))
+	for _, l := range labels {
 		if _, ok := replicaLabels[l.Name]; !ok {
 			newLabels = append(newLabels, l)
 		}
 	}
 
-	labelSet.Labels = newLabels
+	return newLabels
 }
