@@ -125,35 +125,43 @@ func TestCloseMoreThanOnce(t *testing.T) {
 	testutil.Equals(t, true, lc.WasCalled)
 }
 
-func TestClearsDirectoriesFilesProperly(t *testing.T) {
+func TestDeleteAll(t *testing.T) {
 	dir, err := ioutil.TempDir("", "example")
 	testutil.Ok(t, err)
 
 	t.Cleanup(func() {
-		os.RemoveAll(dir)
+		testutil.Ok(t, os.RemoveAll(dir))
 	})
 
-	f, err := os.Create(filepath.Join(dir, "test123"))
+	f, err := os.Create(filepath.Join(dir, "file1"))
 	testutil.Ok(t, err)
 	testutil.Ok(t, f.Close())
 
-	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN8"), os.ModePerm))
-	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW1TN8"), os.ModePerm))
-	f, err = os.Create(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN9"))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "a"), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "b"), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "c", "innerc"), os.ModePerm))
+	f, err = os.Create(filepath.Join(dir, "a", "file2"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+	f, err = os.Create(filepath.Join(dir, "c", "file3"))
 	testutil.Ok(t, err)
 	testutil.Ok(t, f.Close())
 
-	testutil.Ok(t, DeleteAll(dir, "01EHBQRN4RF0HSRR1772KW0TN9", "01EHBQRN4RF0HSRR1772KW0TN8"))
+	testutil.Ok(t, DeleteAll(dir, "file1", "a", filepath.Join("c", "innerc")))
 
-	_, err = os.Stat(filepath.Join(dir, "test123"))
+	// Deleted.
+	_, err = os.Stat(filepath.Join(dir, "file1"))
+	testutil.Assert(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dir, "b/"))
+	testutil.Assert(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dir, "file3"))
 	testutil.Assert(t, os.IsNotExist(err))
 
-	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN9"))
-	testutil.Assert(t, os.IsNotExist(err))
-
-	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW1TN8/"))
-	testutil.Assert(t, os.IsNotExist(err))
-
-	_, err = os.Stat(filepath.Join(dir, "01EHBQRN4RF0HSRR1772KW0TN8/"))
+	// Exits.
+	_, err = os.Stat(filepath.Join(dir, "a", "file2"))
+	testutil.Ok(t, err)
+	_, err = os.Stat(filepath.Join(dir, "a/"))
+	testutil.Ok(t, err)
+	_, err = os.Stat(filepath.Join(dir, "c", "innerc"))
 	testutil.Ok(t, err)
 }
