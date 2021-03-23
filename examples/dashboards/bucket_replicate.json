@@ -467,7 +467,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-bucket-replicate.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-bucket-replicate.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

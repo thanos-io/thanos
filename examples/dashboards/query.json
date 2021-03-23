@@ -1851,7 +1851,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-query.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-query.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

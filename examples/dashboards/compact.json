@@ -1785,7 +1785,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-compact.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-compact.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

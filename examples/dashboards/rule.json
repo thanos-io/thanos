@@ -1837,7 +1837,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-rule.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-rule.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
