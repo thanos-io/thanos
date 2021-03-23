@@ -14,7 +14,7 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/cortexproject/cortex/pkg/ingester/client"
+	"github.com/cortexproject/cortex/pkg/cortexpb"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
@@ -694,8 +694,8 @@ func promqlResults(fail bool) (*int, http.Handler) {
 			ResultType: string(parser.ValueTypeMatrix),
 			Result: []queryrange.SampleStream{
 				{
-					Labels: []client.LabelAdapter{},
-					Samples: []client.Sample{
+					Labels: []cortexpb.LabelAdapter{},
+					Samples: []cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},

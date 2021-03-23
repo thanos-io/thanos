@@ -457,7 +457,7 @@ func runCompact(
 	if conf.wait {
 		r := route.New()
 
-		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 		compactorView.Register(r, true, ins)
 
 		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)

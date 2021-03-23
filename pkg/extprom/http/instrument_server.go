@@ -39,13 +39,18 @@ type defaultInstrumentationMiddleware struct {
 }
 
 // NewInstrumentationMiddleware provides default InstrumentationMiddleware.
-func NewInstrumentationMiddleware(reg prometheus.Registerer) InstrumentationMiddleware {
+// Passing nil as buckets uses the default buckets.
+func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
+	if buckets == nil {
+		buckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
+	}
+
 	ins := defaultInstrumentationMiddleware{
 		requestDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "http_request_duration_seconds",
 				Help:    "Tracks the latencies for HTTP requests.",
-				Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+				Buckets: buckets,
 			},
 			[]string{"code", "handler", "method"},
 		),

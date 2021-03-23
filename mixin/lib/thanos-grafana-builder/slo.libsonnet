@@ -1,9 +1,14 @@
+local utils = import '../utils.libsonnet';
+
 {
-  sloLatency(title, description, selector, quantile, warning, critical)::
+  sloLatency(title, description, selector, dimensions, quantile, warning, critical)::
+    local aggregatedLabels = std.split(dimensions, ',');
+    local dimensionsTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]);
+
     $.panel(title, description) +
     $.queryPanel(
-      'histogram_quantile(%.2f, sum(rate(%s[$interval])) by (job, le))' % [quantile, selector],
-      '{{job}} P' + quantile * 100
+      'histogram_quantile(%.2f, sum by (%s) (rate(%s[$interval])))' % [quantile, utils.joinLabels(aggregatedLabels + ['le']), selector],
+      dimensionsTemplate + ' P' + quantile * 100
     ) +
     {
       yaxes: $.yaxes('s'),
