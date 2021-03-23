@@ -273,6 +273,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		"tenant_id",
 		nil,
 		false,
+		true,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
