@@ -38,7 +38,7 @@ func TSDBBlockExistsInBucket(ctx context.Context, bkt objstore.Bucket, id ulid.U
 // It returns error if block dir already exists in
 // the backup bucket (blocks should be immutable) or if any of the operations
 // fail.
-func BackupAndDelete(ctx Context, id ulid.ULID) error {
+func BackupAndDelete(ctx Context, id ulid.ULID, uploadDebubgMetaFiles bool) error {
 	// Does this TSDB block exist in backupBkt already?
 	found, err := TSDBBlockExistsInBucket(ctx, ctx.BackupBkt, id)
 	if err != nil {
@@ -66,7 +66,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	}
 
 	// Backup the block.
-	if err := backupDownloaded(ctx, ctx.Logger, dir, ctx.BackupBkt, id); err != nil {
+	if err := backupDownloaded(ctx, ctx.Logger, dir, ctx.BackupBkt, id, uploadDebubgMetaFiles); err != nil {
 		return err
 	}
 
@@ -91,7 +91,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 // points to the location on disk where the TSDB block was previously
 // downloaded allowing this function to avoid downloading the TSDB block from
 // the source bucket again. An error is returned if any operation fails.
-func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
+func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID, uploadDebubgMetaFiles bool) error {
 	// Does this TSDB block exist in backupBkt already?
 	found, err := TSDBBlockExistsInBucket(ctx, ctx.BackupBkt, id)
 	if err != nil {
@@ -102,7 +102,7 @@ func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 	}
 
 	// Backup the block.
-	if err := backupDownloaded(ctx, ctx.Logger, bdir, ctx.BackupBkt, id); err != nil {
+	if err := backupDownloaded(ctx, ctx.Logger, bdir, ctx.BackupBkt, id, uploadDebubgMetaFiles); err != nil {
 		return err
 	}
 
@@ -125,7 +125,7 @@ func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 // backupDownloaded is a helper function that uploads a TSDB block
 // found on disk to the given bucket. An error is returned if any operation
 // fails.
-func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backupBkt objstore.Bucket, id ulid.ULID) error {
+func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backupBkt objstore.Bucket, id ulid.ULID, uploadDebubgMetaFiles bool) error {
 	// Safety checks.
 	if _, err := os.Stat(filepath.Join(bdir, "meta.json")); err != nil {
 		// If there is any error stat'ing meta.json inside the TSDB block
@@ -136,7 +136,11 @@ func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backu
 
 	// Upload the on disk TSDB block.
 	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
+<<<<<<< HEAD
 	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc); err != nil {
+=======
+	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc, uploadDebubgMetaFiles); err != nil {
+>>>>>>> b1208db0 (Add flag in tools)
 		return errors.Wrap(err, "upload to backup")
 	}
 

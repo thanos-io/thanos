@@ -26,7 +26,7 @@ type Verifier interface {
 
 type VerifierRepairer interface {
 	IssueID() string
-	VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error
+	VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool, uploadDebubgMetaFiles bool) error
 }
 
 // Context is an verifier config.
@@ -128,7 +128,7 @@ func NewManager(reg prometheus.Registerer, logger log.Logger, bkt objstore.Bucke
 
 // Verify verifies matching blocks using registered list of Verifier and VerifierRepairer.
 // TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
-func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
+func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool, uploadDebubgMetaFiles bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
 		return errors.New("nothing to verify. No verifiers and verifierRepairers registered")
 	}
@@ -148,7 +148,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 		vCtx := m.Context
 		vCtx.Context = ctx
 		vCtx.Logger = log.With(logger, "verifier", vr.IssueID())
-		if err := vr.VerifyRepair(vCtx, idMatcher, false); err != nil {
+		if err := vr.VerifyRepair(vCtx, idMatcher, false, uploadDebubgMetaFiles); err != nil {
 			return errors.Wrapf(err, "verify %s", vr.IssueID())
 		}
 	}
@@ -159,7 +159,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 
 // VerifyAndRepair verifies and repairs matching blocks using registered list of VerifierRepairer.
 // TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
-func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
+func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID) bool, uploadDebubgMetaFiles bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
 		return errors.New("nothing to verify. No verifierRepairers registered")
 	}
@@ -172,7 +172,7 @@ func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID)
 		vCtx := m.Context
 		vCtx.Logger = log.With(logger, "verifier", vr.IssueID())
 		vCtx.Context = ctx
-		if err := vr.VerifyRepair(vCtx, idMatcher, true); err != nil {
+		if err := vr.VerifyRepair(vCtx, idMatcher, true, uploadDebubgMetaFiles); err != nil {
 			return errors.Wrapf(err, "verify and repair %s", vr.IssueID())
 		}
 	}

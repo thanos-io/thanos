@@ -28,7 +28,7 @@ type IndexKnownIssues struct{}
 
 func (IndexKnownIssues) IssueID() string { return "index_known_issues" }
 
-func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error {
+func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool, uploadDebubgMetaFiles bool) error {
 	level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
 	metas, _, err := ctx.Fetcher.Fetch(ctx)
@@ -111,12 +111,16 @@ func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool
 		}
 
 		level.Info(ctx.Logger).Log("msg", "uploading repaired block", "newID", resid)
+<<<<<<< HEAD
 		if err = block.Upload(ctx, ctx.Logger, ctx.Bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc); err != nil {
+=======
+		if err = block.Upload(ctx, ctx.Logger, ctx.Bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc, uploadDebubgMetaFiles); err != nil {
+>>>>>>> b1208db0 (Add flag in tools)
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
 
 		level.Info(ctx.Logger).Log("msg", "safe deleting broken block", "id", id, "issue")
-		if err := BackupAndDeleteDownloaded(ctx, filepath.Join(tmpdir, id.String()), id); err != nil {
+		if err := BackupAndDeleteDownloaded(ctx, filepath.Join(tmpdir, id.String()), id, uploadDebubgMetaFiles); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 		level.Info(ctx.Logger).Log("msg", "all good, continuing", "id", id)

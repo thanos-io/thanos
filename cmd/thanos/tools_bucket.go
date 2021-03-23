@@ -102,6 +102,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("0s"))
+	uploadDebubgMetaFiles := cmd.Flag("shipper.upload-debug-meta-files", "If true shipper will upload debug meta files which can be useful for debugging.").Default("false").Bool()
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -168,10 +169,10 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 		v := verifier.NewManager(reg, logger, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), r)
 		if *repair {
-			return v.VerifyAndRepair(context.Background(), idMatcher)
+			return v.VerifyAndRepair(context.Background(), idMatcher, *uploadDebubgMetaFiles)
 		}
 
-		return v.Verify(context.Background(), idMatcher)
+		return v.Verify(context.Background(), idMatcher, *uploadDebubgMetaFiles)
 	})
 }
 
@@ -821,7 +822,11 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	dryRun := cmd.Flag("dry-run", "Prints the series changes instead of doing them. Defaults to true, for user to double check. (: Pass --no-dry-run to skip this.").Default("true").Bool()
 	toDelete := extflag.RegisterPathOrContent(cmd, "rewrite.to-delete-config", "YAML file that contains []metadata.DeletionRequest that will be applied to blocks", true)
 	provideChangeLog := cmd.Flag("rewrite.add-change-log", "If specified, all modifications are written to new block directory. Disable if latency is to high.").Default("true").Bool()
+<<<<<<< HEAD
 	promBlocks := cmd.Flag("prom-blocks", "If specified, we assume the blocks to be uploaded are only used with Prometheus so we don't check external labels in this case.").Default("false").Bool()
+=======
+	uploadDebubgMetaFiles := cmd.Flag("shipper.upload-debug-meta-files", "If true shipper will upload debug meta files which can be useful for debugging.").Default("false").Bool()
+>>>>>>> b1208db0 (Add flag in tools)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -936,6 +941,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				}
 
 				level.Info(logger).Log("msg", "uploading new block", "source", id, "new", newID)
+<<<<<<< HEAD
 				if *promBlocks {
 					if err := block.UploadPromBlock(ctx, logger, bkt, filepath.Join(*tmpDir, newID.String()), metadata.HashFunc(*hashFunc)); err != nil {
 						return errors.Wrap(err, "upload")
@@ -944,6 +950,10 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					if err := block.Upload(ctx, logger, bkt, filepath.Join(*tmpDir, newID.String()), metadata.HashFunc(*hashFunc)); err != nil {
 						return errors.Wrap(err, "upload")
 					}
+=======
+				if err := block.Upload(ctx, logger, bkt, filepath.Join(*tmpDir, newID.String()), metadata.HashFunc(*hashFunc), *uploadDebubgMetaFiles); err != nil {
+					return errors.Wrap(err, "upload")
+>>>>>>> b1208db0 (Add flag in tools)
 				}
 				level.Info(logger).Log("msg", "uploaded", "source", id, "new", newID)
 			}

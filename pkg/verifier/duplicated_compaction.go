@@ -23,7 +23,7 @@ type DuplicatedCompactionBlocks struct{}
 
 func (DuplicatedCompactionBlocks) IssueID() string { return "duplicated_compaction" }
 
-func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error {
+func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool, uploadDebubgMetaFiles bool) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported")
 	}
@@ -79,7 +79,7 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 	}
 
 	for i, id := range toKill {
-		if err := BackupAndDelete(ctx, id); err != nil {
+		if err := BackupAndDelete(ctx, id, uploadDebubgMetaFiles); err != nil {
 			return err
 		}
 		level.Info(ctx.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
