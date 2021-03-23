@@ -185,15 +185,15 @@
           {
             alert: 'ThanosNoRuleEvaluations',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sdid not perform any rule evaluations in the past 2 minutes.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%sdid not perform any rule evaluations in the past 10 minutes.' % location,
               summary: 'Thanos Rule did not perform any rule evaluations.',
             },
             expr: |||
-              sum by (%(dimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[2m])) <= 0
+              sum by (%(dimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[5m])) <= 0
                 and
               sum by (%(dimensions)s) (thanos_rule_loaded_rules{%(selector)s}) > 0
             ||| % thanos.rule,
-            'for': '3m',
+            'for': '5m',
             labels: {
               severity: 'critical',
             },
