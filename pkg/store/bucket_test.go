@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -1052,6 +1053,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 		Source:     metadata.TestSource,
 	}, nil)
 	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
 
 	return id
@@ -2328,7 +2330,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	head, _ := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
 		TSDBDir:          filepath.Join(tmpDir, "head"),
 		SamplesPerSeries: 86400 / 15, // Simulate 1 day block with 15s scrape interval.
-		ScrapeInterval:   15 * 1000,
+		ScrapeInterval:   15 * time.Second,
 		Series:           1000,
 		PrependLabels:    nil,
 		Random:           rand.New(rand.NewSource(120)),
@@ -2349,7 +2351,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
 
 	if resolutionLevel > 0 {
-		// Downsample newly-created block
+		// Downsample newly-created block.
 		blockID, err = downsample.Downsample(logger, blockMeta, head, tmpDir, int64(resolutionLevel))
 		testutil.Ok(b, err)
 		blockMeta, err = metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
@@ -2412,6 +2414,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				}
 
 				matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+				// TODO FIXME! testutil.Ok calls b.Fatalf under the hood, which
+				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
 				indexReader := blk.indexReader(ctx)

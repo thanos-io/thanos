@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -39,8 +40,9 @@ func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
 }
 
 type HeadGenOptions struct {
-	TSDBDir                                  string
-	SamplesPerSeries, Series, ScrapeInterval int
+	TSDBDir                  string
+	SamplesPerSeries, Series int
+	ScrapeInterval           time.Duration
 
 	WithWAL       bool
 	PrependLabels labels.Labels
@@ -58,14 +60,14 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		t.Fatal("samples and series has to be 1 or more")
 	}
 	if opts.ScrapeInterval == 0 {
-		opts.ScrapeInterval = 1
+		opts.ScrapeInterval = 1 * time.Millisecond
 	}
 
 	fmt.Printf(
-		"Creating %d %d-sample series with %d ms interval in %s\n",
+		"Creating %d %d-sample series with %s interval in %s\n",
 		opts.Series,
 		opts.SamplesPerSeries,
-		opts.ScrapeInterval,
+		opts.ScrapeInterval.String(),
 		opts.TSDBDir,
 	)
 
@@ -88,13 +90,13 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		tsLabel := j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries
 		ref, err := app.Add(
 			labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
-			int64(tsLabel*opts.ScrapeInterval),
+			int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 			opts.Random.Float64(),
 		)
 		testutil.Ok(t, err)
 
 		for is := 1; is < opts.SamplesPerSeries; is++ {
-			testutil.Ok(t, app.AddFast(ref, int64((tsLabel+is)*opts.ScrapeInterval), opts.Random.Float64()))
+			testutil.Ok(t, app.AddFast(ref, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64()))
 		}
 	}
 	testutil.Ok(t, app.Commit())
