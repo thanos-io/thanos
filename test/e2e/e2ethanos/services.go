@@ -24,7 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
-	"github.com/thanos-io/thanos/pkg/route"
+	route "github.com/thanos-io/thanos/pkg/receive_route"
 )
 
 const infoLogLevel = "info"

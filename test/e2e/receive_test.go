@@ -15,7 +15,8 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/route"
+	route "github.com/thanos-io/thanos/pkg/receive_route"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
