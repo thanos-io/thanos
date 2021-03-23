@@ -162,7 +162,7 @@ func TestQueryEndpoints(t *testing.T) {
 	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
 		for i := int64(0); i < 10; i++ {
-			_, err := app.Add(lbl, i*60000, float64(i))
+			_, err := app.Append(0, lbl, i*60000, float64(i))
 			testutil.Ok(t, err)
 		}
 	}
@@ -672,7 +672,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	)
 	for _, lbl := range recent {
 		for i := int64(0); i < 10; i++ {
-			_, err := app.Add(lbl, start+(i*60_000), float64(i)) // ms
+			_, err := app.Append(0, lbl, start+(i*60_000), float64(i)) // ms
 			testutil.Ok(t, err)
 		}
 	}

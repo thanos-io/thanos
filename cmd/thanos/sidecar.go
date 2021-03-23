@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -230,6 +231,7 @@ func runSidecar(
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),

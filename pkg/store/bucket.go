@@ -2258,7 +2258,6 @@ type bucketChunkReader struct {
 	// Mutex protects access to following fields, when updated from chunks-loading goroutines.
 	// After chunks are loaded, mutex is no longer used.
 	mtx        sync.Mutex
-	chunks     map[uint64]chunkenc.Chunk
 	stats      *queryStats
 	chunkBytes []*[]byte // Byte slice to return to the chunk pool on close.
 }

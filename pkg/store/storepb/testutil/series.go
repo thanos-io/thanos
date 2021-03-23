@@ -88,7 +88,8 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	app := h.Appender(context.Background())
 	for i := 0; i < opts.Series; i++ {
 		tsLabel := j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries
-		ref, err := app.Add(
+		ref, err := app.Append(
+			0,
 			labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
 			int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 			opts.Random.Float64(),
@@ -96,7 +97,8 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		testutil.Ok(t, err)
 
 		for is := 1; is < opts.SamplesPerSeries; is++ {
-			testutil.Ok(t, app.AddFast(ref, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64()))
+			_, err := app.Append(ref, nil, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64())
+			testutil.Ok(t, err)
 		}
 	}
 	testutil.Ok(t, app.Commit())

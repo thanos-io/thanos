@@ -32,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -59,6 +60,7 @@ func registerQuery(app *extkingpin.App) {
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
+	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
@@ -102,6 +104,9 @@ func registerQuery(app *extkingpin.App) {
 
 	metadataEndpoints := cmd.Flag("metadata", "Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<metadata>").Strings()
+
+	exemplarEndpoints := cmd.Flag("exemplar", "Experimental: Addresses of statically configured exemplars API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect exemplars API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<exemplar>").Strings()
 
 	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticstore>").Strings()
@@ -159,6 +164,10 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Errorf("Address %s is duplicated for --metadata flag.", dup)
 		}
 
+		if dup := firstDuplicate(*exemplarEndpoints); dup != "" {
+			return errors.Errorf("Address %s is duplicated for --exemplar flag.", dup)
+		}
+
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -200,6 +209,7 @@ func registerQuery(app *extkingpin.App) {
 			*grpcKey,
 			*grpcClientCA,
 			*secure,
+			*skipVerify,
 			*cert,
 			*key,
 			*caCert,
@@ -223,6 +233,7 @@ func registerQuery(app *extkingpin.App) {
 			*stores,
 			*ruleEndpoints,
 			*metadataEndpoints,
+			*exemplarEndpoints,
 			*enableAutodownsampling,
 			*enableQueryPartialResponse,
 			*enableRulePartialResponse,
@@ -256,6 +267,7 @@ func runQuery(
 	grpcKey string,
 	grpcClientCA string,
 	secure bool,
+	skipVerify bool,
 	cert string,
 	key string,
 	caCert string,
@@ -279,6 +291,7 @@ func runQuery(
 	storeAddrs []string,
 	ruleAddrs []string,
 	metadataAddrs []string,
+	exemplarAddrs []string,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
@@ -299,7 +312,7 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
@@ -326,6 +339,12 @@ func runQuery(
 	dnsMetadataProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_metadata_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
+
+	dnsExemplarProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_exemplar_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 
@@ -362,12 +381,20 @@ func runQuery(
 
 				return specs
 			},
+			func() (specs []query.ExemplarSpec) {
+				for _, addr := range dnsExemplarProvider.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+				}
+
+				return specs
+			},
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
 		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
 		metadataProxy    = metadata.NewProxy(logger, stores.GetMetadataClients)
+		exemplarsProxy   = exemplars.NewProxy(logger, stores.GetExemplarsClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -457,6 +484,9 @@ func runQuery(
 				if err := dnsMetadataProvider.Resolve(resolveCtx, metadataAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for metadataAPIs", "err", err)
 				}
+				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs); err != nil {
+					level.Error(logger).Log("msg", "failed to resolve addresses for exemplarsAPI", "err", err)
+				}
 				return nil
 			})
 		}, func(error) {
@@ -493,7 +523,7 @@ func runQuery(
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
-		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
@@ -505,6 +535,7 @@ func runQuery(
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
 			metadata.NewGRPCClient(metadataProxy),
+			exemplars.NewGRPCClientWithDedup(exemplarsProxy, queryReplicaLabels),
 			enableAutodownsampling,
 			enableQueryPartialResponse,
 			enableRulePartialResponse,
@@ -551,6 +582,7 @@ func runQuery(
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),

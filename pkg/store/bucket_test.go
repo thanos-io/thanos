@@ -1061,7 +1061,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 
 func appendTestData(t testing.TB, app storage.Appender, series int) {
 	addSeries := func(l labels.Labels) {
-		_, err := app.Add(l, 0, 0)
+		_, err := app.Append(0, l, 0, 0)
 		testutil.Ok(t, err)
 	}
 
@@ -1415,7 +1415,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "1", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
-			_, err := app.Add(lbls, ts, 0)
+			_, err := app.Append(0, lbls, ts, 0)
 			testutil.Ok(t, err)
 		}
 		testutil.Ok(t, app.Commit())
@@ -1454,7 +1454,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "2", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
-			_, err := app.Add(lbls, ts, 0)
+			_, err := app.Append(0, lbls, ts, 0)
 			testutil.Ok(t, err)
 		}
 		testutil.Ok(t, app.Commit())
@@ -1703,7 +1703,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
 		// (except the last one, which could be smaller).
 		app := h.Appender(context.Background())
-		_, err := app.Add(series, ts, float64(ts))
+		_, err := app.Append(0, series, ts, float64(ts))
 		testutil.Ok(t, err)
 		testutil.Ok(t, app.Commit())
 	}
@@ -1980,10 +1980,11 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	app := h.Appender(context.Background())
 
 	ts := int64(blockIndex * totalSamples)
-	ref, err := app.Add(lbls, ts, random.Float64())
+	ref, err := app.Append(0, lbls, ts, random.Float64())
 	testutil.Ok(t, err)
 	for i := 1; i < totalSamples; i++ {
-		testutil.Ok(t, app.AddFast(ref, ts+step*int64(i), random.Float64()))
+		_, err := app.Append(ref, nil, ts+step*int64(i), random.Float64())
+		testutil.Ok(t, err)
 	}
 	testutil.Ok(t, app.Commit())
 
