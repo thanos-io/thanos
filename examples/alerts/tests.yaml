@@ -128,3 +128,39 @@ tests:
         description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for 720 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
+- interval: 1m
+  input_series:
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '5x7 0x8'
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '5x7 0x8'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '0x5 5x10'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '0x5 5x10'
+  alert_rule_test:
+    - eval_time: 1m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 5m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 6m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 11m
+      alertname: ThanosNoRuleEvaluations
+      exp_alerts:
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-0
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-0 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-1
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'
