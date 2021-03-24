@@ -175,7 +175,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 	}
 }
 
-func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
+func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, samplesLimitPerEachWrite uint64) ([]*Handler, Hashring) {
 	cfg := []HashringConfig{
 		{
 			Hashring: "test",
@@ -198,11 +198,12 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
-			TenantHeader:      DefaultTenantHeader,
-			ReplicaHeader:     DefaultReplicaHeader,
-			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Second,
-			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			TenantHeader:             DefaultTenantHeader,
+			ReplicaHeader:            DefaultReplicaHeader,
+			ReplicationFactor:        replicationFactor,
+			ForwardTimeout:           5 * time.Second,
+			SamplesLimitPerEachWrite: samplesLimitPerEachWrite,
+			Writer:                   NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -216,6 +217,78 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 		h.Hashring(hashring)
 	}
 	return handlers, hashring
+}
+
+func TestReceiveSamplesLimit(t *testing.T) {
+	wreq1 := &prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Labels: []labelpb.ZLabel{
+					{
+						Name:  "foo",
+						Value: "bar",
+					},
+				},
+				Samples: []prompb.Sample{
+					{
+						Value:     1,
+						Timestamp: 1,
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range []struct {
+		name                     string
+		status                   int
+		replicationFactor        uint64
+		wreq                     *prompb.WriteRequest
+		samplesLimitPerEachWrite uint64
+		appendables              []*fakeAppendable
+	}{
+		{
+			name:                     "success: recevied samples are less than samplesLimitPerEachWrite",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 2,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:                     "failure: recevied samples are higher than samplesLimitPerEachWrite",
+			status:                   http.StatusRequestEntityTooLarge,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 0,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handlers, _ := newHandlerHashring(tc.appendables, tc.replicationFactor, tc.samplesLimitPerEachWrite)
+			tenant := "test"
+			// Test from the point of view of every node
+			// so that we know status code does not depend
+			// on which node is erroring and which node is receiving.
+			for i, handler := range handlers {
+				// Test that the correct status is returned.
+				rec, err := makeRequest(handler, tenant, tc.wreq)
+				if err != nil {
+					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+				}
+				if rec.Code != tc.status {
+					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i, tc.status, rec.Code, rec.Body.String())
+				}
+			}
+		})
+	}
 }
 
 func TestReceiveQuorum(t *testing.T) {
@@ -249,17 +322,19 @@ func TestReceiveQuorum(t *testing.T) {
 		},
 	}
 	for _, tc := range []struct {
-		name              string
-		status            int
-		replicationFactor uint64
-		wreq              *prompb.WriteRequest
-		appendables       []*fakeAppendable
+		name                     string
+		status                   int
+		replicationFactor        uint64
+		wreq                     *prompb.WriteRequest
+		samplesLimitPerEachWrite uint64
+		appendables              []*fakeAppendable
 	}{
 		{
-			name:              "size 1 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -267,10 +342,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 1 commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -278,10 +354,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 1 conflict",
-			status:            http.StatusConflict,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 conflict",
+			status:                   http.StatusConflict,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
@@ -289,10 +366,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 2 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 2 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -303,27 +381,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
-		},
-		{
-			name:              "size 3 success with replication",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -337,10 +399,29 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 3 success with replication",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:                     "size 3 commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -354,10 +435,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 commit error with replication",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 commit error with replication",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -371,10 +453,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 appender error with replication",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 appender error with replication",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender:    newFakeAppender(nil, nil, nil),
@@ -391,10 +474,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 conflict with replication",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 conflict with replication",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
@@ -408,10 +492,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 conflict and commit error with replication",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 conflict and commit error with replication",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
@@ -425,10 +510,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and one faulty",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and one faulty",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -442,10 +528,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and one commit error",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and one commit error",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -459,10 +546,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and two conflicts",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and two conflicts",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -476,10 +564,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication one conflict and one commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication one conflict and one commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -493,10 +582,11 @@ func TestReceiveQuorum(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication two commit errors",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication two commit errors",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -511,7 +601,7 @@ func TestReceiveQuorum(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor, tc.samplesLimitPerEachWrite)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -585,17 +675,19 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 		},
 	}
 	for _, tc := range []struct {
-		name              string
-		status            int
-		replicationFactor uint64
-		wreq              *prompb.WriteRequest
-		appendables       []*fakeAppendable
+		name                     string
+		status                   int
+		replicationFactor        uint64
+		wreq                     *prompb.WriteRequest
+		samplesLimitPerEachWrite uint64
+		appendables              []*fakeAppendable
 	}{
 		{
-			name:              "size 1 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -603,10 +695,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 1 commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -614,10 +707,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 1 conflict",
-			status:            http.StatusConflict,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 1 conflict",
+			status:                   http.StatusConflict,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
@@ -625,10 +719,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 2 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 2 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -639,27 +734,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 success",
-			status:            http.StatusOK,
-			replicationFactor: 1,
-			wreq:              wreq1,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
-		},
-		{
-			name:              "size 3 success with replication",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 success",
+			status:                   http.StatusOK,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -673,10 +752,29 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 1,
-			wreq:              wreq1,
+			name:                     "size 3 success with replication",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:                     "size 3 commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        1,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -690,10 +788,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 commit error with replication",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 commit error with replication",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -707,10 +806,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 appender error with replication",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 appender error with replication",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender:    newFakeAppender(nil, nil, nil),
@@ -727,10 +827,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 conflict with replication",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 conflict with replication",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
@@ -744,10 +845,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 conflict and commit error with replication",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 conflict and commit error with replication",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
@@ -761,10 +863,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and one faulty",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and one faulty",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -778,10 +881,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and one commit error",
-			status:            http.StatusOK,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and one commit error",
+			status:                   http.StatusOK,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -795,10 +899,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication and two conflicts",
-			status:            http.StatusConflict,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication and two conflicts",
+			status:                   http.StatusConflict,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -812,10 +917,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication one conflict and one commit error",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication one conflict and one commit error",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
@@ -829,10 +935,11 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			},
 		},
 		{
-			name:              "size 3 with replication two commit errors",
-			status:            http.StatusInternalServerError,
-			replicationFactor: 3,
-			wreq:              wreq1,
+			name:                     "size 3 with replication two commit errors",
+			status:                   http.StatusInternalServerError,
+			replicationFactor:        3,
+			wreq:                     wreq1,
+			samplesLimitPerEachWrite: 5000,
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(nil, commitErrFn, nil),
@@ -850,7 +957,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 		// to see all requests completing all the time, since we're using local
 		// network we are not expecting anything to go wrong with these.
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor, tc.samplesLimitPerEachWrite)
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
