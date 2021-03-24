@@ -104,6 +104,7 @@ func registerReceive(app *extkingpin.App) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().Bool()
+	samplesLimitPerEachWrite := cmd.Flag("receive.samples-limit-per-each-write", "Number of allowed samples for each write API call.").Default("5000").Uint64()
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
@@ -182,6 +183,7 @@ func registerReceive(app *extkingpin.App) {
 			*allowOutOfOrderUpload,
 			component.Receive,
 			metadata.HashFunc(*hashFunc),
+			*samplesLimitPerEachWrite,
 		)
 	})
 }
@@ -226,6 +228,7 @@ func runReceive(
 	allowOutOfOrderUpload bool,
 	comp component.SourceStoreAPI,
 	hashFunc metadata.HashFunc,
+	samplesLimitPerEachWrite uint64,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
@@ -281,18 +284,19 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     rwAddress,
-		Registry:          reg,
-		Endpoint:          endpoint,
-		TenantHeader:      tenantHeader,
-		DefaultTenantID:   defaultTenantID,
-		ReplicaHeader:     replicaHeader,
-		ReplicationFactor: replicationFactor,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    forwardTimeout,
+		Writer:                   writer,
+		ListenAddress:            rwAddress,
+		Registry:                 reg,
+		Endpoint:                 endpoint,
+		TenantHeader:             tenantHeader,
+		DefaultTenantID:          defaultTenantID,
+		ReplicaHeader:            replicaHeader,
+		ReplicationFactor:        replicationFactor,
+		Tracer:                   tracer,
+		TLSConfig:                rwTLSConfig,
+		DialOpts:                 dialOpts,
+		ForwardTimeout:           forwardTimeout,
+		SamplesLimitPerEachWrite: samplesLimitPerEachWrite,
 	})
 
 	grpcProbe := prober.NewGRPC()
