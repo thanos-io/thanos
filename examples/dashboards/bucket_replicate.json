@@ -51,7 +51,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -227,7 +226,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -238,7 +236,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -249,7 +246,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],

@@ -71,7 +71,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{handler}} {{code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -150,7 +149,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -249,7 +247,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -260,7 +257,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -271,7 +267,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -439,7 +434,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -607,7 +601,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -769,7 +762,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -848,7 +840,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -947,7 +938,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -958,7 +948,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -969,7 +958,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1131,7 +1119,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1210,7 +1197,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1309,7 +1295,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1320,7 +1305,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1331,7 +1315,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1493,7 +1476,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1572,7 +1554,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1671,7 +1652,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1682,7 +1662,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1693,7 +1672,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],

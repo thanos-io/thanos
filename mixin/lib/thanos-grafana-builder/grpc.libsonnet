@@ -31,7 +31,6 @@ local utils = import '../utils.libsonnet';
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: dimensionsTemplate + ' {{grpc_method}} {{grpc_code}}',
-        refId: 'A',
         step: 10,
       },
     ],

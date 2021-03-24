@@ -53,7 +53,6 @@ local utils = import '../utils.libsonnet';
         logBase: 10,
         min: null,
         max: null,
-        refId: 'A',
         step: 10,
       }
       for percentile in [0.5, 0.9, 0.99]
@@ -93,7 +92,6 @@ local utils = import '../utils.libsonnet';
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'error',
-        refId: 'A',
         step: 10,
       },
     ],
@@ -113,7 +111,6 @@ local utils = import '../utils.libsonnet';
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'error',
-        refId: 'A',
         step: 10,
       },
       {
@@ -121,7 +118,6 @@ local utils = import '../utils.libsonnet';
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'success',
-        refId: 'B',
         step: 10,
       },
     ],
