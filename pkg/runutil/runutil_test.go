@@ -157,7 +157,7 @@ func TestDeleteAll(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, "file3"))
 	testutil.Assert(t, os.IsNotExist(err))
 
-	// Exits.
+	// Exists.
 	_, err = os.Stat(filepath.Join(dir, "a", "file2"))
 	testutil.Ok(t, err)
 	_, err = os.Stat(filepath.Join(dir, "a/"))
