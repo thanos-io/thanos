@@ -66,9 +66,9 @@ var DefaultConfig = Config{
 		MaxIdleConnsPerHost:   100,
 		MaxConnsPerHost:       0,
 	},
-	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-	// Set to 16 MiB as in the minio client.
-	PartSize: 1024 * 1024 * 16,
+	// TODO(bwplotka): This means 32MB will be always allocated for every Upload.
+	// See: https://github.com/thanos-io/thanos/issues/3917
+	PartSize: 1024 * 1024 * 8, // 8MB.
 }
 
 // Config stores the configuration for s3 bucket.
@@ -84,7 +84,7 @@ type Config struct {
 	HTTPConfig         HTTPConfig        `yaml:"http_config"`
 	TraceConfig        TraceConfig       `yaml:"trace"`
 	ListObjectsVersion string            `yaml:"list_objects_version"`
-	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
+	// PartSize used for multipart upload. Only used if uploaded object size is known and 4x larger than configured PartSize.
 	PartSize  uint64    `yaml:"part_size"`
 	SSEConfig SSEConfig `yaml:"sse_config"`
 }
@@ -449,10 +449,9 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		size = -1
 	}
 
-	// partSize cannot be larger than object size.
 	partSize := b.partSize
-	if size < int64(partSize) {
-		partSize = size // set partSize to the object size
+	if size < 4*int64(partSize) {
+		partSize = 0
 	}
 	if _, err := b.client.PutObject(
 		ctx,
@@ -461,6 +460,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		r,
 		size,
 		minio.PutObjectOptions{
+			NumThreads:           4, // Minio default.
 			PartSize:             partSize,
 			ServerSideEncryption: sse,
 			UserMetadata:         b.putUserMetadata,
