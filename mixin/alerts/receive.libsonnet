@@ -10,14 +10,14 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.receive == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-receive',
         rules: [
           {
             alert: 'ThanosReceiveHttpRequestErrorRateHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%sis failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is failing to handle requests.',
             },
             expr: |||
@@ -35,7 +35,7 @@
           {
             alert: 'ThanosReceiveHttpRequestLatencyHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%shas a 99th percentile latency of {{ $value }} seconds for requests.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s has a 99th percentile latency of {{ $value }} seconds for requests.' % location,
               summary: 'Thanos Receive has high HTTP requests latency.',
             },
             expr: |||
@@ -53,7 +53,7 @@
           {
             alert: 'ThanosReceiveHighReplicationFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%sis failing to replicate {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s is failing to replicate {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is having high number of replication failures.',
             },
             expr: |||
@@ -81,7 +81,7 @@
           {
             alert: 'ThanosReceiveHighForwardRequestFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%sis failing to forward {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s is failing to forward {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Receive is failing to forward requests.',
             },
             expr: |||
@@ -99,7 +99,7 @@
           {
             alert: 'ThanosReceiveHighHashringFileRefreshFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%sis failing to refresh hashring file, {{$value | humanize}} of attempts failed.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s is failing to refresh hashring file, {{$value | humanize}} of attempts failed.' % location,
               summary: 'Thanos Receive is failing to refresh hasring file.',
             },
             expr: |||
@@ -118,7 +118,7 @@
           {
             alert: 'ThanosReceiveConfigReloadFailure',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%shas not been able to reload hashring configurations.' % location,
+              description: 'Thanos Receive {{$labels.job}}%s has not been able to reload hashring configurations.' % location,
               summary: 'Thanos Receive has not been able to reload configuration.',
             },
             expr: 'avg by (%(dimensions)s) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
@@ -130,7 +130,7 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              description: 'Thanos Receive {{$labels.instance}}%shas not uploaded latest data to object storage.' % location,
+              description: 'Thanos Receive {{$labels.instance}}%s has not uploaded latest data to object storage.' % location,
               summary: 'Thanos Receive has not uploaded latest data to object storage.',
             },
             expr: |||

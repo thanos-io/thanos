@@ -6,14 +6,14 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.sidecar == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-sidecar',
         rules: [
           {
             alert: 'ThanosSidecarPrometheusDown',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%scannot connect to Prometheus.' % location,
+              description: 'Thanos Sidecar {{$labels.instance}}%s cannot connect to Prometheus.' % location,
               summary: 'Thanos Sidecar cannot connect to Prometheus',
             },
             expr: |||
@@ -27,7 +27,7 @@
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%sbucket operations are failing' % location,
+              description: 'Thanos Sidecar {{$labels.instance}}%s bucket operations are failing' % location,
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
@@ -41,7 +41,7 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%sis unhealthy for {{$value}} seconds.' % location,
+              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for {{$value}} seconds.' % location,
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||

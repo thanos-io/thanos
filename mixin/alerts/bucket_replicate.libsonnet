@@ -8,7 +8,7 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.bucket_replicate == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-bucket-replicate',
         rules: [
@@ -16,7 +16,7 @@
             alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
               description: 'Thanos Replicate is failing to run%s, {{$value | humanize}}%% of attempts failed.' % location,
-              summary: 'Thanose Replicate is failing to run in %s.' % location,
+              summary: 'Thanose Replicate is failing to run%s.' % location,
             },
             expr: |||
               (
@@ -33,7 +33,7 @@
           {
             alert: 'ThanosBucketReplicateRunLatency',
             annotations: {
-              description: 'Thanos Replicate {{$labels.job}}%shas a 99th percentile latency of {{$value}} seconds for the replicate operations.' % location,
+              description: 'Thanos Replicate {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for the replicate operations.' % location,
               summary: 'Thanos Replicate has a high latency for replicate operations.',
             },
             expr: |||
