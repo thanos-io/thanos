@@ -10,7 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use _breaking :warning:_ to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.19.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.19.0-rc.2) - 2021.03.22
+## [v0.19.0-rc.2](https://github.com/thanos-io/thanos/releases/tag/v0.19.0-rc.2) - 2021.03.24
 
 ### Added
 
@@ -23,7 +23,6 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3740](https://github.com/thanos-io/thanos/pull/3740) Query: Added `--query.default-step` flag to set default step. Useful when your tenant scrape interval is stable and far from default UI's 1s.
 - [#3686](https://github.com/thanos-io/thanos/pull/3686) Query/Sidecar: Added metric metadata API support. You can now configure you Querier to fetch Prometheus metrics metadata from leaf Prometheus-es!
 - [#3031](https://github.com/thanos-io/thanos/pull/3031) Compact/Sidecar/Receive/Rule: Added `--hash-func`. If some function has been specified, writers calculate hashes using that function of each file in a block before uploading them. If those hashes exist in the `meta.json` file then Compact does not download the files if they already exist on disk and with the same hash. This also means that the data directory passed to Thanos Compact is only *cleared once at boot* or *if everything succeeds*. So, if you, for example, use persistent volumes on k8s and your Thanos Compact crashes or fails to make an iteration properly then the last downloaded files are not wiped from the disk. The directories that were created the last time are only wiped again after a successful iteration or if the previously picked up blocks have disappeared.
-
 
 ### Fixed
 
