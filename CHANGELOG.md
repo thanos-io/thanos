@@ -20,6 +20,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
 - [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
+- [#3960](https://github.com/thanos-io/thanos/pull/3960) fix deduplication of equal alerts with different labels
 
 ### Changed
 - [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
