@@ -492,7 +492,7 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	return minio.ToErrorResponse(err).Code == "NoSuchKey"
+	return minio.ToErrorResponse(errors.Cause(err)).Code == "NoSuchKey"
 }
 
 func (b *Bucket) Close() error { return nil }
