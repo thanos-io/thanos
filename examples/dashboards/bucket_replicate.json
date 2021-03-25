@@ -51,7 +51,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -227,7 +226,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -238,7 +236,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -249,7 +246,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -467,7 +463,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-bucket-replicate.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-bucket-replicate.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
