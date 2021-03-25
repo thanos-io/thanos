@@ -166,6 +166,9 @@ func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ..
 // NOTE: DeleteAll is not idempotent.
 func DeleteAll(dir string, ignoreDirs ...string) error {
 	entries, err := ioutil.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
