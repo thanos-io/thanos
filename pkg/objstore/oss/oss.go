@@ -354,7 +354,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	switch aliErr := err.(type) {
+	switch aliErr := errors.Cause(err).(type) {
 	case alioss.ServiceError:
 		if aliErr.StatusCode == http.StatusNotFound {
 			return true
