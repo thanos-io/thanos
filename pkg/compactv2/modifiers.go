@@ -62,12 +62,9 @@ SeriesLoop:
 		for _, deletions := range d.d.deletions {
 			for _, m := range deletions.Matchers {
 				v := lbls.Get(m.Name)
-				if v == "" {
-					continue
-				}
 
 				// Only if all matchers in the deletion request are matched can we proceed to deletion.
-				if !m.Matches(v) {
+				if v == "" || !m.Matches(v) {
 					continue DeletionsLoop
 				}
 			}
