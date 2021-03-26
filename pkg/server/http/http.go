@@ -104,7 +104,9 @@ func registerProfiler(mux *http.ServeMux) {
 
 func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	if g != nil {
-		mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+		mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{
+			EnableOpenMetrics: true,
+		}))
 	}
 }
 
