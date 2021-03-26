@@ -157,10 +157,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		next = ins.NewHandler(name, http.HandlerFunc(next))
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
-		return ins.NewHandler(name, http.HandlerFunc(next))
+		return next
 	}
 
 	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
