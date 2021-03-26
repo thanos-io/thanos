@@ -1005,14 +1005,9 @@ type tsOverrideAppender struct {
 
 var cnt int64
 
-func (a *tsOverrideAppender) Add(l labels.Labels, _ int64, v float64) (uint64, error) {
+func (a *tsOverrideAppender) Append(ref uint64, l labels.Labels, _ int64, v float64) (uint64, error) {
 	cnt += a.interval
-	return a.Appender.Add(l, cnt, v)
-}
-
-func (a *tsOverrideAppender) AddFast(ref uint64, _ int64, v float64) error {
-	cnt += a.interval
-	return a.Appender.AddFast(ref, cnt, v)
+	return a.Appender.Append(ref, l, cnt, v)
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
