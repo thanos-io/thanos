@@ -446,7 +446,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -545,7 +544,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -556,7 +554,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -567,7 +564,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -735,7 +731,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -897,7 +892,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -976,7 +970,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1075,7 +1068,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1086,7 +1078,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1097,7 +1088,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1259,7 +1249,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1338,7 +1327,6 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1437,7 +1425,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1448,7 +1435,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   },
                   {
@@ -1459,7 +1445,6 @@
                      "logBase": 10,
                      "max": null,
                      "min": null,
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1559,7 +1544,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"})[30s]",
+                     "expr": "rate(go_memstats_alloc_bytes_total{job=\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "alloc rate all {{instance}}",
@@ -1567,7 +1552,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"})[30s]",
+                     "expr": "rate(go_memstats_heap_alloc_bytes{job=\"$job\"}[30s])",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "alloc rate heap {{instance}}",
@@ -1837,7 +1822,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{job=~\"thanos-rule.*\"}, job)",
+            "query": "label_values(up{job=~\".*thanos-rule.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

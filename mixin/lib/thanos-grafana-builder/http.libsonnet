@@ -19,7 +19,6 @@ local utils = import '../utils.libsonnet';
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: dimensionsTemplate + ' {{handler}} {{code}}',
-        refId: 'A',
         step: 10,
       },
     ],

@@ -205,7 +205,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	switch tmpErr := err.(type) {
+	switch tmpErr := errors.Cause(err).(type) {
 	case *cos.ErrorResponse:
 		if tmpErr.Code == "NoSuchKey" ||
 			(tmpErr.Response != nil && tmpErr.Response.StatusCode == http.StatusNotFound) {
