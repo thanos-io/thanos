@@ -454,6 +454,7 @@ sse_config:
 - [#2113](https://github.com/thanos-io/thanos/pull/2113) Bucket: added `thanos bucket replicate` command to replicate blocks from one bucket to another.
 - [#1922](https://github.com/thanos-io/thanos/pull/1922) Docs: create a new document to explain sharding in Thanos.
 - [#2230](https://github.com/thanos-io/thanos/pull/2230) Store: optimize conversion of labels.
+- [#3984](https://github.com/thanos-io/thanos/pull/3984) UI: Thanos Configurations file page: Display all available configuration for each component on the UI.
 
 ### Changed
 
