@@ -511,7 +511,6 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		if err != nil {
 			return nil, err
 		}
-		sort.Strings(vals)
 	} else {
 		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
 		if err != nil {
@@ -522,8 +521,11 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 			return nil, err
 		}
 		for _, s := range sers {
-			vals = append(vals, s[r.Label])
+			if val, exists := s[r.Label]; exists {
+				vals = append(vals, val)
+			}
 		}
 	}
+	sort.Strings(vals)
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }

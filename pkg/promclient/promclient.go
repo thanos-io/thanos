@@ -608,14 +608,14 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 	return v.Data, nil
 }
 
-// BuildInfo returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
-func (c *Client) BuildInfo(ctx context.Context, base *url.URL) (string, error) {
+// BuildVersion returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
+func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/buildinfo")
 
-	level.Debug(c.logger).Log("msg", "querying instant", "url", u.String())
+	level.Debug(c.logger).Log("msg", "build version", "url", u.String())
 
-	span, ctx := tracing.StartSpan(ctx, "/prom_buildinfo HTTP[client]")
+	span, ctx := tracing.StartSpan(ctx, "/prom_buildversion HTTP[client]")
 	defer span.Finish()
 
 	body, _, err := c.req2xx(ctx, &u, http.MethodGet)

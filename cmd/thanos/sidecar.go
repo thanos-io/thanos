@@ -212,7 +212,7 @@ func runSidecar(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			// We retry infinitely until we reach and fetch BuildInfo from our Prometheus.
+			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
 				if err := m.BuildVersion(ctx); err != nil {
 					level.Warn(logger).Log(
@@ -424,7 +424,7 @@ func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 }
 
 func (s *promMetadata) BuildVersion(ctx context.Context) error {
-	ver, err := s.client.BuildInfo(ctx, s.promURL)
+	ver, err := s.client.BuildVersion(ctx, s.promURL)
 	if err != nil {
 		return err
 	}
