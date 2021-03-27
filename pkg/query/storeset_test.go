@@ -199,6 +199,9 @@ func TestStoreSet_Update(t *testing.T) {
 		func() (specs []MetadataSpec) {
 			return nil
 		},
+		func() (specs []ExemplarSpec) {
+			return nil
+		},
 		testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
@@ -549,6 +552,7 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 		},
 		func() (specs []RuleSpec) { return nil },
 		func() (specs []MetadataSpec) { return nil },
+		func() (specs []ExemplarSpec) { return nil },
 		testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
@@ -635,6 +639,8 @@ func TestQuerierStrict(t *testing.T) {
 		return nil
 	}, func() (specs []MetadataSpec) {
 		return nil
+	}, func() []ExemplarSpec {
+		return nil
 	}, testGRPCOpts, time.Minute)
 	defer storeSet.Close()
 	storeSet.gRPCInfoCallTimeout = 1 * time.Second
@@ -688,6 +694,7 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 		name           string
 		storeSpecs     func() []StoreSpec
 		ruleSpecs      func() []RuleSpec
+		exemplarSpecs  func() []ExemplarSpec
 		expectedStores int
 		expectedRules  int
 	}{
@@ -757,6 +764,12 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 					NewGRPCStoreSpec(stores.orderAddrs[1], false),
 				}
 			},
+			exemplarSpecs: func() []ExemplarSpec {
+				return []ExemplarSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0], false),
+					NewGRPCStoreSpec(stores.orderAddrs[1], false),
+				}
+			},
 			expectedStores: 2,
 			expectedRules:  2,
 		},
@@ -765,6 +778,7 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 			tc.storeSpecs,
 			tc.ruleSpecs,
 			func() []MetadataSpec { return nil },
+			tc.exemplarSpecs,
 			testGRPCOpts, time.Minute)
 
 		t.Run(tc.name, func(t *testing.T) {
@@ -940,6 +954,7 @@ func TestStoreSet_Rules_Discovery(t *testing.T) {
 				func() []MetadataSpec {
 					return nil
 				},
+				func() []ExemplarSpec { return nil },
 				testGRPCOpts, time.Minute)
 
 			defer storeSet.Close()

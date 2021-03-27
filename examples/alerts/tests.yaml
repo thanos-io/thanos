@@ -22,28 +22,28 @@ tests:
       exp_samples:
         - labels: '{}'
           value: 120
-    - expr: time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"})) by (job, instance)
+    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
       eval_time: 5m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
           value: 60
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
           value: 60
-    - expr: time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"})) by (job, instance)
+    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
       eval_time: 6m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
           value: 120
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
           value: 120
-    - expr: time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"})) by (job, instance)
+    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
       eval_time: 7m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
           value: 180
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
           value: 180
-    - expr: time() - max(timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"})) by (job, instance)
+    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
       eval_time: 8m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
@@ -67,7 +67,7 @@ tests:
           job: thanos-sidecar
           instance: thanos-sidecar-0
         exp_annotations:
-          description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-0 is unhealthy for more than 240 seconds.'
+          description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 240 seconds.'
           runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
           summary: 'Thanos Sidecar is unhealthy.'
       - exp_labels:
@@ -75,8 +75,44 @@ tests:
           job: thanos-sidecar
           instance: thanos-sidecar-1
         exp_annotations:
-          description: 'Thanos Sidecar thanos-sidecar thanos-sidecar-1 is unhealthy for more than 240 seconds.'
+          description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 240 seconds.'
           runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
           summary: 'Thanos Sidecar is unhealthy.'
     - eval_time: 10m
       alertname: ThanosSidecarUnhealthy
+- interval: 1m
+  input_series:
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '5x7 0x8'
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '5x7 0x8'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '0x5 5x10'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '0x5 5x10'
+  alert_rule_test:
+    - eval_time: 1m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 5m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 6m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 11m
+      alertname: ThanosNoRuleEvaluations
+      exp_alerts:
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-0
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-0 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-1
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'

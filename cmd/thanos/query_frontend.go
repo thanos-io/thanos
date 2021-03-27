@@ -213,7 +213,7 @@ func runQueryFrontend(
 
 	// Configure Request Logging for HTTP calls.
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-	ins := extpromhttp.NewInstrumentationMiddleware(reg)
+	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 	// Start metrics HTTP server.
 	{
@@ -229,14 +229,14 @@ func runQueryFrontend(
 				if !cfg.webDisableCORS {
 					api.SetCORS(w)
 				}
-				ins.NewHandler(
+				tracing.HTTPMiddleware(
+					tracer,
 					name,
-					logMiddleware.HTTPMiddleware(
+					logger,
+					ins.NewHandler(
 						name,
-						tracing.HTTPMiddleware(
-							tracer,
+						logMiddleware.HTTPMiddleware(
 							name,
-							logger,
 							gziphandler.GzipHandler(middleware.RequestID(f)),
 						),
 					),

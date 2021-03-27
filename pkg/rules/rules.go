@@ -68,23 +68,22 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 		return rules
 	}
 
-	// Sort each rule's label names such that they are comparable.
+	// Remove replica labels and sort each rule's label names such that they are comparable.
 	for _, r := range rules {
+		removeReplicaLabels(r, replicaLabels)
 		sort.Slice(r.GetLabels(), func(i, j int) bool {
 			return r.GetLabels()[i].Name < r.GetLabels()[j].Name
 		})
 	}
 
-	// Sort rules globally based on synthesized deduplication labels, also considering replica labels and their values.
+	// Sort rules globally.
 	sort.Slice(rules, func(i, j int) bool {
 		return rules[i].Compare(rules[j]) < 0
 	})
 
-	// Remove rules based on synthesized deduplication labels, this time ignoring replica labels and last evaluation.
+	// Remove rules based on synthesized deduplication labels.
 	i := 0
-	removeReplicaLabels(rules[i], replicaLabels)
 	for j := 1; j < len(rules); j++ {
-		removeReplicaLabels(rules[j], replicaLabels)
 		if rules[i].Compare(rules[j]) != 0 {
 			// Effectively retain rules[j] in the resulting slice.
 			i++

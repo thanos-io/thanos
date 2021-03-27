@@ -957,7 +957,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		ignoreDirs := []string{}
 		for _, gr := range groups {
-			ignoreDirs = append(ignoreDirs, gr.Key())
+			for _, grID := range gr.IDs() {
+				ignoreDirs = append(ignoreDirs, filepath.Join(gr.Key(), grID.String()))
+			}
 		}
 
 		if err := runutil.DeleteAll(c.compactDir, ignoreDirs...); err != nil {

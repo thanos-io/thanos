@@ -7,15 +7,13 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
   },
   grafanaDashboards+:: {
     'overview.json':
-      g.dashboard(thanos.overview.title) +
-      g.template('namespace', thanos.dashboard.namespaceQuery),
+      g.dashboard(thanos.dashboard.overview.title),
   },
 } +
 {
   local grafanaDashboards = super.grafanaDashboards,
   grafanaDashboards+:: {
     'overview.json'+: {
-
       __enumeratedRows__+:: std.foldl(
         function(acc, row)
           local n = std.length(row.panels);
