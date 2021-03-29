@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -967,6 +968,7 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb
 }
 
 func BenchmarkHandlerReceiveHTTP(b *testing.B) {
+	defer goleak.VerifyNone(b)
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(b))
 }
 
