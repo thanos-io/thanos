@@ -210,6 +210,23 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, "empty external labels are not allowed for Thanos block.", err.Error())
 		testutil.Equals(t, 4, len(bkt.Objects()))
 	}
+	{
+		// No external labels with UploadPromBlocks.
+		b2, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+			{{Name: "a", Value: "1"}},
+			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "3"}},
+			{{Name: "a", Value: "4"}},
+			{{Name: "b", Value: "1"}},
+		}, 100, 0, 1000, nil, 124, metadata.NoneFunc)
+		testutil.Ok(t, err)
+		err = UploadPromBlock(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 8, len(bkt.Objects()))
+		testutil.Equals(t, 3736, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
+		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
+		testutil.Equals(t, 525, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+	}
 }
 
 func TestDelete(t *testing.T) {
