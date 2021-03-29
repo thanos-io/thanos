@@ -170,7 +170,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 	m.seriesGetAllDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_series_get_all_duration_seconds",
-		Help:    "Time it takes until all per-block prepares and preloads for a query are finished.",
+		Help:    "Time it takes until all per-block prepares and loads for a query are finished.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 	m.seriesMergeDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -2242,7 +2242,7 @@ func decodeSeriesForTime(b []byte, lset *[]symbolizedLabel, chks *[]chunks.Meta,
 	return len(*chks) > 0, d.Err()
 }
 
-type preloadIdx struct {
+type loadIdx struct {
 	offset uint32
 	// Indices, not actual entries and chunks.
 	seriesEntry int
@@ -2253,7 +2253,7 @@ type bucketChunkReader struct {
 	ctx   context.Context
 	block *bucketBlock
 
-	preloads [][]preloadIdx
+	toLoad [][]loadIdx
 
 	// Mutex protects access to following fields, when updated from chunks-loading goroutines.
 	// After chunks are loaded, mutex is no longer used.
@@ -2264,10 +2264,10 @@ type bucketChunkReader struct {
 
 func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
 	return &bucketChunkReader{
-		ctx:      ctx,
-		block:    block,
-		stats:    &queryStats{},
-		preloads: make([][]preloadIdx, len(block.chunkObjs)),
+		ctx:    ctx,
+		block:  block,
+		stats:  &queryStats{},
+		toLoad: make([][]loadIdx, len(block.chunkObjs)),
 	}
 }
 
@@ -2287,10 +2287,10 @@ func (r *bucketChunkReader) addLoad(id uint64, seriesEntry, chunk int) error {
 		seq = int(id >> 32)
 		off = uint32(id)
 	)
-	if seq >= len(r.preloads) {
+	if seq >= len(r.toLoad) {
 		return errors.Errorf("reference sequence %d out of range", seq)
 	}
-	r.preloads[seq] = append(r.preloads[seq], preloadIdx{off, seriesEntry, chunk})
+	r.toLoad[seq] = append(r.toLoad[seq], loadIdx{off, seriesEntry, chunk})
 	return nil
 }
 
@@ -2298,7 +2298,7 @@ func (r *bucketChunkReader) addLoad(id uint64, seriesEntry, chunk int) error {
 func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) error {
 	g, ctx := errgroup.WithContext(r.ctx)
 
-	for seq, pIdxs := range r.preloads {
+	for seq, pIdxs := range r.toLoad {
 		sort.Slice(pIdxs, func(i, j int) bool {
 			return pIdxs[i].offset < pIdxs[j].offset
 		})
@@ -2320,7 +2320,7 @@ func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) error 
 
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
-func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []preloadIdx) error {
+func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx) error {
 	fetchBegin := time.Now()
 
 	// Get a reader for the required range.
@@ -2391,7 +2391,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
-			if err := populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save); err != nil {
+			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save)
+			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
 			r.stats.chunksTouched++
@@ -2421,7 +2422,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		r.stats.chunksFetchCount++
 		r.stats.chunksFetchDurationSum += time.Since(fetchBegin)
 		r.stats.chunksFetchedSizeSum += len(*nb)
-		if err := populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save); err != nil {
+		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save)
+		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")
 		}
