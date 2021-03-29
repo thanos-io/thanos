@@ -178,6 +178,8 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.samples-limit-per-each-write=5000
+                                Number of allowed samples for each write API call.
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.

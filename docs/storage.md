@@ -92,7 +92,7 @@ config:
   trace:
     enable: false
   list_objects_version: ""
-  part_size: 134217728
+  part_size: 67108864
   sse_config:
     type: ""
     kms_key_id: ""
