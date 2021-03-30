@@ -614,31 +614,6 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	return nil
 }
 
-// RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
-func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
-	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
-	defer span.Finish()
-
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
-	if err != nil {
-		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
-	}
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return &storepb.WriteResponse{}, nil
-	case errNotReady:
-		return nil, status.Error(codes.Unavailable, err.Error())
-	case errUnavailable:
-		return nil, status.Error(codes.Unavailable, err.Error())
-	case errConflict:
-		return nil, status.Error(codes.AlreadyExists, err.Error())
-	case errBadReplica:
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	default:
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-}
-
 // isConflict returns whether or not the given error represents a conflict.
 func isConflict(err error) bool {
 	if err == nil {
