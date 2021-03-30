@@ -91,6 +91,7 @@ type Reloader struct {
 	retryInterval time.Duration
 	watchedDirs   []string
 	watcher       *watcher
+	oneOff        bool
 
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
@@ -114,6 +115,7 @@ type Options struct {
 	CfgOutputFile string
 	// WatchedDirs is a collection of paths for the reloader to watch over.
 	WatchedDirs []string
+	OneOff      bool
 	// DelayInterval controls how long the reloader will wait without receiving
 	// new file-system events before it applies the reload.
 	DelayInterval time.Duration
@@ -138,6 +140,7 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 		cfgFile:       o.CfgFile,
 		cfgOutputFile: o.CfgOutputFile,
 		watcher:       newWatcher(logger, reg, o.DelayInterval),
+		oneOff:        o.OneOff,
 		watchedDirs:   o.WatchedDirs,
 		watchInterval: o.WatchInterval,
 		retryInterval: o.RetryInterval,
@@ -290,6 +293,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
 				return errors.Wrap(err, "rename file")
+			}
+
+			if r.oneOff {
+				<-ctx.Done()
+				return nil
 			}
 		}
 	}
