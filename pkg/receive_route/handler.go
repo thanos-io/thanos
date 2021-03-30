@@ -81,16 +81,18 @@ type Options struct {
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	logger            log.Logger
-	writer            *receive.Writer
-	router            *route.Router
-	options           *Options
-	listener          net.Listener
-	mtx               sync.RWMutex
-	hashring          Hashring
-	peers             *peerGroup
-	expBackoff        backoff.Backoff
-	peerStates        map[string]*retryState
+	logger   log.Logger
+	writer   *receive.Writer
+	router   *route.Router
+	options  *Options
+	listener net.Listener
+
+	mtx        sync.RWMutex
+	hashring   Hashring
+	peers      *peerGroup
+	expBackoff backoff.Backoff
+	peerStates map[string]*retryState
+
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
@@ -147,15 +149,17 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
 		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
-			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5})
+			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
+		)
 	}
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		next = ins.NewHandler(name, http.HandlerFunc(next))
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
-		return ins.NewHandler(name, http.HandlerFunc(next))
+		return next
 	}
 
 	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
@@ -180,8 +184,9 @@ func (h *Handler) Hashring(hashring Hashring) {
 func (h *Handler) isReady() bool {
 	h.mtx.RLock()
 	hr := h.hashring != nil
+	sr := h.writer != nil
 	h.mtx.RUnlock()
-	return hr
+	return sr && hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.

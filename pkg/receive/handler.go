@@ -38,8 +38,8 @@ const (
 )
 
 var (
-	// conflictErr is returned whenever an operation fails due to any conflict-type error.
-	conflictErr = errors.New("conflict")
+	// errConflict is returned whenever an operation fails due to any conflict-type error.
+	errConflict = errors.New("conflict")
 
 	errBadReplica  = errors.New("replica count exceeds replication factor")
 	errNotReady    = errors.New("target not ready")
@@ -81,7 +81,7 @@ func (h *Handler) handleRequest(ctx context.Context, tenant string, wreq *prompb
 		// To avoid breaking the counting logic, we need to flatten the error.
 		if errs, ok := err.(errutil.NonNilMultiError); ok {
 			if countCause(errs, isConflict) > 0 {
-				err = errors.Wrap(conflictErr, errs.Error())
+				err = errors.Wrap(errConflict, errs.Error())
 			} else if countCause(errs, isNotReady) > 0 {
 				err = errNotReady
 			} else {
@@ -106,7 +106,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		return nil, status.Error(codes.Unavailable, err.Error())
 	case errUnavailable:
 		return nil, status.Error(codes.Unavailable, err.Error())
-	case conflictErr:
+	case errConflict:
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errBadReplica:
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -138,7 +138,7 @@ func isConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == conflictErr ||
+	return err == errConflict ||
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
