@@ -216,7 +216,16 @@ func GetInstr(
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return ins.NewHandler(name, logMiddleware.HTTPMiddleware(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(middleware.RequestID(hf)))))
+
+		return tracing.HTTPMiddleware(tracer, name, logger,
+			ins.NewHandler(name,
+				logMiddleware.HTTPMiddleware(name,
+					gziphandler.GzipHandler(
+						middleware.RequestID(hf),
+					),
+				),
+			),
+		)
 	}
 	return instr
 }

@@ -9,7 +9,7 @@
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@prmsrswt](https://github.com/prmsrswt)    | Atlan             |
 | Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
-| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
+| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Polar Signals     |
 | Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)        | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.

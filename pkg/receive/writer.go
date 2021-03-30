@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -29,13 +30,13 @@ type TenantStorage interface {
 
 type Writer struct {
 	logger    log.Logger
-	multiTSDB TenantStorage
+	MultiTSDB TenantStorage
 }
 
 func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 	return &Writer{
 		logger:    logger,
-		multiTSDB: multiTSDB,
+		MultiTSDB: multiTSDB,
 	}
 }
 
@@ -46,7 +47,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		numOutOfBounds = 0
 	)
 
-	s, err := r.multiTSDB.TenantAppendable(tenantID)
+	s, err := r.MultiTSDB.TenantAppendable(tenantID)
 	if err != nil {
 		return errors.Wrap(err, "get tenant appendable")
 	}
@@ -61,13 +62,12 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var errs errutil.MultiError
 	for _, t := range wreq.Timeseries {
-		lset := make(labels.Labels, len(t.Labels))
-		for j := range t.Labels {
-			lset[j] = labels.Label{
-				Name:  t.Labels[j].Name,
-				Value: t.Labels[j].Value,
-			}
-		}
+		// Copy labels so we allocate memory only for labels, nothing else.
+		labelpb.ReAllocZLabelsStrings(&t.Labels)
+
+		// TODO(bwplotka): Use improvement https://github.com/prometheus/prometheus/pull/8600, so we do that only when
+		// we need it (when we store labels for longer).
+		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
