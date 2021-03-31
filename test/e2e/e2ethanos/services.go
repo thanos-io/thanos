@@ -510,7 +510,7 @@ func NewToolsBucketWeb(name string, bucketConfig client.BucketConfig, routePrefi
 	args := e2e.BuildArgs(map[string]string{
 		"--debug.name":      fmt.Sprintf("toolsBucketWeb-%s", name),
 		"--http-address":    ":8080",
-		"--log.level":       logLevel,
+		"--log.level":       infoLogLevel,
 		"--objstore.config": string(bktConfigBytes),
 	})
 	if routePrefix != "" {
