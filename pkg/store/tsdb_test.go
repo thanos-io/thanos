@@ -522,11 +522,11 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		}
 	})
 
-	flushDone := make(chan struct{})
+	flushDone := make(chan error)
 	t.Run("flush WAL and access results", func(t *testing.T) {
 		go func() {
 			// This should block until all queries are closed.
-			testutil.Ok(t, db.FlushWAL(tmpDir))
+			flushDone <- db.FlushWAL(tmpDir)
 			close(flushDone)
 		}()
 		// All chunks should be still accessible for read, but not necessarily for write.
@@ -544,18 +544,18 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		}
 	})
 	select {
-	case _, ok := <-flushDone:
+	case err, ok := <-flushDone:
 		if !ok {
-			t.Fatal("expected flush to be blocked, but it seems it completed.")
+			t.Fatalf("expected flush to be blocked, but it seems it completed. Result: %v", err)
 		}
 	default:
 	}
 
-	closeDone := make(chan struct{})
+	closeDone := make(chan error)
 	t.Run("close db with block readers and access results", func(t *testing.T) {
 		go func() {
 			// This should block until all queries are closed.
-			testutil.Ok(t, db.Close())
+			closeDone <- db.Close()
 			db = nil
 			close(closeDone)
 		}()
@@ -576,7 +576,8 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 	select {
 	case _, ok := <-closeDone:
 		if !ok {
-			t.Fatal("expected db to be closed, but it seems it completed.")
+			t.Fatalf("expected db cloe to be blocked, but it seems it completed. Result: %v", err)
+
 		}
 	default:
 	}
@@ -586,9 +587,9 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		testutil.Equals(t, 1, len(csrv.closers))
 		testutil.Ok(t, csrv.closers[0].Close())
 
-		// Expect flush and close to be unblocked.
-		<-flushDone
-		<-closeDone
+		// Expect flush and close to be unblocked and without errors.
+		testutil.Ok(t, <-flushDone)
+		testutil.Ok(t, <-closeDone)
 
 		// Expect segfault on read and write.
 		t.Run("non delegatable", func(t *testing.T) {
