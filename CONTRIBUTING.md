@@ -92,13 +92,16 @@ component of the Thanos distributed system. We recommend:
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-* Make sure you have GOBIN, GOPATH and GOBIN (useful) set to PATH. For example -
-  * ```shell
-  export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
-export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the dir where you have installed golang will be used.
-export GOPROXY="https://proxy.golang.org"
-export PATH="$GOBIN:$GOROOT/bin:$PATH"
-  ```
+  * Make sure you have GOBIN, GOPATH and GOBIN (useful) set to PATH. For example -
+    ```
+    export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
+
+    export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the dir where you have installed golang will be used.
+
+    export GOPROXY="https://proxy.golang.org"
+    export PATH="$GOBIN:$GOROOT/bin:$PATH"
+    ```
+
   * Consider adding the environment variables to your host machine (e.g `/.bashrc` or [`.envrc`](https://direnv.net/)) file so that those environment variables are persisted across sessions.
 * Clone Thanos inside the `~/Repos` folder -
   * For HTTPS - `git clone https://github.com/thanos-io/thanos.git`
@@ -158,11 +161,7 @@ $ git push origin <your_branch_for_new_pr>
 ```
 **Tests your changes**
 
-* Add unit tests for new functionality. Add e2e tests for major changes to functionality.
-* If you don't have a live object store ready, you can use the `make test-local` command.
-* **NOTE**: This command skips tests against live object storage systems by specifying environment variables; this causes the
-store-specific tests to be run against memory and filesystem object storage types only. The CI tests run uses GCS, AWS and Swift.
-* Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
+
 
 **Updating your branch**
 
@@ -205,13 +204,16 @@ You have to commit the changes to `go.mod` and `go.sum` before submitting the pu
 ### Running Tests
 
 * Thanos provides make commands that help you run the tests locally.
+* If you don't have a live object store ready, you can use the `make test-local` command.
+* **NOTE**: This command skips tests against live object storage systems by specifying environment variables; this causes the
+store-specific tests to be run against memory and filesystem object storage types only. The CI tests run uses GCS, AWS and Swift.
+* Not specifying these variables will result in auth errors against GCS, AWS, Azure, COS etc.
 * If you have a decent hardware to run the tests, you can run them locally.
 * If you want to run the tests once in a while, it is suitable for you to send in a PR, the built in CI/CD setup runs the tests for you, which is nice for once in a while run.
 *  `make test`: Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in `./test/e2e`.
 *  `make test-local`: Runs test excluding tests for ALL object storage integrations.
 *   `make test-e2e`: Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
 *   `make test-e2e-local`: Runs all thanos e2e tests locally.
-
 
 ### Advanced testing
 
