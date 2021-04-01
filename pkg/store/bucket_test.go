@@ -572,23 +572,18 @@ func TestBucketStore_Info(t *testing.T) {
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
-		nil,
-		nil,
 		dir,
-		nil,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		20,
-		allowAllFilterConf,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
 		0,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -823,25 +818,20 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, err)
 
 			bucketStore, err := NewBucketStore(
-				logger,
-				nil,
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
-				nil,
-				nil,
-				nil,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
-				false,
 				20,
-				allowAllFilterConf,
 				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
 				false,
 				0,
+				WithLogger(logger),
+				WithFilterConfig(allowAllFilterConf),
 			)
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -1262,25 +1252,20 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
-		logger,
-		nil,
 		ibkt,
 		f,
 		tmpDir,
-		nil,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		1,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
 		0,
+		WithLogger(logger),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 
@@ -1640,25 +1625,20 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -1737,25 +1717,20 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1886,25 +1861,21 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -2052,25 +2023,20 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))

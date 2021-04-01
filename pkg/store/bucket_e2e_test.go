@@ -180,25 +180,21 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		s.logger,
-		nil,
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		dir,
-		s.cache,
-		nil,
-		nil,
 		chunksLimiterFactory,
 		seriesLimiterFactory,
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		20,
-		filterConf,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		true,
 		time.Minute,
+		WithLogger(s.logger),
+		WithIndexCache(s.cache),
+		WithFilterConfig(filterConf),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()

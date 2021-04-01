@@ -258,6 +258,7 @@ type FilterConfig struct {
 // When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
 	logger          log.Logger
+	reg             prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
 	metrics         *bucketStoreMetrics
 	bkt             objstore.InstrumentedBucketReader
 	fetcher         block.MetadataFetcher
@@ -313,66 +314,101 @@ type noopGate struct{}
 func (noopGate) Start(context.Context) error { return nil }
 func (noopGate) Done()                       {}
 
+// BucketStoreOption are functions that configure BucketStore.
+type BucketStoreOption func(s *BucketStore)
+
+// WithLogger sets the BucketStore logger to the one you pass.
+func WithLogger(logger log.Logger) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.logger = logger
+	}
+}
+
+// WithRegistry sets a registry that BucketStore uses to register metrics with.
+func WithRegistry(reg prometheus.Registerer) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.reg = reg
+	}
+}
+
+// WithIndexCache sets a indexCache to use instead of a noopCache.
+func WithIndexCache(cache storecache.IndexCache) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.indexCache = cache
+	}
+}
+
+// WithQueryGate sets a queryGate to use instead of a noopGate.
+func WithQueryGate(queryGate gate.Gate) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.queryGate = queryGate
+	}
+}
+
+// WithChunkPool sets a pool.Bytes to use for chunks.
+func WithChunkPool(chunkPool pool.Bytes) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.chunkPool = chunkPool
+	}
+}
+
+// WithFilterConfig sets a filter which Store uses for filtering metrics based on time.
+func WithFilterConfig(filter *FilterConfig) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.filterConfig = filter
+	}
+}
+
+// WithDebugLogging enables debug logging.
+func WithDebugLogging() BucketStoreOption {
+	return func(s *BucketStore) {
+		s.debugLogging = true
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
-// TODO(bwplotka): Move to config at this point.
 func NewBucketStore(
-	logger log.Logger,
-	reg prometheus.Registerer,
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
 	dir string,
-	indexCache storecache.IndexCache,
-	queryGate gate.Gate,
-	chunkPool pool.Bytes,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	partitioner Partitioner,
-	debugLogging bool,
 	blockSyncConcurrency int,
-	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
 	lazyIndexReaderIdleTimeout time.Duration,
+	options ...BucketStoreOption,
 ) (*BucketStore, error) {
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-
-	if chunkPool == nil {
-		chunkPool = pool.NoopBytes{}
-	}
-	if indexCache == nil {
-		indexCache = noopCache{}
-	}
-	if queryGate == nil {
-		queryGate = noopGate{}
-	}
-
 	s := &BucketStore{
-		logger:                      logger,
+		logger:                      log.NewNopLogger(),
 		bkt:                         bkt,
 		fetcher:                     fetcher,
 		dir:                         dir,
-		indexCache:                  indexCache,
-		indexReaderPool:             indexheader.NewReaderPool(logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", reg)),
-		chunkPool:                   chunkPool,
+		indexCache:                  noopCache{},
+		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
-		debugLogging:                debugLogging,
 		blockSyncConcurrency:        blockSyncConcurrency,
-		filterConfig:                filterConfig,
-		queryGate:                   queryGate,
+		queryGate:                   noopGate{},
 		chunksLimiterFactory:        chunksLimiterFactory,
 		seriesLimiterFactory:        seriesLimiterFactory,
 		partitioner:                 partitioner,
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
-		metrics:                     newBucketStoreMetrics(reg),
 	}
+
+	for _, option := range options {
+		option(s)
+	}
+
+	// Depend on the options
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
+	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
