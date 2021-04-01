@@ -36,6 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
 	yaml "gopkg.in/yaml.v2"
@@ -781,4 +782,20 @@ func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, query strin
 	}
 
 	return m.Data, nil
+}
+
+func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets string) (*targetspb.TargetDiscovery, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/targets")
+
+	if stateTargets != "" {
+		q := u.Query()
+		q.Add("state", stateTargets)
+		u.RawQuery = q.Encode()
+	}
+
+	var v struct {
+		Data *targetspb.TargetDiscovery `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/targets HTTP[client]", &u, &v)
 }

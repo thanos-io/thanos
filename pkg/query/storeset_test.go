@@ -196,6 +196,9 @@ func TestStoreSet_Update(t *testing.T) {
 		func() (specs []RuleSpec) {
 			return nil
 		},
+		func() (specs []TargetSpec) {
+			return nil
+		},
 		func() (specs []MetadataSpec) {
 			return nil
 		},
@@ -551,6 +554,7 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 			return specs
 		},
 		func() (specs []RuleSpec) { return nil },
+		func() (specs []TargetSpec) { return nil },
 		func() (specs []MetadataSpec) { return nil },
 		func() (specs []ExemplarSpec) { return nil },
 		testGRPCOpts, time.Minute)
@@ -637,6 +641,8 @@ func TestQuerierStrict(t *testing.T) {
 			NewGRPCStoreSpec(st.StoreAddresses()[2], true),
 		}
 	}, func() []RuleSpec {
+		return nil
+	}, func() []TargetSpec {
 		return nil
 	}, func() (specs []MetadataSpec) {
 		return nil
@@ -793,6 +799,7 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 		storeSet := NewStoreSet(nil, nil,
 			tc.storeSpecs,
 			tc.ruleSpecs,
+			func() []TargetSpec { return nil },
 			func() []MetadataSpec { return nil },
 			tc.exemplarSpecs,
 			testGRPCOpts, time.Minute)
@@ -967,6 +974,7 @@ func TestStoreSet_Rules_Discovery(t *testing.T) {
 
 					return tc.states[currentState].ruleSpecs()
 				},
+				func() []TargetSpec { return nil },
 				func() []MetadataSpec {
 					return nil
 				},

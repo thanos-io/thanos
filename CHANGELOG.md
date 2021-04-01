@@ -12,6 +12,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+- [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
+
 ### Added
 
 - [#3977](https://github.com/thanos-io/thanos/pull/3903) Expose exemplars for `http_request_duration_seconds` histogram if tracing is enabled.
