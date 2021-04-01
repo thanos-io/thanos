@@ -90,21 +90,26 @@ component of the Thanos distributed system. We recommend:
 
 ### Installing Project locally in your machine
 
-* Change your directory to the gopath for installing Thanos there -
-  * `cd $GOPATH/src/github.com/`
-* If you don’t have `$GOPATH` set, then add them -
-  * `export GOPATH=$HOME/go; export PATH=$PATH:$GOROOT/bin:$GOPATH/bin`
-  * Make sure you add the exports to the `/.bashrc` file so that those environment variables are persisted when you run them again.
-* If `github.com` folder is not present in the `src` path of `$GOPATH`, make one and clone Thanos inside it -
+* Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
+  * `cd ~/Repos`
+* Make sure you have GOBIN, GOPATH and GOBIN (useful) set to PATH. For example -
+  * ```shell
+  export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
+export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the dir where you have installed golang will be used.
+export GOPROXY="https://proxy.golang.org"
+export PATH="$GOBIN:$GOROOT/bin:$PATH"
+  ```
+  * Consider adding the environment variables to your host machine (e.g `/.bashrc` or [`.envrc`](https://direnv.net/)) file so that those environment variables are persisted across sessions.
+* Clone Thanos inside the `~/Repos` folder -
   * For HTTPS - `git clone https://github.com/thanos-io/thanos.git`
   * For SSH - `git clone git@github.com:thanos-io/thanos.git`
 * Once installed, you can run `make help` inside Thanos folder for getting a list of helper commands which are provided for making development easy for you :)
 
 ### Building/Running/Developing
 
-* Run `make help` for getting a list of helper commands that will make your development life much more easy. It also provides auto **linting** and **formatter** for making sure the code quality meets the standards of contribution.
+* Run `make help` for getting a list of helper commands that will make your development life much more easy. Especially consider using `make lint` often. It provides auto **linting** and **formatter** for making sure the code quality meets the standards of contribution.
 * Usually, while sending in a PR  `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs`, `make quickstart` are the most used commands while developing Thanos.
-* When you run `make build` from `$GOPATH/src/github.com/thanos`the code is compiled and a binary named `thanos` is created. To run the binary, run `thanos`, which would call the thanos binary from `$GOPATH/src/bin/thanos`.
+* When you run `make build` from Thanos repo root,  code is compiled and a binary named `thanos` is created and built into your `$GOBIN` or `$GOPATH/bin`.
 * In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
   * Run `make quickstart` for spinning up all components of Thanos quickly.
   * If you want to run specific components instead of all, feel free to use and edit - [quickstart.sh](https://github.com/thanos-io/thanos/blob/b08c0ea62abfe4dcf1400da0e37598f0cd8fa8cf/scripts/quickstart.sh)
@@ -151,7 +156,7 @@ $ make build
 $ <Iterate your development>
 $ git push origin <your_branch_for_new_pr>
 ```
-**Tests for your changes**
+**Tests your changes**
 
 * Add unit tests for new functionality. Add e2e tests for major changes to functionality.
 * If you don't have a live object store ready, you can use the `make test-local` command.
