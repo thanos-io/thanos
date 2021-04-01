@@ -31,6 +31,8 @@ type Bucket struct {
 	rootDir string
 }
 
+func (b *Bucket) ReloadCredentials() error { return nil }
+
 // NewBucketFromConfig returns a new filesystem.Bucket from config.
 func NewBucketFromConfig(conf []byte) (*Bucket, error) {
 	var c Config

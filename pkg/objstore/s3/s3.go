@@ -159,6 +159,7 @@ type Bucket struct {
 	putUserMetadata map[string]string
 	partSize        uint64
 	listObjectsV1   bool
+	confFilepath    string
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -172,13 +173,13 @@ func parseConfig(conf []byte) (Config, error) {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string, path string) (*Bucket, error) {
 	config, err := parseConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBucketWithConfig(logger, config, component)
+	return NewBucketWithConfig(logger, config, component, path)
 }
 
 type overrideSignerType struct {
@@ -198,7 +199,7 @@ func (s *overrideSignerType) Retrieve() (credentials.Value, error) {
 }
 
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
-func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
+func NewBucketWithConfig(logger log.Logger, config Config, component string, path string) (*Bucket, error) {
 	var chain []credentials.Provider
 
 	// TODO(bwplotka): Don't do flags as they won't scale, use actual params like v2, v4 instead
@@ -298,6 +299,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		putUserMetadata: config.PutUserMetadata,
 		partSize:        config.PartSize,
 		listObjectsV1:   config.ListObjectsVersion == "v1",
+		confFilepath:    path,
 	}
 	return bkt, nil
 }
@@ -305,6 +307,53 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 // Name returns the bucket name for s3.
 func (b *Bucket) Name() string {
 	return b.name
+}
+
+// Reads the config file and changes the credentials of the instance if yaml is changed.
+func (b *Bucket) ReloadCredentials() error {
+	if len(b.confFilepath) > 0 {
+		c, err := ioutil.ReadFile(b.confFilepath)
+		if err != nil {
+			return errors.Errorf("Error reading config file.")
+		}
+		config, err := parseConfig(c)
+		if err != nil {
+			return err
+		}
+		if err := validate(config); err != nil {
+			return err
+		}
+		var chain []credentials.Provider
+		wrapCredentialsProvider := func(p credentials.Provider) credentials.Provider { return p }
+		if config.AccessKey != "" {
+			chain = []credentials.Provider{wrapCredentialsProvider(&credentials.Static{
+				Value: credentials.Value{
+					AccessKeyID:     config.AccessKey,
+					SecretAccessKey: config.SecretKey,
+					SignerType:      credentials.SignatureV4,
+				},
+			})}
+			var rt http.RoundTripper
+			if config.HTTPConfig.Transport != nil {
+				rt = config.HTTPConfig.Transport
+			} else {
+				rt = DefaultTransport(config)
+			}
+			client, err := minio.New(config.Endpoint, &minio.Options{
+				Creds:     credentials.NewChainCredentials(chain),
+				Secure:    !config.Insecure,
+				Region:    config.Region,
+				Transport: rt,
+			})
+			if err != nil {
+				return errors.Wrap(err, "initialize s3 client.")
+			}
+			(*b).client = client
+			return nil
+		}
+	}
+	b.logger.Log("Config file path is empty, credentials are loaded from different source.")
+	return nil
 }
 
 // validate checks to see the config options are set.
@@ -347,6 +396,7 @@ func ValidateForTests(conf Config) error {
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
+	b.ReloadCredentials()
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
@@ -379,6 +429,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	b.ReloadCredentials()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return nil, err
@@ -423,6 +474,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	b.ReloadCredentials()
 	_, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -436,6 +488,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	b.ReloadCredentials()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return err
@@ -472,6 +525,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	b.ReloadCredentials()
 	objInfo, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
@@ -485,11 +539,13 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
+	b.ReloadCredentials()
 	return b.client.RemoveObject(ctx, b.name, name, minio.RemoveObjectOptions{})
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	b.ReloadCredentials()
 	return minio.ToErrorResponse(errors.Cause(err)).Code == "NoSuchKey"
 }
 
@@ -497,6 +553,7 @@ func (b *Bucket) Close() error { return nil }
 
 // getServerSideEncryption returns the SSE to use.
 func (b *Bucket) getServerSideEncryption(ctx context.Context) (encrypt.ServerSide, error) {
+	b.ReloadCredentials()
 	if value := ctx.Value(sseConfigKey); value != nil {
 		if sse, ok := value.(encrypt.ServerSide); ok {
 			return sse, nil
@@ -547,7 +604,8 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+	path := ""
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", path)
 	if err != nil {
 		return nil, nil, err
 	}

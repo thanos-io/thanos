@@ -73,3 +73,12 @@ func (p *PathOrContent) Content() ([]byte, error) {
 
 	return content, nil
 }
+
+func (p *PathOrContent) GetPath() (string, error) {
+	path := ""
+	if len(*p.path) > 0 {
+		path = *p.path
+		return path, nil
+	}
+	return path, errors.Errorf("path is empty.")
+}

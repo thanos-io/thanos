@@ -47,6 +47,7 @@ type Bucket interface {
 
 	// Name returns the bucket name for the provider.
 	Name() string
+	ReloadCredentials() error
 }
 
 // InstrumentedBucket is a Bucket with optional instrumentation control on reader.
@@ -321,6 +322,7 @@ type metricBucket struct {
 	lastSuccessfulUploadTime *prometheus.GaugeVec
 }
 
+func (b *metricBucket) ReloadCredentials() error { return nil }
 func (b *metricBucket) WithExpectedErrs(fn IsOpFailureExpectedFunc) Bucket {
 	return &metricBucket{
 		bkt:                      b.bkt,

@@ -40,6 +40,8 @@ type Bucket struct {
 	config       *Config
 }
 
+func (b *Bucket) ReloadCredentials() error { return nil }
+
 // Validate checks to see if any of the config options are set.
 func (conf *Config) validate() error {
 	if conf.StorageAccountName == "" ||

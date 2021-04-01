@@ -41,6 +41,8 @@ type Bucket struct {
 	closer io.Closer
 }
 
+func (b *Bucket) ReloadCredentials() error { return nil }
+
 // NewBucket returns a new Bucket against the given bucket handle.
 func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	var gc Config
