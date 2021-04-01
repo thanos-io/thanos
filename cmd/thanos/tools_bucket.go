@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -321,9 +322,12 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("web", "Web interface for remote storage bucket.")
 	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 	webDisableCORS := cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").Bool()
+
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
@@ -341,7 +345,30 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)
 
+		if *webRoutePrefix == "" {
+			*webRoutePrefix = *webExternalPrefix
+		}
+
+		if *webRoutePrefix != *webExternalPrefix {
+			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
+		}
+
 		router := route.New()
+
+		// RoutePrefix must always start with '/'.
+		*webRoutePrefix = "/" + strings.Trim(*webRoutePrefix, "/")
+
+		// Redirect from / to /webRoutePrefix.
+		if *webRoutePrefix != "/" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
+			})
+			router.Get(*webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
+			})
+			router = router.WithPrefix(*webRoutePrefix)
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName, "", component.Bucket)
