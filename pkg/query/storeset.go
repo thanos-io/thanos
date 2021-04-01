@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -499,6 +500,9 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				}
 
 				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
+				if spec.StrictStatic() {
+					st.maxTime = math.MaxInt64
+				}
 			}
 
 			var rule rulespb.RulesClient
@@ -566,6 +570,10 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	prev, ok := s.storeStatuses[store.addr]
 	if ok {
 		status = *prev
+	} else {
+		mint, maxt := store.TimeRange()
+		status.MinTime = mint
+		status.MaxTime = maxt
 	}
 
 	if err == nil {
