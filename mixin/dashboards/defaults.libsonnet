@@ -7,7 +7,7 @@
   dashboard:: {
     prefix: 'Thanos / ',
     tags: error 'must provide dashboard tags',
-    timezone: 'UTC'
+    timezone: 'UTC',
   },
 
   // Automatically add a uid to each dashboard based on the base64 encoding
