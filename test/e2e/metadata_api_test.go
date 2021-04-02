@@ -5,10 +5,13 @@ package e2e_test
 
 import (
 	"context"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -68,12 +71,14 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 
 	promMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+prom1.HTTPEndpoint()), "", -1)
 	testutil.Ok(t, err)
+	testutil.Assert(t, true, len(promMeta) > 0)
 
 	thanosMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", -1)
 	testutil.Ok(t, err)
+	testutil.Assert(t, true, len(thanosMeta) > 0)
 
 	// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.
-	testutil.Equals(t, thanosMeta, promMeta)
+	metadataEqual(t, thanosMeta, promMeta)
 
 	// We only expect to see one metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 1)
@@ -94,4 +99,24 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "prometheus_build_info", -1)
 	testutil.Ok(t, err)
 	testutil.Assert(t, true, len(thanosMeta) == 1 && len(thanosMeta["prometheus_build_info"]) > 0)
+}
+
+func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
+	// The two responses should have equal # of entries.
+	testutil.Equals(t, len(meta1), len(meta2))
+
+	for metric := range meta1 {
+		// Get metadata for the metric.
+		meta1MetricMeta := meta1[metric]
+		meta2MetricMeta, ok := meta2[metric]
+		testutil.Assert(t, true, ok)
+
+		sort.Slice(meta1MetricMeta, func(i, j int) bool {
+			return meta1MetricMeta[i].Help < meta1MetricMeta[j].Help
+		})
+		sort.Slice(meta2MetricMeta, func(i, j int) bool {
+			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
+		})
+		reflect.DeepEqual(meta1MetricMeta, meta2MetricMeta)
+	}
 }
