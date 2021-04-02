@@ -569,10 +569,8 @@ config:
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("cancelled")
 			break
 		case <-time.After(300 * time.Millisecond):
-			fmt.Println("timeout")
 		}
 
 		if reloads.Load().(int) == 1 {
