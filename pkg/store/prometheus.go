@@ -520,10 +520,16 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		if err != nil {
 			return nil, err
 		}
+
+		// using set to handle duplicate values.
+		labelValuesSet := make(map[string]struct{})
 		for _, s := range sers {
 			if val, exists := s[r.Label]; exists {
-				vals = append(vals, val)
+				labelValuesSet[val] = struct{}{}
 			}
+		}
+		for key := range labelValuesSet {
+			vals = append(vals, key)
 		}
 	}
 	sort.Strings(vals)

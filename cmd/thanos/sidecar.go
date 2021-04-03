@@ -229,7 +229,7 @@ func runSidecar(
 				return nil
 			})
 			if err != nil {
-				return errors.Wrap(err, "buildinfo query")
+				return errors.Wrap(err, "failed to get prometheus version")
 			}
 			return nil
 		}, func(error) {
