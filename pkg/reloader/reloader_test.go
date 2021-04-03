@@ -554,8 +554,6 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
   a: 1
-  b: 2
-  c: 3
 `), os.ModePerm))
 
 	rctx, cancel2 := context.WithCancel(ctx)
@@ -580,8 +578,6 @@ config:
 			testutil.Equals(t, `
 config:
   a: 1
-  b: 2
-  c: 3
 `, string(f))
 			break
 		}
