@@ -71,11 +71,11 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 
 	promMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+prom1.HTTPEndpoint()), "", -1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(promMeta) > 0)
+	testutil.Assert(t, len(promMeta) > 0, "got empty metadata response from Prometheus")
 
 	thanosMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", -1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(thanosMeta) > 0)
+	testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
 
 	// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.
 	metadataEqual(t, thanosMeta, promMeta)
@@ -83,22 +83,22 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	// We only expect to see one metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(thanosMeta) == 1)
+	testutil.Assert(t, len(thanosMeta) == 1, "expected 1 metadata from Thanos, got %d", len(thanosMeta))
 
 	// We only expect to see ten metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 10)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(thanosMeta) == 10)
+	testutil.Assert(t, len(thanosMeta) == 10, "expected 10 metadata from Thanos, got %d", len(thanosMeta))
 
 	// No metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 0)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(thanosMeta) == 0)
+	testutil.Assert(t, len(thanosMeta) == 0, "expected 0 metadata from Thanos, got %d", len(thanosMeta))
 
 	// Only prometheus_build_info metric will be returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "prometheus_build_info", -1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, true, len(thanosMeta) == 1 && len(thanosMeta["prometheus_build_info"]) > 0)
+	testutil.Assert(t, len(thanosMeta) == 1 && len(thanosMeta["prometheus_build_info"]) > 0, "expected one prometheus_build_info metadata from Thanos, got %v", thanosMeta)
 }
 
 func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
@@ -109,7 +109,7 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
 		// Get metadata for the metric.
 		meta1MetricMeta := meta1[metric]
 		meta2MetricMeta, ok := meta2[metric]
-		testutil.Assert(t, true, ok)
+		testutil.Assert(t, ok)
 
 		sort.Slice(meta1MetricMeta, func(i, j int) bool {
 			return meta1MetricMeta[i].Help < meta1MetricMeta[j].Help

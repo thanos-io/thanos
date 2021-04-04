@@ -90,7 +90,7 @@ scrape_configs:
 			})
 			testutil.Equals(t, storage.Warnings(nil), w)
 			testutil.Ok(t, err)
-			testutil.Assert(t, true, tcase.expectedFunc(meta))
+			testutil.Assert(t, tcase.expectedFunc(meta))
 		})
 	}
 }
