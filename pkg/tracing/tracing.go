@@ -10,7 +10,9 @@ import (
 )
 
 // ForceTracingBaggageKey - force sampling header.
-const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
+// Lower kebab-case for Jaeger support, per documentation:
+// https://www.jaegertracing.io/docs/1.22/client-libraries/#baggage
+const ForceTracingBaggageKey = "x-thanos-force-tracing"
 
 // traceIdResponseHeader - Trace ID response header.
 const traceIDResponseHeader = "X-Thanos-Trace-Id"
