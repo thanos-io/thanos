@@ -12,6 +12,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+- [#4019](https://github.com/thanos-io/thanos/pull/4019) Query: Adds query range histogram. 
 - [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
 
 ### Added
