@@ -117,6 +117,6 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
 		sort.Slice(meta2MetricMeta, func(i, j int) bool {
 			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
 		})
-		reflect.DeepEqual(meta1MetricMeta, meta2MetricMeta)
+		testutil.Assert(t, reflect.DeepEqual(meta1MetricMeta, meta2MetricMeta), "meta1 %v; meta2 %v", meta1MetricMeta, meta2MetricMeta)
 	}
 }
