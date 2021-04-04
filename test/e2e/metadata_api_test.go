@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -69,9 +71,18 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_query_metadata_apis_dns_provider_results"}, e2e.WaitMissingMetrics))
 
-	promMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+prom1.HTTPEndpoint()), "", -1)
-	testutil.Ok(t, err)
-	testutil.Assert(t, len(promMeta) > 0, "got empty metadata response from Prometheus")
+	var (
+		promMeta map[string][]metadatapb.Meta
+	)
+	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
+	testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
+		promMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+prom1.HTTPEndpoint()), "", -1)
+		testutil.Ok(t, err)
+		if len(promMeta) > 0 {
+			return nil
+		}
+		return fmt.Errorf("empty metadata response from Prometheus")
+	}))
 
 	thanosMeta, err := promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", -1)
 	testutil.Ok(t, err)
