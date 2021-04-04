@@ -182,6 +182,7 @@ func (p *Prometheus) start() error {
 		"--web.listen-address=" + p.addr,
 		"--web.route-prefix=" + p.prefix,
 		"--web.enable-admin-api",
+		"--web.enable-lifecycle", // Enable hot reload.
 		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
 	}, extra...)
 
@@ -199,7 +200,7 @@ func (p *Prometheus) start() error {
 	return nil
 }
 
-func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
+func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) error {
 	if !p.running {
 		return errors.New("method Start was not invoked.")
 	}
@@ -208,6 +209,7 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
 
 		if r.StatusCode != 200 {
 			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
@@ -278,6 +280,20 @@ func (p *Prometheus) Appender() storage.Appender {
 		panic("Appender must not be called after start")
 	}
 	return p.db.Appender(context.Background())
+}
+
+// Reload sends a POST request to the reload endpoint for a hot reload.
+func (p *Prometheus) Reload(logger log.Logger) error {
+	r, err := http.Post(fmt.Sprintf("http://%s/-/reload", p.addr), "", nil)
+	if err != nil {
+		return err
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
+
+	if r.StatusCode != 200 {
+		return errors.Errorf("Got non 200 response: %v", r.StatusCode)
+	}
+	return nil
 }
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
