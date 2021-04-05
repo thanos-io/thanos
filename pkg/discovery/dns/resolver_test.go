@@ -21,11 +21,17 @@ type mockHostnameResolver struct {
 	err        error
 }
 
+var errNoSuchHost = errors.New("no such host")
+
 func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.resultIPs[host], nil
+	result, ok := m.resultIPs[host]
+	if !ok {
+		return nil, errNoSuchHost
+	}
+	return result, nil
 }
 
 func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error) {
@@ -36,7 +42,7 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 }
 
 func (m mockHostnameResolver) IsNotFound(err error) bool {
-	return false
+	return errors.Is(err, errNoSuchHost)
 }
 
 type DNSSDTest struct {
@@ -119,6 +125,24 @@ var (
 				},
 				resultIPs: map[string][]net.IPAddr{
 					"alt1.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
+					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
+				},
+			},
+		},
+		{
+			testName:       "multiple SRV records from SRV lookup with missing A records",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRV,
+			expectedResult: []string{"192.168.0.2:8081"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "alt1.mycompany.com.", Port: 8080},
+						&net.SRV{Target: "alt2.mycompany.com.", Port: 8081},
+					},
+				},
+				resultIPs: map[string][]net.IPAddr{
 					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
 				},
 			},
