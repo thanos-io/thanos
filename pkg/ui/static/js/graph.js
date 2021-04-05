@@ -32,11 +32,18 @@ Prometheus.Graph.stepValues = [
   "1w", "2w", "4w", "8w", "1y", "2y"
 ];
 
-Prometheus.Graph.numGraphs = 0;
+// Get id of last panel and increment.
+let num = 0;
+Object.entries(localStorage).map(([key]) => {
+  if (key.includes("enable-dedup") && num < parseInt(key[key.length - 1], 10)) {
+    num = parseInt(key[key.length - 1], 10);
+  }
+});
+Prometheus.Graph.numGraphs = num;
 
 Prometheus.Graph.prototype.initialize = function() {
   var self = this;
-  self.id = Prometheus.Graph.numGraphs++;
+  self.id = ++Prometheus.Graph.numGraphs;
 
   // Set default options.
   self.options.id = self.id;
