@@ -282,18 +282,9 @@ func (p *Prometheus) Appender() storage.Appender {
 	return p.db.Appender(context.Background())
 }
 
-// Reload sends a POST request to the reload endpoint for a hot reload.
-func (p *Prometheus) Reload(logger log.Logger) error {
-	r, err := http.Post(fmt.Sprintf("http://%s/-/reload", p.addr), "", nil)
-	if err != nil {
-		return err
-	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
-
-	if r.StatusCode != 200 {
-		return errors.Errorf("Got non 200 response: %v", r.StatusCode)
-	}
-	return nil
+// Reload sends a SIGHUP to Prometheus for a hot reload.
+func (p *Prometheus) Reload() error {
+	return p.cmd.Process.Signal(syscall.SIGHUP)
 }
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.

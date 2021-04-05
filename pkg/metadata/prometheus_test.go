@@ -72,8 +72,8 @@ scrape_configs:
 `, p.Addr()))
 	testutil.Ok(t, err)
 
-	// Do a hot reload for load the latest configuration.
-	err = p.Reload(logger)
+	// Do a hot reload for loading the latest configuration.
+	err = p.Reload()
 	testutil.Ok(t, err)
 
 	u, err := url.Parse("http://" + p.Addr())
