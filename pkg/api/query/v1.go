@@ -441,7 +441,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	qe := qapi.queryEngine(maxSourceResolution)
 
-	// Record the query range requested
+	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
