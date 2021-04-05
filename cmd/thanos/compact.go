@@ -248,7 +248,7 @@ func runCompact(
 			compactorView.Set(blocks, err)
 			api.SetLoaded(blocks, err)
 		})
-		sy, err = compact.NewSyncer(
+		sy, err = compact.NewMetaSyncer(
 			logger,
 			reg,
 			bkt,
