@@ -182,7 +182,6 @@ func (p *Prometheus) start() error {
 		"--web.listen-address=" + p.addr,
 		"--web.route-prefix=" + p.prefix,
 		"--web.enable-admin-api",
-		"--web.enable-lifecycle", // Enable hot reload.
 		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
 	}, extra...)
 
