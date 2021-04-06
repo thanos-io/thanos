@@ -5,7 +5,6 @@ package metadata
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -30,7 +30,7 @@ func TestPrometheus_Metadata_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	testutil.Ok(t, p.SetConfig(fmt.Sprintf(`
+	p.SetConfig(fmt.Sprintf(`
 global:
   external_labels:
     region: eu-west
@@ -41,7 +41,7 @@ scrape_configs:
   scrape_timeout: 1s
   static_configs:
   - targets: ['%s']
-`, e2eutil.PromAddrPlaceHolder)))
+`, e2eutil.PromAddrPlaceHolder))
 	testutil.Ok(t, p.Start())
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -181,8 +181,9 @@ func (p *Prometheus) start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
-	// Update the config template with the actual address.
-	if err := p.SetConfig(strings.ReplaceAll(p.config, PromAddrPlaceHolder, p.addr)); err != nil {
+	// Write the final config to the config file.
+	// The address placeholder will be replaced with the actual address.
+	if err := p.writeConfig(strings.ReplaceAll(p.config, PromAddrPlaceHolder, p.addr)); err != nil {
 		return err
 	}
 	args := append([]string{
@@ -248,16 +249,19 @@ func (p *Prometheus) DisableCompaction() {
 	p.disabledCompaction = true
 }
 
-// SetConfig updates the contents of the config file. By default it is empty.
-func (p *Prometheus) SetConfig(s string) (err error) {
+// SetConfig updates the contents of the config.
+func (p *Prometheus) SetConfig(s string) {
+	p.config = s
+}
+
+// writeConfig writes the Prometheus config to the config file.
+func (p *Prometheus) writeConfig(config string) (err error) {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
 		return err
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
-
-	p.config = s
-	_, err = f.Write([]byte(s))
+	_, err = f.Write([]byte(config))
 	return err
 }
 

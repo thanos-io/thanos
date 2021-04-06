@@ -25,7 +25,7 @@ func TestPrometheus_Targets_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	testutil.Ok(t, p.SetConfig(`
+	p.SetConfig(`
 global:
   external_labels:
     region: eu-west
@@ -41,7 +41,7 @@ scrape_configs:
   - source_labels: ['__address__']
     regex: '^.+:80$'
     action: drop
-`))
+`)
 	testutil.Ok(t, p.Start())
 
 	// For some reason it's better to wait much more than a few scrape intervals.
