@@ -154,6 +154,10 @@ func registerQuery(app *extkingpin.App) {
 	storeResponseTimeout := extkingpin.ModelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
+	enableAtModifier := cmd.Flag("promql-at-modifier", "Experimental: Enable @ modifier in PromQL.").Default("false").Bool()
+
+	enableNegativeOffset := cmd.Flag("promql-negative-offset", "Experimental: Enable negative offset in PromQL.").Default("false").Bool()
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
@@ -260,6 +264,8 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*webDisableCORS,
+			*enableAtModifier,
+			*enableNegativeOffset,
 			component.Query,
 		)
 	})
@@ -320,6 +326,8 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	disableCORS bool,
+	enableAtModifier bool,
+	enableNegativeOffset bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -444,6 +452,14 @@ func runQuery(
 			},
 		}
 	)
+
+	if enableAtModifier {
+		engineOpts.EnableAtModifier = true
+	}
+
+	if enableNegativeOffset {
+		engineOpts.EnableNegativeOffset = true
+	}
 
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
