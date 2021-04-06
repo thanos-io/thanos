@@ -198,7 +198,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	}
 
 	if r.watchInterval == 0 {
-		// Skip watching the file-system
+		// Skip watching the file-system.
 		return nil
 	}
 
