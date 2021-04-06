@@ -20,6 +20,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
 - [#3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 - [#3840](https://github.com/thanos-io/thanos/pull/3840) Tools: Added a flag to support rewrite Prometheus TSDB blocks.
+- [#4026](https://github.com/thanos-io/thanos/pull/4026) Query: Experimental: Add `promql-at-modifier` and `promql-negative-offset` to enable two new promql features.
 
 ### Fixed
 
