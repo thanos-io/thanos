@@ -458,5 +458,7 @@ Flags:
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --promql-at-modifier       Experimental: Enable @ modifier in PromQL.
+      --promql-negative-offset   Experimental: Enable negative offset in PromQL.
 
 ```
