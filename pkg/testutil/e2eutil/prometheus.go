@@ -46,6 +46,9 @@ const (
 	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
 	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
+
+	// A placeholder for actual Prometheus instance address in the scrape config.
+	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
 )
 
 func PrometheusBinary() string {
@@ -80,6 +83,8 @@ type Prometheus struct {
 	cmd                *exec.Cmd
 	disabledCompaction bool
 	addr               string
+
+	config string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -176,6 +181,10 @@ func (p *Prometheus) start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
+	// Update the config template with the actual address.
+	if err := p.SetConfig(strings.ReplaceAll(p.config, PromAddrPlaceHolder, p.addr)); err != nil {
+		return err
+	}
 	args := append([]string{
 		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
 		"--storage.tsdb.path=" + p.db.Dir(),
@@ -247,6 +256,7 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
 
+	p.config = s
 	_, err = f.Write([]byte(s))
 	return err
 }
@@ -279,11 +289,6 @@ func (p *Prometheus) Appender() storage.Appender {
 		panic("Appender must not be called after start")
 	}
 	return p.db.Appender(context.Background())
-}
-
-// Reload sends a SIGHUP to Prometheus for a hot reload.
-func (p *Prometheus) Reload() error {
-	return p.cmd.Process.Signal(syscall.SIGHUP)
 }
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.

@@ -5,6 +5,7 @@ package metadata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,36 +30,7 @@ func TestPrometheus_Metadata_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	// As we don't know the actual port of the test Prometheus service,
-	// we just use localhost:9090 here.
-	testutil.Ok(t, p.SetConfig(`
-global:
-  external_labels:
-    region: eu-west
-scrape_configs:
-- job_name: 'myself'
-  # Quick scrapes for test purposes.
-  scrape_interval: 1s
-  scrape_timeout: 1s
-  static_configs:
-  - targets: ['localhost:9090']
-`))
-	testutil.Ok(t, p.Start())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	_ = ctx
-
-	upctx, upcancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer upcancel()
-
-	logger := log.NewNopLogger()
-	// Wait for Prometheus up.
-	err = p.WaitPrometheusUp(upctx, logger)
-	testutil.Ok(t, err)
-
-	// Update the scrape configs to the current Prometheus address.
-	err = p.SetConfig(fmt.Sprintf(`
+	testutil.Ok(t, p.SetConfig(fmt.Sprintf(`
 global:
   external_labels:
     region: eu-west
@@ -69,18 +41,23 @@ scrape_configs:
   scrape_timeout: 1s
   static_configs:
   - targets: ['%s']
-`, p.Addr()))
-	testutil.Ok(t, err)
+`, e2eutil.PromAddrPlaceHolder)))
+	testutil.Ok(t, p.Start())
 
-	// Do a hot reload for loading the latest configuration.
-	err = p.Reload()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer upcancel()
+
+	logger := log.NewNopLogger()
+	err = p.WaitPrometheusUp(upctx, logger)
 	testutil.Ok(t, err)
 
 	u, err := url.Parse("http://" + p.Addr())
 	testutil.Ok(t, err)
 
 	c := promclient.NewClient(http.DefaultClient, logger, "")
-	prom := NewPrometheus(u, c)
 
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 	testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
@@ -89,10 +66,10 @@ scrape_configs:
 		if len(meta) > 0 {
 			return nil
 		}
-		return fmt.Errorf("empty metadata response from Prometheus")
+		return errors.New("empty metadata response from Prometheus")
 	}))
 
-	grpcClient := NewGRPCClient(prom)
+	grpcClient := NewGRPCClient(NewPrometheus(u, c))
 	for _, tcase := range []struct {
 		name         string
 		metric       string
