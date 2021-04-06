@@ -149,7 +149,7 @@ func NewQueryAPI(
 		disableCORS:                            disableCORS,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "query_range_duration_seconds",
+			Name:    "thanos_query_range_requested_timespan_duration_seconds",
 			Help:    "A histogram of the query range window in seconds",
 			Buckets: prometheus.ExponentialBuckets(15*60, 2, 12),
 		}),
