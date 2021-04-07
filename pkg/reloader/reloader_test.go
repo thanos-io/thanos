@@ -511,17 +511,9 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 
 	reloads := &atomic.Value{}
 	reloads.Store(0)
-	i := 0
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
-		i++
-		if i%2 == 0 {
-			// Every second request, fail to ensure that retry works.
-			resp.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-
-		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		reloads.Store(reloads.Load().(int) + 1)
 		resp.WriteHeader(http.StatusOK)
 	})
 	go func() { _ = srv.Serve(l) }()
@@ -554,6 +546,8 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
   a: 1
+  b: 2
+  c: 3
 `), os.ModePerm))
 
 	rctx, cancel2 := context.WithCancel(ctx)
@@ -570,18 +564,21 @@ config:
 			break
 		case <-time.After(300 * time.Millisecond):
 		}
-
-		if reloads.Load().(int) == 1 {
+		if reloads.Load().(int) == 0 {
 			// Initial apply seen (without doing nothing).
 			f, err := ioutil.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, `
 config:
   a: 1
+  b: 2
+  c: 3
 `, string(f))
 			break
 		}
 	}
 	cancel2()
 	g.Wait()
+	// Check no reload request made
+	testutil.Equals(t, 0, reloads.Load().(int))
 }
