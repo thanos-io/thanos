@@ -32,6 +32,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -95,6 +97,8 @@ type QueryAPI struct {
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
 	defaultMetadataTimeRange               time.Duration
+
+	queryRangeHist prometheus.Histogram
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -119,6 +123,7 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
+	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
 		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
@@ -142,6 +147,12 @@ func NewQueryAPI(
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
+
+		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Name:    "thanos_query_range_requested_timespan_duration_seconds",
+			Help:    "A histogram of the query range window in seconds",
+			Buckets: prometheus.ExponentialBuckets(15*60, 2, 12),
+		}),
 	}
 }
 
@@ -429,6 +440,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	qe := qapi.queryEngine(maxSourceResolution)
+
+	// Record the query range requested.
+	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
