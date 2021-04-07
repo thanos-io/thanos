@@ -81,6 +81,7 @@
     "not op_mini all"
   ],
   "devDependencies": {
+    "@testing-library/react-hooks": "^3.1.1",
     "@types/enzyme": "^3.10.8",
     "@types/enzyme-adapter-react-16": "^1.0.6",
     "@types/flot": "^0.0.31",
@@ -102,6 +103,7 @@
     "eslint-plugin-react": "^7.22.0",
     "eslint-plugin-react-hooks": "^4.2.0",
     "jest-fetch-mock": "^2.1.2",
+    "mutationobserver-shim": "^0.3.7",
     "prettier": "^2.2.1",
     "sinon": "^9.2.4"
   },
@@ -109,6 +111,9 @@
   "jest": {
     "snapshotSerializers": [
       "enzyme-to-json/serializer"
+    ],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!codemirror-promql).+(js|jsx)$"
     ]
   }
 }
