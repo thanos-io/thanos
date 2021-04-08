@@ -18,6 +18,7 @@ import { theme, promqlHighlighter } from './CMTheme';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { CompleteStrategy, newCompleteStrategy } from 'codemirror-promql/complete';
+import PathPrefixProps from '../../types/PathPrefixProps';
 
 const promqlExtension = new PromQLExtension();
 
@@ -75,7 +76,8 @@ export class HistoryCompleteStrategy implements CompleteStrategy {
   }
 }
 
-const CMExpressionInput: FC<CMExpressionInputProps> = ({
+const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
+  pathPrefix,
   value,
   onExpressionChange,
   queryHistory,
@@ -98,7 +100,7 @@ const CMExpressionInput: FC<CMExpressionInputProps> = ({
       .setComplete({
         completeStrategy: new HistoryCompleteStrategy(
           newCompleteStrategy({
-            remote: { url: '' },
+            remote: { url: pathPrefix ? pathPrefix : '' },
           }),
           queryHistory
         ),

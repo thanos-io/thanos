@@ -290,6 +290,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           <Col>
             {this.props.useExperimentalEditor ? (
               <CMExpressionInput
+                pathPrefix={this.props.pathPrefix}
                 value={this.state.exprInputValue}
                 onExpressionChange={this.handleExpressionChange}
                 executeQuery={this.executeQuery}
