@@ -127,7 +127,7 @@ func RunReplicate(
 		fromConfContentYaml,
 		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg),
 		component.Replicate.String(),
-		fromConfPathYaml,
+		fromConfPathYaml...,
 	)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func RunReplicate(
 		toConfContentYaml,
 		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg),
 		component.Replicate.String(),
-		toConfPathYaml,
+		toConfPathYaml...,
 	)
 	if err != nil {
 		return err

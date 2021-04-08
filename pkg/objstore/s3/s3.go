@@ -159,7 +159,7 @@ type Bucket struct {
 	putUserMetadata map[string]string
 	partSize        uint64
 	listObjectsV1   bool
-	confFilepath    string
+	confFilepath    []string
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -173,13 +173,13 @@ func parseConfig(conf []byte) (Config, error) {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, component string, path string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string, path ...string) (*Bucket, error) {
 	config, err := parseConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBucketWithConfig(logger, config, component, path)
+	return NewBucketWithConfig(logger, config, component, path...)
 }
 
 type overrideSignerType struct {
@@ -199,7 +199,7 @@ func (s *overrideSignerType) Retrieve() (credentials.Value, error) {
 }
 
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
-func NewBucketWithConfig(logger log.Logger, config Config, component string, path string) (*Bucket, error) {
+func NewBucketWithConfig(logger log.Logger, config Config, component string, path ...string) (*Bucket, error) {
 	var chain []credentials.Provider
 
 	// TODO(bwplotka): Don't do flags as they won't scale, use actual params like v2, v4 instead
@@ -311,8 +311,8 @@ func (b *Bucket) Name() string {
 
 // Reads the config file and changes the credentials of the instance if yaml is changed.
 func (b *Bucket) ReloadCredentials() error {
-	if len(b.confFilepath) > 0 {
-		c, err := ioutil.ReadFile(b.confFilepath)
+	if len(b.confFilepath) > 0 && len(b.confFilepath[0]) > 0 {
+		c, err := ioutil.ReadFile(b.confFilepath[0])
 		if err != nil {
 			return errors.Errorf("Error reading config file.")
 		}
