@@ -7,10 +7,10 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.15-node
+      - image: cimg/go:1.16-node
   golang-test:
     docker:
-      - image: cimg/go:1.15-node
+      - image: cimg/go:1.16-node
       - image: beaukode/docker-swift-onlyone-authv2-keystone
 
 jobs:
