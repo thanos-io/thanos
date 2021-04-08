@@ -423,6 +423,11 @@ func ValidateForTests(conf Config) error {
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
+	confFile, err := lockedfile.Open(b.confFilepath[0])
+	if err != nil {
+		return err
+	}
+	defer confFile.Close()
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {
@@ -457,6 +462,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	confFile, err := lockedfile.Open(b.confFilepath[0])
+	if err != nil {
+		return nil, err
+	}
+	defer confFile.Close()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return nil, err
@@ -501,7 +511,12 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	_, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
+	confFile, err := lockedfile.Open(b.confFilepath[0])
+	if err != nil {
+		return false, err
+	}
+	defer confFile.Close()
+	_, err = b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -514,6 +529,11 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	confFile, err := lockedfile.Open(b.confFilepath[0])
+	if err != nil {
+		return err
+	}
+	defer confFile.Close()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return err
@@ -550,6 +570,11 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
+	confFile, err := lockedfile.Open(b.confFilepath[0])
+	if err != nil {
+		return objstore.ObjectAttributes{}, err
+	}
+	defer confFile.Close()
 	objInfo, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err

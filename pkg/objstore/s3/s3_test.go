@@ -332,3 +332,51 @@ func TestBucket_Get_ShouldReturnErrorIfServerTruncateResponse(t *testing.T) {
 	_, err = ioutil.ReadAll(reader)
 	testutil.Equals(t, io.ErrUnexpectedEOF, err)
 }
+
+// func TestBucket_CheckCredentialReload(t *testing.T) {
+
+// 	// initialise config
+// 	input1 := []byte(`bucket: "bucket-name"
+// 	endpoint: "s3-endpoint"
+// 	access_key: "access_key_1"
+// insecure: false
+// signature_version2: false
+// secret_key: "secret_key_1"
+// part_size: 104857600
+// http_config:
+//   insecure_skip_verify: false
+//   idle_conn_timeout: 50s`)
+
+// 	//change config
+// 	input2 := []byte(`bucket: "bucket-name"
+// 	endpoint: "s3-endpoint"
+// 	access_key: "access_key_2"
+// insecure: false
+// signature_version2: false
+// secret_key: "secret_key_2"
+// part_size: 104857600
+// http_config:
+//   insecure_skip_verify: false
+//   idle_conn_timeout: 50s`)
+
+// 	rootPath, err := os.Getwd()
+// 	testutil.Ok(t, err)
+// 	filePath := filepath.Join(rootPath, "credential_reload_test.yaml")
+// 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+// 	testutil.Ok(t, err)
+
+// 	_, err = f.Write(input1)
+// 	testutil.Ok(t, err)
+// 	f.Close()
+
+// 	cfg1, err := parseConfig(input1)
+// 	testutil.Ok(t, err)
+
+// 	// initialise a bucket
+// 	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test", filePath)
+
+// 	// assert secret and access key of old object
+// 	testutil.Equals(t, bkt.client.pro)
+// 	// change config
+
+// }
