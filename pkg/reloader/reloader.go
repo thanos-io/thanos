@@ -341,6 +341,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	if err := runutil.RetryWithLog(r.logger, r.retryInterval, ctx.Done(), func() error {
+		if r.watchInterval == 0 {
+			return nil
+		}
 		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()
