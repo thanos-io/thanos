@@ -48,8 +48,8 @@ type PrometheusStore struct {
 	buffers          sync.Pool
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
-	timestamps       func() (mint int64, maxt int64)
 	promVersion      func() string
+	Timestamps       func() (mint int64, maxt int64)
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -72,7 +72,7 @@ func NewPrometheusStore(
 	baseURL *url.URL,
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
-	timestamps func() (mint int64, maxt int64),
+	Timestamps func() (mint int64, maxt int64),
 	promVersion func() string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
@@ -84,8 +84,8 @@ func NewPrometheusStore(
 		client:                        client,
 		component:                     component,
 		externalLabelsFn:              externalLabelsFn,
-		timestamps:                    timestamps,
 		promVersion:                   promVersion,
+		Timestamps:                    Timestamps,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -107,7 +107,7 @@ func NewPrometheusStore(
 // This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabelsFn()
-	mint, maxt := p.timestamps()
+	mint, maxt := p.Timestamps()
 
 	res := &storepb.InfoResponse{
 		Labels:    make([]labelpb.ZLabel, 0, len(lset)),
@@ -153,7 +153,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
-	availableMinTime, _ := p.timestamps()
+	availableMinTime, _ := p.Timestamps()
 	if r.MinTime < availableMinTime {
 		r.MinTime = availableMinTime
 	}
