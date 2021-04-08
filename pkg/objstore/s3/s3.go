@@ -396,7 +396,6 @@ func ValidateForTests(conf Config) error {
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
-	b.ReloadCredentials()
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
@@ -429,7 +428,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.ReloadCredentials()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return nil, err
@@ -474,7 +472,6 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	b.ReloadCredentials()
 	_, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -488,7 +485,6 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	b.ReloadCredentials()
 	sse, err := b.getServerSideEncryption(ctx)
 	if err != nil {
 		return err
@@ -525,7 +521,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
-	b.ReloadCredentials()
 	objInfo, err := b.client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
@@ -539,13 +534,11 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	b.ReloadCredentials()
 	return b.client.RemoveObject(ctx, b.name, name, minio.RemoveObjectOptions{})
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	b.ReloadCredentials()
 	return minio.ToErrorResponse(errors.Cause(err)).Code == "NoSuchKey"
 }
 
@@ -553,7 +546,6 @@ func (b *Bucket) Close() error { return nil }
 
 // getServerSideEncryption returns the SSE to use.
 func (b *Bucket) getServerSideEncryption(ctx context.Context) (encrypt.ServerSide, error) {
-	b.ReloadCredentials()
 	if value := ctx.Value(sseConfigKey); value != nil {
 		if sse, ok := value.(encrypt.ServerSide); ok {
 			return sse, nil
@@ -604,8 +596,8 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	if err != nil {
 		return nil, nil, err
 	}
-	path := ""
-	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", path)
+	var path []string
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", path...)
 	if err != nil {
 		return nil, nil, err
 	}

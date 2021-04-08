@@ -32,8 +32,6 @@ type Bucket struct {
 	name   string
 }
 
-func (b *Bucket) ReloadCredentials() error { return nil }
-
 // Config encapsulates the necessary config values to instantiate an cos client.
 type Config struct {
 	Bucket    string `yaml:"bucket"`

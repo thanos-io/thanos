@@ -26,8 +26,6 @@ type InMemBucket struct {
 	attrs   map[string]ObjectAttributes
 }
 
-func (b *InMemBucket) ReloadCredentials() error { return nil }
-
 // NewInMemBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
 func NewInMemBucket() *InMemBucket {

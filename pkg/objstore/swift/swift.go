@@ -139,7 +139,6 @@ type Container struct {
 	segmentsContainer      string
 }
 
-func (c *Container) ReloadCredentials() error { return nil }
 func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 	sc, err := parseConfig(conf)
 	if err != nil {

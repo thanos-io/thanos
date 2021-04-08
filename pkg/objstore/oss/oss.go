@@ -46,8 +46,6 @@ type Bucket struct {
 	bucket *alioss.Bucket
 }
 
-func (b *Bucket) ReloadCredentials() error { return nil }
-
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	c := Config{
 		Endpoint:        os.Getenv("ALIYUNOSS_ENDPOINT"),

@@ -269,8 +269,8 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	// Default config should return no SSE config.
 	cfg := DefaultConfig
 	cfg.Endpoint = "localhost:80"
-	path := ""
-	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path)
+	var path []string
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path...)
 	testutil.Ok(t, err)
 
 	sse, err := bkt.getServerSideEncryption(context.Background())
@@ -281,7 +281,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	cfg = DefaultConfig
 	cfg.Endpoint = "localhost:80"
 	cfg.SSEConfig = SSEConfig{Type: SSES3}
-	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path)
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path...)
 	testutil.Ok(t, err)
 
 	sse, err = bkt.getServerSideEncryption(context.Background())
@@ -295,7 +295,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	override, err := encrypt.NewSSEKMS("test", nil)
 	testutil.Ok(t, err)
 
-	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path)
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path...)
 	testutil.Ok(t, err)
 
 	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), sseConfigKey, override))
@@ -321,8 +321,8 @@ func TestBucket_Get_ShouldReturnErrorIfServerTruncateResponse(t *testing.T) {
 	cfg.Region = "test"
 	cfg.AccessKey = "test"
 	cfg.SecretKey = "test"
-	path := ""
-	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path)
+	var path []string
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test", path...)
 	testutil.Ok(t, err)
 
 	reader, err := bkt.Get(context.Background(), "test")
