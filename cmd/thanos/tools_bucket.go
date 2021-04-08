@@ -587,7 +587,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					duplicateBlocksFilter,
 				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
 			)
-			sy, err = compact.NewSyncer(
+			sy, err = compact.NewMetaSyncer(
 				logger,
 				reg,
 				bkt,

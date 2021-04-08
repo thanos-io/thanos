@@ -501,3 +501,84 @@ func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, 2, reloads.Load().(int))
 }
+
+func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		reloads.Store(reloads.Load().(int) + 1)
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() { _ = srv.Serve(l) }()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir, err := ioutil.TempDir("", "reloader-cfg-test")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
+	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
+
+	var (
+		input  = filepath.Join(dir, "in", "cfg.yaml.tmpl")
+		output = filepath.Join(dir, "out", "cfg.yaml")
+	)
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       input,
+		CfgOutputFile: output,
+		WatchedDirs:   nil,
+		WatchInterval: 0, // Set WatchInterval equals to 0
+		RetryInterval: 100 * time.Millisecond,
+		DelayInterval: 1 * time.Millisecond,
+	})
+
+	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
+config:
+  a: 1
+  b: 2
+  c: 3
+`), os.ModePerm))
+
+	rctx, cancel2 := context.WithCancel(ctx)
+	g := sync.WaitGroup{}
+	g.Add(1)
+	go func() {
+		defer g.Done()
+		testutil.Ok(t, reloader.Watch(rctx))
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			break
+		case <-time.After(300 * time.Millisecond):
+		}
+		if reloads.Load().(int) == 0 {
+			// Initial apply seen (without doing nothing).
+			f, err := ioutil.ReadFile(output)
+			testutil.Ok(t, err)
+			testutil.Equals(t, `
+config:
+  a: 1
+  b: 2
+  c: 3
+`, string(f))
+			break
+		}
+	}
+	cancel2()
+	g.Wait()
+	// Check no reload request made
+	testutil.Equals(t, 0, reloads.Load().(int))
+}

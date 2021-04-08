@@ -12,6 +12,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+- [#4029](https://github.com/thanos-io/thanos/pull/4029) Mixin: Remove dependency on the rule dashboard when generating the compact dashboard
+- [#4019](https://github.com/thanos-io/thanos/pull/4019) Query: Adds query range histogram.
 - [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
 
 ### Added
@@ -27,6 +29,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
 - [#3960](https://github.com/thanos-io/thanos/pull/3960) fix deduplication of equal alerts with different labels
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Fix race condition in chunk pool.
+- [#4017](https://github.com/thanos-io/thanos/pull/4017) Query Frontend: fix downsampling iterator returning duplicate samples.
 
 ### Changed
 - [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info

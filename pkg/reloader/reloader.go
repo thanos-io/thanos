@@ -197,6 +197,11 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 	}
 
+	if r.watchInterval == 0 {
+		// Skip watching the file-system.
+		return nil
+	}
+
 	for _, dir := range r.watchedDirs {
 		if err := r.watcher.addDirectory(dir); err != nil {
 			return errors.Wrapf(err, "add directory %s to watcher", dir)
@@ -336,6 +341,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	if err := runutil.RetryWithLog(r.logger, r.retryInterval, ctx.Done(), func() error {
+		if r.watchInterval == 0 {
+			return nil
+		}
 		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()

@@ -585,6 +585,7 @@ func runQuery(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
 			),
+			reg,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
