@@ -6,7 +6,6 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -71,9 +70,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_query_metadata_apis_dns_provider_results"}, e2e.WaitMissingMetrics))
 
-	var (
-		promMeta map[string][]metadatapb.Meta
-	)
+	var promMeta map[string][]metadatapb.Meta
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 	testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
 		promMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+prom1.HTTPEndpoint()), "", -1)
@@ -94,17 +91,17 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	// We only expect to see one metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 1)
 	testutil.Ok(t, err)
-	testutil.Assert(t, len(thanosMeta) == 1, "expected 1 metadata from Thanos, got %d", len(thanosMeta))
+	testutil.Equals(t, len(thanosMeta), 1)
 
 	// We only expect to see ten metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 10)
 	testutil.Ok(t, err)
-	testutil.Assert(t, len(thanosMeta) == 10, "expected 10 metadata from Thanos, got %d", len(thanosMeta))
+	testutil.Equals(t, len(thanosMeta), 10)
 
 	// No metadata returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "", 0)
 	testutil.Ok(t, err)
-	testutil.Assert(t, len(thanosMeta) == 0, "expected 0 metadata from Thanos, got %d", len(thanosMeta))
+	testutil.Equals(t, len(thanosMeta), 0)
 
 	// Only prometheus_build_info metric will be returned.
 	thanosMeta, err = promclient.NewDefaultClient().MetadataInGRPC(ctx, mustURLParse(t, "http://"+q.HTTPEndpoint()), "prometheus_build_info", -1)
@@ -128,6 +125,6 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
 		sort.Slice(meta2MetricMeta, func(i, j int) bool {
 			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
 		})
-		testutil.Assert(t, reflect.DeepEqual(meta1MetricMeta, meta2MetricMeta), "meta1 %v; meta2 %v", meta1MetricMeta, meta2MetricMeta)
+		testutil.Equals(t, meta1MetricMeta, meta2MetricMeta)
 	}
 }
