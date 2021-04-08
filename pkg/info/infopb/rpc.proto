@@ -1,0 +1,64 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+
+import "store/labelpb/types.proto";
+import "store/storepb/rpc.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "infopb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+// Info represents the API that is responsible for gather metadata about the all APIs supported by the component.
+service Info {
+    // Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
+    rpc Info(InfoRequest) returns (InfoResponse);
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+    repeated ZLabelSet label_sets = 1 [(gogoproto.nullable) = false];
+    StoreType storeType  = 2; // Maybe rename to ComponentType
+    
+    StoreInfo storeInfo = 3;
+    RulesInfo rulesInfo = 4;
+    MetadataInfo metadataInfo = 5;
+    ExemplarsInfo exemplarsInfo = 6;
+    
+    // Deprecated. Use label_sets instead.
+    repeated Label labels = 7 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+
+}
+
+message StoreInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
+
+message RulesInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
+
+message MetadataInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
+
+message ExemplarsInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
