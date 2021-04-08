@@ -143,7 +143,7 @@ const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
 
 const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
   const [delta, setDelta] = useState(0);
-  const [useExperimentalEditor, setUseExperimentalEditor] = useLocalStorage('use-new-editor', false);
+  const [useExperimentalEditor, setUseExperimentalEditor] = useLocalStorage('use-new-editor', true);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
