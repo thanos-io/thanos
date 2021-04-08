@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rogpeppe/go-internal/lockedfile"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/minio/minio-go/v7"
@@ -29,6 +31,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/fsnotify.v1"
 	"gopkg.in/yaml.v2"
 )
 
@@ -160,6 +163,7 @@ type Bucket struct {
 	partSize        uint64
 	listObjectsV1   bool
 	confFilepath    []string
+	watcher         *fsnotify.Watcher
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -290,7 +294,10 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string, pat
 	if config.ListObjectsVersion != "" && config.ListObjectsVersion != "v1" && config.ListObjectsVersion != "v2" {
 		return nil, errors.Errorf("Initialize s3 client list objects version: Unsupported version %q was provided. Supported values are v1, v2", config.ListObjectsVersion)
 	}
-
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		errors.Wrap(err, "Error instantiating bucket watcher")
+	}
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
@@ -300,6 +307,28 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string, pat
 		partSize:        config.PartSize,
 		listObjectsV1:   config.ListObjectsVersion == "v1",
 		confFilepath:    path,
+		watcher:         watcher,
+	}
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					bkt.ReloadCredentials()
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				errors.Wrapf(err, "error:")
+			}
+		}
+	}()
+	if len(path) > 0 && len(path[0]) > 0 {
+		err = watcher.Add(path[0])
 	}
 	return bkt, nil
 }
@@ -312,7 +341,7 @@ func (b *Bucket) Name() string {
 // Reads the config file and changes the credentials of the instance if yaml is changed.
 func (b *Bucket) ReloadCredentials() error {
 	if len(b.confFilepath) > 0 && len(b.confFilepath[0]) > 0 {
-		c, err := ioutil.ReadFile(b.confFilepath[0])
+		c, err := lockedfile.Read(b.confFilepath[0])
 		if err != nil {
 			return errors.Errorf("Error reading config file.")
 		}
