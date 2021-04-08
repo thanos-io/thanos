@@ -571,7 +571,9 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	return minio.ToErrorResponse(errors.Cause(err)).Code == "NoSuchKey"
 }
 
-func (b *Bucket) Close() error { return nil }
+func (b *Bucket) Close() error {
+	return b.watcher.Close()
+}
 
 // getServerSideEncryption returns the SSE to use.
 func (b *Bucket) getServerSideEncryption(ctx context.Context) (encrypt.ServerSide, error) {
