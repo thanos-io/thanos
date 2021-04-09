@@ -11,7 +11,7 @@ docker stop querier-fruit && docker stop querier-veggie
 ```
 docker run -d --net=host --rm \
     --name querier-multi \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     query \
     --http-address 0.0.0.0:29090 \
     --grpc-address 0.0.0.0:29190 \
