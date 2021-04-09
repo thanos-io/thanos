@@ -54,7 +54,7 @@ The purpose of the Sidecar is to backup Prometheus data into an Object Storage b
 
 The Sidecar makes use of the `reload` Prometheus endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
 
-[Component sidecar documentation](../components/sidecar.md)
+[Component sidecar documentation](./components/sidecar.md)
 
 ### External storage
 
@@ -116,7 +116,7 @@ global:
 
 ## Querier/Query
 
-Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](../components/query.md) to evaluate PromQL queries against all instances at once.
+Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](./components/query.md) to evaluate PromQL queries against all instances at once.
 
 The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
@@ -134,7 +134,7 @@ thanos query \
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus. If the cluster formed correctly you can now query across all Prometheus instances within the cluster. You can also check the Stores page to check up on your stores.
 
-[Query documentation](../components/query.md)
+[Query documentation](./components/query.md)
 
 ### Deduplicating Data from Prometheus HA pairs
 
@@ -207,7 +207,7 @@ The store gateway occupies small amounts of disk space for caching basic informa
 
 * _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-store-statefulSet.yaml)_
 
-[Store Gateway documentation](../components/store.md)
+[Store Gateway documentation](./components/store.md)
 
 ## Compactor
 
@@ -228,11 +228,11 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 
 * _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compact-statefulSet.yaml)_
 
-[Compactor documentation](../components/compact.md)
+[Compactor documentation](./components/compact.md)
 
 ## Ruler/Rule
 
-In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](../components/rule.md),
+In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](./components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
-[Rule documentation](../components/rule.md)
+[Rule documentation](./components/rule.md)
