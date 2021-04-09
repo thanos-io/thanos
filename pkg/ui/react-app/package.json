@@ -3,6 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@codemirror/autocomplete": "^0.18.3",
+    "@codemirror/closebrackets": "^0.18.0",
+    "@codemirror/commands": "^0.18.0",
+    "@codemirror/comment": "^0.18.0",
+    "@codemirror/highlight": "^0.18.3",
+    "@codemirror/history": "^0.18.0",
+    "@codemirror/language": "^0.18.0",
+    "@codemirror/lint": "^0.18.1",
+    "@codemirror/matchbrackets": "^0.18.0",
+    "@codemirror/search": "^0.18.2",
+    "@codemirror/state": "^0.18.2",
+    "@codemirror/view": "^0.18.3",
     "@fortawesome/fontawesome-svg-core": "^1.2.34",
     "@fortawesome/free-solid-svg-icons": "^5.15.2",
     "@fortawesome/react-fontawesome": "^0.1.14",
@@ -19,6 +31,7 @@
     "@types/react-select": "^4.0.13",
     "@types/sanitize-html": "^1.27.1",
     "bootstrap": "^4.6.0",
+    "codemirror-promql": "^0.14.1",
     "css.escape": "^1.5.1",
     "downshift": "^6.1.0",
     "enzyme-to-json": "^3.6.1",
@@ -68,6 +81,7 @@
     "not op_mini all"
   ],
   "devDependencies": {
+    "@testing-library/react-hooks": "^3.1.1",
     "@types/enzyme": "^3.10.8",
     "@types/enzyme-adapter-react-16": "^1.0.6",
     "@types/flot": "^0.0.31",
@@ -89,6 +103,7 @@
     "eslint-plugin-react": "^7.22.0",
     "eslint-plugin-react-hooks": "^4.2.0",
     "jest-fetch-mock": "^2.1.2",
+    "mutationobserver-shim": "^0.3.7",
     "prettier": "^2.2.1",
     "sinon": "^9.2.4"
   },
@@ -96,6 +111,9 @@
   "jest": {
     "snapshotSerializers": [
       "enzyme-to-json/serializer"
+    ],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!codemirror-promql).+(js|jsx)$"
     ]
   }
 }
