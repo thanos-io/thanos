@@ -29,7 +29,7 @@ func TestHTTPServerMiddleware(t *testing.T) {
 	}
 	hm := m.HTTPMiddleware("test", http.HandlerFunc(handler))
 
-	// Cortex way:
+	// Regression test for Cortex way - https://github.com/thanos-io/thanos/pull/4041
 	u, err := url.Parse("http://example.com:5555/foo")
 	testutil.Ok(t, err)
 	req := &http.Request{
