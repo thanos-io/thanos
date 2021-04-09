@@ -46,6 +46,9 @@ const (
 	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
 	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
+
+	// A placeholder for actual Prometheus instance address in the scrape config.
+	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
 )
 
 func PrometheusBinary() string {
@@ -80,6 +83,8 @@ type Prometheus struct {
 	cmd                *exec.Cmd
 	disabledCompaction bool
 	addr               string
+
+	config string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -176,6 +181,11 @@ func (p *Prometheus) start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
+	// Write the final config to the config file.
+	// The address placeholder will be replaced with the actual address.
+	if err := p.writeConfig(strings.ReplaceAll(p.config, PromAddrPlaceHolder, p.addr)); err != nil {
+		return err
+	}
 	args := append([]string{
 		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
 		"--storage.tsdb.path=" + p.db.Dir(),
@@ -199,7 +209,7 @@ func (p *Prometheus) start() error {
 	return nil
 }
 
-func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
+func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) error {
 	if !p.running {
 		return errors.New("method Start was not invoked.")
 	}
@@ -208,6 +218,7 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
 
 		if r.StatusCode != 200 {
 			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
@@ -238,15 +249,19 @@ func (p *Prometheus) DisableCompaction() {
 	p.disabledCompaction = true
 }
 
-// SetConfig updates the contents of the config file. By default it is empty.
-func (p *Prometheus) SetConfig(s string) (err error) {
+// SetConfig updates the contents of the config.
+func (p *Prometheus) SetConfig(s string) {
+	p.config = s
+}
+
+// writeConfig writes the Prometheus config to the config file.
+func (p *Prometheus) writeConfig(config string) (err error) {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
 		return err
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
-
-	_, err = f.Write([]byte(s))
+	_, err = f.Write([]byte(config))
 	return err
 }
 
