@@ -118,7 +118,8 @@ type tracingReadCloser struct {
 	read int
 }
 
-func (t *tracingReadCloser) Size() (int64, error) {
+func (t *tracingReadCloser) ObjectSize() (int64, error) {
+	// Note that TryToGetSize returns size of unread data only, which may not be the full object size.
 	return TryToGetSize(t.r)
 }
 

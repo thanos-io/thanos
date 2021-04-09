@@ -145,29 +145,27 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
-	case Sizer:
-		return f.Size()
+	case ObjectSizer:
+		return f.ObjectSize()
 	}
 	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
 }
 
-// Sizer can return size of data.
-type Sizer interface {
-	// Size returns length of the data, or error, if it is not available.
-	// It is best to call Size before calling other methods on the type, as some io.Reader implementations may only return
-	// length of unread data.
-	Size() (int64, error)
+// ObjectSizer can return size of object.
+type ObjectSizer interface {
+	// ObjectSize returns the size of the object in bytes, or error if it is not available.
+	ObjectSize() (int64, error)
 }
 
-type nopCloserWithSize struct{ io.Reader }
+type nopCloserWithObjectSize struct{ io.Reader }
 
-func (nopCloserWithSize) Close() error           { return nil }
-func (n nopCloserWithSize) Size() (int64, error) { return TryToGetSize(n.Reader) }
+func (nopCloserWithObjectSize) Close() error                 { return nil }
+func (n nopCloserWithObjectSize) ObjectSize() (int64, error) { return TryToGetSize(n.Reader) }
 
 // NopCloserWithSize returns a ReadCloser with a no-op Close method wrapping
 // the provided Reader r. Returned ReadCloser also implements Size method.
 func NopCloserWithSize(r io.Reader) io.ReadCloser {
-	return nopCloserWithSize{r}
+	return nopCloserWithObjectSize{r}
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
