@@ -129,6 +129,7 @@ var (
 				},
 			},
 		},
+		// Regression test for https://github.com/thanos-io/thanos/issues/3766
 		{
 			testName:       "multiple SRV records from SRV lookup with missing A records",
 			addr:           "_test._tcp.mycompany.com",
