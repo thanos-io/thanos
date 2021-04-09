@@ -25,7 +25,7 @@ Click below snippet to start the Compactor.
 docker run -d --net=host --rm \
  -v /root/editor/bucket_storage.yaml:/etc/thanos/minio-bucket.yaml \
     --name thanos-compact \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     compact \
     --wait --wait-interval 30s \
     --consistency-delay 0s \

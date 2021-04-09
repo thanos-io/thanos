@@ -65,7 +65,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-eu1-replica0:/prometheus \
     --name prom-eu1-0-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -85,7 +85,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-eu1-replica1:/prometheus \
     --name prom-eu1-1-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -105,7 +105,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-us1-replica0:/prometheus \
     --name prom-us1-0-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -130,7 +130,7 @@ Let's run Store Gateway server:
 docker run -d --net=host --rm \
     -v ${CURR_DIR}/minio-bucket.yaml:/etc/thanos/minio-bucket.yaml \
     --name store-gateway \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     store \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
     --http-address 0.0.0.0:19094 \
@@ -143,7 +143,7 @@ docker run -d --net=host --rm \
 docker stop querier && \
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     query \
     --http-address 0.0.0.0:9090 \
     --grpc-address 0.0.0.0:19190 \
@@ -162,7 +162,7 @@ Visit https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.co
 docker run -d --net=host --rm \
     -v ${CURR_DIR}/minio-bucket.yaml:/etc/thanos/minio-bucket.yaml \
     --name compactor \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     compact \
     --wait --wait-interval 30s \
     --consistency-delay 0s \

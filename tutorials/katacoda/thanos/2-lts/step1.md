@@ -117,7 +117,7 @@ Similar to previous course, let's setup global view querying with sidecar:
 docker run -d --net=host --rm \
     --name prometheus-0-eu1-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
@@ -130,7 +130,7 @@ so we will make sure we point the Querier to the gRPC endpoints of the sidecar:
 ```
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     query \
     --http-address 0.0.0.0:9091 \
     --query.replica-label replica \

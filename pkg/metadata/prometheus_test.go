@@ -61,7 +61,7 @@ scrape_configs:
 
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 	testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
-		meta, err := c.MetadataInGRPC(ctx, u, "", -1)
+		meta, err := c.MetricMetadataInGRPC(ctx, u, "", -1)
 		testutil.Ok(t, err)
 		if len(meta) > 0 {
 			return nil
@@ -108,7 +108,7 @@ scrape_configs:
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			meta, w, err := grpcClient.Metadata(ctx, &metadatapb.MetadataRequest{
+			meta, w, err := grpcClient.MetricMetadata(ctx, &metadatapb.MetricMetadataRequest{
 				Metric: tcase.metric,
 				Limit:  tcase.limit,
 			})

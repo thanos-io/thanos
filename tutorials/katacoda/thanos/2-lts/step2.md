@@ -79,7 +79,7 @@ docker run -d --net=host --rm \
     -v /root/prom-eu1:/prometheus \
     --name prometheus-0-eu1-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \

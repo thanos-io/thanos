@@ -129,7 +129,7 @@ Flags:
                                  TLS CA Certificates to use to verify servers.
       --remote-write.client-server-name=""
                                  Server name to verify the hostname on the
-                                 returned gRPC certificates. See
+                                 returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
