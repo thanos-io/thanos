@@ -41,10 +41,15 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Receiver: receives data from Prometheus's remote-write WAL, exposes it and/or upload it to cloud storage.
 * Ruler/Rule: evaluates recording and alerting rules against data in Thanos for exposition and/or upload.
 * Querier/Query: implements Prometheus's v1 API to aggregate data from the underlying components.
+* Query Frontend: implements Prometheus's v1 API proxies it to Query while caching the response and optional splitting by queries day.
 
-See those components on this diagram:
+Deployment with Sidecar:
 
-<img src="../img/arch.jpg" class="img-fluid" alt="architecture overview" />
+![Sidecar](https://docs.google.com/drawings/d/e/2PACX-1vTBFKKgf8YDInJyRakPE8eZZg9phTlOsBB2ogNkFvhNGbZ8YDvz_cGMbxWZBG1G6hpsQfSX145FpYcv/pub?w=960&h=720)
+
+Deployment with Receive:
+
+![Receive](https://docs.google.com/drawings/d/e/2PACX-1vTfko27YB_3ab7ZL8ODNG5uCcrpqKxhmqaz3lW-yhGN3_oNxkTrqXmwwlcZjaWf3cGgAJIM4CMwwkEV/pub?w=960&h=720)
 
 ### Sidecar
 
