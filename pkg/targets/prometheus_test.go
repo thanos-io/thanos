@@ -6,14 +6,18 @@ package targets
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -25,30 +29,48 @@ func TestPrometheus_Targets_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	p.SetConfig(`
+	p.SetConfig(fmt.Sprintf(`
 global:
   external_labels:
     region: eu-west
-
 scrape_configs:
 - job_name: 'myself'
   # Quick scrapes for test purposes.
   scrape_interval: 1s
   scrape_timeout: 1s
   static_configs:
-  - targets: ['localhost:9090','localhost:80']
+  - targets: ['%s','localhost:80']
   relabel_configs:
   - source_labels: ['__address__']
     regex: '^.+:80$'
     action: drop
-`)
+`, e2eutil.PromAddrPlaceHolder))
 	testutil.Ok(t, p.Start())
 
-	// For some reason it's better to wait much more than a few scrape intervals.
-	time.Sleep(5 * time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer upcancel()
+
+	logger := log.NewNopLogger()
+	err = p.WaitPrometheusUp(upctx, logger)
 	testutil.Ok(t, err)
+
+	u, err := url.Parse("http://" + p.Addr())
+	testutil.Ok(t, err)
+
+	c := promclient.NewClient(http.DefaultClient, logger, "")
+
+	// Wait targets response to be ready as Prometheus scrapes targets.
+	testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
+		targets, err := c.TargetsInGRPC(ctx, u, "")
+		testutil.Ok(t, err)
+		if len(targets.ActiveTargets) > 0 {
+			return nil
+		}
+		return errors.New("empty targets response from Prometheus")
+	}))
 
 	promTargets := NewPrometheus(u, promclient.NewDefaultClient(), func() labels.Labels {
 		return labels.FromStrings("replica", "test1")
@@ -58,20 +80,20 @@ scrape_configs:
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
 				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-					{Name: "__address__", Value: "localhost:9090"},
+					{Name: "__address__", Value: p.Addr()},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
 				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-					{Name: "instance", Value: "localhost:9090"},
+					{Name: "instance", Value: p.Addr()},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
 				ScrapePool:         "myself",
-				ScrapeUrl:          "http://localhost:9090/metrics",
-				Health:             targetspb.TargetHealth_DOWN,
+				ScrapeUrl:          fmt.Sprintf("http://%s/metrics", p.Addr()),
+				Health:             targetspb.TargetHealth_UP,
 				LastScrape:         time.Time{},
 				LastScrapeDuration: 0,
 			},
@@ -89,6 +111,7 @@ scrape_configs:
 		},
 	}
 
+	grpcClient := NewGRPCClientWithDedup(promTargets, nil)
 	for _, tcase := range []struct {
 		requestedState targetspb.TargetsRequest_State
 		expectedErr    error
@@ -104,7 +127,7 @@ scrape_configs:
 		},
 	} {
 		t.Run(tcase.requestedState.String(), func(t *testing.T) {
-			targets, w, err := NewGRPCClientWithDedup(promTargets, nil).Targets(context.Background(), &targetspb.TargetsRequest{
+			targets, w, err := grpcClient.Targets(context.Background(), &targetspb.TargetsRequest{
 				State: tcase.requestedState,
 			})
 			testutil.Equals(t, storage.Warnings(nil), w)
