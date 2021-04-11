@@ -33,17 +33,17 @@ Prometheus.Graph.stepValues = [
 ];
 
 // Get id of last panel and increment.
-let num = 0;
+let num = -1;
 Object.entries(localStorage).map(([key]) => {
-  if (key.includes("enable-dedup") && num < parseInt(key[key.length - 1], 10)) {
-    num = parseInt(key[key.length - 1], 10);
+  if (key.includes("enable-dedup") && num < Number(key[key.length - 1])) {
+    num = Number(key[key.length - 1]);
   }
 });
-Prometheus.Graph.numGraphs = num;
+Prometheus.Graph.numGraphs = num + 1;
 
 Prometheus.Graph.prototype.initialize = function() {
   var self = this;
-  self.id = ++Prometheus.Graph.numGraphs;
+  self.id = Prometheus.Graph.numGraphs++;
 
   // Set default options.
   self.options.id = self.id;
