@@ -93,6 +93,7 @@ scrape_configs:
 				}},
 				ScrapePool:         "myself",
 				ScrapeUrl:          fmt.Sprintf("http://%s/metrics", p.Addr()),
+				GlobalUrl:          "",
 				Health:             targetspb.TargetHealth_UP,
 				LastScrape:         time.Time{},
 				LastScrapeDuration: 0,
@@ -151,6 +152,7 @@ scrape_configs:
 				targets.ActiveTargets[i].LastScrapeDuration = 0
 				targets.ActiveTargets[i].LastScrape = time.Time{}
 				targets.ActiveTargets[i].LastError = ""
+				targets.ActiveTargets[i].GlobalUrl = ""
 			}
 
 			testutil.Equals(t, expectedTargets.ActiveTargets, targets.ActiveTargets)

@@ -127,6 +127,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr string, state strin
 		for it := range res.ActiveTargets {
 			res.ActiveTargets[it].LastScrape = time.Time{}
 			res.ActiveTargets[it].LastScrapeDuration = 0
+			res.ActiveTargets[it].GlobalUrl = ""
 		}
 
 		sort.Slice(res.ActiveTargets, func(i, j int) bool { return res.ActiveTargets[i].Compare(res.ActiveTargets[j]) < 0 })
