@@ -33,6 +33,7 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
       children: [
         { name: 'Runtime & Build Information', uri: '/new/status' },
         { name: 'Command-Line Flags', uri: '/new/flags' },
+        { name: 'Targets', uri: '/new/targets' },
       ],
     },
   ],
