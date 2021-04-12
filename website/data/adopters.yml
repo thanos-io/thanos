@@ -120,3 +120,9 @@ adopters:
 - name: Talend
   url: https://www.talend.com
   logo: talend.png
+- name: NOS
+  url: https://www.nos.pt
+  logo: nos.png
+- name: Truphone
+  url: https://www.truphone.com
+  logo: truphone.png  

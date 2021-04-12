@@ -212,16 +212,17 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 		testutil.Ok(t, p.Start())
 
+		logger := log.NewNopLogger()
 		upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer upcancel()
-		testutil.Ok(t, p.WaitPrometheusUp(upctx))
+		testutil.Ok(t, p.WaitPrometheusUp(upctx, logger))
 
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart())
 
 		upctx2, upcancel2 := context.WithTimeout(ctx, 10*time.Second)
 		defer upcancel2()
-		testutil.Ok(t, p.WaitPrometheusUp(upctx2))
+		testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
 
 		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, false, metadata.NoneFunc)
 

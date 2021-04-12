@@ -62,7 +62,7 @@ And deploy Query Frontend:
 docker run -d --net=host --rm \
     -v $(pwd)/frontend.yml:/etc/thanos/frontend.yml \
     --name query-frontend \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     query-frontend \
     --http-address 0.0.0.0:20902 \
     --query-frontend.compress-responses \

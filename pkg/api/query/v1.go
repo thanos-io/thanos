@@ -32,6 +32,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -53,6 +55,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -75,12 +79,14 @@ type QueryAPI struct {
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
 	queryEngine func(int64) *promql.Engine
 	ruleGroups  rules.UnaryClient
+	targets     targets.UnaryClient
 	metadatas   metadata.UnaryClient
 	exemplars   exemplars.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
 	enableRulePartialResponse           bool
+	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
@@ -91,6 +97,8 @@ type QueryAPI struct {
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
 	defaultMetadataTimeRange               time.Duration
+
+	queryRangeHist prometheus.Histogram
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -100,11 +108,13 @@ func NewQueryAPI(
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
+	targets targets.UnaryClient,
 	metadatas metadata.UnaryClient,
 	exemplars exemplars.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
+	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
@@ -113,6 +123,7 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
+	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
 		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
@@ -121,12 +132,14 @@ func NewQueryAPI(
 		queryableCreate: c,
 		gate:            gate,
 		ruleGroups:      ruleGroups,
+		targets:         targets,
 		metadatas:       metadatas,
 		exemplars:       exemplars,
 
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
+		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
@@ -134,6 +147,12 @@ func NewQueryAPI(
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
+
+		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Name:    "thanos_query_range_requested_timespan_duration_seconds",
+			Help:    "A histogram of the query range window in seconds",
+			Buckets: prometheus.ExponentialBuckets(15*60, 2, 12),
+		}),
 	}
 }
 
@@ -161,9 +180,12 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
 
+	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
+
 	r.Get("/metadata", instr("metadata", NewMetricMetadataHandler(qapi.metadatas, qapi.enableMetricMetadataPartialResponse)))
 
 	r.Get("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
+	r.Post("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
 }
 
 type queryData struct {
@@ -419,6 +441,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	qe := qapi.queryEngine(maxSourceResolution)
 
+	// Record the query range requested.
+	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
@@ -661,6 +686,36 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 	return statuses, nil, nil
 }
 
+func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		stateParam := r.URL.Query().Get("state")
+		state, ok := targetspb.TargetsRequest_State_value[strings.ToUpper(stateParam)]
+		if !ok {
+			if stateParam != "" {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid targets parameter state='%v'", stateParam)}
+			}
+			state = int32(targetspb.TargetsRequest_ANY)
+		}
+
+		req := &targetspb.TargetsRequest{
+			State:                   targetspb.TargetsRequest_State(state),
+			PartialResponseStrategy: ps,
+		}
+
+		t, warnings, err := client.Targets(r.Context(), req)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving targets")}
+		}
+
+		return t, warnings, nil
+	}
+}
+
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
 func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
@@ -853,7 +908,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
-		req := &metadatapb.MetadataRequest{
+		req := &metadatapb.MetricMetadataRequest{
 			// By default we use -1, which means no limit.
 			Limit:                   -1,
 			Metric:                  r.URL.Query().Get("metric"),
@@ -869,7 +924,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			req.Limit = int32(limit)
 		}
 
-		t, warnings, err := client.Metadata(r.Context(), req)
+		t, warnings, err := client.MetricMetadata(r.Context(), req)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
 		}

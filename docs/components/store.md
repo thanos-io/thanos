@@ -23,7 +23,7 @@ config:
   bucket: example-bucket
 ```
 
-In general about 1MB of local disk space is required per TSDB block stored in the object storage bucket.
+In general, an average of 6 MB of local disk space is required per TSDB block stored in the object storage bucket, but for high cardinality blocks with large label set it can even go up to 30MB and more. It is for the pre-computed index, which includes symbols and postings offsets as well as metadata JSON.
 
 ## Flags
 
@@ -316,9 +316,15 @@ Both memcached and in-memory cache "backend"s are supported:
 ```yaml
 type: MEMCACHED # Case-insensitive
 config:
-  addresses:
-    - localhost:11211
-
+  addresses: []
+  timeout: 500ms
+  max_idle_connections: 100
+  max_async_concurrency: 20
+  max_async_buffer_size: 10000
+  max_item_size: 1MiB
+  max_get_multi_concurrency: 100
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 10s
 chunk_subrange_size: 16000
 max_chunks_get_range_requests: 3
 chunk_object_attrs_ttl: 24h
@@ -330,7 +336,7 @@ metafile_content_ttl: 24h
 metafile_max_size: 1MiB
 ```
 
-`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache).
+`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
 
 Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
 

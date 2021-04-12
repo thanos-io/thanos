@@ -93,12 +93,23 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 	return nil
 }
 
-// Upload uploads block from given block dir that ends with block id.
+// Upload uploads a TSDB block to the object storage. It verifies basic
+// features of Thanos block.
+func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
+	return upload(ctx, logger, bkt, bdir, hf, true)
+}
+
+// UploadPromBlock uploads a TSDB block to the object storage. It assumes
+// the block is used in Prometheus so it doesn't check Thanos external labels.
+func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
+	return upload(ctx, logger, bkt, bdir, hf, false)
+}
+
+// upload uploads block from given block dir that ends with block id.
 // It makes sure cleanup is done on error to avoid partial block uploads.
-// It also verifies basic features of Thanos block.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
+func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
@@ -119,20 +130,23 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "read meta")
 	}
 
-	if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
-		return errors.New("empty external labels are not allowed for Thanos block.")
+	if checkExternalLabels {
+		if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
+			return errors.New("empty external labels are not allowed for Thanos block.")
+		}
 	}
 
+	metaEncoded := strings.Builder{}
 	meta.Thanos.Files, err = gatherFileStats(bdir, hf, logger)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
 
-	metaEncoded := strings.Builder{}
 	if err := meta.Write(&metaEncoded); err != nil {
 		return errors.Wrap(err, "encode meta file")
 	}
 
+	// TODO(yeya24): Remove this step.
 	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String())); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
 	}

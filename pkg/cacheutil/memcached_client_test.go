@@ -390,7 +390,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (*memcachedClient, error) {
 	logger := log.NewNopLogger()
 	selector := &MemcachedJumpHashSelector{}
-	client, err := newMemcachedClient(logger, backendMock, selector, config, nil)
+	client, err := newMemcachedClient(logger, backendMock, selector, config, nil, "test")
 
 	return client, err
 }

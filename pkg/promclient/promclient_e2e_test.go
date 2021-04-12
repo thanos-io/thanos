@@ -38,12 +38,12 @@ func TestIsWALFileAccessible_e2e(t *testing.T) {
 
 func TestExternalLabels_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		testutil.Ok(t, p.SetConfig(`
+		p.SetConfig(`
 global:
   external_labels:
     region: eu-west
     az: 1
-`))
+`)
 
 		testutil.Ok(t, p.Start())
 

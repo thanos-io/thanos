@@ -10,7 +10,7 @@ component and can be invoked in a single command.
 Let's take a look at all the Thanos commands:
 
 ```
-docker run --rm quay.io/thanos/thanos:v0.18.0 --help
+docker run --rm quay.io/thanos/thanos:v0.19.0 --help
 ```{{execute}}
 
 You should see multiple commands that solves different purposes.
@@ -53,7 +53,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus0_eu1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-eu1 \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
@@ -68,7 +68,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus0_us1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-us1 \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --http-address 0.0.0.0:19091 \
     --grpc-address 0.0.0.0:19191 \
@@ -81,7 +81,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus1_us1.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-1-sidecar-us1 \
     -u root \
-    quay.io/thanos/thanos:v0.18.0 \
+    quay.io/thanos/thanos:v0.19.0 \
     sidecar \
     --http-address 0.0.0.0:19092 \
     --grpc-address 0.0.0.0:19192 \

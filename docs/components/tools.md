@@ -241,6 +241,11 @@ Flags:
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
+      --web.route-prefix=""     Prefix for API and UI endpoints. This allows
+                                thanos UI to be served on a sub-path. Defaults
+                                to the value of --web.external-prefix. This
+                                option is analogous to --web.route-prefix of
+                                Prometheus.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the
@@ -764,6 +769,9 @@ Flags:
       --rewrite.add-change-log  If specified, all modifications are written to
                                 new block directory. Disable if latency is to
                                 high.
+      --prom-blocks             If specified, we assume the blocks to be
+                                uploaded are only used with Prometheus so we
+                                don't check external labels in this case.
 
 ```
 

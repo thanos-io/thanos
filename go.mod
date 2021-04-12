@@ -46,15 +46,15 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/alertmanager v0.21.1-0.20210310093010-0f9cab6991e6
-	github.com/prometheus/client_golang v1.9.0
+	github.com/prometheus/client_golang v1.10.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.18.0
 	github.com/prometheus/prometheus v1.8.2-0.20210315220929-1cba1741828b
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	github.com/weaveworks/common v0.0.0-20210112142934-23c8d7fa6120
-	go.elastic.co/apm v1.5.0
-	go.elastic.co/apm/module/apmot v1.5.0
+	go.elastic.co/apm v1.11.0
+	go.elastic.co/apm/module/apmot v1.11.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/automaxprocs v1.2.0
 	go.uber.org/goleak v1.1.10
@@ -77,6 +77,9 @@ replace (
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
+
+	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
+	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210315220929-1cba1741828b
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible

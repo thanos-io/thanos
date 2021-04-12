@@ -47,6 +47,7 @@ linters:
     - unused
     - varcheck
     - exportloopref
+    - promlinter
 
 linters-settings:
   errcheck:
@@ -58,6 +59,10 @@ linters-settings:
 
 issues:
   exclude-rules:
+    # We don't check metrics naming in the tests.
+    - path: _test\.go
+      linters:
+      - promlinter
     # These are not being checked since these methods exist
     # so that no one else could implement them.
     - linters:

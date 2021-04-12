@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -40,6 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
@@ -570,23 +572,18 @@ func TestBucketStore_Info(t *testing.T) {
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
-		nil,
-		nil,
 		dir,
-		nil,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		20,
-		allowAllFilterConf,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
 		0,
+		WithChunkPool(chunkPool),
+		WithFilterConfig(allowAllFilterConf),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -821,25 +818,20 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, err)
 
 			bucketStore, err := NewBucketStore(
-				logger,
-				nil,
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
 				dir,
-				nil,
-				nil,
-				nil,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
-				false,
 				20,
-				allowAllFilterConf,
 				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
 				false,
 				0,
+				WithLogger(logger),
+				WithFilterConfig(allowAllFilterConf),
 			)
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, bucketStore.Close()) }()
@@ -1052,6 +1044,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	}, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
 
 	return id
 }
@@ -1255,29 +1248,24 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	f, err := block.NewRawMetaFetcher(logger, ibkt)
 	testutil.Ok(t, err)
 
-	chunkPool, err := pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, 1e9) // 1GB.
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 1e9) // 1GB.
 	testutil.Ok(t, err)
 
 	st, err := NewBucketStore(
-		logger,
-		nil,
 		ibkt,
 		f,
 		tmpDir,
-		nil,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		1,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
 		0,
+		WithLogger(logger),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 
@@ -1318,8 +1306,6 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 
 	if !t.IsBenchmark() {
 		if !skipChunk {
-			// Make sure the pool is correctly used. This is expected for 200k numbers.
-			testutil.Equals(t, numOfBlocks, int(st.chunkPool.(*mockedPool).gets.Load()))
 			// TODO(bwplotka): This is wrong negative for large number of samples (1mln). Investigate.
 			testutil.Equals(t, 0, int(st.chunkPool.(*mockedPool).balance.Load()))
 			st.chunkPool.(*mockedPool).gets.Store(0)
@@ -1381,7 +1367,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		Source:     metadata.TestSource,
 	}
 
-	chunkPool, err := pool.NewBucketedBytes(EstimatedMaxChunkSize, 50e6, 2, 100e7)
+	chunkPool, err := pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, 100e7)
 	testutil.Ok(t, err)
 
 	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{
@@ -1639,25 +1625,20 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -1736,25 +1717,20 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -1885,25 +1861,21 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		chunkPool,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+		WithChunkPool(chunkPool),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -2051,25 +2023,20 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	testutil.Ok(tb, err)
 
 	store, err := NewBucketStore(
-		logger,
-		nil,
 		instrBkt,
 		fetcher,
 		tmpDir,
-		indexCache,
-		nil,
-		nil,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
-		false,
 		10,
-		nil,
 		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
 		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
 	)
 	testutil.Ok(tb, err)
 	testutil.Ok(tb, store.SyncBlocks(context.Background()))
@@ -2276,8 +2243,8 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
 
-	// Create a chunk pool with buckets between 1KB and 32KB.
-	chunkPool, err := pool.NewBucketedBytes(1024, 32*1024, 2, 1e10)
+	// Create a chunk pool with buckets between 8B and 32KB.
+	chunkPool, err := pool.NewBucketedBytes(8, 32*1024, 2, 1e10)
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
@@ -2298,6 +2265,17 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 }
 
 func BenchmarkBlockSeries(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevelRaw)
+
+	aggrs := []storepb.Aggr{storepb.Aggr_RAW}
+	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
+			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
+		})
+	}
+}
+
+func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*bucketBlock, *metadata.Meta) {
 	var (
 		ctx    = context.Background()
 		logger = log.NewNopLogger()
@@ -2319,13 +2297,13 @@ func BenchmarkBlockSeries(b *testing.B) {
 	head, _ := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
 		TSDBDir:          filepath.Join(tmpDir, "head"),
 		SamplesPerSeries: 86400 / 15, // Simulate 1 day block with 15s scrape interval.
+		ScrapeInterval:   15 * time.Second,
 		Series:           1000,
 		PrependLabels:    nil,
 		Random:           rand.New(rand.NewSource(120)),
 		SkipChunks:       true,
 	})
 	blockID := createBlockFromHead(b, tmpDir, head)
-	testutil.Ok(b, head.Close())
 
 	// Upload the block to the bucket.
 	thanosMeta := metadata.Thanos{
@@ -2338,6 +2316,17 @@ func BenchmarkBlockSeries(b *testing.B) {
 	testutil.Ok(b, err)
 
 	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+
+	if resolutionLevel > 0 {
+		// Downsample newly-created block.
+		blockID, err = downsample.Downsample(logger, blockMeta, head, tmpDir, int64(resolutionLevel))
+		testutil.Ok(b, err)
+		blockMeta, err = metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
+		testutil.Ok(b, err)
+
+		testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	}
+	testutil.Ok(b, head.Close())
 
 	// Create chunk pool and partitioner using the same production settings.
 	chunkPool, err := NewDefaultChunkBytesPool(64 * 1024 * 1024 * 1024)
@@ -2354,15 +2343,10 @@ func BenchmarkBlockSeries(b *testing.B) {
 	// Create a bucket block with only the dependencies we need for the benchmark.
 	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
 	testutil.Ok(b, err)
-
-	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
-		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
-			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk)
-		})
-	}
+	return blk, blockMeta
 }
 
-func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock) {
+func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock, aggrs []storepb.Aggr) {
 	ctx := context.Background()
 
 	// Run the same number of queries per goroutine.
@@ -2393,9 +2377,12 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: labelMatcher},
 					},
 					SkipChunks: false,
+					Aggregates: aggrs,
 				}
 
 				matchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+				// TODO FIXME! testutil.Ok calls b.Fatalf under the hood, which
+				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
 				indexReader := blk.indexReader(ctx)
@@ -2416,41 +2403,15 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	wg.Wait()
 }
 
-func TestChunkOffsetsToByteRanges(t *testing.T) {
-	tests := map[string]struct {
-		offsets  []uint32
-		start    uint32
-		expected byteRanges
-	}{
-		"no offsets in input": {
-			offsets:  nil,
-			expected: byteRanges{},
-		},
-		"no overlapping ranges in input": {
-			offsets: []uint32{1000, 20000, 45000},
-			start:   1000,
-			expected: byteRanges{
-				{offset: 0, length: 16000},
-				{offset: 19000, length: 16000},
-				{offset: 44000, length: 16000},
-			},
-		},
-		"overlapping ranges in input": {
-			offsets: []uint32{1000, 5000, 9500, 30000},
-			start:   1000,
-			expected: byteRanges{
-				{offset: 0, length: 4000},
-				{offset: 4000, length: 4500},
-				{offset: 8500, length: 16000},
-				{offset: 29000, length: 16000},
-			},
-		},
-	}
-
-	for testName, testData := range tests {
-		t.Run(testName, func(t *testing.T) {
-			testutil.Equals(t, len(testData.offsets), len(testData.expected))
-			testutil.Equals(t, testData.expected, chunkOffsetsToByteRanges(testData.offsets, testData.start))
-		})
+func BenchmarkDownsampledBlockSeries(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevel5m)
+	aggrs := []storepb.Aggr{}
+	for i := 1; i < int(storepb.Aggr_COUNTER); i++ {
+		aggrs = append(aggrs, storepb.Aggr(i))
+		for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+			b.Run(fmt.Sprintf("aggregates: %v, concurrency: %d", aggrs, concurrency), func(b *testing.B) {
+				benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
+			})
+		}
 	}
 }

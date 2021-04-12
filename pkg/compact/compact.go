@@ -89,7 +89,7 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometh
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, garbageCollectedBlocks prometheus.Counter, blockSyncConcurrency int) (*Syncer, error) {
+func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, garbageCollectedBlocks prometheus.Counter, blockSyncConcurrency int) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -310,7 +310,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 			groups[groupKey] = group
 			res = append(res, group)
 		}
-		if err := group.Add(m); err != nil {
+		if err := group.AppendMeta(m); err != nil {
 			return nil, errors.Wrap(err, "add compaction group")
 		}
 	}
@@ -388,8 +388,8 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
-// Add the block with the given meta to the group.
-func (cg *Group) Add(meta *metadata.Meta) error {
+// AppendMeta the block with the given meta to the group.
+func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -957,7 +957,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		ignoreDirs := []string{}
 		for _, gr := range groups {
-			ignoreDirs = append(ignoreDirs, gr.Key())
+			for _, grID := range gr.IDs() {
+				ignoreDirs = append(ignoreDirs, filepath.Join(gr.Key(), grID.String()))
+			}
 		}
 
 		if err := runutil.DeleteAll(c.compactDir, ignoreDirs...); err != nil {
