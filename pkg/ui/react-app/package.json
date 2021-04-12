@@ -35,6 +35,7 @@
     "downshift": "^6.1.0",
     "enzyme-to-json": "^3.6.1",
     "fuzzy": "^0.1.3",
+    "hosted-git-info": "2.8.9",
     "i": "^0.3.6",
     "jquery": "^3.5.1",
     "jquery.flot.tooltip": "^0.9.0",
