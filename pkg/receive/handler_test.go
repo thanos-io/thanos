@@ -1166,7 +1166,10 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
 					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
-					testutil.Equals(b, http.StatusConflict, r.Code, "%v", i)
+					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
+						b, _ := ioutil.ReadAll(r.Body)
+						return string(b)
+					}())
 				}
 			})
 		})
@@ -1174,7 +1177,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 	runtime.GC()
 	// Take snapshot at the end to reveal how much memory we keep in TSDB.
-	testutil.Ok(b, Heap("../../"))
+	testutil.Ok(b, Heap("../../../_dev/thanos/2021/receive2"))
 
 }
 
@@ -1183,7 +1186,7 @@ func Heap(dir string) (err error) {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(dir, "mem.pprof"))
+	f, err := os.Create(filepath.Join(dir, "main-go16.pprof"))
 	if err != nil {
 		return err
 	}
