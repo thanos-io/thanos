@@ -1,6 +1,5 @@
 import React, { FC, useEffect, useRef } from 'react';
 import { Button, InputGroup, InputGroupAddon, InputGroupText } from 'reactstrap';
-
 import { EditorView, highlightSpecialChars, keymap, ViewUpdate, placeholder } from '@codemirror/view';
 import { EditorState, Prec, Compartment } from '@codemirror/state';
 import { indentOnInput, syntaxTree } from '@codemirror/language';
@@ -11,13 +10,12 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/closebrackets';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { commentKeymap } from '@codemirror/comment';
 import { lintKeymap } from '@codemirror/lint';
-import { PromQLExtension } from 'codemirror-promql';
+import { PromQLExtension, CompleteStrategy } from 'codemirror-promql';
 import { autocompletion, completionKeymap, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { theme, promqlHighlighter } from './CMTheme';
-
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
-import { CompleteStrategy, newCompleteStrategy } from 'codemirror-promql/complete';
+import { newCompleteStrategy } from 'codemirror-promql/cjs/complete';
 import PathPrefixProps from '../../types/PathPrefixProps';
 
 const promqlExtension = new PromQLExtension();
@@ -100,7 +98,7 @@ const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
       .setComplete({
         completeStrategy: new HistoryCompleteStrategy(
           newCompleteStrategy({
-            remote: { url: pathPrefix ? pathPrefix : '' },
+            remote: { url: pathPrefix ? pathPrefix : '', cache: { initialMetricList: metricNames } },
           }),
           queryHistory
         ),
