@@ -395,7 +395,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
-	return int((h.options.ReplicationFactor / 2) + 1)
+	return int(((h.options.ReplicationFactor - 1) / 2) + 1)
 }
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
