@@ -29,6 +29,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Fix race condition in chunk pool.
 - [#4017](https://github.com/thanos-io/thanos/pull/4017) Query Frontend: fix downsampling iterator returning duplicate samples.
 - [#4017](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger
+- [#4053](https://github.com/thanos-io/thanos/pull/4053) receiver: fix the calculation logic of minimum number of successful replicas
 
 ### Changed
 - [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info
