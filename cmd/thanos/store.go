@@ -121,9 +121,6 @@ func registerStore(app *extkingpin.App) {
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&conf.blockMetaFetchConcurrency)
 
-	model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
-		Default("0000-01-01T00:00:00Z"))
-
 	conf.filterConf = store.FilterConfig{
 		MinTime: *model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 			Default("0000-01-01T00:00:00Z")),
