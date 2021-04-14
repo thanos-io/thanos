@@ -500,36 +500,44 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	var (
-		vals []string
 		sers []map[string]string
 		err  error
 	)
 
+	vals := []string{}
 	version := p.promVersion()
+
 	if version > "2.24" {
 		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
-		if err != nil {
-			return nil, err
-		}
-
-		// using set to handle duplicate values.
-		labelValuesSet := make(map[string]struct{})
-		for _, s := range sers {
-			if val, exists := s[r.Label]; exists {
-				labelValuesSet[val] = struct{}{}
+		if len(r.Matchers) == 0 {
+			vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, nil, r.Start, r.End)
+			if err != nil {
+				return nil, err
 			}
-		}
-		for key := range labelValuesSet {
-			vals = append(vals, key)
+		} else {
+			matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+			if err != nil {
+				return nil, err
+			}
+
+			// using set to handle duplicate values.
+			labelValuesSet := make(map[string]struct{})
+			for _, s := range sers {
+				if val, exists := s[r.Label]; exists {
+					labelValuesSet[val] = struct{}{}
+				}
+			}
+			for key := range labelValuesSet {
+				vals = append(vals, key)
+			}
 		}
 	}
 	sort.Strings(vals)
