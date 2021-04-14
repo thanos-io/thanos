@@ -18,6 +18,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 
+	common_model "github.com/prometheus/common/model"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -280,12 +282,12 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, conf.ignoreDeletionMarksDelay, conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
 	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
-			block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
 			ignoreDeletionMarkFilter,
 			block.NewDeduplicateFilter(),
 		}, nil)
