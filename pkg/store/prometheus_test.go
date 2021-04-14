@@ -496,7 +496,10 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, nil)
+	version, err := promclient.NewDefaultClient().BuildVersion(ctx, u)
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, func() string { return version })
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
