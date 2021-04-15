@@ -36,6 +36,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
 - [#3856](https://github.com/thanos-io/thanos/pull/3856) Mixin: _breaking :warning:_ Introduce flexible multi-cluster/namespace mode for alerts and dashboards. Removes jobPrefix config option. Removes `namespace` by default.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Reduce memory usage for range queries.
+- [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically
 
 ### Removed
 
