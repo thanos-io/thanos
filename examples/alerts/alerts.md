@@ -521,7 +521,7 @@ rules:
     ) * 100 > 20
   for: 5m
   labels:
-    severity: warning
+    severity: info
 - alert: ThanosReceiveHighHashringFileRefreshFailures
   annotations:
     description: Thanos Receive {{$labels.job}} is failing to refresh hashring file,
