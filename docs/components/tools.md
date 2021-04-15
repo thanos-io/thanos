@@ -760,7 +760,7 @@ Flags:
                                 Path to YAML file that contains
                                 []metadata.DeletionRequest that will be applied
                                 to blocks
-      --tmp.dir="/var/folders/7q/nd_xkppx783clb5nc5zzts6c0000gn/T/thanos-rewrite"
+      --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
