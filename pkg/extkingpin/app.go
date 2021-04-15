@@ -46,7 +46,7 @@ usage: {{.App.Name}}{{template "FormatUsage" .App}}
 {{end}}\
 {{if .Context.Flags}}\
 Flags:
-{{alphabetical .Context.Flags|FlagsToTwoColumns|FormatTwoColumns}}
+{{alphabeticalSort .Context.Flags|FlagsToTwoColumns|FormatTwoColumns}}
 {{end}}\
 {{if .Context.Args}}\
 Args:
@@ -89,7 +89,7 @@ func NewApp(app *kingpin.Application) *App {
 	app.HelpFlag.Short('h')
 	app.UsageTemplate(UsageTemplate)
 	app.UsageFuncs(template.FuncMap{
-		"alphabetical": func(data []*kingpin.FlagModel) []*kingpin.FlagModel {
+		"alphabeticalSort": func(data []*kingpin.FlagModel) []*kingpin.FlagModel {
 			sort.Slice(data, func(i, j int) bool { return data[i].Name < data[j].Name })
 			return data
 		},
