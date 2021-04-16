@@ -109,6 +109,8 @@ func registerStore(app *extkingpin.App) {
 
 	cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int64Var(&conf.maxConcurrency)
 
+	conf.component = component.Store
+
 	conf.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
 
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
@@ -155,8 +157,10 @@ func registerStore(app *extkingpin.App) {
 
 	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
 		Default("").StringVar(&conf.webConfig.externalPrefix)
+
 	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").
 		Default("").StringVar(&conf.webConfig.prefixHeaderName)
+
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&conf.webConfig.disableCORS)
 
@@ -185,7 +189,7 @@ func registerStore(app *extkingpin.App) {
 			httpLogOpts,
 			grpcLogOpts,
 			tagOpts,
-			conf,
+			*conf,
 			getFlagsMap(cmd.Flags()),
 		)
 	})
@@ -200,7 +204,7 @@ func runStore(
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
-	conf *storeConfig,
+	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
 	grpcProbe := prober.NewGRPC()
