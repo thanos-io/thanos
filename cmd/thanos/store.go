@@ -48,11 +48,11 @@ type storeConfig struct {
 	dataDir                     string
 	grpcConfig                  grpcConfig
 	httpConfig                  httpConfig
-	indexCacheSizeBytes         uint64
+	indexCacheSizeBytes         model.Bytes
 	chunkPoolSize               uint64
 	maxSampleCount              uint64
 	maxTouchedSeriesCount       uint64
-	maxConcurrent               int64
+	maxConcurrency              int64
 	component                   component.StoreAPI
 	debugLogging                bool
 	syncInterval                time.Duration
@@ -73,7 +73,6 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig.registerFlag(cmd)
-	sc.webConfig.registerFlag(cmd)
 }
 
 // registerStore registers a store command.
@@ -83,13 +82,13 @@ func registerStore(app *extkingpin.App) {
 	conf := &storeConfig{}
 	conf.registerFlag(cmd)
 
-	app.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
+	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
 		Default("./data").StringVar(&conf.dataDir)
 
-	app.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
-		Default("250MB").Uint64Var(&conf.indexCacheSizeBytes)
+	conf.indexCacheSizeBytes = model.Bytes(*cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
+		Default("250MB").Uint64())
 
-	conf.indexCacheConfigs = *extflag.RegisterPathOrContent(app, "index-cache.config",
+	conf.indexCacheConfigs = *extflag.RegisterPathOrContent(cmd, "index-cache.config",
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/tip/components/store.md/#index-cache",
 		false)
 
@@ -108,7 +107,7 @@ func registerStore(app *extkingpin.App) {
 		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").Uint64Var(&conf.maxTouchedSeriesCount)
 
-	cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int64Var(&conf.maxConcurrent)
+	cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int64Var(&conf.maxConcurrency)
 
 	conf.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
 
@@ -153,6 +152,13 @@ func registerStore(app *extkingpin.App) {
 
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&conf.lazyIndexReaderIdleTimeout)
+
+	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
+		Default("").StringVar(&conf.webConfig.externalPrefix)
+	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").
+		Default("").StringVar(&conf.webConfig.prefixHeaderName)
+	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
+		Default("false").BoolVar(&conf.webConfig.disableCORS)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
@@ -271,7 +277,7 @@ func runStore(
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
 		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
-			MaxSize:     model.Bytes(conf.indexCacheSizeBytes),
+			MaxSize:     conf.indexCacheSizeBytes,
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
 	}
@@ -293,11 +299,11 @@ func runStore(
 	}
 
 	// Limit the concurrency on queries against the Thanos store.
-	if conf.maxConcurrent < 0 {
-		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrent)
+	if conf.maxConcurrency < 0 {
+		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
 	}
 
-	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrent))
+	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
 
 	chunkPool, err := store.NewDefaultChunkBytesPool(conf.chunkPoolSize)
 	if err != nil {
