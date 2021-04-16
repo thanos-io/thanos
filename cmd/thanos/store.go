@@ -86,7 +86,7 @@ func registerStore(app *extkingpin.App) {
 		Default("./data").StringVar(&conf.dataDir)
 
 	conf.indexCacheSizeBytes = model.Bytes(*cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
-		Default("250MB").Uint64())
+		Default("250MB").Bytes())
 
 	conf.indexCacheConfigs = *extflag.RegisterPathOrContent(cmd, "index-cache.config",
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/tip/components/store.md/#index-cache",
@@ -96,8 +96,8 @@ func registerStore(app *extkingpin.App) {
 		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/tip/components/store.md/#caching-bucket",
 		false)
 
-	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
-		Default("2GB").Uint64Var(&conf.chunkPoolSize)
+	conf.chunkPoolSize = uint64(*cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
+		Default("2GB").Bytes())
 
 	cmd.Flag("store.grpc.series-sample-limit",
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
