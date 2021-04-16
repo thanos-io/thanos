@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -48,8 +49,8 @@ type storeConfig struct {
 	dataDir                     string
 	grpcConfig                  grpcConfig
 	httpConfig                  httpConfig
-	indexCacheSizeBytes         model.Bytes
-	chunkPoolSize               uint64
+	indexCacheSizeBytes         units.Base2Bytes
+	chunkPoolSize               units.Base2Bytes
 	maxSampleCount              uint64
 	maxTouchedSeriesCount       uint64
 	maxConcurrency              int64
@@ -85,8 +86,8 @@ func registerStore(app *extkingpin.App) {
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
 		Default("./data").StringVar(&conf.dataDir)
 
-	conf.indexCacheSizeBytes = model.Bytes(*cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
-		Default("250MB").Bytes())
+	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
+		Default("250MB").BytesVar(&conf.indexCacheSizeBytes)
 
 	conf.indexCacheConfigs = *extflag.RegisterPathOrContent(cmd, "index-cache.config",
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/tip/components/store.md/#index-cache",
@@ -96,8 +97,8 @@ func registerStore(app *extkingpin.App) {
 		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/tip/components/store.md/#caching-bucket",
 		false)
 
-	conf.chunkPoolSize = uint64(*cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
-		Default("2GB").Bytes())
+	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
+		Default("2GB").BytesVar(&conf.chunkPoolSize)
 
 	cmd.Flag("store.grpc.series-sample-limit",
 		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
@@ -281,7 +282,7 @@ func runStore(
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
 		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
-			MaxSize:     conf.indexCacheSizeBytes,
+			MaxSize:     model.Bytes(conf.indexCacheSizeBytes),
 			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
 	}
@@ -309,7 +310,7 @@ func runStore(
 
 	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
 
-	chunkPool, err := store.NewDefaultChunkBytesPool(conf.chunkPoolSize)
+	chunkPool, err := store.NewDefaultChunkBytesPool(uint64(conf.chunkPoolSize))
 	if err != nil {
 		return errors.Wrap(err, "create chunk pool")
 	}
