@@ -5,7 +5,6 @@ syntax = "proto3";
 package thanos;
 
 import "store/labelpb/types.proto";
-import "store/storepb/rpc.proto";
 import "gogoproto/gogo.proto";
 
 option go_package = "infopb";
@@ -29,18 +28,25 @@ service Info {
 
 message InfoRequest {}
 
+enum ComponentType {
+    UNKNOWN = 0;
+    QUERY = 1;
+    RULE = 2;
+    SIDECAR = 3;
+    STORE = 4;
+    RECEIVE = 5;
+    // DEBUG represents some debug StoreAPI components e.g. thanos tools store-api-serve.
+    DEBUG = 6;
+  }
+
 message InfoResponse {
     repeated ZLabelSet label_sets = 1 [(gogoproto.nullable) = false];
-    StoreType storeType  = 2; // Maybe rename to ComponentType
+    ComponentType ComponentType  = 2;
     
     StoreInfo storeInfo = 3;
     RulesInfo rulesInfo = 4;
     MetadataInfo metadataInfo = 5;
     ExemplarsInfo exemplarsInfo = 6;
-    
-    // Deprecated. Use label_sets instead.
-    repeated Label labels = 7 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
-
 }
 
 message StoreInfo {
