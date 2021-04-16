@@ -216,7 +216,7 @@ func runSidecar(
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
 				if err := m.BuildVersion(ctx); err != nil {
 					level.Warn(logger).Log(
-						"msg", "failed to fetch prometheur version. Is Prometheus running? Retrying",
+						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
 						"err", err,
 					)
 					return err
@@ -224,7 +224,6 @@ func runSidecar(
 
 				level.Info(logger).Log(
 					"msg", "successfully loaded prometheus version",
-					"prometheus_version", m.Version(),
 				)
 				return nil
 			})

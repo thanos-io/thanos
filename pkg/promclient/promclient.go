@@ -609,6 +609,7 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 }
 
 // BuildVersion returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
+// For Prometheus versions < 2.14.0 it returns "0" as Prometheus version.
 func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/buildinfo")
@@ -618,8 +619,12 @@ func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error
 	span, ctx := tracing.StartSpan(ctx, "/prom_buildversion HTTP[client]")
 	defer span.Finish()
 
-	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
+	// We get status code 404 for prometheus versions lower than 2.14.0
+	body, code, err := c.req2xx(ctx, &u, http.MethodGet)
 	if err != nil {
+		if code == http.StatusNotFound {
+			return "0", nil
+		}
 		return "", err
 	}
 
