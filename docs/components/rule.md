@@ -373,6 +373,12 @@ Flags:
                                  an alert to Alertmanager.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
+      --shipper.upload-compacted
+                                 If true shipper will try to upload compacted
+                                 blocks as well. Useful for migration purposes.
+                                 Works only if compaction is disabled on
+                                 Prometheus. Do it once and then disable the
+                                 flag when done.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
@@ -393,11 +399,11 @@ Flags:
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
-                                 URLs in the UI query web interface. Actual
+                                 URLs in the bucket web UI interface. Actual
                                  endpoints are still served on / or the
-                                 web.route-prefix. This allows thanos UI to be
-                                 served behind a reverse proxy that strips a URL
-                                 sub-path.
+                                 web.route-prefix. This allows thanos bucket web
+                                 UI to be served behind a reverse proxy that
+                                 strips a URL sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
                                  prefixing of UI links and redirects. This
                                  option is ignored if web.external-prefix
