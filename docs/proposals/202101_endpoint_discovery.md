@@ -54,7 +54,7 @@ The plan would be for the initial discovery of gRPC services available to happen
 
 #### Possible Disadvantages
 
-1. For servers implementing multiple API (Eg. Store, Rules, Exemplar), we need to make multiple microservices calls (For given example 4x calls). 
+1. For servers implementing multiple API (Eg. Store, Rules, Exemplar), we need to make multiple microservices calls (For given example 4x calls).
 2. There is also ambiguity about which Info method should be used for these kinds of servers.
 
 ### Upgrade plan
