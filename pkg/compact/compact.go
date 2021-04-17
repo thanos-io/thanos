@@ -728,7 +728,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		// Ensure all input blocks are valid.
 		stats, err := block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
-			level.Error(cg.logger).Log("msg", "gather index issues for block", bdir, err)
+			level.Error(cg.logger).Log("msg", "gather index issues for block ", bdir, err)
 			continue
 		}
 
