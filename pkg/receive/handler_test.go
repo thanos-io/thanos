@@ -227,6 +227,7 @@ type fakeAppender struct {
 }
 
 var _ storage.Appender = &fakeAppender{}
+var _ storage.GetRef = &fakeAppender{}
 
 func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
 	if appendErr == nil {
@@ -273,6 +274,10 @@ func (f *fakeAppender) AppendExemplar(ref uint64, l labels.Labels, e exemplar.Ex
 	}
 	f.exemplars[ref] = append(f.exemplars[ref], e)
 	return ref, f.appendErr()
+}
+
+func (f *fakeAppender) GetRef(l labels.Labels) (uint64, labels.Labels) {
+	return l.Hash(), l
 }
 
 func (f *fakeAppender) Commit() error {
@@ -1108,6 +1113,10 @@ func (a *tsOverrideAppender) Append(ref uint64, l labels.Labels, _ int64, v floa
 	return a.Appender.Append(ref, l, cnt, v)
 }
 
+func (a *tsOverrideAppender) GetRef(lset labels.Labels) (uint64, labels.Labels) {
+	return a.Appender.(storage.GetRef).GetRef(lset)
+}
+
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
 // be send to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
@@ -1284,7 +1293,7 @@ func Heap(dir string) (err error) {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(dir, "impr3-go1.16.3.pprof"))
+	f, err := os.Create(filepath.Join(dir, "impr4-go1.16.3.pprof"))
 	if err != nil {
 		return err
 	}

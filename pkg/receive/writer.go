@@ -57,22 +57,28 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if err != nil {
 		return errors.Wrap(err, "get appender")
 	}
+	getRef := app.(storage.GetRef)
 
 	var errs errutil.MultiError
 	for _, t := range wreq.Timeseries {
-		// Copy labels so we allocate memory only for labels, nothing else.
-		labelpb.ReAllocZLabelsStrings(&t.Labels)
+		var (
+			ref  uint64 = 0
+			lset        = labelpb.ZLabelsToPromLabels(t.Labels)
+		)
 
-		// TODO(bwplotka): Use improvement https://github.com/prometheus/prometheus/pull/8600, so we do that only when
-		// we need it (when we store labels for longer).
-		lset := labelpb.ZLabelsToPromLabels(t.Labels)
+		// Check if the TSDB has cached reference for those labels.
+		ref, lset = getRef.GetRef(lset)
+		if ref == 0 {
+			// If not, copy labels, as TSDB will hold those strings long term. Given no
+			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
+			labelpb.ReAllocZLabelsStrings(&t.Labels)
+			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
-			_, err = app.Append(0, lset, s.Timestamp, s.Value)
+			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
 			switch err {
-			case nil:
-				continue
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
 				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
