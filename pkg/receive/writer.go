@@ -5,12 +5,10 @@ package receive
 
 import (
 	"context"
-	"sync"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -106,90 +104,4 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 
 	return errs.Err()
-}
-
-type fakeTenantAppendable struct {
-	f *fakeAppendable
-}
-
-func newFakeTenantAppendable(f *fakeAppendable) *fakeTenantAppendable {
-	return &fakeTenantAppendable{f: f}
-}
-
-func (t *fakeTenantAppendable) TenantAppendable(tenantID string) (Appendable, error) {
-	return t.f, nil
-}
-
-type fakeAppendable struct {
-	appender    storage.Appender
-	appenderErr func() error
-}
-
-var _ Appendable = &fakeAppendable{}
-
-func nilErrFn() error {
-	return nil
-}
-
-func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
-	errf := f.appenderErr
-	if errf == nil {
-		errf = nilErrFn
-	}
-	return f.appender, errf()
-}
-
-type fakeAppender struct {
-	sync.Mutex
-	samples     map[uint64][]prompb.Sample
-	appendErr   func() error
-	commitErr   func() error
-	rollbackErr func() error
-}
-
-var _ storage.Appender = &fakeAppender{}
-
-func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
-	if appendErr == nil {
-		appendErr = nilErrFn
-	}
-	if commitErr == nil {
-		commitErr = nilErrFn
-	}
-	if rollbackErr == nil {
-		rollbackErr = nilErrFn
-	}
-	return &fakeAppender{
-		samples:     make(map[uint64][]prompb.Sample),
-		appendErr:   appendErr,
-		commitErr:   commitErr,
-		rollbackErr: rollbackErr,
-	}
-}
-
-func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
-	f.Lock()
-	defer f.Unlock()
-	s := f.samples[l.Hash()]
-	res := make([]prompb.Sample, len(s))
-	copy(res, s)
-	return res
-}
-
-func (f *fakeAppender) Append(ref uint64, l labels.Labels, t int64, v float64) (uint64, error) {
-	f.Lock()
-	defer f.Unlock()
-	if ref == 0 {
-		ref = l.Hash()
-	}
-	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v})
-	return ref, f.appendErr()
-}
-
-func (f *fakeAppender) Commit() error {
-	return f.commitErr()
-}
-
-func (f *fakeAppender) Rollback() error {
-	return f.rollbackErr()
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -183,6 +184,103 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		}
 		testutil.Ok(t, err)
 	}
+}
+
+type fakeTenantAppendable struct {
+	f *fakeAppendable
+}
+
+func newFakeTenantAppendable(f *fakeAppendable) *fakeTenantAppendable {
+	return &fakeTenantAppendable{f: f}
+}
+
+func (t *fakeTenantAppendable) TenantAppendable(_ string) (Appendable, error) {
+	return t.f, nil
+}
+
+type fakeAppendable struct {
+	appender    storage.Appender
+	appenderErr func() error
+}
+
+var _ Appendable = &fakeAppendable{}
+
+func nilErrFn() error {
+	return nil
+}
+
+func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
+	errf := f.appenderErr
+	if errf == nil {
+		errf = nilErrFn
+	}
+	return f.appender, errf()
+}
+
+type fakeAppender struct {
+	sync.Mutex
+	samples     map[uint64][]prompb.Sample
+	exemplars   map[uint64][]exemplar.Exemplar
+	appendErr   func() error
+	commitErr   func() error
+	rollbackErr func() error
+}
+
+var _ storage.Appender = &fakeAppender{}
+
+func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
+	if appendErr == nil {
+		appendErr = nilErrFn
+	}
+	if commitErr == nil {
+		commitErr = nilErrFn
+	}
+	if rollbackErr == nil {
+		rollbackErr = nilErrFn
+	}
+	return &fakeAppender{
+		samples:     make(map[uint64][]prompb.Sample),
+		appendErr:   appendErr,
+		commitErr:   commitErr,
+		rollbackErr: rollbackErr,
+	}
+}
+
+func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
+	f.Lock()
+	defer f.Unlock()
+	s := f.samples[l.Hash()]
+	res := make([]prompb.Sample, len(s))
+	copy(res, s)
+	return res
+}
+
+func (f *fakeAppender) Append(ref uint64, l labels.Labels, t int64, v float64) (uint64, error) {
+	f.Lock()
+	defer f.Unlock()
+	if ref == 0 {
+		ref = l.Hash()
+	}
+	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v})
+	return ref, f.appendErr()
+}
+
+func (f *fakeAppender) AppendExemplar(ref uint64, l labels.Labels, e exemplar.Exemplar) (uint64, error) {
+	f.Lock()
+	defer f.Unlock()
+	if ref == 0 {
+		ref = l.Hash()
+	}
+	f.exemplars[ref] = append(f.exemplars[ref], e)
+	return ref, f.appendErr()
+}
+
+func (f *fakeAppender) Commit() error {
+	return f.commitErr()
+}
+
+func (f *fakeAppender) Rollback() error {
+	return f.rollbackErr()
 }
 
 func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
@@ -1186,7 +1284,7 @@ func Heap(dir string) (err error) {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(dir, "main-go16.pprof"))
+	f, err := os.Create(filepath.Join(dir, "impr2-go1.16.3.pprof"))
 	if err != nil {
 		return err
 	}

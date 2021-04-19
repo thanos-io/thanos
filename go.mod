@@ -1,7 +1,7 @@
 module github.com/thanos-io/thanos
 
 require (
-	cloud.google.com/go v0.74.0
+	cloud.google.com/go v0.79.0
 	cloud.google.com/go/storage v1.10.0
 	github.com/Azure/azure-pipeline-go v0.2.2
 	github.com/Azure/azure-storage-blob-go v0.8.0
@@ -33,7 +33,7 @@ require (
 	github.com/leanovate/gopter v0.2.4
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
-	github.com/miekg/dns v1.1.38
+	github.com/miekg/dns v1.1.41
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
@@ -48,8 +48,8 @@ require (
 	github.com/prometheus/alertmanager v0.21.1-0.20210310093010-0f9cab6991e6
 	github.com/prometheus/client_golang v1.10.0
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.18.0
-	github.com/prometheus/prometheus v1.8.2-0.20210315220929-1cba1741828b
+	github.com/prometheus/common v0.20.0
+	github.com/prometheus/prometheus v1.8.2-0.20210413124018-62afcabd01ea
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	github.com/weaveworks/common v0.0.0-20210112142934-23c8d7fa6120
@@ -58,13 +58,13 @@ require (
 	go.uber.org/atomic v1.7.0
 	go.uber.org/automaxprocs v1.2.0
 	go.uber.org/goleak v1.1.10
-	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
-	golang.org/x/oauth2 v0.0.0-20210210192628-66670185b0cd
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
+	golang.org/x/oauth2 v0.0.0-20210323180902-22b0adad7558
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/text v0.3.5
-	google.golang.org/api v0.39.0
-	google.golang.org/genproto v0.0.0-20201214200347-8c77b98c765d
-	google.golang.org/grpc v1.34.0
+	google.golang.org/api v0.42.0
+	google.golang.org/genproto v0.0.0-20210312152112-fc591d9ea70f
+	google.golang.org/grpc v1.36.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v2 v2.4.0
@@ -81,7 +81,7 @@ replace (
 	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210315220929-1cba1741828b
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210413124018-62afcabd01ea
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
