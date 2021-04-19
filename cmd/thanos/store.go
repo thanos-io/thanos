@@ -172,7 +172,7 @@ func registerStore(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if conf.filterConf.MinTime.PrometheusTimestamp() > conf.filterConf.MaxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
-				conf.filterConf.MaxTime, conf.filterConf.MinTime)
+				conf.filterConf.MinTime, conf.filterConf.MaxTime)
 		}
 
 		httpLogOpts, err := logging.ParseHTTPOptions("", conf.reqLogConfig)
