@@ -86,7 +86,7 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
 const defaultClassicUIRoute: { [component: string]: string } = {
   query: '/classic/graph',
   rule: '/classic/alerts',
-  bucket: '/',
+  bucket: '/classic',
   compact: '/classic/loaded',
   store: '/classic/loaded',
 };

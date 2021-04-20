@@ -407,7 +407,7 @@ func runStore(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		compactorView := ui.NewBucketUI(logger, "", conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, "/loaded", conf.component)
-		compactorView.Register(r, true, ins)
+		compactorView.Register(r, ins)
 
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)

@@ -481,10 +481,10 @@ func runCompact(
 		r := route.New()
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
-		compactorView.Register(r, true, ins)
+		compactorView.Register(r, ins)
 
 		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)
-		global.Register(r, false, ins)
+		global.Register(r, ins)
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
