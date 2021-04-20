@@ -1293,7 +1293,7 @@ func Heap(dir string) (err error) {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(dir, "impr4-go1.16.3.pprof"))
+	f, err := os.Create(filepath.Join(dir, "impr5-go1.16.3.pprof"))
 	if err != nil {
 		return err
 	}
