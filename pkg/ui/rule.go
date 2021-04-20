@@ -154,13 +154,6 @@ func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
 }
 
-// Root redirects / requests to /graph, taking into account the path prefix value.
-func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r)
-
-	http.Redirect(w, r, path.Join(prefix, "/alerts"), http.StatusFound)
-}
-
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, path.Join(GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), "/alerts"), http.StatusFound)
