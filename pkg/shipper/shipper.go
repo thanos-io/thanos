@@ -80,6 +80,7 @@ type Shipper struct {
 	source  metadata.SourceType
 
 	uploadCompacted        bool
+	uploadDebugMetaFiles   bool
 	allowOutOfOrderUploads bool
 	hashFunc               metadata.HashFunc
 }
@@ -95,6 +96,7 @@ func New(
 	lbls func() labels.Labels,
 	source metadata.SourceType,
 	uploadCompacted bool,
+	uploadDebugMetaFiles bool,
 	allowOutOfOrderUploads bool,
 	hashFunc metadata.HashFunc,
 ) *Shipper {
@@ -113,6 +115,7 @@ func New(
 		metrics:                newMetrics(r, uploadCompacted),
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
+		uploadDebugMetaFiles:   uploadDebugMetaFiles,
 		uploadCompacted:        uploadCompacted,
 		hashFunc:               hashFunc,
 	}
@@ -366,7 +369,14 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
+	return block.Upload(ctx, block.Uploader{
+		Logger:               s.logger,
+		Bkt:                  s.bucket,
+		Bdir:                 updir,
+		Hf:                   s.hashFunc,
+		UploadDebugMetaFiles: s.uploadDebugMetaFiles,
+		CheckExternalLabels:  true,
+	})
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir

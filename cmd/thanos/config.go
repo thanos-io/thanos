@@ -126,6 +126,7 @@ func (rc *reloaderConfig) registerFlag(cmd extkingpin.FlagClause) *reloaderConfi
 
 type shipperConfig struct {
 	uploadCompacted       bool
+	uploadDebubgMetaFiles bool
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	hashFunc              string
@@ -135,6 +136,8 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 	cmd.Flag("shipper.upload-compacted",
 		"If true shipper will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus. Do it once and then disable the flag when done.").
 		Default("false").BoolVar(&sc.uploadCompacted)
+	cmd.Flag("shipper.upload-debug-meta-files", "If true shipper will upload debug meta files which can be useful for debugging.").
+		Default("false").BoolVar(&sc.uploadDebubgMetaFiles)
 	cmd.Flag("shipper.ignore-unequal-block-size",
 		"If true shipper will not require prometheus min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled on your Prometheus instance, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").
 		Default("false").Hidden().BoolVar(&sc.ignoreBlockSize)

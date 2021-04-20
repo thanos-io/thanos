@@ -635,19 +635,47 @@ func TestBucketStore_Sharding(t *testing.T) {
 
 	id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id1.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(dir, id1.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	id2, err := e2eutil.CreateBlock(ctx, dir, series, 10, 1000, 2000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id2.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(dir, id2.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	id3, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "b"}, {Name: "region", Value: "r1"}}, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id3.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(dir, id3.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r2"}}, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id4.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(dir, id4.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	if ok := t.Run("new_runs", func(t *testing.T) {
 		testSharding(t, "", bkt, id1, id2, id3, id4)
@@ -1043,8 +1071,13 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 		Source:     metadata.TestSource,
 	}, nil)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, "tmp", id.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, "tmp", id.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+	}))
 
 	return id
 }
@@ -1241,7 +1274,14 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		testutil.Ok(t, err)
 
 		testutil.Ok(t, meta.WriteToDir(logger, filepath.Join(blockDir, id.String())))
-		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+			Logger:               logger,
+			Bkt:                  bkt,
+			Bdir:                 filepath.Join(blockDir, id.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 	}
 
 	ibkt := objstore.WithNoopInstr(bkt)
@@ -1410,7 +1450,14 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		meta, err := metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, id.String()), thanosMeta, nil)
 		testutil.Ok(t, err)
-		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+			Logger:               logger,
+			Bkt:                  bkt,
+			Bdir:                 filepath.Join(blockDir, id.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 
 		b1 = &bucketBlock{
 			indexCache:  indexCache,
@@ -1449,7 +1496,14 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		meta, err := metadata.InjectThanos(log.NewNopLogger(), filepath.Join(blockDir, id.String()), thanosMeta, nil)
 		testutil.Ok(t, err)
-		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+			Logger:               logger,
+			Bkt:                  bkt,
+			Bdir:                 filepath.Join(blockDir, id.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 
 		b2 = &bucketBlock{
 			indexCache:  indexCache,
@@ -1707,7 +1761,14 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 
 	instrBkt := objstore.WithNoopInstr(bkt)
 	logger := log.NewNopLogger()
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(headOpts.ChunkDirRoot, blk.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Instance a real bucket store we'll use to query the series.
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
@@ -1848,7 +1909,14 @@ func TestBlockWithLargeChunks(t *testing.T) {
 	logger := log.NewNopLogger()
 	instrBkt := objstore.WithNoopInstr(bkt)
 
-	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, b.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(blockDir, b.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Instance a real bucket store we'll use to query the series.
 	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil, nil)
@@ -2241,7 +2309,14 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	blockMeta, err := metadata.InjectThanos(logger, filepath.Join(tmpDir, blockID.String()), thanosMeta, nil)
 	testutil.Ok(b, err)
 
-	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(b, block.Upload(context.Background(), block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Create a chunk pool with buckets between 8B and 32KB.
 	chunkPool, err := pool.NewBucketedBytes(8, 32*1024, 2, 1e10)
@@ -2315,7 +2390,16 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	blockMeta, err := metadata.InjectThanos(logger, filepath.Join(tmpDir, blockID.String()), thanosMeta, nil)
 	testutil.Ok(b, err)
 
-	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	uploader := block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}
+
+	testutil.Ok(b, block.Upload(context.Background(), uploader))
 
 	if resolutionLevel > 0 {
 		// Downsample newly-created block.
@@ -2324,7 +2408,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 		blockMeta, err = metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
 		testutil.Ok(b, err)
 
-		testutil.Ok(b, block.Upload(context.Background(), logger, bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+		testutil.Ok(b, block.Upload(context.Background(), uploader))
 	}
 	testutil.Ok(b, head.Close())
 

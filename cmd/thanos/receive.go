@@ -98,6 +98,7 @@ func registerReceive(app *extkingpin.App) {
 	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").Enum("SHA256", "")
 
+	uploadDebugMetafiles := cmd.Flag("shipper.upload-debug-meta-files", "If true shipper will upload debug meta files which can be useful for debugging.").Default("false").Bool()
 	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 	allowOutOfOrderUpload := cmd.Flag("shipper.allow-out-of-order-uploads",
 		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
@@ -180,6 +181,7 @@ func registerReceive(app *extkingpin.App) {
 			*replicationFactor,
 			time.Duration(*forwardTimeout),
 			*allowOutOfOrderUpload,
+			*uploadDebugMetafiles,
 			component.Receive,
 			metadata.HashFunc(*hashFunc),
 		)
@@ -224,6 +226,7 @@ func runReceive(
 	replicationFactor uint64,
 	forwardTimeout time.Duration,
 	allowOutOfOrderUpload bool,
+	uploadDebugMetafiles bool,
 	comp component.SourceStoreAPI,
 	hashFunc metadata.HashFunc,
 ) error {
@@ -287,6 +290,7 @@ func runReceive(
 		tenantLabelName,
 		bkt,
 		allowOutOfOrderUpload,
+		uploadDebugMetafiles,
 		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)

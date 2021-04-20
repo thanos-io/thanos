@@ -93,29 +93,28 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 	return nil
 }
 
-// Upload uploads a TSDB block to the object storage. It verifies basic
-// features of Thanos block.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
-	return upload(ctx, logger, bkt, bdir, hf, true)
-}
-
-// UploadPromBlock uploads a TSDB block to the object storage. It assumes
-// the block is used in Prometheus so it doesn't check Thanos external labels.
-func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc) error {
-	return upload(ctx, logger, bkt, bdir, hf, false)
-}
-
 // upload uploads block from given block dir that ends with block id.
+// Uploader holds the cofig necessary to upload the block.
+type Uploader struct {
+	Logger               log.Logger
+	Bkt                  objstore.Bucket
+	Bdir                 string
+	Hf                   metadata.HashFunc
+	UploadDebugMetaFiles bool
+	CheckExternalLabels  bool
+}
+
+// Upload uploads block from given block dir that ends with block id.
 // It makes sure cleanup is done on error to avoid partial block uploads.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool) error {
-	df, err := os.Stat(bdir)
+func Upload(ctx context.Context, config Uploader) error {
+	df, err := os.Stat(config.Bdir)
 	if err != nil {
 		return err
 	}
 	if !df.IsDir() {
-		return errors.Errorf("%s is not a directory", bdir)
+		return errors.Errorf("%s is not a directory", config.Bdir)
 	}
 
 	// Verify dir.
@@ -124,43 +123,44 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "not a block dir")
 	}
 
-	meta, err := metadata.ReadFromDir(bdir)
+	meta, err := metadata.ReadFromDir(config.Bdir)
 	if err != nil {
 		// No meta or broken meta file.
 		return errors.Wrap(err, "read meta")
 	}
 
-	if checkExternalLabels {
+	if config.CheckExternalLabels {
 		if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
 			return errors.New("empty external labels are not allowed for Thanos block.")
 		}
 	}
 
-	metaEncoded := strings.Builder{}
-	meta.Thanos.Files, err = gatherFileStats(bdir, hf, logger)
+	meta.Thanos.Files, err = gatherFileStats(config.Bdir, config.Hf, config.Logger)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
 
+	metaEncoded := strings.Builder{}
 	if err := meta.Write(&metaEncoded); err != nil {
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	// TODO(yeya24): Remove this step.
-	if err := bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String())); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload debug meta file"))
+	if config.UploadDebugMetaFiles {
+		if err := config.Bkt.Upload(ctx, path.Join(DebugMetas, fmt.Sprintf("%s.json", id)), strings.NewReader(metaEncoded.String())); err != nil {
+			return cleanUp(config.Logger, config.Bkt, id, errors.Wrap(err, "upload debug meta file"))
+		}
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
+	if err := objstore.UploadDir(ctx, config.Logger, config.Bkt, path.Join(config.Bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
+		return cleanUp(config.Logger, config.Bkt, id, errors.Wrap(err, "upload chunks"))
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
+	if err := objstore.UploadFile(ctx, config.Logger, config.Bkt, path.Join(config.Bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+		return cleanUp(config.Logger, config.Bkt, id, errors.Wrap(err, "upload index"))
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
-	if err := bkt.Upload(ctx, path.Join(id.String(), MetaFilename), strings.NewReader(metaEncoded.String())); err != nil {
+	if err := config.Bkt.Upload(ctx, path.Join(id.String(), MetaFilename), strings.NewReader(metaEncoded.String())); err != nil {
 		// Don't call cleanUp here. Despite getting error, meta.json may have been uploaded in certain cases,
 		// and even though cleanUp will not see it yet, meta.json may appear in the bucket later.
 		// (Eg. S3 is known to behave this way when it returns 503 "SlowDown" error).

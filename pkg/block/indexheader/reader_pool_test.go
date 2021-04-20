@@ -56,7 +56,14 @@ func TestReaderPool_NewBinaryReader(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
@@ -94,7 +101,14 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, nil)
 	defer pool.Close()

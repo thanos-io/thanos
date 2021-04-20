@@ -136,11 +136,14 @@ func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backu
 
 	// Upload the on disk TSDB block.
 	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
-<<<<<<< HEAD
-	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc); err != nil {
-=======
-	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc, uploadDebubgMetaFiles); err != nil {
->>>>>>> b1208db0 (Add flag in tools)
+	if err := block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  backupBkt,
+		Bdir:                 bdir,
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: uploadDebubgMetaFiles,
+		CheckExternalLabels:  true,
+	}); err != nil {
 		return errors.Wrap(err, "upload to backup")
 	}
 

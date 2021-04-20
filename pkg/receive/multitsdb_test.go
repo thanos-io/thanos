@@ -43,6 +43,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			true,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -111,6 +112,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			true,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()

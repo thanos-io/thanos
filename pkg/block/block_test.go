@@ -95,28 +95,51 @@ func TestUpload(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String()), os.ModePerm))
 
+	uploader := Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 path.Join(tmpDir, "test", b1.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}
+
 	{
 		// Wrong dir.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "not-existing"), metadata.NoneFunc)
+		err := Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, "not-existing"),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+		})
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/not-existing: no such file or directory"), "")
 	}
 	{
 		// Wrong existing dir (not a block).
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test"), metadata.NoneFunc)
+		// err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test"), metadata.NoneFunc, true)
+		err := Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, "test"),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		})
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "not a block dir: ulid: bad data size when unmarshaling", err.Error())
 	}
 	{
 		// Empty block dir.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
+		err := Upload(ctx, uploader)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Missing chunks.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
+		err := Upload(ctx, uploader)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/chunks: no such file or directory"), err.Error())
 	}
@@ -124,7 +147,7 @@ func TestUpload(t *testing.T) {
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), ChunksDirname, "000001"), path.Join(tmpDir, "test", b1.String(), ChunksDirname, "000001"))
 	{
 		// Missing index file.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
+		err := Upload(ctx, uploader)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/index: no such file or directory"), "")
 	}
@@ -132,14 +155,14 @@ func TestUpload(t *testing.T) {
 	testutil.Ok(t, os.Remove(path.Join(tmpDir, "test", b1.String(), MetaFilename)))
 	{
 		// Missing meta.json file.
-		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc)
+		err := Upload(ctx, uploader)
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
 	}
 	e2eutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Full block.
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
+		testutil.Ok(t, Upload(ctx, uploader))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
@@ -189,7 +212,7 @@ func TestUpload(t *testing.T) {
 	}
 	{
 		// Test Upload is idempotent.
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
+		testutil.Ok(t, Upload(ctx, uploader))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
@@ -205,32 +228,21 @@ func TestUpload(t *testing.T) {
 			{{Name: "b", Value: "1"}},
 		}, 100, 0, 1000, nil, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		err = Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
+		err = Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, b2.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		})
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "empty external labels are not allowed for Thanos block.", err.Error())
 		testutil.Equals(t, 4, len(bkt.Objects()))
 	}
 	{
-		// Upload block without debug meta files.
-		b3, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
-			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-			{{Name: "b", Value: "1"}},
-		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
-		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b3.String()), metadata.NoneFunc, false))
-
-		// 4 files from b1 + 3 files from b3.
-		testutil.Equals(t, 7, len(bkt.Objects()))
-		testutil.Equals(t, 3736, len(bkt.Objects()[path.Join(b3.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b3.String(), IndexFilename)]))
-		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b3.String(), MetaFilename)]))
-	}
-	{
 		// No external labels with UploadPromBlocks.
-		b2, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		b3, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
 			{{Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
@@ -238,12 +250,43 @@ func TestUpload(t *testing.T) {
 			{{Name: "b", Value: "1"}},
 		}, 100, 0, 1000, nil, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		err = UploadPromBlock(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc)
+		err = Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, b3.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  false,
+		})
 		testutil.Ok(t, err)
 		testutil.Equals(t, 8, len(bkt.Objects()))
-		testutil.Equals(t, 3736, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
-		testutil.Equals(t, 525, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
+		testutil.Equals(t, 3736, len(bkt.Objects()[path.Join(b3.String(), ChunksDirname, "000001")]))
+		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b3.String(), IndexFilename)]))
+		testutil.Equals(t, 525, len(bkt.Objects()[path.Join(b3.String(), MetaFilename)]))
+	}
+	{
+		// Upload block without debug meta files.
+		b4, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+			{{Name: "a", Value: "1"}},
+			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "3"}},
+			{{Name: "a", Value: "4"}},
+			{{Name: "b", Value: "1"}},
+		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
+		testutil.Ok(t, err)
+		testutil.Ok(t, Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, b4.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: false,
+		}))
+
+		// 4 files from b1 + 4 files from b2 + 3 files from b3.
+		testutil.Equals(t, 11, len(bkt.Objects()))
+		testutil.Equals(t, 3729, len(bkt.Objects()[path.Join(b4.String(), ChunksDirname, "000001")]))
+		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b4.String(), IndexFilename)]))
+		testutil.Equals(t, 546, len(bkt.Objects()[path.Join(b4.String(), MetaFilename)]))
 	}
 }
 
@@ -265,7 +308,14 @@ func TestDelete(t *testing.T) {
 			{{Name: "b", Value: "1"}},
 		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc))
+		testutil.Ok(t, Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, b1.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 
 		markedForDeletion := promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{Name: "test"})
@@ -285,7 +335,14 @@ func TestDelete(t *testing.T) {
 			{{Name: "b", Value: "1"}},
 		}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b2.String()), metadata.NoneFunc))
+		testutil.Ok(t, Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 path.Join(tmpDir, b2.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 		testutil.Equals(t, 5, len(bkt.Objects()))
 
 		// Remove meta.json and check if delete can delete it.
@@ -342,7 +399,14 @@ func TestMarkForDeletion(t *testing.T) {
 
 			tcase.preUpload(t, id, bkt)
 
-			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String()), metadata.NoneFunc))
+			testutil.Ok(t, Upload(ctx, Uploader{
+				Logger:               log.NewNopLogger(),
+				Bkt:                  bkt,
+				Bdir:                 path.Join(tmpDir, id.String()),
+				Hf:                   metadata.NoneFunc,
+				UploadDebugMetaFiles: true,
+				CheckExternalLabels:  true,
+			}))
 
 			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			err = MarkForDeletion(ctx, log.NewNopLogger(), bkt, id, "", c)
@@ -398,7 +462,14 @@ func TestMarkForNoCompact(t *testing.T) {
 
 			tcase.preUpload(t, id, bkt)
 
-			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String()), metadata.NoneFunc))
+			testutil.Ok(t, Upload(ctx, Uploader{
+				Logger:               log.NewNopLogger(),
+				Bkt:                  bkt,
+				Bdir:                 path.Join(tmpDir, id.String()),
+				Hf:                   metadata.NoneFunc,
+				UploadDebugMetaFiles: true,
+				CheckExternalLabels:  true,
+			}))
 
 			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			err = MarkForNoCompact(ctx, log.NewNopLogger(), bkt, id, metadata.ManualNoCompactReason, "", c)
@@ -431,7 +502,14 @@ func TestHashDownload(t *testing.T) {
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 42, metadata.SHA256Func)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, Upload(ctx, log.NewNopLogger(), instrumentedBkt, path.Join(tmpDir, b1.String()), metadata.SHA256Func))
+	testutil.Ok(t, Upload(ctx, Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  instrumentedBkt,
+		Bdir:                 path.Join(tmpDir, b1.String()),
+		Hf:                   metadata.SHA256Func,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 	testutil.Equals(t, 4, len(bkt.Objects()))
 
 	m, err := DownloadMeta(ctx, log.NewNopLogger(), bkt, b1)
@@ -529,7 +607,14 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/index"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  errBkt,
+			Bdir:                 path.Join(tmpDir, b1.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		})
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of index fails, block is deleted.
@@ -540,7 +625,14 @@ func TestUploadCleanup(t *testing.T) {
 	{
 		errBkt := errBucket{Bucket: bkt, failSuffix: "/meta.json"}
 
-		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
+		uploadErr := Upload(ctx, Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  errBkt,
+			Bdir:                 path.Join(tmpDir, b1.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		})
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
 		// If upload of meta.json fails, nothing is cleaned up.

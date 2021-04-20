@@ -423,7 +423,14 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(ctx, block.Uploader{
+			Logger:               log.NewNopLogger(),
+			Bkt:                  bkt,
+			Bdir:                 filepath.Join(prepareDir, id.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 	}
 	return metas
 }

@@ -111,11 +111,13 @@ func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool
 		}
 
 		level.Info(ctx.Logger).Log("msg", "uploading repaired block", "newID", resid)
-<<<<<<< HEAD
-		if err = block.Upload(ctx, ctx.Logger, ctx.Bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc); err != nil {
-=======
-		if err = block.Upload(ctx, ctx.Logger, ctx.Bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc, uploadDebubgMetaFiles); err != nil {
->>>>>>> b1208db0 (Add flag in tools)
+		if err = block.Upload(ctx, block.Uploader{
+			Logger:               ctx.Logger,
+			Bkt:                  ctx.Bkt,
+			Bdir:                 filepath.Join(tmpdir, resid.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: uploadDebubgMetaFiles,
+		}); err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
 

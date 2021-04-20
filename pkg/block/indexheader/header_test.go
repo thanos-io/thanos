@@ -60,7 +60,14 @@ func TestReaders(t *testing.T) {
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, id1.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Copy block index version 1 for backward compatibility.
 	/* The block here was produced at the commit
@@ -89,7 +96,14 @@ func TestReaders(t *testing.T) {
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, m.ULID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	for _, id := range []ulid.ULID{id1, m.ULID} {
 		t.Run(id.String(), func(t *testing.T) {
@@ -325,7 +339,14 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 		Source:     metadata.TestSource,
 	}, &m.BlockMeta)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(context.Background(), log.NewNopLogger(), bkt, filepath.Join(tmpDir, m.ULID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(context.Background(), block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, m.ULID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	return m
 }
@@ -402,7 +423,14 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	// Create a block.
 	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(b, err)
-	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
+	testutil.Ok(b, block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, id1.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Create an index reader.
 	reader, err := NewBinaryReader(ctx, logger, bkt, tmpDir, id1, postingOffsetsInMemSampling)

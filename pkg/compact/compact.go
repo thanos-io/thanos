@@ -667,7 +667,14 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	}
 
 	level.Info(logger).Log("msg", "uploading repaired block", "newID", resid)
-	if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc); err != nil {
+	if err = block.Upload(ctx, block.Uploader{
+		Logger:               logger,
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpdir, resid.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}); err != nil {
 		return retry(errors.Wrapf(err, "upload of %s failed", resid))
 	}
 
@@ -811,7 +818,14 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 
-	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc); err != nil {
+	if err := block.Upload(ctx, block.Uploader{
+		Logger:               cg.logger,
+		Bkt:                  cg.bkt,
+		Bdir:                 bdir,
+		Hf:                   cg.hashFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}); err != nil {
 		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))

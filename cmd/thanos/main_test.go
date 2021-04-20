@@ -45,7 +45,14 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(ctx, block.Uploader{
+			Logger:               logger,
+			Bkt:                  bkt,
+			Bdir:                 path.Join(dir, id.String()),
+			Hf:                   metadata.NoneFunc,
+			UploadDebugMetaFiles: true,
+			CheckExternalLabels:  true,
+		}))
 	}
 
 	meta, err := block.DownloadMeta(ctx, logger, bkt, id)

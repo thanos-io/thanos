@@ -56,7 +56,14 @@ func TestNewLazyBinaryReader_ShouldBuildIndexHeaderFromBucket(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
@@ -97,7 +104,14 @@ func TestNewLazyBinaryReader_ShouldRebuildCorruptedIndexHeader(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	// Write a corrupted index-header for the block.
 	headerFilename := filepath.Join(tmpDir, blockID.String(), block.IndexHeaderFilename)
@@ -137,7 +151,14 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
@@ -189,7 +210,22 @@ func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
@@ -240,7 +276,14 @@ func TestLazyBinaryReader_LoadUnloadRaceCondition(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 	}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "1"}}, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
-	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, blockID.String()), metadata.NoneFunc))
+	testutil.Ok(t, block.Upload(ctx, block.Uploader{
+		Logger:               log.NewNopLogger(),
+		Bkt:                  bkt,
+		Bdir:                 filepath.Join(tmpDir, blockID.String()),
+		Hf:                   metadata.NoneFunc,
+		UploadDebugMetaFiles: true,
+		CheckExternalLabels:  true,
+	}))
 
 	m := NewLazyBinaryReaderMetrics(nil)
 	r, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, m, nil)
