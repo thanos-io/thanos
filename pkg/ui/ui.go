@@ -23,10 +23,16 @@ import (
 )
 
 var reactRouterPaths = []string{
-	"/graph",
-	"/stores",
-	"/status",
+	"/alerts",
+	"/config",
 	"/flags",
+	"/graph",
+	"/rules",
+	"/service-discovery",
+	"/status",
+	"/stores",
+	"/targets",
+	"/tsdb-status",
 }
 
 type BaseUI struct {
