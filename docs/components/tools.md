@@ -345,6 +345,9 @@ Flags:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
+      --shipper.upload-debug-meta-files
+                           If true shipper will upload debug meta files which
+                           can be useful for debugging.
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
@@ -760,6 +763,9 @@ Flags:
                                 Path to YAML file that contains
                                 []metadata.DeletionRequest that will be applied
                                 to blocks
+      --shipper.upload-debug-meta-files
+                                If true shipper will upload debug meta files
+                                which can be useful for debugging.
       --tmp.dir="/tmp/thanos-rewrite"
                                 Working directory for temporary files
       --tracing.config=<content>

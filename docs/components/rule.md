@@ -379,6 +379,9 @@ Flags:
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
+      --shipper.upload-debug-meta-files
+                                 If true shipper will upload debug meta files
+                                 which can be useful for debugging.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with

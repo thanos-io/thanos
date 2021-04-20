@@ -181,6 +181,9 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --shipper.upload-debug-meta-files
+                                 If true shipper will upload debug meta files
+                                 which can be useful for debugging.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
