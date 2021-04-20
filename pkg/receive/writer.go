@@ -59,12 +59,12 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 	getRef := app.(storage.GetRef)
 
-	var errs errutil.MultiError
+	var (
+		ref  uint64
+		errs errutil.MultiError
+	)
 	for _, t := range wreq.Timeseries {
-		var (
-			ref  uint64 = 0
-			lset        = labelpb.ZLabelsToPromLabels(t.Labels)
-		)
+		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(lset)

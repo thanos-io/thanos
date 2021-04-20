@@ -14,8 +14,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-const sep = '\xff'
-
 // insufficientNodesError is returned when a hashring does not
 // have enough nodes to satisfy a request for a node.
 type insufficientNodesError struct {
