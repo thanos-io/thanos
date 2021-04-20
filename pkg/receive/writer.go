@@ -81,33 +81,32 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample", s)
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample", s)
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
-				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset.String(), "sample", s.String())
+				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", s)
 			}
 		}
 	}
 
 	if numOutOfOrder > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order samples", "num_dropped", numOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "failed to non-fast add %d samples", numOutOfOrder))
+		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numOutOfOrder)
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "add %d samples", numOutOfOrder))
 	}
 	if numDuplicates > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples with different value but same timestamp", "num_dropped", numDuplicates)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "failed to non-fast add %d samples", numDuplicates))
+		level.Warn(r.logger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numDuplicates)
+		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numDuplicates))
 	}
 	if numOutOfBounds > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "num_dropped", numOutOfBounds)
-		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "failed to non-fast add %d samples", numOutOfBounds))
+		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
+		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
 	}
 
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
-
 	return errs.Err()
 }
