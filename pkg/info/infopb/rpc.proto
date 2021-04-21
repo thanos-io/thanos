@@ -47,6 +47,7 @@ message InfoResponse {
     RulesInfo rulesInfo = 4;
     MetadataInfo metadataInfo = 5;
     ExemplarsInfo exemplarsInfo = 6;
+    TargetsInfo targetsInfo = 7;
 }
 
 message StoreInfo {
@@ -65,6 +66,11 @@ message MetadataInfo {
 }
 
 message ExemplarsInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
+
+message TargetsInfo {
     int64 min_time = 1;
     int64 max_time = 2;
 }
