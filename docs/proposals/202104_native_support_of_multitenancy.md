@@ -25,14 +25,14 @@ All the components implementing either the Store API (Sidecar, Ruler, Store Gate
 
 ### Motivation
 
-* We actually don't have any way to track the resource usages of the query(like error rates, memory allocation, CPU usages along with the queries) and tenant-wise metrics.
-* Every component should allow passing a special label that allows APIs that identify tenants.
+* We currently don't have any way to track the resource usages of the query (like error rates, memory allocation, CPU usages along with the queries) and tenant-wise metrics.
+* Not every component allows Thanos to identify tenants.
 * Currently, we use external labels to achieve multi-tenancy. These labels are sufficient for the sidecar (single-tenant per sidecar i.e hard tenant) but for other components (where we will have multiple tenants per component i.e soft tenancy) these external labels are not sufficient.
 
 ### Goals
 
 1. Introduce a mechanism to identify tenants to support multi-tenancy use cases.
-2. Isolate all the incoming query requests.
+2. Isolate the incoming read and write API requests across tenants if needed.
 3. Track data usage across tenants.
 
 #### Use Case
@@ -52,7 +52,7 @@ All the components implementing either the Store API (Sidecar, Ruler, Store Gate
 * Introduce a new flag to enable or disable the multi-tenancy mode.
 * When this flag is enabled we will modify the metrics which can be used to track usage characteristics of a tenant by injecting the tenant’s label (a const. Label ).
 * We will make sure that the query request received has a tenant label and if not we have some default tenant label configured.
-* We will enforce the tenant labels inside the Thanos code base(i.e we assume the authentication is done and the query has access to the tenant's data which it specifies) when we run components with a specified mode(i.e multi-tenancy flag is enabled). We will no longer require any label enforcing proxy.
+* We will enforce the tenant labels inside the Thanos codebase(i.e we assume the authentication is done and the query has access to the tenant's data which it specifies) when we run components with a specified mode (i.e multi-tenancy flag is enabled). We will no longer require any label enforcing proxy.
 * Support the cross tenant queries using regular expressions.
 * Store API will advertise the tenant label and this how it will help us -
     * Let's assume a case of hard tenancy, we have two store-gateway advertising different sets of tenants.
@@ -62,13 +62,13 @@ All the components implementing either the Store API (Sidecar, Ruler, Store Gate
 * So, when we get a query and we pass it, and we have a tenant label and we treat that as a special value for a tenant, we can extract that value and aggregate some metrics and inject these metrics into Thanos components itself. Then we have tenant-specific metrics. Depending on the data we collect from the Thanos we can generate the dashboard etc.
 * Changes specific to components
     * Ruler
-        * We have put some extra effort into Ruler, there will be rules according to different tenants and there will be a configuration layer from tenant to which alert manager(i.e for different tenants having different alert manager ) to redirect. We have tenant-id(tenant label) and we can inject them on all outgoing requests as header and querier knows how to deal with them, we get the queries done and if we get some alert fired, we will redirect to tenant-specific alert managers.
+        * We have put some extra effort into Ruler, there will be rules according to different tenants and there will be a configuration layer from tenant to which alert manager (i.e for different tenants having different alert manager) to redirect. We have `tenant-id` (tenant label) and we can inject them on all outgoing requests as header and querier knows how to deal with them, we get the queries done and if we get some alert fired, we will redirect to tenant-specific alert managers.
     * Store
         * We will build multi-tenancy on a label-based approach and after introducing this PR we will need a thin layer that will convert custom prefix to external label and the rest advertising label, querying will be the same.
 
 #### Alternatives
 
-1. If we want to track the resource usages of a query, we can deploy another X proxy(hypothetical) depending on the data we want to aggregate. Similar to prom-label proxy we can inject this proxy to each of thanos components and check the queries and depending on tenant label(or any specified label) we can aggregate the metrics, this would be okay and we can aggregate simple metrics like error rates, latencies. And then we generate metrics per tenant and scrape these proxies from another prometheus and then finally generate dashboard reports etc.
+1. If we want to track the resource usages of a query, we can deploy another X proxy (hypothetical) depending on the data we want to aggregate. Similar to prom-label proxy we can inject this proxy to each of thanos components and check the queries and depending on tenant label (or any specified label) we can aggregate the metrics, this would be okay and we can aggregate simple metrics like error rates, latencies. And then we generate metrics per tenant and scrape these proxies from another prometheus and then finally generate dashboard reports etc.
     * Though this approach is not sufficient because when we want to track actual resource usages like memory allocation, CPU usages along with the queries, then we need to get into the Thanos components itself and for this, we need to know about these tenant labels.
 
 2. We can use a prom-label proxy for label enforcement.
