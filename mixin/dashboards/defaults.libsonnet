@@ -7,6 +7,7 @@
   dashboard:: {
     prefix: 'Thanos / ',
     tags: error 'must provide dashboard tags',
+    timezone: 'UTC',
   },
 
   // Automatically add a uid to each dashboard based on the base64 encoding
@@ -15,7 +16,7 @@
     local component = std.split(filename, '.')[0],
     [filename]: grafanaDashboards[filename] {
       uid: std.md5(filename),
-      timezone: 'UTC',
+      timezone: thanos.dashboard.timezone,
       tags: thanos.dashboard.tags,
 
       // Modify tooltip to only show a single value
