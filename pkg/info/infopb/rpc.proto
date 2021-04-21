@@ -56,13 +56,9 @@ message StoreInfo {
 }
 
 message RulesInfo {
-    int64 min_time = 1;
-    int64 max_time = 2;
 }
 
 message MetadataInfo {
-    int64 min_time = 1;
-    int64 max_time = 2;
 }
 
 message ExemplarsInfo {
@@ -71,6 +67,4 @@ message ExemplarsInfo {
 }
 
 message TargetsInfo {
-    int64 min_time = 1;
-    int64 max_time = 2;
 }
