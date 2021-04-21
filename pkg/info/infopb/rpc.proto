@@ -20,7 +20,7 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-// Info represents the API that is responsible for gather metadata about the all APIs supported by the component.
+// Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
 service Info {
     // Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
     rpc Info(InfoRequest) returns (InfoResponse);
