@@ -67,10 +67,11 @@ message ActiveTarget {
     ZLabelSet labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     string scrapePool = 3 [(gogoproto.jsontag) = "scrapePool"];
     string scrapeUrl = 4 [(gogoproto.jsontag) = "scrapeUrl"];
-    string lastError = 5 [(gogoproto.jsontag) = "lastError"];
-    google.protobuf.Timestamp lastScrape = 6 [(gogoproto.jsontag) = "lastScrape", (gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    double lastScrapeDuration = 7 [(gogoproto.jsontag) = "lastScrapeDuration"];
-    TargetHealth health = 8 [(gogoproto.jsontag) = "health"];
+    string globalUrl = 5 [(gogoproto.jsontag) = "globalUrl"];
+    string lastError = 6 [(gogoproto.jsontag) = "lastError"];
+    google.protobuf.Timestamp lastScrape = 7 [(gogoproto.jsontag) = "lastScrape", (gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    double lastScrapeDuration = 8 [(gogoproto.jsontag) = "lastScrapeDuration"];
+    TargetHealth health = 9 [(gogoproto.jsontag) = "health"];
 }
 
 message DroppedTarget {
