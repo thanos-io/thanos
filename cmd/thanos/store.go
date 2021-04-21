@@ -62,8 +62,8 @@ type storeConfig struct {
 	filterConf                  *store.FilterConfig
 	selectorRelabelConf         extflag.PathOrContent
 	advertiseCompatibilityLabel bool
-	consistencyDelay            common_model.Duration
-	ignoreDeletionMarksDelay    common_model.Duration
+	consistencyDelay            commonmodel.Duration
+	ignoreDeletionMarksDelay    commonmodel.Duration
 	webConfig                   webConfig
 	postingOffsetsInMemSampling int
 	cachingBucketConfig         extflag.PathOrContent
@@ -205,7 +205,7 @@ func runStore(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
-	grpcLogOpts []grpc_logging.Option,
+	grpcLogOpts []grpclogging.Option,
 	tagOpts []tags.Option,
 	conf storeConfig,
 	flagsMap map[string]string,
