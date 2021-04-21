@@ -6,7 +6,7 @@ menu: operating
 
 # Q&A
 
-This is a curated list of "Questions and Answers". The goal of this page is to provide answers to frequently asked questions and give basic information about operating Thanos. 
+This is a curated list of "Questions and Answers". The goal of this page is to provide answers to frequently asked questions and give basic information about operating Thanos.
 
 We encourage to asks questions in the appropriate channels and update this page to share the knowledge further.
 
@@ -45,7 +45,7 @@ A single store will just do fine. If needed you can create more instances where 
 
 ## What is a TSDB Block?
 
-See [storage](https://thanos.io/tip/thanos/storage.md/#tsdb-block)  
+See [storage](https://thanos.io/tip/thanos/storage.md/#tsdb-block)
 
 ## What is a chunk?
 
