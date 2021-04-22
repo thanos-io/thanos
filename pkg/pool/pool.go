@@ -112,11 +112,12 @@ func (p *BucketedBytes) Put(b *[]byte) {
 			continue
 		}
 		*b = (*b)[:0]
-		p.mtx.Lock()
-		defer p.mtx.Unlock()
 		p.buckets[i].Put(b)
 		break
 	}
+
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
 
 	// We could assume here that our users will not make the slices larger
 	// but lets be on the safe side to avoid an underflow of p.usedTotal.
