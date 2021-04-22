@@ -78,13 +78,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLength)
+		Default("0").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxQueryLength))
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of query range requests will be scheduled in parallel by the Frontend.").
 		Default("14").IntVar(&cfg.QueryRangeConfig.Limits.MaxQueryParallelism)
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result for query range requests, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness)
+		Default("1m").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness))
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for query range requests if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.PartialResponseStrategy)
@@ -102,7 +102,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("14").IntVar(&cfg.LabelsConfig.Limits.MaxQueryParallelism)
 
 	cmd.Flag("labels.response-cache-max-freshness", "Most recent allowed cacheable result for labels requests, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.LabelsConfig.Limits.MaxCacheFreshness)
+		Default("1m").DurationVar((*time.Duration)(&cfg.LabelsConfig.Limits.MaxCacheFreshness))
 
 	cmd.Flag("labels.partial-response", "Enable partial response for labels requests if no partial_response param is specified. --no-labels.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.LabelsConfig.PartialResponseStrategy)
