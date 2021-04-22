@@ -29,8 +29,8 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
       />
       <Container fluid style={{ paddingTop: 70 }}>
         <QueryParamProvider reachHistory={globalHistory}>
-          <Router basepath={`${pathPrefix}/new`}>
-            <Redirect from="/" to={`${pathPrefix}/new${defaultRouteConfig[thanosComponent]}`} />
+          <Router basepath={`${pathPrefix}`}>
+            <Redirect from="/" to={`${pathPrefix}${defaultRouteConfig[thanosComponent]}`} />
 
             <PanelList path="/graph" pathPrefix={pathPrefix} />
             <Alerts path="/alerts" pathPrefix={pathPrefix} />
