@@ -17,7 +17,7 @@ We want to propose a new flag called `--endpoint=<address>` that will be passed 
 
 ### Motivation
 
-Currently, in Thanos Query, the discovery of rules APIs happens via Store API's Info method. This makes it harder if we ever want to not have a coupling to the Store API (which is already planned for [scalable ruler proposal](https://github.com/thanos-io/thanos/blob/master/docs/proposals/202005_scalable-rule-storage.md)).
+Currently, in Thanos Query, the discovery of rules APIs happens via Store API's Info method. This makes it harder if we ever want to not have a coupling to the Store API (which is already planned for [scalable ruler proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202005_scalable-rule-storage.md)).
 
 We also require passing two different flags to the Thanos Query component `--store=<address>` and `--rule=<address>`. If users use both flags, the Query component performs DNS discovery on often the same address multiple times, this can cause occasional DNS issues as this resolving happens so frequently. This is especially confusing when one works and the other doesn't. Adding new APIs in the future would exacerbate this issue with DNS requests.
 
@@ -29,7 +29,7 @@ Unite discovery of endpoints, which would make code cleaner as well as provide b
 
 Add a new flag called `--endpoint` to Thanos query, and auto-discover what services that endpoint is serving based on metadata each gRPC server exposes.
 
-Each component will expose an Info service, that includes various metadata listed below. Discovery of endpoints will happen via this Info service. There might be a case that the discovery of gRPC will also have to happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md), this will be clear once implementation starts.
+Each component will expose an Info service, that includes various metadata listed below. Discovery of what services an endpoint is exposing will happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md). Once we discover what services that endpoint is exposing (e.g. StoreAPI, TargetsAPI) we can retrieve metadata about them using a single `Info` method call from the Info service.
 
 Info API metadata would include the following fields regardless of the type:
 ```
@@ -42,7 +42,7 @@ info:
     blah: ...
 ```
 
-Right now this Info service would be added to existing components Ruler, Store, Sidecar and Receive.
+Right now this Info service would be added to existing components exposing a gRPC server.
 
 The upgrade path would be possible in this case, as it's strictly additive for endpoints, and there will be a migration path to fall back to current discovery methods which could be removed in the future.
 
