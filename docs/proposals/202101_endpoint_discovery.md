@@ -29,7 +29,7 @@ Unite discovery of endpoints, which would make code cleaner as well as provide b
 
 Add a new flag called `--endpoint` to Thanos query, and auto-discover what services that endpoint is serving based on metadata each gRPC server exposes.
 
-Each component will expose an Info service, that includes various metadata listed below. Discovery of endpoints will happen via this Info service. there might be a case that the discovery of gRPC will also have to happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md), this will be clear once implementation starts.
+Each component will expose an Info service, that includes various metadata listed below. Discovery of endpoints will happen via this Info service. There might be a case that the discovery of gRPC will also have to happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md), this will be clear once implementation starts.
 
 Info API metadata would include the following fields regardless of the type:
 ```
@@ -42,7 +42,7 @@ info:
     blah: ...
 ```
 
-Right now this info service would be added to existing components Ruler, Store, Sidecar, Compact, Downsample, Receive.
+Right now this Info service would be added to existing components Ruler, Store, Sidecar and Receive.
 
 The upgrade path would be possible in this case, as it's strictly additive for endpoints, and there will be a migration path to fall back to current discovery methods which could be removed in the future.
 
@@ -52,7 +52,7 @@ Initial discovery of gRPC services available will happen via gRPC reflection. To
 
 This alternative solution was also considered, however it was not chosen because of its following drawbacks.
 
-1. For servers implementing multiple API (Eg. Store, Rules, Exemplar), we need to make multiple microservices calls (For given example 3x calls).
+1. For servers implementing multiple API (e.g. Store, Rules, Exemplar), we need to make multiple microservices calls (For given example 3x calls).
 2. There is also ambiguity about which Info method should be used for these kinds of servers.
 
 ### Upgrade plan
@@ -61,6 +61,6 @@ Regardless of the solution, we will be not removing any flags for a given period
 
 ### Work plan
 
-1. We would be adding the new info service and flags needed for the above solution, so this part would be entirely additive.
+1. We would be adding the new Info service and flags needed for the above solution, so this part would be entirely additive.
 2. Second step would be the integration of this service, flags and migration of existing code.
 3. We would not be removing the existing flags (`--store` and `--rule`) for some grace period, after that passes we would also have to remove it and any migration code.
