@@ -38,8 +38,11 @@ func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanos
 		"queryURL":  queryURL,
 	}
 
+	tmplFuncs := ruleTmplFuncs(queryURL)
+	tmplFuncs["uiPrefix"] = func() string { return "/classic" }
+
 	return &Rule{
-		BaseUI:         NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL), tmplVariables, externalPrefix, prefixHeader, component.Rule),
+		BaseUI:         NewBaseUI(logger, "rule_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Rule),
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		ruleManager:    ruleManager,

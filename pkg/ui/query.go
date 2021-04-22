@@ -38,8 +38,11 @@ func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, externalPrefix, pre
 	}
 	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 
+	tmplFuncs := queryTmplFuncs()
+	tmplFuncs["uiPrefix"] = func() string { return "/classic" }
+
 	return &Query{
-		BaseUI:         NewBaseUI(logger, "query_menu.html", queryTmplFuncs(), tmplVariables, externalPrefix, prefixHeader, component.Query),
+		BaseUI:         NewBaseUI(logger, "query_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query),
 		storeSet:       storeSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,

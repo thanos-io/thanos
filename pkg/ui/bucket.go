@@ -37,8 +37,13 @@ func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefi
 		"Component": comp.String(),
 	}
 
+	tmplFuncs := queryTmplFuncs()
+	// here the uiPrefix is empty because the uiPrefix is injected in the pathPrefix.
+	// Which seems to be the only way to the correct path in the file bucket.html
+	tmplFuncs["uiPrefix"] = func() string { return "" }
+
 	return &Bucket{
-		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", queryTmplFuncs(), tmplVariables, externalPrefix, prefixHeader, comp),
+		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, comp),
 		Blocks:         "[]",
 		Label:          label,
 		externalPrefix: externalPrefix,
@@ -48,41 +53,30 @@ func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefi
 }
 
 // Register registers http routes for bucket UI.
-func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
-	/*	redirectPath := "/blocks"
-		if len(b.uiPrefix) > 0 {
-			redirectPath = b.uiPrefix
-		}
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), redirectPath), http.StatusFound)
-		})
+func (b *Bucket) Register(r *route.Router, registerNewUI bool, ins extpromhttp.InstrumentationMiddleware) {
+	classicPrefix := path.Join("/classic", b.uiPrefix)
+	r.WithPrefix(classicPrefix).Get("/", instrf("bucket", ins, b.bucket))
+	r.WithPrefix(classicPrefix).Get("/static/*filepath", instrf("static", ins, b.serveStaticAsset))
+
+	if registerNewUI {
 		// Redirect the original React UI's path (under "/new") to its new path at the root.
 		r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 			p := route.Param(r.Context(), "path")
 			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
 		})
 
-		// here we have two routes that serve the same document. It's because it depends where do we come from.
-		// If we are coming from the new UI, it will use the first route.
-		// If we are coming from the old UI, it will use the second route.
-		r.Get(path.Join("/classic", b.uiPrefix), instrf("bucket", ins, b.bucket))
-		r.WithPrefix(b.uiPrefix).Get("/classic", instrf("bucket", ins, b.bucket))
-		r.WithPrefix(b.uiPrefix).Get("/classic/static/*filepath", instrf("static", ins, b.serveStaticAsset))
-		registerReactApp(r, ins, b.BaseUI)*/
-	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		return ins.NewHandler(b.externalPrefix+name, http.HandlerFunc(next))
-	}
-	r.WithPrefix(b.uiPrefix).Get("/", instrf("root", b.root))
-	r.WithPrefix(b.uiPrefix).Get("/static/*filepath", instrf("static", b.serveStaticAsset))
-}
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), b.uiPrefix), http.StatusFound)
+		})
 
-func (b *Bucket) root(w http.ResponseWriter, r *http.Request) {
-	b.executeTemplate(w, "bucket.html", GetWebPrefix(b.logger, path.Join(b.externalPrefix, strings.TrimPrefix(b.uiPrefix, "/")), b.prefixHeader, r), b)
+		registerReactApp(r, ins, b.BaseUI)
+	}
 }
 
 // Handle / of bucket UIs.
 func (b *Bucket) bucket(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(b.logger, path.Join(b.externalPrefix, strings.TrimPrefix(b.uiPrefix, "/")), b.prefixHeader, r)
+	classicPrefix := path.Join("/classic", b.uiPrefix)
+	prefix := GetWebPrefix(b.logger, path.Join(b.externalPrefix, strings.TrimPrefix(classicPrefix, "/")), b.prefixHeader, r)
 	b.executeTemplate(w, "bucket.html", prefix, b)
 }
 
