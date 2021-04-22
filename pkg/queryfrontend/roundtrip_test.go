@@ -18,6 +18,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
@@ -33,9 +34,9 @@ const (
 )
 
 var defaultLimits = &cortexvalidation.Limits{
-	MaxQueryLength:      7 * 24 * time.Hour,
+	MaxQueryLength:      model.Duration(7 * 24 * time.Hour),
 	MaxQueryParallelism: 14,
-	MaxCacheFreshness:   time.Minute,
+	MaxCacheFreshness:   model.Duration(time.Minute),
 }
 
 // fakeRoundTripper implements the RoundTripper interface.
