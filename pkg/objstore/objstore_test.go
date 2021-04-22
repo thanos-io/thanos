@@ -5,6 +5,7 @@ package objstore
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -66,11 +67,22 @@ func TestMetricBucket_Close(t *testing.T) {
 }
 
 func TestTracingReader(t *testing.T) {
-	r := bytes.NewBuffer([]byte("hello"))
-	tr := &tracingReadCloser{r: NopCloserWithSize(r)}
+	r := bytes.NewReader([]byte("hello world"))
+	tr := newTracingReadCloser(NopCloserWithSize(r), nil)
 
 	size, err := TryToGetSize(tr)
 
 	testutil.Ok(t, err)
-	testutil.Equals(t, int64(5), size)
+	testutil.Equals(t, int64(11), size)
+
+	smallBuf := make([]byte, 4)
+	n, err := io.ReadFull(tr, smallBuf)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 4, n)
+
+	// Verify that size is still the same, after reading 4 bytes.
+	size, err = TryToGetSize(tr)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, int64(11), size)
 }
