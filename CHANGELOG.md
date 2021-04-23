@@ -22,6 +22,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 - [#3840](https://github.com/thanos-io/thanos/pull/3840) Tools: Added a flag to support rewrite Prometheus TSDB blocks.
 - [#3920](https://github.com/thanos-io/thanos/pull/3920) Query Frontend: Support `max_item_size` in Query frontend Memcached cache.
+- [#4078](https://github.com/thanos-io/thanos/pull/4078) receive: Improved efficiency of multitsdb appends, upgraded Prometheus deps.
 
 ### Fixed
 
@@ -42,11 +43,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#4045](https://github.com/thanos-io/thanos/pull/4045) UI: Enable Targets page in Querier UI.
 - [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically.
 - [#4081](https://github.com/thanos-io/thanos/pull/4081) UI: Make the ReactUI the default one.
+- [#4085](https://github.com/thanos-io/thanos/pull/4085) Receive: Improved Performance for err path.
 - [#4094](https://github.com/thanos-io/thanos/pull/4094) *: Upgrade Prometheus & Alertmanager.
-
-### Removed
-
--
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.03.31
 
