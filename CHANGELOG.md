@@ -10,6 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use _breaking :warning:_ to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.20.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0-rc.0) - 2021.04.23
 
 ### Added
 
@@ -25,23 +26,29 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
-- [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
-- [#3960](https://github.com/thanos-io/thanos/pull/3960) fix deduplication of equal alerts with different labels
+- [#3922](https://github.com/thanos-io/thanos/pull/3922) *: Fix panic in http logging middleware.
+- [#3960](https://github.com/thanos-io/thanos/pull/3960) Ruler: Fix deduplication of equal alerts with different labels.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Fix race condition in chunk pool.
 - [#4017](https://github.com/thanos-io/thanos/pull/4017) Query Frontend: fix downsampling iterator returning duplicate samples.
-- [#4017](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger
+- [#4041](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger.
 
 ### Changed
-- [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info
+
+- [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info.
 - [#3827](https://github.com/thanos-io/thanos/pull/3827) Upgrade Go version to 1.16
 - [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
 - [#3856](https://github.com/thanos-io/thanos/pull/3856) Mixin: _breaking :warning:_ Introduce flexible multi-cluster/namespace mode for alerts and dashboards. Removes jobPrefix config option. Removes `namespace` by default.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Reduce memory usage for range queries.
-- [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically
+- [#4045](https://github.com/thanos-io/thanos/pull/4045) UI: Enable Targets page in Querier UI.
+- [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically.
+- [#4081](https://github.com/thanos-io/thanos/pull/4081) UI: Make the ReactUI the default one.
+- [#4094](https://github.com/thanos-io/thanos/pull/4094) *: Upgrade Prometheus & Alertmanager.
 
 ### Removed
 
-## [v0.19.0](https://github.com/thanos-io/thanos/releases/tag/v0.19.0) - 2021.03.31
+-
+
+## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.03.31
 
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) Compact/Web: Make old bucket viewer UI work with vanilla Prometheus blocks.
 - [#3657](https://github.com/thanos-io/thanos/pull/3657) *: It's now possible to configure HTTP transport options for S3 client.
