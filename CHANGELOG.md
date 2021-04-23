@@ -10,6 +10,17 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use _breaking :warning:_ to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+### Added
+-
+### Fixed
+-
+### Changed
+-
+### Removed
+-
+## [v0.20.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.20)
 
 ### Added
 
@@ -32,6 +43,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#4017](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger
 
 ### Changed
+
 - [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info
 - [#3827](https://github.com/thanos-io/thanos/pull/3827) Upgrade Go version to 1.16
 - [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
