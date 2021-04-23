@@ -145,15 +145,34 @@ func runSidecar(
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
-				// Check prometheus's flags to ensure sane sidecar flags.
+				// Check prometheus's flags to ensure same sidecar flags.
 				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
 				}
 			}
 
+			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
+			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				if err := m.BuildVersion(ctx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus version",
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to get prometheus version")
+			}
+
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			err = runutil.Retry(2*time.Second, ctx.Done(), func() error {
 				if err := m.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
@@ -209,33 +228,6 @@ func runSidecar(
 			cancel()
 		})
 	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := m.BuildVersion(ctx); err != nil {
-					level.Warn(logger).Log(
-						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
-						"err", err,
-					)
-					return err
-				}
-
-				level.Info(logger).Log(
-					"msg", "successfully loaded prometheus version",
-				)
-				return nil
-			})
-			if err != nil {
-				return errors.Wrap(err, "failed to get prometheus version")
-			}
-			return nil
-		}, func(error) {
-			cancel()
-		})
-	}
-
 	{
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost

@@ -522,7 +522,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 			return nil, err
 		}
 
-		// using set to handle duplicate values.
+		// Using set to handle duplicate values.
 		labelValuesSet := make(map[string]struct{})
 		for _, s := range sers {
 			if val, exists := s[r.Label]; exists {
