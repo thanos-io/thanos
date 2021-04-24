@@ -136,21 +136,6 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 	return u.rt.RoundTrip(r)
 }
 
-type TransportConfigRoundTripper struct {
-	Transport http.Transport
-	rt        http.RoundTripper
-}
-
-func (t TransportConfigRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	r2 := new(http.Request)
-	*r2 = *r
-	r2.Header = make(http.Header)
-	for k, s := range r.Header {
-		r2.Header[k] = s
-	}
-	return t.rt.RoundTrip(r)
-}
-
 // EndpointsConfig configures a cluster of HTTP endpoints from static addresses and
 // file service discovery.
 type EndpointsConfig struct {
