@@ -4,7 +4,9 @@
 package main
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -25,7 +27,7 @@ func registerTools(app *extkingpin.App) {
 
 func registerCheckRules(app extkingpin.AppClause) {
 	cmd := app.Command("rules-check", "Check if the rule files are valid or not.")
-	ruleFiles := cmd.Flag("rules", "The rule files glob to check (repeated).").Required().ExistingFiles()
+	ruleFiles := cmd.Flag("rules", "The rule files glob to check (repeated).").Required().Strings()
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
@@ -39,26 +41,33 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 
 	for _, fn := range *files {
 		level.Info(logger).Log("msg", "checking", "filename", fn)
-		f, err := os.Open(fn)
+		matches, err := filepath.Glob(fn)
+		if matches == nil {
+			err = errors.New("Matching file not found")
+		}
 		if err != nil {
 			level.Error(logger).Log("result", "FAILED", "error", err)
 			level.Info(logger).Log()
 			failed.Add(err)
 			continue
 		}
-		defer func() { _ = f.Close() }()
+		for _, fn1 := range matches {
+			// no need to check path error
+			f, _ := os.Open(fn1)
+			defer func() { _ = f.Close() }()
 
-		n, errs := rules.ValidateAndCount(f)
-		if errs.Err() != nil {
-			level.Error(logger).Log("result", "FAILED")
-			for _, e := range errs {
-				level.Error(logger).Log("error", e.Error())
-				failed.Add(e)
+			n, errs := rules.ValidateAndCount(f)
+			if errs.Err() != nil {
+				level.Error(logger).Log("result", "FAILED")
+				for _, e := range errs {
+					level.Error(logger).Log("error", e.Error())
+					failed.Add(e)
+				}
+				level.Info(logger).Log()
+				continue
 			}
-			level.Info(logger).Log()
-			continue
+			level.Info(logger).Log("result", "SUCCESS", "rules found", n)
 		}
-		level.Info(logger).Log("result", "SUCCESS", "rules found", n)
 	}
 	return failed.Err()
 }
