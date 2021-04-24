@@ -831,19 +831,3 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
 }
-
-type RoundTripperWithTransportOptions struct {
-	MaxIdleConnsPerHost int
-	MaxIdleConns        int
-	rt                  http.RoundTripper
-}
-
-func (r RoundTripperWithTransportOptions) RoundTrip(req *http.Request) (*http.Response, error) {
-	req2 := new(http.Request)
-	*req2 = *req
-	req2.Header = make(http.Header)
-	for k, s := range req.Header {
-		req2.Header[k] = s
-	}
-	return r.rt.RoundTrip(req2)
-}
