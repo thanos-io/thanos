@@ -38,17 +38,22 @@ func registerCheckRules(app extkingpin.AppClause) {
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
 	var failed errutil.MultiError
+	errhandle := func(e error) {
+		level.Error(logger).Log("result", "FAILED", "error", e)
+		level.Info(logger).Log()
+		failed.Add(e)
+	}
 
 	for _, fn := range *files {
 		level.Info(logger).Log("msg", "checking", "filename", fn)
 		matches, err := filepath.Glob(fn)
-		if matches == nil {
-			err = errors.New("Matching file not found")
-		}
 		if err != nil {
-			level.Error(logger).Log("result", "FAILED", "error", err)
-			level.Info(logger).Log()
-			failed.Add(err)
+			errhandle(err)
+			continue
+		}
+		if matches == nil {
+			err = errors.New("matching file not found")
+			errhandle(err)
 			continue
 		}
 		for _, fn1 := range matches {
