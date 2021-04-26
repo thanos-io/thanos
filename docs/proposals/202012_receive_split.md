@@ -71,11 +71,10 @@ In comparison to previous proposal (as mentioned in [alternatives](#previous-pro
 1. Use consistent hashing to avoid reshuffling time series after resharding events. The exact consistent hashing mechanism to be used needs some further research.
 1. Migration: We document how the new architecture can be set up to have the same general deployment of the old architecture. (We run router and Receiver on the same node).
 
-This potentially makes the receiver more difficult to operate and understand for Thanos users. I would argue this is howerver much more harder in overall Thanos deployment. Otherwise this option is exactly the same.
+This potentially makes the receiver more difficult to operate and understand for Thanos users. I would argue this is however much harder in overall Thanos deployment. Otherwise, this option is exactly the same.
 
 #### Flag for current Receiver --receive-route
 
 Idea would be similar same as in [Proposal](#Proposal), but there will be explicit flag to turn off local storage capabilities.
 
 I think we can have much more understandable logic if we simply not configure hashring for ingesting Receivers and not configure local hashring endpoint to notify that such Receiver instance will never store anything.
-
