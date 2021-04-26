@@ -1205,6 +1205,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
+			var result []string
 			if len(reqSeriesMatchers) == 0 {
 				// Do it via index reader to have pending reader registered correctly.
 				res, err := indexr.block.indexHeaderReader.LabelNames()
@@ -1222,11 +1223,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					extRes = append(extRes, l.Name)
 				}
 
-				res = strutil.MergeSlices(res, extRes)
-
-				mtx.Lock()
-				sets = append(sets, res)
-				mtx.Unlock()
+				result = strutil.MergeSlices(res, extRes)
 			} else {
 				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
 				if err != nil {
@@ -1247,14 +1244,16 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					return errors.Wrapf(seriesSet.Err(), "iterate series for block %s", b.meta.ULID)
 				}
 
-				sortedLabelNames := make([]string, 0, len(labelNames))
+				result = make([]string, 0, len(labelNames))
 				for n := range labelNames {
-					sortedLabelNames = append(sortedLabelNames, n)
+					result = append(result, n)
 				}
-				sort.Strings(sortedLabelNames)
+				sort.Strings(result)
+			}
 
+			if len(result) > 0 {
 				mtx.Lock()
-				sets = append(sets, sortedLabelNames)
+				sets = append(sets, result)
 				mtx.Unlock()
 			}
 
@@ -1377,9 +1376,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				sort.Strings(result)
 			}
 
-			mtx.Lock()
-			sets = append(sets, result)
-			mtx.Unlock()
+			if len(result) > 0 {
+				mtx.Lock()
+				sets = append(sets, result)
+				mtx.Unlock()
+			}
 
 			return nil
 		})
