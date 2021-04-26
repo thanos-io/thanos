@@ -116,7 +116,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 
-		// Add labels to the meta of the second block.
+		// Replace labels to the meta of the second block.
 		meta, err := metadata.ReadFromDir(dir2)
 		testutil.Ok(t, err)
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
@@ -163,8 +163,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
-		series, extLset)
+	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt, series, extLset)
 
 	s := &storeSuite{
 		logger:  log.NewLogfmtLogger(os.Stderr),
@@ -680,6 +679,89 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 		})
 		testutil.Ok(t, err)
 		testutil.Equals(t, []string(nil), vals.Names)
+	})
+}
+
+func TestBucketStore_LabelNames_WithMatchers_e2e(t *testing.T) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		dir, err := ioutil.TempDir("", "test_bucketstore_label_names_with_matchers_e2e")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s.cache.SwapWith(noopCache{})
+
+		mint, maxt := s.store.TimeRange()
+		testutil.Equals(t, s.minTime, mint)
+		testutil.Equals(t, s.maxTime, maxt)
+
+		t.Run("matcher matching everything", func(t *testing.T) {
+			vals, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Matchers: []storepb.LabelMatcher{
+					{
+						Type:  storepb.LabelMatcher_EQ,
+						Name:  "a",
+						Value: "1",
+					},
+				},
+			})
+			testutil.Ok(t, err)
+			testutil.Equals(t, []string{"a", "b", "c", "ext1", "ext2"}, vals.Names)
+		})
+
+		t.Run("b=1 matcher", func(t *testing.T) {
+			vals, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Matchers: []storepb.LabelMatcher{
+					{
+						Type:  storepb.LabelMatcher_EQ,
+						Name:  "b",
+						Value: "1",
+					},
+				},
+			})
+			testutil.Ok(t, err)
+			testutil.Equals(t, []string{"a", "b", "ext1"}, vals.Names)
+		})
+
+		t.Run("b='' matcher", func(t *testing.T) {
+			vals, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(minTime),
+				End:   timestamp.FromTime(maxTime),
+				Matchers: []storepb.LabelMatcher{
+					{
+						Type:  storepb.LabelMatcher_EQ,
+						Name:  "b",
+						Value: "",
+					},
+				},
+			})
+			testutil.Ok(t, err)
+			testutil.Equals(t, []string{"a", "c", "ext2"}, vals.Names)
+		})
+
+		t.Run("outside the time range", func(t *testing.T) {
+			vals, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
+				Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
+				End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
+
+				Matchers: []storepb.LabelMatcher{
+					{
+						Type:  storepb.LabelMatcher_EQ,
+						Name:  "a",
+						Value: "1",
+					},
+				},
+			})
+			testutil.Ok(t, err)
+			testutil.Equals(t, []string(nil), vals.Names)
+		})
 	})
 }
 

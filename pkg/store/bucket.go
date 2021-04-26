@@ -746,6 +746,7 @@ func (s *bucketSeriesSet) Err() error {
 	return s.err
 }
 
+// blockSeries returns series matching given matchers, that have some data in given time range.
 func blockSeries(
 	extLset labels.Labels, // External labels added to the returned series labels.
 	indexr *bucketIndexReader, // Index reader for block.
@@ -1158,16 +1159,14 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
+	}
+
 	resHints := &hintspb.LabelNamesResponseHints{}
 
-	g, gctx := errgroup.WithContext(ctx)
-
-	s.mtx.RLock()
-
-	var mtx sync.Mutex
-	var sets [][]string
 	var reqBlockMatchers []*labels.Matcher
-
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelNamesRequestHints{}
 		err := types.UnmarshalAny(req.Hints, reqHints)
@@ -1181,7 +1180,16 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		}
 	}
 
+	g, gctx := errgroup.WithContext(ctx)
+
+	s.mtx.RLock()
+
+	var mtx sync.Mutex
+	var sets [][]string
+	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
+
 	for _, b := range s.blocks {
+		b := b
 		if !b.overlapsClosedInterval(req.Start, req.End) {
 			continue
 		}
@@ -1192,32 +1200,62 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		resHints.AddQueriedBlock(b.meta.ULID)
 
 		indexr := b.indexReader(gctx)
-		extLabels := b.meta.Thanos.Labels
 
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
-			// Do it via index reader to have pending reader registered correctly.
-			res, err := indexr.block.indexHeaderReader.LabelNames()
-			if err != nil {
-				return errors.Wrap(err, "label names")
+			if len(reqSeriesMatchers) == 0 {
+				// Do it via index reader to have pending reader registered correctly.
+				res, err := indexr.block.indexHeaderReader.LabelNames()
+				if err != nil {
+					return errors.Wrapf(err, "label names for block %s", b.meta.ULID)
+				}
+
+				sort.Strings(res)
+
+				// Add  a set for the external labels as well.
+				// We're not adding them directly to res because there could be duplicates.
+				// b.extLset is already sorted by label name, no need to sort it again.
+				extRes := make([]string, 0, len(b.extLset))
+				for _, l := range b.extLset {
+					extRes = append(extRes, l.Name)
+				}
+
+				res = strutil.MergeSlices(res, extRes)
+
+				mtx.Lock()
+				sets = append(sets, res)
+				mtx.Unlock()
+			} else {
+				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				if err != nil {
+					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				}
+
+				// Extract label names from all series. Many label names will be the same, so we need to deduplicate them.
+				// Note that label names will already include external labels (passed to blockSeries), so we don't need
+				// to add them again.
+				labelNames := map[string]struct{}{}
+				for seriesSet.Next() {
+					ls, _ := seriesSet.At()
+					for _, l := range ls {
+						labelNames[l.Name] = struct{}{}
+					}
+				}
+				if seriesSet.Err() != nil {
+					return errors.Wrapf(seriesSet.Err(), "iterate series for block %s", b.meta.ULID)
+				}
+
+				sortedLabelNames := make([]string, 0, len(labelNames))
+				for n := range labelNames {
+					sortedLabelNames = append(sortedLabelNames, n)
+				}
+				sort.Strings(sortedLabelNames)
+
+				mtx.Lock()
+				sets = append(sets, sortedLabelNames)
+				mtx.Unlock()
 			}
-
-			// Add  a set for the external labels as well.
-			// We're not adding them directly to res because there could be duplicates.
-			extRes := make([]string, 0, len(extLabels))
-			for lName := range extLabels {
-				extRes = append(extRes, lName)
-			}
-
-			sort.Strings(res)
-			sort.Strings(extRes)
-
-			res = strutil.MergeSlices(res, extRes)
-
-			mtx.Lock()
-			sets = append(sets, res)
-			mtx.Unlock()
 
 			return nil
 		})
