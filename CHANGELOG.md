@@ -16,6 +16,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#4029](https://github.com/thanos-io/thanos/pull/4029) Mixin: Remove dependency on the rule dashboard when generating the compact dashboard
 - [#4019](https://github.com/thanos-io/thanos/pull/4019) Query: Adds query range histogram.
+- [#3846](https://github.com/thanos-io/thanos/pull/3846) Query: Added federated exemplars API support.
 - [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
 - [#3977](https://github.com/thanos-io/thanos/pull/3903) Expose exemplars for `http_request_duration_seconds` histogram if tracing is enabled.
 - [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
