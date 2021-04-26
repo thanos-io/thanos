@@ -747,13 +747,15 @@ func (s *bucketSeriesSet) Err() error {
 }
 
 func blockSeries(
-	extLset labels.Labels,
-	indexr *bucketIndexReader,
-	chunkr *bucketChunkReader,
-	matchers []*labels.Matcher,
-	req *storepb.SeriesRequest,
-	chunksLimiter ChunksLimiter,
-	seriesLimiter SeriesLimiter,
+	extLset labels.Labels, // External labels added to the returned series labels.
+	indexr *bucketIndexReader, // Index reader for block.
+	chunkr *bucketChunkReader, // Chunk reader for block.
+	matchers []*labels.Matcher, // Series matchers.
+	chunksLimiter ChunksLimiter, // Rate limiter for loading chunks.
+	seriesLimiter SeriesLimiter, // Rate limiter for loading series.
+	skipChunks bool, // If true, chunks are not loaded.
+	minTime, maxTime int64, // Series must have data in this time range to be returned.
+	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -785,7 +787,7 @@ func blockSeries(
 		chks           []chunks.Meta
 	)
 	for _, id := range ps {
-		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, req.SkipChunks, req.MinTime, req.MaxTime)
+		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
@@ -795,7 +797,7 @@ func blockSeries(
 		}
 
 		s := seriesEntry{}
-		if !req.SkipChunks {
+		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]uint64, 0, len(chks))
 			s.chks = make([]storepb.AggrChunk, 0, len(chks))
@@ -825,11 +827,11 @@ func blockSeries(
 		res = append(res, s)
 	}
 
-	if req.SkipChunks {
+	if skipChunks {
 		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
-	if err := chunkr.load(res, req.Aggregates); err != nil {
+	if err := chunkr.load(res, loadAggregates); err != nil {
 		return nil, nil, errors.Wrap(err, "load chunks")
 	}
 
@@ -1026,9 +1028,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					indexr,
 					chunkr,
 					blockMatchers,
-					req,
 					chunksLimiter,
 					seriesLimiter,
+					req.SkipChunks,
+					req.MinTime, req.MaxTime,
+					req.Aggregates,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
