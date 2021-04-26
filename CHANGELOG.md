@@ -13,7 +13,10 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
--
+
+- [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
+
+
 ### Fixed
 -
 ### Changed
