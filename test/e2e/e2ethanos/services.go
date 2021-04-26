@@ -514,6 +514,7 @@ func NewIngestingReceiver(e e2e.Environment, name string) (*e2e.InstrumentedRunn
 func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
+
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create rule dir")
 	}
