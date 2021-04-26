@@ -36,29 +36,23 @@ func registerCheckRules(app extkingpin.AppClause) {
 	})
 }
 
-func checkRulesFiles(logger log.Logger, files *[]string) error {
+func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 	var failed errutil.MultiError
-	errhandle := func(e error) {
-		level.Error(logger).Log("result", "FAILED", "error", e)
-		level.Info(logger).Log()
-		failed.Add(e)
-	}
 
-	for _, fn := range *files {
-		level.Info(logger).Log("msg", "checking", "filename", fn)
-		matches, err := filepath.Glob(fn)
-		if err != nil {
-			errhandle(err)
-			continue
-		}
-		if matches == nil {
+	for _, p := range *patterns {
+		level.Info(logger).Log("msg", "checking", "pattern", p)
+		matches, err := filepath.Glob(p)
+		if err != nil || matches == nil {
 			err = errors.New("matching file not found")
-			errhandle(err)
+			level.Error(logger).Log("result", "FAILED", "error", err)
+			level.Info(logger).Log()
+			failed.Add(err)
 			continue
 		}
-		for _, fn1 := range matches {
+		for _, fn := range matches {
+			level.Info(logger).Log("msg", "checking", "filename", fn)
 			// no need to check path error
-			f, _ := os.Open(fn1)
+			f, _ := os.Open(fn)
 			defer func() { _ = f.Close() }()
 
 			n, errs := rules.ValidateAndCount(f)
