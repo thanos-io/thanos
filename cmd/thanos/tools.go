@@ -51,8 +51,13 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 		}
 		for _, fn := range matches {
 			level.Info(logger).Log("msg", "checking", "filename", fn)
-			// no need to check path error
-			f, _ := os.Open(fn)
+			f, er := os.Open(fn)
+			if er != nil {
+				level.Error(logger).Log("result", "FAILED", "error", er)
+				level.Info(logger).Log()
+				failed.Add(err)
+				continue
+			}
 			defer func() { _ = f.Close() }()
 
 			n, errs := rules.ValidateAndCount(f)
