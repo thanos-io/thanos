@@ -107,6 +107,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	})
 }
 
+//nolint:unused
 func targetAndAssert(t *testing.T, ctx context.Context, addr string, state string, want *targetspb.TargetDiscovery) {
 	t.Helper()
 
