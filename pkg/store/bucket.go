@@ -1208,12 +1208,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			var result []string
 			if len(reqSeriesMatchers) == 0 {
 				// Do it via index reader to have pending reader registered correctly.
+				// LabelNames are already sorted.
 				res, err := indexr.block.indexHeaderReader.LabelNames()
 				if err != nil {
 					return errors.Wrapf(err, "label names for block %s", b.meta.ULID)
 				}
-
-				sort.Strings(res)
 
 				// Add  a set for the external labels as well.
 				// We're not adding them directly to res because there could be duplicates.
