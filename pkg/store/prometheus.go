@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/blang/semver/v4"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -504,10 +505,22 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		err  error
 	)
 
+	lvc := false // LabelValuesCall
 	vals := []string{}
-	version := p.promVersion()
+	v := p.promVersion()
 
-	if len(r.Matchers) == 0 || version > "2.24" {
+	version, err := semver.Parse(v)
+	if err == nil {
+		baseVer, err := semver.Make("2.24.0")
+		if err != nil {
+			return nil, err
+		}
+		if version.Compare(baseVer) == 1 {
+			lvc = true
+		}
+	}
+
+	if len(r.Matchers) == 0 || lvc {
 		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
