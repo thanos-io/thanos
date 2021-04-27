@@ -38,7 +38,7 @@ We propose allowing to run Thanos Receiver in a mode that only forwards/replicat
                                  configuration.
 ```
 
-We can call this mode a "Routing Receiver". Similarly, we can skip specify any hashring to Thanos Receiver (`--receive.hashrings-file=<path>`), explicitly purposing it only for ingesting. We can call this mode "Ingesting Receiver".
+We can call this mode a "Routing Receiver". Similarly, we can skip specifying any hashring to Thanos Receiver (`--receive.hashrings-file=<path>`), explicitly purposing it only for ingesting. We can call this mode "Ingesting Receiver".
 
 User can also mix all of those two modes for various federated hashrings etc. So instead of what we had before:
 
