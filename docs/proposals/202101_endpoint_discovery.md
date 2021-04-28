@@ -19,7 +19,7 @@ We want to propose a new flag called `--endpoint=<address>` that will be passed 
 
 Currently, in Thanos Query, the discovery of rules APIs happens via Store API's Info method. This makes it harder if we ever want to not have a coupling to the Store API (which is already planned for [scalable ruler proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202005_scalable-rule-storage.md)).
 
-We also require passing two different flags to the Thanos Query component `--store=<address>` and `--rule=<address>`. If users use both flags, the Query component performs DNS discovery on often the same address multiple times, this can cause occasional DNS issues as this resolving happens so frequently. This is especially confusing when one works and the other doesn't. Adding new APIs in the future would exacerbate this issue with DNS requests.
+We also require passing two different flags to the Thanos Query component `--store=<address>` and `--rule=<address>`. If users use both flags, the Query component performs DNS discovery on often the same address multiple times, which can cause occasional DNS issues as this resolution happens so frequently. This is especially confusing when one DNS lookup works and the other doesn't. Adding new APIs in the future would exacerbate this issue with DNS requests.
 
 ### Goals
 
@@ -44,7 +44,7 @@ info:
 
 Right now this Info service would be added to existing components exposing a gRPC server.
 
-The upgrade path would be possible in this case, as it's strictly additive for endpoints, and there will be a migration path to fall back to current discovery methods which could be removed in the future.
+The upgrade path would be possible in this case, as it's strictly additive for endpoints, and there will be a migration path to fall back to current discovery methods, which could be removed in the future.
 
 ### Alternatives
 
@@ -52,15 +52,15 @@ Initial discovery of gRPC services available will happen via gRPC reflection. To
 
 This alternative solution was also considered, however it was not chosen because of its following drawbacks.
 
-1. For servers implementing multiple API (e.g. Store, Rules, Exemplar), we need to make multiple microservices calls (For given example 3x calls).
+1. For servers implementing multiple APIs (e.g. Store, Rules, Exemplar), we need to make multiple gRPC calls, e.g. three calls to a component implementing Store, Rules and Exemplars APIs.
 2. There is also ambiguity about which Info method should be used for these kinds of servers.
 
 ### Upgrade plan
 
-Regardless of the solution, we will be not removing any flags for a given period and have a fallback code in place to be able to discover in the same way as we do right now. This will ensure a smooth upgrade path for the users that make use of the current flags for discovery. We will mark the current flags as deprecated and after two releases have passed we can remove the existing store and rule flag from the query component and remove any migration code.
+Regardless of the solution, we will be not removing any flags for a given period and have a fallback in place to be able to discover in the same way as we do right now. This will ensure a smooth upgrade path for the users who make use of the current flags for discovery. We will mark the current flags as deprecated and after two releases have passed we can remove the existing component-specific discovery flags from the query component and remove any migration code.
 
 ### Work plan
 
 1. We would be adding the new Info service and flags needed for the above solution, so this part would be entirely additive.
-2. Second step would be the integration of this service, flags and migration of existing code.
+2. Second step would be the integration of this service, the addition of new flags, and migration of existing code.
 3. We would not be removing the existing flags (`--store` and `--rule`) for some grace period, after that passes we would also have to remove it and any migration code.
