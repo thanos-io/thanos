@@ -16,45 +16,49 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
 
-
 ### Fixed
 -
 ### Changed
 -
 ### Removed
 -
-## [v0.20.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.20)
+
+## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
 ### Added
 
 - [#4029](https://github.com/thanos-io/thanos/pull/4029) Mixin: Remove dependency on the rule dashboard when generating the compact dashboard
 - [#4019](https://github.com/thanos-io/thanos/pull/4019) Query: Adds query range histogram.
+- [#3846](https://github.com/thanos-io/thanos/pull/3846) Query: Added federated exemplars API support.
 - [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
 - [#3977](https://github.com/thanos-io/thanos/pull/3903) Expose exemplars for `http_request_duration_seconds` histogram if tracing is enabled.
 - [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
 - [#3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 - [#3840](https://github.com/thanos-io/thanos/pull/3840) Tools: Added a flag to support rewrite Prometheus TSDB blocks.
 - [#3920](https://github.com/thanos-io/thanos/pull/3920) Query Frontend: Support `max_item_size` in Query frontend Memcached cache.
+- [#4078](https://github.com/thanos-io/thanos/pull/4078) receive: Improved efficiency of multitsdb appends, upgraded Prometheus deps.
 
 ### Fixed
 
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
-- [#3922](https://github.com/thanos-io/thanos/pull/3922) Fix panic in http logging middleware.
-- [#3960](https://github.com/thanos-io/thanos/pull/3960) fix deduplication of equal alerts with different labels
+- [#3922](https://github.com/thanos-io/thanos/pull/3922) *: Fix panic in http logging middleware.
+- [#3960](https://github.com/thanos-io/thanos/pull/3960) Ruler: Fix deduplication of equal alerts with different labels.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Fix race condition in chunk pool.
 - [#4017](https://github.com/thanos-io/thanos/pull/4017) Query Frontend: fix downsampling iterator returning duplicate samples.
-- [#4017](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger
+- [#4041](https://github.com/thanos-io/thanos/pull/4041) Logging: fix the HTTP logger.
 
 ### Changed
 
-- [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info
+- [#3929](https://github.com/thanos-io/thanos/pull/3929) Store: Adds the name of the instantiated memcached client to log info.
 - [#3827](https://github.com/thanos-io/thanos/pull/3827) Upgrade Go version to 1.16
 - [#3948](https://github.com/thanos-io/thanos/pull/3948) Receiver: Adjust `http_request_duration_seconds` buckets for low latency requests.
 - [#3856](https://github.com/thanos-io/thanos/pull/3856) Mixin: _breaking :warning:_ Introduce flexible multi-cluster/namespace mode for alerts and dashboards. Removes jobPrefix config option. Removes `namespace` by default.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Reduce memory usage for range queries.
-- [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically
-
-### Removed
+- [#4045](https://github.com/thanos-io/thanos/pull/4045) UI: Enable Targets page in Querier UI.
+- [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically.
+- [#4081](https://github.com/thanos-io/thanos/pull/4081) UI: Make the ReactUI the default one.
+- [#4085](https://github.com/thanos-io/thanos/pull/4085) Receive: Improved Performance for err path.
+- [#4094](https://github.com/thanos-io/thanos/pull/4094) *: Upgrade Prometheus & Alertmanager.
 
 ## [v0.19.0](https://github.com/thanos-io/thanos/releases/tag/v0.19.0) - 2021.03.31
 
