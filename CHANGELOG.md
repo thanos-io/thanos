@@ -22,7 +22,8 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 -
 ### Removed
 -
-## [v0.20.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0-rc.0) - 2021.04.23
+
+## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
 ### Added
 
