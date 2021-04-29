@@ -152,9 +152,9 @@
             },
             expr: |||
               (
-                avg by (%(dimensions)s) (rate(http_requests_total{code=~"2..", %(selector)s, handler="receive"}[1h]))
+                avg_over_time(rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[5m])[1h:5m])
               /
-                avg by (%(dimensions)s) (rate(http_requests_total{code=~"2..", %(selector)s, handler="receive"}[12h]))
+                avg_over_time(rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[5m])[12h:5m])
               ) * 100 < %(ingestionThreshold)s
             ||| % thanos.receive,
             'for': '1h',

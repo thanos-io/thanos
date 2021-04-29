@@ -572,9 +572,9 @@ rules:
       to avg. 12-hr ingestion rate.
   expr: |
     (
-      avg by (job) (rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[1h]))
+      avg_over_time(rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[5m])[1h:5m])
     /
-      avg by (job) (rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[12h]))
+      avg_over_time(rate(http_requests_total{code=~"2..", job=~".*thanos-receive.*", handler="receive"}[5m])[12h:5m])
     ) * 100 < 50
   for: 1h
   labels:
