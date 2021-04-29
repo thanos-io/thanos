@@ -318,7 +318,24 @@ config:
   storage_account_key: ""
   container: ""
   endpoint: ""
-  max_retries: 0
+  msi_resource: ""
+  pipeline_config:
+    max_tries: ""
+    try_timeout: ""
+    retry_delay: ""
+    max_retry_delay: ""
+  reader_config:
+    max_retry_requests: ""
+  http_config:
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
+    insecure_skip_verify: false
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
+    max_conns_per_host: 0
+  
 ```
 
 #### OpenStack Swift

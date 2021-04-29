@@ -6,16 +6,19 @@ package azure
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -24,13 +27,63 @@ const (
 	azureDefaultEndpoint = "blob.core.windows.net"
 )
 
+// Set default retry values to default Azure values. 0 = use Default Azure
+var DefaultConfig = Config{
+	PipelineConfig: PipelineConfig{
+		MaxTries:      0,
+		TryTimeout:    0,
+		RetryDelay:    0,
+		MaxRetryDelay: 0,
+	},
+	ReaderConfig: ReaderConfig{
+		MaxRetryRequests: 0,
+	},
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
+		ExpectContinueTimeout: model.Duration(1 * time.Second),
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		MaxConnsPerHost:       0,
+		DisableCompression:    false,
+	},
+}
+
 // Config Azure storage configuration.
 type Config struct {
-	StorageAccountName string `yaml:"storage_account"`
-	StorageAccountKey  string `yaml:"storage_account_key"`
-	ContainerName      string `yaml:"container"`
-	Endpoint           string `yaml:"endpoint"`
-	MaxRetries         int    `yaml:"max_retries"`
+	StorageAccountName string         `yaml:"storage_account"`
+	StorageAccountKey  string         `yaml:"storage_account_key"`
+	ContainerName      string         `yaml:"container"`
+	Endpoint           string         `yaml:"endpoint"`
+	MSIResource        string         `yaml:"msi_resource"`
+	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
+	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
+	HTTPConfig         HTTPConfig     `yaml:"http_config"`
+}
+
+type ReaderConfig struct {
+	MaxRetryRequests int `yaml:"max_retry_requests"`
+}
+
+type PipelineConfig struct {
+	MaxTries      int32          `yaml:"max_tries"`
+	TryTimeout    model.Duration `yaml:"try_timeout"`
+	RetryDelay    model.Duration `yaml:"retry_delay"`
+	MaxRetryDelay model.Duration `yaml:"max_retry_delay"`
+}
+
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          int            `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+	DisableCompression    bool           `yaml:"disable_compression"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.
@@ -42,34 +95,68 @@ type Bucket struct {
 
 // Validate checks to see if any of the config options are set.
 func (conf *Config) validate() error {
-	if conf.StorageAccountName == "" ||
-		conf.StorageAccountKey == "" {
-		return errors.New("invalid Azure storage configuration")
+
+	var errMsg []string
+	if conf.MSIResource == "" {
+		if conf.StorageAccountName == "" ||
+			conf.StorageAccountKey == "" {
+			errMsg = append(errMsg, fmt.Sprint("invalid Azure storage configuration"))
+		}
+		if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
+			errMsg = append(errMsg, fmt.Sprint("no Azure storage_account specified while storage_account_key is present in config file; both should be present"))
+		}
+		if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
+			errMsg = append(errMsg, fmt.Sprint("no Azure storage_account_key specified while storage_account is present in config file; both should be present"))
+		}
+	} else {
+		if conf.StorageAccountName == "" {
+			errMsg = append(errMsg, fmt.Sprint("MSI resource is configured but storage account name is missing"))
+		}
+		if conf.StorageAccountKey != "" {
+			errMsg = append(errMsg, fmt.Sprint("MSI resource is configured but storage account key is used"))
+		}
 	}
-	if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
-		return errors.New("no Azure storage_account specified while storage_account_key is present in config file; both should be present")
-	}
-	if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
-		return errors.New("no Azure storage_account_key specified while storage_account is present in config file; both should be present")
-	}
+
 	if conf.ContainerName == "" {
-		return errors.New("no Azure container specified")
+		errMsg = append(errMsg, fmt.Sprint("no Azure container specified"))
 	}
 	if conf.Endpoint == "" {
 		conf.Endpoint = azureDefaultEndpoint
 	}
-	if conf.MaxRetries < 0 {
-		return errors.New("the value of maxretries must be greater than or equal to 0 in the config file")
+
+	var NegativeErrMsg = "the value of %d must be greater than or equal to 0 in the config file"
+
+	if conf.PipelineConfig.MaxTries < 0 {
+		errMsg = append(errMsg, fmt.Sprintf(NegativeErrMsg, "max_tries"))
 	}
+
+	if conf.ReaderConfig.MaxRetryRequests < 0 {
+		errMsg = append(errMsg, fmt.Sprintf(NegativeErrMsg, "max_retry_requests"))
+	}
+
+	if len(errMsg) > 0 {
+		return errors.New(strings.Join(errMsg, ", "))
+	}
+
 	return nil
+}
+
+// parseConfig unmarshals a buffer into a Config with default values.
+func parseConfig(conf []byte) (Config, error) {
+	config := DefaultConfig
+	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
+		return Config{}, err
+	}
+
+	return config, nil
 }
 
 // NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket, error) {
 	level.Debug(logger).Log("msg", "creating new Azure bucket connection", "component", component)
 
-	var conf Config
-	if err := yaml.Unmarshal(azureConfig, &conf); err != nil {
+	conf, err := parseConfig(azureConfig)
+	if err != nil {
 		return nil, err
 	}
 
@@ -227,7 +314,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			Parallelism: uint16(3),
 			Progress:    nil,
 			RetryReaderOptionsPerBlock: blob.RetryReaderOptions{
-				MaxRetryRequests: b.config.MaxRetries,
+				MaxRetryRequests: b.config.ReaderConfig.MaxRetryRequests,
 			},
 		},
 	); err != nil {
