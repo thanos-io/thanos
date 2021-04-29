@@ -61,10 +61,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 
 	newSelectors := make([][]*labels.Matcher, 0, len(selectors))
 	for _, matchers := range selectors {
-		matched, newMatchers, err := matchesExternalLabels(matchers, s.selectorLabels)
-		if err != nil {
-			return err
-		}
+		matched, newMatchers := matchesExternalLabels(matchers, s.selectorLabels)
 		if matched {
 			newSelectors = append(newSelectors, newMatchers)
 		}
@@ -93,7 +90,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 						} else {
 							// If the current matcher matches one external label,
 							// we don't add it to the current metric selector
-							// as Prometheus's external API cannot handle external labels.
+							// as Prometheus' Exemplars API cannot handle external labels.
 							continue
 						}
 					}
@@ -211,9 +208,9 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher) {
 	if len(externalLabels) == 0 {
-		return true, ms, nil
+		return true, ms
 	}
 
 	var newMatchers []*labels.Matcher
@@ -230,8 +227,8 @@ func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (
 		if !tm.Matches(extValue) {
 			// External label does not match. This should not happen - it should be filtered out on query node,
 			// but let's do that anyway here.
-			return false, nil, nil
+			return false, nil
 		}
 	}
-	return true, newMatchers, nil
+	return true, newMatchers
 }
