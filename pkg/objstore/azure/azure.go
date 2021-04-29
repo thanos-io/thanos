@@ -6,7 +6,6 @@ package azure
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -100,38 +99,36 @@ func (conf *Config) validate() error {
 	if conf.MSIResource == "" {
 		if conf.StorageAccountName == "" ||
 			conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, fmt.Sprint("invalid Azure storage configuration"))
+			errMsg = append(errMsg, "invalid Azure storage configuration")
 		}
 		if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
-			errMsg = append(errMsg, fmt.Sprint("no Azure storage_account specified while storage_account_key is present in config file; both should be present"))
+			errMsg = append(errMsg, "no Azure storage_account specified while storage_account_key is present in config file; both should be present")
 		}
 		if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, fmt.Sprint("no Azure storage_account_key specified while storage_account is present in config file; both should be present"))
+			errMsg = append(errMsg, "no Azure storage_account_key specified while storage_account is present in config file; both should be present")
 		}
 	} else {
 		if conf.StorageAccountName == "" {
-			errMsg = append(errMsg, fmt.Sprint("MSI resource is configured but storage account name is missing"))
+			errMsg = append(errMsg, "MSI resource is configured but storage account name is missing")
 		}
 		if conf.StorageAccountKey != "" {
-			errMsg = append(errMsg, fmt.Sprint("MSI resource is configured but storage account key is used"))
+			errMsg = append(errMsg, "MSI resource is configured but storage account key is used")
 		}
 	}
 
 	if conf.ContainerName == "" {
-		errMsg = append(errMsg, fmt.Sprint("no Azure container specified"))
+		errMsg = append(errMsg, "no Azure container specified")
 	}
 	if conf.Endpoint == "" {
 		conf.Endpoint = azureDefaultEndpoint
 	}
 
-	var NegativeErrMsg = "the value of %d must be greater than or equal to 0 in the config file"
-
 	if conf.PipelineConfig.MaxTries < 0 {
-		errMsg = append(errMsg, fmt.Sprintf(NegativeErrMsg, "max_tries"))
+		errMsg = append(errMsg, "The value of max_tries must be greater than or equal to 0 in the config file")
 	}
 
 	if conf.ReaderConfig.MaxRetryRequests < 0 {
-		errMsg = append(errMsg, fmt.Sprintf(NegativeErrMsg, "max_retry_requests"))
+		errMsg = append(errMsg, "The value of max_retry_requests must be greater than or equal to 0 in the config file")
 	}
 
 	if len(errMsg) > 0 {
