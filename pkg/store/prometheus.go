@@ -58,6 +58,9 @@ type PrometheusStore struct {
 	framesRead prometheus.Histogram
 }
 
+// LabelValues call with matchers is supported for Prometheus versions >= 2.24.0
+var baseVer, _ = semver.Make("2.24.0")
+
 const initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size for sync pool size.
 
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
@@ -509,10 +512,8 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	vals := []string{}
 	v := p.promVersion()
 
-	version, err1 := semver.Parse(v)
-	baseVer, err2 := semver.Make("2.24.0")
-
-	if err1 == nil && err2 == nil && version.Compare(baseVer) == 1 {
+	version, err := semver.Parse(v)
+	if err == nil && version.GTE(baseVer) {
 		lvc = true
 	}
 
