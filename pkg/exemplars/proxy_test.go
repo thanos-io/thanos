@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package exemplars
 
 import (
@@ -13,6 +16,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 )
 
@@ -266,8 +270,18 @@ func TestProxy(t *testing.T) {
 				t.Errorf("want error %q, got %q", wantErr, gotErr)
 			}
 
-			if !reflect.DeepEqual(tc.wantResponses, tc.server.responses) {
-				t.Errorf("want response %v, got %v", tc.wantResponses, tc.server.responses)
+			testutil.Equals(t, len(tc.wantResponses), len(tc.server.responses))
+
+			// Actual responses are unordered so we search
+			// for matched response for simplicity.
+		Outer:
+			for _, exp := range tc.wantResponses {
+				for _, res := range tc.server.responses {
+					if reflect.DeepEqual(exp, res) {
+						continue Outer
+					}
+				}
+				t.Errorf("miss expected response %v", exp)
 			}
 		})
 	}
