@@ -322,73 +322,19 @@ usage: thanos compact [<flags>]
 Continuously compacts blocks in an object store bucket.
 
 Flags:
-  -h, --help                    Show context-sensitive help (also try
-                                --help-long and --help-man).
-      --version                 Show application version.
-      --log.level=info          Log filtering level.
-      --log.format=logfmt       Log format to use. Possible options: logfmt or
-                                json.
-      --tracing.config-file=<file-path>
-                                Path to YAML file with tracing configuration.
-                                See format details:
-                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
-                                Alternative to 'tracing.config-file' flag
-                                (mutually exclusive). Content of YAML file with
-                                tracing configuration. See format details:
-                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --http-address="0.0.0.0:10902"
-                                Listen host:port for HTTP endpoints.
-      --http-grace-period=2m    Time to wait after an interrupt received for
-                                HTTP Server.
-      --data-dir="./data"       Data directory in which to cache blocks and
-                                process compactions.
-      --objstore.config-file=<file-path>
-                                Path to YAML file that contains object store
-                                configuration. See format details:
-                                https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config=<content>
-                                Alternative to 'objstore.config-file' flag
-                                (mutually exclusive). Content of YAML file that
-                                contains object store configuration. See format
-                                details:
-                                https://thanos.io/tip/thanos/storage.md/#configuration
-      --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
-                                before they are being processed. Malformed
-                                blocks older than the maximum of
-                                consistency-delay and 48h0m0s will be removed.
-      --retention.resolution-raw=0d
-                                How long to retain raw samples in bucket.
-                                Setting this to 0d will retain samples of this
-                                resolution forever
-      --retention.resolution-5m=0d
-                                How long to retain samples of resolution 1 (5
-                                minutes) in bucket. Setting this to 0d will
-                                retain samples of this resolution forever
-      --retention.resolution-1h=0d
-                                How long to retain samples of resolution 2 (1
-                                hour) in bucket. Setting this to 0d will retain
-                                samples of this resolution forever
-  -w, --wait                    Do not exit after all compactions have been
-                                processed and wait for new work.
-      --wait-interval=5m        Wait interval between consecutive compaction
-                                runs and bucket refreshes. Only works when
-                                --wait flag specified.
-      --downsampling.disable    Disables downsampling. This is not recommended
-                                as querying long time ranges without
-                                non-downsampled data is not efficient and useful
-                                e.g it is not possible to render all samples for
-                                a human eye anyway
-      --block-sync-concurrency=20
-                                Number of goroutines to use when syncing block
-                                metadata from object storage.
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
+                                metadata from object storage.
+      --block-sync-concurrency=20
+                                Number of goroutines to use when syncing block
                                 metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --bucket-web-label=BUCKET-WEB-LABEL
+                                Prometheus label to use as timeline title in the
+                                bucket web UI
       --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the
@@ -397,6 +343,12 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
+                                before they are being processed. Malformed
+                                blocks older than the maximum of
+                                consistency-delay and 48h0m0s will be removed.
+      --data-dir="./data"       Data directory in which to cache blocks and
+                                process compactions.
       --delete-delay=48h        Time before a block marked for deletion is
                                 deleted from bucket. If delete-delay is non
                                 zero, blocks will be marked for deletion and
@@ -408,18 +360,48 @@ Flags:
                                 loaded, or compactor is ignoring the deletion
                                 because it's compacting the block at the same
                                 time.
+      --downsampling.disable    Disables downsampling. This is not recommended
+                                as querying long time ranges without
+                                non-downsampled data is not efficient and useful
+                                e.g it is not possible to render all samples for
+                                a human eye anyway
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files. If no
                                 function has been specified, it does not happen.
                                 This permits avoiding downloading some files
                                 twice albeit at some performance cost. Possible
                                 values are: "", "SHA256".
-      --selector.relabel-config-file=<file-path>
-                                Path to YAML file that contains relabeling
-                                configuration that allows selecting blocks. It
-                                follows native Prometheus relabel-config syntax.
-                                See format details:
-                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --http-address="0.0.0.0:10902"
+                                Listen host:port for HTTP endpoints.
+      --http-grace-period=2m    Time to wait after an interrupt received for
+                                HTTP Server.
+      --log.format=logfmt       Log format to use. Possible options: logfmt or
+                                json.
+      --log.level=info          Log filtering level.
+      --objstore.config=<content>
+                                Alternative to 'objstore.config-file' flag
+                                (mutually exclusive). Content of YAML file that
+                                contains object store configuration. See format
+                                details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config-file=<file-path>
+                                Path to YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/tip/thanos/storage.md/#configuration
+      --retention.resolution-1h=0d
+                                How long to retain samples of resolution 2 (1
+                                hour) in bucket. Setting this to 0d will retain
+                                samples of this resolution forever
+      --retention.resolution-5m=0d
+                                How long to retain samples of resolution 1 (5
+                                minutes) in bucket. Setting this to 0d will
+                                retain samples of this resolution forever
+      --retention.resolution-raw=0d
+                                How long to retain raw samples in bucket.
+                                Setting this to 0d will retain samples of this
+                                resolution forever
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
                                 flag (mutually exclusive). Content of YAML file
@@ -428,6 +410,30 @@ Flags:
                                 Prometheus relabel-config syntax. See format
                                 details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config-file=<file-path>
+                                Path to YAML file that contains relabeling
+                                configuration that allows selecting blocks. It
+                                follows native Prometheus relabel-config syntax.
+                                See format details:
+                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --tracing.config=<content>
+                                Alternative to 'tracing.config-file' flag
+                                (mutually exclusive). Content of YAML file with
+                                tracing configuration. See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config-file=<file-path>
+                                Path to YAML file with tracing configuration.
+                                See format details:
+                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version                 Show application version.
+  -w, --wait                    Do not exit after all compactions have been
+                                processed and wait for new work.
+      --wait-interval=5m        Wait interval between consecutive compaction
+                                runs and bucket refreshes. Only works when
+                                --wait flag specified.
+      --web.disable-cors        Whether to disable CORS headers to be set by
+                                Thanos. By default Thanos sets CORS headers to
+                                be allowed by all.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the
@@ -447,11 +453,9 @@ Flags:
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
-      --web.disable-cors        Whether to disable CORS headers to be set by
-                                Thanos. By default Thanos sets CORS headers to
-                                be allowed by all.
-      --bucket-web-label=BUCKET-WEB-LABEL
-                                Prometheus label to use as timeline title in the
-                                bucket web UI
+      --web.route-prefix=""     Prefix for API and UI endpoints. This allows
+                                thanos UI to be served on a sub-path. This
+                                option is analogous to --web.route-prefix of
+                                Prometheus.
 
 ```

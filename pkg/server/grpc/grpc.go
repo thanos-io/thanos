@@ -73,17 +73,17 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
+			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
 			tags.UnaryServerInterceptor(tagsOpts...),
 			tracing.UnaryServerInterceptor(tracer),
-			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 		grpc_middleware.WithStreamServerChain(
+			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.StreamServerInterceptor(),
 			tags.StreamServerInterceptor(tagsOpts...),
 			tracing.StreamServerInterceptor(tracer),
-			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 	}...)

@@ -1,5 +1,5 @@
 go:
-  version: 1.15
+  version: 1.16
 repository:
   path: github.com/thanos-io/thanos
 build:

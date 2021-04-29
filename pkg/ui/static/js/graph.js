@@ -32,7 +32,14 @@ Prometheus.Graph.stepValues = [
   "1w", "2w", "4w", "8w", "1y", "2y"
 ];
 
-Prometheus.Graph.numGraphs = 0;
+// Get id of last panel and increment.
+let num = -1;
+Object.entries(localStorage).map(([key]) => {
+  if (key.includes("enable-dedup") && num < Number(key[key.length - 1])) {
+    num = Number(key[key.length - 1]);
+  }
+});
+Prometheus.Graph.numGraphs = num + 1;
 
 Prometheus.Graph.prototype.initialize = function() {
   var self = this;
@@ -1294,7 +1301,7 @@ function init() {
   });
 
   $.ajax({
-    url: PATH_PREFIX + "/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
+    url: PATH_PREFIX + "/classic/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
     success: function(data) {
 
       graphTemplate = data;

@@ -196,7 +196,13 @@ func TestStoreSet_Update(t *testing.T) {
 		func() (specs []RuleSpec) {
 			return nil
 		},
+		func() (specs []TargetSpec) {
+			return nil
+		},
 		func() (specs []MetadataSpec) {
+			return nil
+		},
+		func() (specs []ExemplarSpec) {
 			return nil
 		},
 		testGRPCOpts, time.Minute)
@@ -548,7 +554,9 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 			return specs
 		},
 		func() (specs []RuleSpec) { return nil },
+		func() (specs []TargetSpec) { return nil },
 		func() (specs []MetadataSpec) { return nil },
+		func() (specs []ExemplarSpec) { return nil },
 		testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
@@ -625,6 +633,7 @@ func TestQuerierStrict(t *testing.T) {
 	defer st.Close()
 
 	staticStoreAddr := st.StoreAddresses()[0]
+	slowStaticStoreAddr := st.StoreAddresses()[2]
 	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
 		return []StoreSpec{
 			NewGRPCStoreSpec(st.StoreAddresses()[0], true),
@@ -633,7 +642,11 @@ func TestQuerierStrict(t *testing.T) {
 		}
 	}, func() []RuleSpec {
 		return nil
+	}, func() []TargetSpec {
+		return nil
 	}, func() (specs []MetadataSpec) {
+		return nil
+	}, func() []ExemplarSpec {
 		return nil
 	}, testGRPCOpts, time.Minute)
 	defer storeSet.Close()
@@ -643,13 +656,25 @@ func TestQuerierStrict(t *testing.T) {
 	storeSet.Update(context.Background())
 	testutil.Equals(t, 3, len(storeSet.stores), "three clients must be available for running store nodes")
 
-	testutil.Assert(t, storeSet.stores[st.StoreAddresses()[2]].cc.GetState().String() != "SHUTDOWN", "slow store's connection should not be closed")
+	// The store has not responded to the info call and is assumed to cover everything.
+	curMin, curMax := storeSet.stores[slowStaticStoreAddr].minTime, storeSet.stores[slowStaticStoreAddr].maxTime
+	testutil.Assert(t, storeSet.stores[slowStaticStoreAddr].cc.GetState().String() != "SHUTDOWN", "slow store's connection should not be closed")
+	testutil.Equals(t, int64(0), curMin)
+	testutil.Equals(t, int64(math.MaxInt64), curMax)
 
 	// The store is statically defined + strict mode is enabled
 	// so its client + information must be retained.
-	curMin, curMax := storeSet.stores[staticStoreAddr].minTime, storeSet.stores[staticStoreAddr].maxTime
+	curMin, curMax = storeSet.stores[staticStoreAddr].minTime, storeSet.stores[staticStoreAddr].maxTime
 	testutil.Equals(t, int64(12345), curMin, "got incorrect minimum time")
 	testutil.Equals(t, int64(54321), curMax, "got incorrect minimum time")
+
+	// Successfully retrieve the information and observe minTime/maxTime updating.
+	storeSet.gRPCInfoCallTimeout = 3 * time.Second
+	storeSet.Update(context.Background())
+	updatedCurMin, updatedCurMax := storeSet.stores[slowStaticStoreAddr].minTime, storeSet.stores[slowStaticStoreAddr].maxTime
+	testutil.Equals(t, int64(65644), updatedCurMin)
+	testutil.Equals(t, int64(77777), updatedCurMax)
+	storeSet.gRPCInfoCallTimeout = 1 * time.Second
 
 	// Turn off the stores.
 	st.Close()
@@ -664,6 +689,9 @@ func TestQuerierStrict(t *testing.T) {
 	testutil.Equals(t, curMin, storeSet.stores[staticStoreAddr].minTime, "minimum time reported by the store node is different")
 	testutil.Equals(t, curMax, storeSet.stores[staticStoreAddr].maxTime, "minimum time reported by the store node is different")
 	testutil.NotOk(t, storeSet.storeStatuses[staticStoreAddr].LastError.originalErr)
+
+	testutil.Equals(t, updatedCurMin, storeSet.stores[slowStaticStoreAddr].minTime, "minimum time reported by the store node is different")
+	testutil.Equals(t, updatedCurMax, storeSet.stores[slowStaticStoreAddr].maxTime, "minimum time reported by the store node is different")
 }
 
 func TestStoreSet_Update_Rules(t *testing.T) {
@@ -688,6 +716,7 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 		name           string
 		storeSpecs     func() []StoreSpec
 		ruleSpecs      func() []RuleSpec
+		exemplarSpecs  func() []ExemplarSpec
 		expectedStores int
 		expectedRules  int
 	}{
@@ -757,6 +786,12 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 					NewGRPCStoreSpec(stores.orderAddrs[1], false),
 				}
 			},
+			exemplarSpecs: func() []ExemplarSpec {
+				return []ExemplarSpec{
+					NewGRPCStoreSpec(stores.orderAddrs[0], false),
+					NewGRPCStoreSpec(stores.orderAddrs[1], false),
+				}
+			},
 			expectedStores: 2,
 			expectedRules:  2,
 		},
@@ -764,7 +799,9 @@ func TestStoreSet_Update_Rules(t *testing.T) {
 		storeSet := NewStoreSet(nil, nil,
 			tc.storeSpecs,
 			tc.ruleSpecs,
+			func() []TargetSpec { return nil },
 			func() []MetadataSpec { return nil },
+			tc.exemplarSpecs,
 			testGRPCOpts, time.Minute)
 
 		t.Run(tc.name, func(t *testing.T) {
@@ -937,9 +974,11 @@ func TestStoreSet_Rules_Discovery(t *testing.T) {
 
 					return tc.states[currentState].ruleSpecs()
 				},
+				func() []TargetSpec { return nil },
 				func() []MetadataSpec {
 					return nil
 				},
+				func() []ExemplarSpec { return nil },
 				testGRPCOpts, time.Minute)
 
 			defer storeSet.Close()

@@ -55,6 +55,10 @@ scrape_configs:
   scrape_timeout: 1s
   static_configs:
   - targets: [%s]
+  relabel_configs:
+  - source_labels: ['__address__']
+    regex: '^.+:80$'
+    action: drop
 `, name, replica, targets)
 
 	if remoteWriteEndpoint != "" {
@@ -108,7 +112,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, nil, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -189,6 +193,8 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 		"",
 		externalPrefix,
 	)
@@ -209,6 +215,8 @@ func TestQueryExternalPrefix(t *testing.T) {
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -239,6 +247,8 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(), "1",
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -279,6 +289,8 @@ func TestQueryLabelNames(t *testing.T) {
 		"1",
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
 		[]string{},
+		nil,
+		nil,
 		nil,
 		nil,
 		"",
@@ -338,6 +350,8 @@ func TestQueryLabelValues(t *testing.T) {
 		"1",
 		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
 		[]string{},
+		nil,
+		nil,
 		nil,
 		nil,
 		"",

@@ -82,25 +82,6 @@ usage: thanos sidecar [<flags>]
 Sidecar for Prometheus server.
 
 Flags:
-  -h, --help                     Show context-sensitive help (also try
-                                 --help-long and --help-man).
-      --version                  Show application version.
-      --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
-      --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
-                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
-                                 Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
-                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --http-address="0.0.0.0:10902"
-                                 Listen host:port for HTTP endpoints.
-      --http-grace-period=2m     Time to wait after an interrupt received for
-                                 HTTP Server.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -109,69 +90,27 @@ Flags:
                                  GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
-                                 disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --prometheus.url=http://localhost:9090
-                                 URL at which to reach Prometheus's API. For
-                                 better performance use local network.
-      --prometheus.ready_timeout=10m
-                                 Maximum time to wait for the Prometheus
-                                 instance to start up
-      --receive.connection-pool-size=RECEIVE.CONNECTION-POOL-SIZE
-                                 Controls the http MaxIdleConns. Default is 0,
-                                 which is unlimited
-      --receive.connection-pool-size-per-host=100
-                                 Controls the http MaxIdleConnsPerHost
-      --tsdb.path="./data"       Data directory of TSDB.
-      --reloader.config-file=""  Config file watched by the reloader.
-      --reloader.config-envsubst-file=""
-                                 Output file for environment variable
-                                 substituted config file.
-      --reloader.rule-dir=RELOADER.RULE-DIR ...
-                                 Rule directories for the reloader to refresh
-                                 (repeated field).
-      --reloader.watch-interval=3m
-                                 Controls how often reloader re-reads config and
-                                 rules.
-      --reloader.retry-interval=5s
-                                 Controls how often reloader retries config
-                                 reload in case of error.
-      --request.logging-config-file=<file-path>
-                                 Path to YAML file with request logging
-                                 configuration. See format details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging-config=<content>
-                                 Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store
-                                 configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store configuration. See format
-                                 details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --shipper.upload-compacted
-                                 If true shipper will try to upload compacted
-                                 blocks as well. Useful for migration purposes.
-                                 Works only if compaction is disabled on
-                                 Prometheus. Do it once and then disable the
-                                 flag when done.
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files. If no
                                  function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --http-address="0.0.0.0:10902"
+                                 Listen host:port for HTTP endpoints.
+      --http-grace-period=2m     Time to wait after an interrupt received for
+                                 HTTP Server.
+      --log.format=logfmt        Log format to use. Possible options: logfmt or
+                                 json.
+      --log.level=info           Log filtering level.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened
@@ -179,5 +118,66 @@ Flags:
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
+      --objstore.config=<content>
+                                 Alternative to 'objstore.config-file' flag
+                                 (mutually exclusive). Content of YAML file that
+                                 contains object store configuration. See format
+                                 details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore.config-file=<file-path>
+                                 Path to YAML file that contains object store
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --prometheus.ready_timeout=10m
+                                 Maximum time to wait for the Prometheus
+                                 instance to start up
+      --prometheus.url=http://localhost:9090
+                                 URL at which to reach Prometheus's API. For
+                                 better performance use local network.
+      --receive.connection-pool-size=RECEIVE.CONNECTION-POOL-SIZE
+                                 Controls the http MaxIdleConns. Default is 0,
+                                 which is unlimited
+      --receive.connection-pool-size-per-host=100
+                                 Controls the http MaxIdleConnsPerHost
+      --reloader.config-envsubst-file=""
+                                 Output file for environment variable
+                                 substituted config file.
+      --reloader.config-file=""  Config file watched by the reloader.
+      --reloader.retry-interval=5s
+                                 Controls how often reloader retries config
+                                 reload in case of error.
+      --reloader.rule-dir=RELOADER.RULE-DIR ...
+                                 Rule directories for the reloader to refresh
+                                 (repeated field).
+      --reloader.watch-interval=3m
+                                 Controls how often reloader re-reads config and
+                                 rules.
+      --request.logging-config=<content>
+                                 Alternative to 'request.logging-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 with request logging configuration. See format
+                                 details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --request.logging-config-file=<file-path>
+                                 Path to YAML file with request logging
+                                 configuration. See format details:
+                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+      --shipper.upload-compacted
+                                 If true shipper will try to upload compacted
+                                 blocks as well. Useful for migration purposes.
+                                 Works only if compaction is disabled on
+                                 Prometheus. Do it once and then disable the
+                                 flag when done.
+      --tracing.config=<content>
+                                 Alternative to 'tracing.config-file' flag
+                                 (mutually exclusive). Content of YAML file with
+                                 tracing configuration. See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tracing.config-file=<file-path>
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
+                                 https://thanos.io/tip/thanos/tracing.md/#configuration
+      --tsdb.path="./data"       Data directory of TSDB.
+      --version                  Show application version.
 
 ```

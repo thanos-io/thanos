@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -25,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 )
 
 const (
@@ -50,8 +53,18 @@ type RuleSpec interface {
 	Addr() string
 }
 
+type TargetSpec interface {
+	// Addr returns TargetsAPI Address for the targets spec. It is used as its ID.
+	Addr() string
+}
+
 type MetadataSpec interface {
 	// Addr returns MetadataAPI Address for the metadata spec. It is used as its ID.
+	Addr() string
+}
+
+type ExemplarSpec interface {
+	// Addr returns ExemplarsAPI Address for the exemplars spec. It is used as its ID.
 	Addr() string
 }
 
@@ -187,7 +200,9 @@ type StoreSet struct {
 	// accessible and we close gRPC client for it.
 	storeSpecs          func() []StoreSpec
 	ruleSpecs           func() []RuleSpec
+	targetSpecs         func() []TargetSpec
 	metadataSpecs       func() []MetadataSpec
+	exemplarSpecs       func() []ExemplarSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
@@ -210,7 +225,9 @@ func NewStoreSet(
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
 	ruleSpecs func() []RuleSpec,
+	targetSpecs func() []TargetSpec,
 	metadataSpecs func() []MetadataSpec,
+	exemplarSpecs func() []ExemplarSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
@@ -228,15 +245,23 @@ func NewStoreSet(
 	if ruleSpecs == nil {
 		ruleSpecs = func() []RuleSpec { return nil }
 	}
+	if targetSpecs == nil {
+		targetSpecs = func() []TargetSpec { return nil }
+	}
 	if metadataSpecs == nil {
 		metadataSpecs = func() []MetadataSpec { return nil }
+	}
+	if exemplarSpecs == nil {
+		exemplarSpecs = func() []ExemplarSpec { return nil }
 	}
 
 	ss := &StoreSet{
 		logger:                log.With(logger, "component", "storeset"),
 		storeSpecs:            storeSpecs,
 		ruleSpecs:             ruleSpecs,
+		targetSpecs:           targetSpecs,
 		metadataSpecs:         metadataSpecs,
+		exemplarSpecs:         exemplarSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
 		gRPCInfoCallTimeout:   5 * time.Second,
@@ -258,6 +283,12 @@ type storeRef struct {
 	rule     rulespb.RulesClient
 	metadata metadatapb.MetadataClient
 
+	// If exemplar is not nil, then this store also support exemplars API.
+	exemplar exemplarspb.ExemplarsClient
+
+	// If target is not nil, then this store also supports targets API.
+	target targetspb.TargetsClient
+
 	// Meta (can change during runtime).
 	labelSets []labels.Labels
 	storeType component.StoreAPI
@@ -267,7 +298,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, metadata metadatapb.MetadataClient) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, target targetspb.TargetsClient, metadata metadatapb.MetadataClient, exemplar exemplarspb.ExemplarsClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -276,7 +307,9 @@ func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int6
 	s.minTime = minTime
 	s.maxTime = maxTime
 	s.rule = rule
+	s.target = target
 	s.metadata = metadata
+	s.exemplar = exemplar
 }
 
 func (s *storeRef) StoreType() component.StoreAPI {
@@ -293,11 +326,25 @@ func (s *storeRef) HasRulesAPI() bool {
 	return s.rule != nil
 }
 
+func (s *storeRef) HasTargetsAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.target != nil
+}
+
 func (s *storeRef) HasMetadataAPI() bool {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
 	return s.metadata != nil
+}
+
+func (s *storeRef) HasExemplarsAPI() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.exemplar != nil
 }
 
 func (s *storeRef) LabelSets() []labels.Labels {
@@ -405,6 +452,14 @@ func (s *StoreSet) Update(ctx context.Context) {
 			level.Info(s.logger).Log("msg", "adding new rulesAPI to query storeset", "address", addr)
 		}
 
+		if st.HasExemplarsAPI() {
+			level.Info(s.logger).Log("msg", "adding new exemplarsAPI to query storeset", "address", addr)
+		}
+
+		if st.HasTargetsAPI() {
+			level.Info(s.logger).Log("msg", "adding new targetsAPI to query storeset", "address", addr)
+		}
+
 		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 
@@ -425,7 +480,9 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 
 		storeAddrSet    = make(map[string]struct{})
 		ruleAddrSet     = make(map[string]struct{})
+		targetAddrSet   = make(map[string]struct{})
 		metadataAddrSet = make(map[string]struct{})
+		exemplarAddrSet = make(map[string]struct{})
 	)
 
 	// Gather active stores map concurrently. Build new store if does not exist already.
@@ -433,9 +490,19 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 		ruleAddrSet[ruleSpec.Addr()] = struct{}{}
 	}
 
+	// Gather active targets map concurrently. Add a new target if it does not exist already.
+	for _, targetSpec := range s.targetSpecs() {
+		targetAddrSet[targetSpec.Addr()] = struct{}{}
+	}
+
 	// Gather active stores map concurrently. Build new store if does not exist already.
 	for _, metadataSpec := range s.metadataSpecs() {
 		metadataAddrSet[metadataSpec.Addr()] = struct{}{}
+	}
+
+	// Gather active stores map concurrently. Build new store if does not exist already.
+	for _, exemplarSpec := range s.exemplarSpecs() {
+		exemplarAddrSet[exemplarSpec.Addr()] = struct{}{}
 	}
 
 	// Gather healthy stores map concurrently. Build new store if does not exist already.
@@ -466,6 +533,9 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				}
 
 				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), storeType: component.UnknownStoreAPI, cc: conn, addr: addr, logger: s.logger}
+				if spec.StrictStatic() {
+					st.maxTime = math.MaxInt64
+				}
 			}
 
 			var rule rulespb.RulesClient
@@ -473,9 +543,19 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 				rule = rulespb.NewRulesClient(st.cc)
 			}
 
+			var target targetspb.TargetsClient
+			if _, ok := targetAddrSet[addr]; ok {
+				target = targetspb.NewTargetsClient(st.cc)
+			}
+
 			var metadata metadatapb.MetadataClient
 			if _, ok := metadataAddrSet[addr]; ok {
 				metadata = metadatapb.NewMetadataClient(st.cc)
+			}
+
+			var exemplar exemplarspb.ExemplarsClient
+			if _, ok := exemplarAddrSet[addr]; ok {
+				exemplar = exemplarspb.NewExemplarsClient(st.cc)
 			}
 
 			// Check existing or new store. Is it healthy? What are current metadata?
@@ -502,7 +582,7 @@ func (s *StoreSet) getActiveStores(ctx context.Context, stores map[string]*store
 			}
 
 			s.updateStoreStatus(st, nil)
-			st.Update(labelSets, minTime, maxTime, storeType, rule, metadata)
+			st.Update(labelSets, minTime, maxTime, storeType, rule, target, metadata, exemplar)
 
 			mtx.Lock()
 			defer mtx.Unlock()
@@ -528,6 +608,10 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	prev, ok := s.storeStatuses[store.addr]
 	if ok {
 		status = *prev
+	} else {
+		mint, maxt := store.TimeRange()
+		status.MinTime = mint
+		status.MaxTime = maxt
 	}
 
 	if err == nil {
@@ -586,6 +670,20 @@ func (s *StoreSet) GetRulesClients() []rulespb.RulesClient {
 	return rules
 }
 
+// GetTargetsClients returns a list of all active targets clients.
+func (s *StoreSet) GetTargetsClients() []targetspb.TargetsClient {
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
+
+	targets := make([]targetspb.TargetsClient, 0, len(s.stores))
+	for _, st := range s.stores {
+		if st.HasTargetsAPI() {
+			targets = append(targets, st.target)
+		}
+	}
+	return targets
+}
+
 // GetMetadataClients returns a list of all active metadata clients.
 func (s *StoreSet) GetMetadataClients() []metadatapb.MetadataClient {
 	s.storesMtx.RLock()
@@ -598,6 +696,20 @@ func (s *StoreSet) GetMetadataClients() []metadatapb.MetadataClient {
 		}
 	}
 	return metadataClients
+}
+
+// GetExemplarsClients returns a list of all active exemplars clients.
+func (s *StoreSet) GetExemplarsClients() []exemplarspb.ExemplarsClient {
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
+
+	exemplars := make([]exemplarspb.ExemplarsClient, 0, len(s.stores))
+	for _, st := range s.stores {
+		if st.HasExemplarsAPI() {
+			exemplars = append(exemplars, st.exemplar)
+		}
+	}
+	return exemplars
 }
 
 func (s *StoreSet) Close() {

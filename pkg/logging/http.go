@@ -39,7 +39,11 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		wrapped := httputil.WrapResponseWriterWithStatus(w)
 		start := time.Now()
-		_, port, err := net.SplitHostPort(r.Host)
+		hostPort := r.Host
+		if hostPort == "" {
+			hostPort = r.URL.Host
+		}
+		_, port, err := net.SplitHostPort(hostPort)
 		if err != nil {
 			level.Error(m.logger).Log("msg", "failed to parse host port for http log decision", "err", err)
 			next.ServeHTTP(w, r)

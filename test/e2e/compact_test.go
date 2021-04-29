@@ -442,7 +442,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -539,8 +539,26 @@ func TestCompactWithStoreGateway(t *testing.T) {
 
 	// No replica label with overlaps should halt compactor. This test is sequential
 	// because we do not want two Thanos Compact instances deleting the same partially
-	// uploaded blocks and blocks with deletion marks.
+	// uploaded blocks and blocks with deletion marks. We also check that Thanos Compactor
+	// deletes directories inside of a compaction group that do not belong there.
 	{
+		// Precreate a directory. It should be deleted.
+		// In a hypothetical scenario, the directory could be a left-over from
+		// a compaction that had crashed.
+		p := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt", "compact")
+
+		testutil.Assert(t, len(blocksWithHashes) > 0)
+
+		m, err := block.DownloadMeta(ctx, logger, bkt, blocksWithHashes[0])
+		testutil.Ok(t, err)
+
+		randBlockDir := filepath.Join(p, compact.DefaultGroupKey(m.Thanos), "ITISAVERYRANDULIDFORTESTS0")
+		testutil.Ok(t, os.MkdirAll(randBlockDir, os.ModePerm))
+
+		f, err := os.Create(filepath.Join(randBlockDir, "index"))
+		testutil.Ok(t, err)
+		testutil.Ok(t, f.Close())
+
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
@@ -578,6 +596,10 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "loaded"))
 
 		testutil.Ok(t, s.Stop(c))
+
+		_, err = os.Stat(randBlockDir)
+		testutil.NotOk(t, err)
+		testutil.Assert(t, os.IsNotExist(err))
 	}
 
 	// Sequential because we want to check that Thanos Compactor does not

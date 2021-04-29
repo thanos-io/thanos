@@ -10,14 +10,14 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.rule == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else ' ';
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-rule',
         rules: [
           {
             alert: 'ThanosRuleQueueIsDroppingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sis failing to queue alerts.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s is failing to queue alerts.' % location,
               summary: 'Thanos Rule is failing to queue alerts.',
             },
             expr: |||
@@ -31,7 +31,7 @@
           {
             alert: 'ThanosRuleSenderIsFailingAlerts',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sis failing to send alerts to alertmanager.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s is failing to send alerts to alertmanager.' % location,
               summary: 'Thanos Rule is failing to send alerts to alertmanager.',
             },
             expr: |||
@@ -45,7 +45,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sis failing to evaluate rules.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s is failing to evaluate rules.' % location,
               summary: 'Thanos Rule is failing to evaluate rules.',
             },
             expr: |||
@@ -65,7 +65,7 @@
           {
             alert: 'ThanosRuleHighRuleEvaluationWarnings',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas high number of evaluation warnings.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s has high number of evaluation warnings.' % location,
               summary: 'Thanos Rule has high number of evaluation warnings.',
             },
             expr: |||
@@ -80,7 +80,7 @@
           {
             alert: 'ThanosRuleRuleEvaluationLatencyHigh',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas higher evaluation latency than interval for {{$labels.rule_group}}.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s has higher evaluation latency than interval for {{$labels.rule_group}}.' % location,
               summary: 'Thanos Rule has high rule evaluation latency.',
             },
             expr: |||
@@ -98,7 +98,7 @@
           {
             alert: 'ThanosRuleGrpcErrorRate',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}%sis failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Rule {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
               summary: 'Thanos Rule is failing to handle grpc requests.',
             },
             expr: |||
@@ -117,7 +117,7 @@
           {
             alert: 'ThanosRuleConfigReloadFailure',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}%shas not been able to reload its configuration.' % location,
+              description: 'Thanos Rule {{$labels.job}}%s has not been able to reload its configuration.' % location,
               summary: 'Thanos Rule has not been able to reload configuration.',
             },
             expr: 'avg by (%(dimensions)s) (thanos_rule_config_last_reload_successful{%(selector)s}) != 1' % thanos.rule,
@@ -129,7 +129,7 @@
           {
             alert: 'ThanosRuleQueryHighDNSFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}%shas {{$value | humanize}}%% of failing DNS queries for query endpoints.' % location,
+              description: 'Thanos Rule {{$labels.job}}%s has {{$value | humanize}}%% of failing DNS queries for query endpoints.' % location,
               summary: 'Thanos Rule is having high number of DNS failures.',
             },
             expr: |||
@@ -148,7 +148,7 @@
           {
             alert: 'ThanosRuleAlertmanagerHighDNSFailures',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%shas {{$value | humanize}}%% of failing DNS queries for Alertmanager endpoints.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s has {{$value | humanize}}%% of failing DNS queries for Alertmanager endpoints.' % location,
               summary: 'Thanos Rule is having high number of DNS failures.',
             },
             expr: |||
@@ -168,7 +168,7 @@
             // NOTE: This alert will give false positive if no rules are configured.
             alert: 'ThanosRuleNoEvaluationFor10Intervals',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}%shas {{$value | humanize}}%% rule groups that did not evaluate for at least 10x of their expected interval.' % location,
+              description: 'Thanos Rule {{$labels.job}}%s has {{$value | humanize}}%% rule groups that did not evaluate for at least 10x of their expected interval.' % location,
               summary: 'Thanos Rule has rule groups that did not evaluate for 10 intervals.',
             },
             expr: |||
@@ -185,15 +185,15 @@
           {
             alert: 'ThanosNoRuleEvaluations',
             annotations: {
-              description: 'Thanos Rule {{$labels.instance}}%sdid not perform any rule evaluations in the past 2 minutes.' % location,
+              description: 'Thanos Rule {{$labels.instance}}%s did not perform any rule evaluations in the past 10 minutes.' % location,
               summary: 'Thanos Rule did not perform any rule evaluations.',
             },
             expr: |||
-              sum by (%(dimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[2m])) <= 0
+              sum by (%(dimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[5m])) <= 0
                 and
               sum by (%(dimensions)s) (thanos_rule_loaded_rules{%(selector)s}) > 0
             ||| % thanos.rule,
-            'for': '3m',
+            'for': '5m',
             labels: {
               severity: 'critical',
             },

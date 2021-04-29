@@ -10,29 +10,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func TestHash(t *testing.T) {
-	ts := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{
-			{
-				Name:  "foo",
-				Value: "bar",
-			},
-			{
-				Name:  "baz",
-				Value: "qux",
-			},
-		},
-	}
-
-	ts2 := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{ts.Labels[1], ts.Labels[0]},
-	}
-
-	if hash("", ts) != hash("", ts2) {
-		t.Errorf("expected hashes to be independent of label order")
-	}
-}
-
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
 		Labels: []labelpb.ZLabel{

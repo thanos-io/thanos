@@ -23,20 +23,26 @@ export const updateURL = (nextPanels: PanelMeta[]) => {
 interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   panels: PanelMeta[];
   metrics: string[];
+  useExperimentalEditor: boolean;
   useLocalTime: boolean;
   queryHistoryEnabled: boolean;
   stores: StoreListProps;
   enableAutocomplete: boolean;
+  enableHighlighting: boolean;
+  enableLinter: boolean;
   defaultStep: string;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
   metrics = [],
+  useExperimentalEditor,
   useLocalTime,
   pathPrefix,
   queryHistoryEnabled,
   stores = {},
   enableAutocomplete,
+  enableHighlighting,
+  enableLinter,
   defaultStep,
   ...rest
 }) => {
@@ -114,12 +120,15 @@ export const PanelListContent: FC<PanelListProps> = ({
               )
             )
           }
+          useExperimentalEditor={useExperimentalEditor}
           useLocalTime={useLocalTime}
           metricNames={metrics}
           pastQueries={queryHistoryEnabled ? historyItems : []}
           pathPrefix={pathPrefix}
           stores={storeData}
           enableAutocomplete={enableAutocomplete}
+          enableHighlighting={enableHighlighting}
+          enableLinter={enableLinter}
           defaultStep={defaultStep}
         />
       ))}
@@ -134,10 +143,13 @@ const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
 
 const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
   const [delta, setDelta] = useState(0);
+  const [useExperimentalEditor, setUseExperimentalEditor] = useLocalStorage('use-new-editor', true);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);
   const [debugMode, setDebugMode] = useState(false);
   const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-autocomplete', true);
+  const [enableHighlighting, setEnableHighlighting] = useLocalStorage('enable-syntax-highlighting', true);
+  const [enableLinter, setEnableLinter] = useLocalStorage('enable-linter', true);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
@@ -166,38 +178,70 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
 
   return (
     <>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 3, display: 'inline-block' }}
-        id="query-history-checkbox"
-        onChange={({ target }) => setEnableQueryHistory(target.checked)}
-        defaultChecked={enableQueryHistory}
-      >
-        Enable query history
-      </Checkbox>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="use-local-time-checkbox"
-        onChange={({ target }) => setUseLocalTime(target.checked)}
-        defaultChecked={useLocalTime}
-      >
-        Use local time
-      </Checkbox>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="debug-mode-checkbox"
-        defaultChecked={debugMode}
-        onChange={({ target }) => setDebugMode(target.checked)}
-      >
-        Enable Store Filtering
-      </Checkbox>
-      <Checkbox
-        wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-        id="autocomplete"
-        defaultChecked={enableAutocomplete}
-        onChange={({ target }) => setEnableAutocomplete(target.checked)}
-      >
-        Enable autocomplete
-      </Checkbox>
+      <div className="clearfix">
+        <div className="float-left">
+          <Checkbox
+            wrapperStyles={{ display: 'inline-block' }}
+            id="use-local-time-checkbox"
+            onChange={({ target }) => setUseLocalTime(target.checked)}
+            defaultChecked={useLocalTime}
+          >
+            Use local time
+          </Checkbox>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id="query-history-checkbox"
+            onChange={({ target }) => setEnableQueryHistory(target.checked)}
+            defaultChecked={enableQueryHistory}
+          >
+            Enable query history
+          </Checkbox>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id="debug-mode-checkbox"
+            defaultChecked={debugMode}
+            onChange={({ target }) => setDebugMode(target.checked)}
+          >
+            Enable Store Filtering
+          </Checkbox>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id="autocomplete-checkbox"
+            onChange={({ target }) => setEnableAutocomplete(target.checked)}
+            defaultChecked={enableAutocomplete}
+          >
+            Enable autocomplete
+          </Checkbox>
+        </div>
+        <div className="float-right">
+          <Checkbox
+            wrapperStyles={{ display: 'inline-block' }}
+            id="use-experimental-editor-checkbox"
+            onChange={({ target }) => setUseExperimentalEditor(target.checked)}
+            defaultChecked={useExperimentalEditor}
+          >
+            Use experimental editor
+          </Checkbox>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id="highlighting-checkbox"
+            onChange={({ target }) => setEnableHighlighting(target.checked)}
+            defaultChecked={enableHighlighting}
+            disabled={!useExperimentalEditor}
+          >
+            Enable highlighting
+          </Checkbox>
+          <Checkbox
+            wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+            id="linter-checkbox"
+            onChange={({ target }) => setEnableLinter(target.checked)}
+            defaultChecked={enableLinter}
+            disabled={!useExperimentalEditor}
+          >
+            Enable linter
+          </Checkbox>
+        </div>
+      </div>
       {(delta > 30 || timeErr) && (
         <UncontrolledAlert color="danger">
           <strong>Warning: </strong>
@@ -227,10 +271,13 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
       <PanelListContentWithIndicator
         panels={decodePanelOptionsFromQueryString(window.location.search)}
         pathPrefix={pathPrefix}
+        useExperimentalEditor={useExperimentalEditor}
         useLocalTime={useLocalTime}
         metrics={metricsRes.data}
         stores={debugMode ? storesRes.data : {}}
         enableAutocomplete={enableAutocomplete}
+        enableHighlighting={enableHighlighting}
+        enableLinter={enableLinter}
         defaultStep={defaultStep}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading || flagsLoading}

@@ -66,16 +66,17 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		return nil, "", errors.Wrap(err, "creating prom config failed")
 	}
 
+	args := e2e.BuildArgs(map[string]string{
+		"--config.file":                     filepath.Join(container, "prometheus.yml"),
+		"--storage.tsdb.path":               container,
+		"--storage.tsdb.max-block-duration": "2h",
+		"--log.level":                       infoLogLevel,
+		"--web.listen-address":              ":9090",
+	})
 	prom := e2e.NewHTTPService(
 		fmt.Sprintf("prometheus-%s", name),
 		promImage,
-		e2e.NewCommandWithoutEntrypoint("prometheus", e2e.BuildArgs(map[string]string{
-			"--config.file":                     filepath.Join(container, "prometheus.yml"),
-			"--storage.tsdb.path":               container,
-			"--storage.tsdb.max-block-duration": "2h",
-			"--log.level":                       infoLogLevel,
-			"--web.listen-address":              ":9090",
-		})...),
+		e2e.NewCommandWithoutEntrypoint("prometheus", args...),
 		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
 		9090,
 	)
@@ -114,7 +115,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses, metadataAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
+func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses, targetAddresses []string, metadataAddresses, exemplarAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -136,8 +137,16 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		args = append(args, "--rule="+addr)
 	}
 
+	for _, addr := range targetAddresses {
+		args = append(args, "--target="+addr)
+	}
+
 	for _, addr := range metadataAddresses {
 		args = append(args, "--metadata="+addr)
+	}
+
+	for _, addr := range exemplarAddresses {
+		args = append(args, "--exemplar="+addr)
 	}
 
 	if len(fileSDStoreAddresses) > 0 {
@@ -494,4 +503,40 @@ func NewMemcached(name string) *e2e.ConcreteService {
 	memcached.SetBackoff(defaultBackoffConfig)
 
 	return memcached
+}
+
+func NewToolsBucketWeb(name string, bucketConfig client.BucketConfig, routePrefix, externalPrefix string) (*Service, error) {
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig)
+	}
+
+	args := e2e.BuildArgs(map[string]string{
+		"--debug.name":      fmt.Sprintf("toolsBucketWeb-%s", name),
+		"--http-address":    ":8080",
+		"--log.level":       infoLogLevel,
+		"--objstore.config": string(bktConfigBytes),
+	})
+	if routePrefix != "" {
+		args = append(args, "--web.route-prefix="+routePrefix)
+	}
+
+	if externalPrefix != "" {
+		args = append(args, "--web.external-prefix="+externalPrefix)
+	}
+
+	args = append([]string{"bucket", "web"}, args...)
+
+	toolsBucketWeb := NewService(
+		fmt.Sprintf("toolsBucketWeb-%s", name),
+		DefaultImage(),
+		e2e.NewCommand("tools", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+	)
+	toolsBucketWeb.SetUser(strconv.Itoa(os.Getuid()))
+	toolsBucketWeb.SetBackoff(defaultBackoffConfig)
+
+	return toolsBucketWeb, nil
 }

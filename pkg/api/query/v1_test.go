@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -186,6 +188,9 @@ func TestQueryEndpoints(t *testing.T) {
 		},
 		gate:                  gate.New(nil, 4),
 		defaultRangeQueryStep: time.Second,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 
 	start := time.Unix(0, 0)
@@ -878,6 +883,9 @@ func TestMetadataEndpoints(t *testing.T) {
 			return qe
 		},
 		gate: gate.New(nil, 4),
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 	apiWithLabelLookback := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -889,6 +897,9 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		gate:                     gate.New(nil, 4),
 		defaultMetadataTimeRange: apiLookbackDelta,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 
 	var tests = []endpointTestCase{
@@ -1509,6 +1520,9 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
 			gate:                   gate.New(nil, 4),
+			queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+				Name: "query_range_hist",
+			}),
 		}
 		v := url.Values{}
 		v.Set(MaxSourceResolutionParam, test.maxSourceResolutionParam)
@@ -1557,6 +1571,9 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			api := QueryAPI{
 				gate: promgate.New(4),
+				queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+					Name: "query_range_hist",
+				}),
 			}
 			v := url.Values{}
 			v.Set(StoreMatcherParam, tc.storeMatchers)

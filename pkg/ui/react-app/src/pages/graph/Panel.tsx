@@ -16,6 +16,7 @@ import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseRange } from '../../utils/index';
+import CMExpressionInput from './CMExpressionInput';
 
 interface PanelProps {
   id: string;
@@ -27,7 +28,10 @@ interface PanelProps {
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
   stores: Store[];
+  useExperimentalEditor: boolean;
   enableAutocomplete: boolean;
+  enableHighlighting: boolean;
+  enableLinter: boolean;
   defaultStep: string;
 }
 
@@ -284,17 +288,32 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       <div className="panel">
         <Row>
           <Col>
-            <ExpressionInput
-              value={this.state.exprInputValue}
-              onExpressionChange={this.handleExpressionChange}
-              executeQuery={this.executeQuery}
-              loading={this.state.loading}
-              enableAutocomplete={this.props.enableAutocomplete}
-              autocompleteSections={{
-                'Query History': pastQueries,
-                'Metric Names': metricNames,
-              }}
-            />
+            {this.props.useExperimentalEditor ? (
+              <CMExpressionInput
+                pathPrefix={this.props.pathPrefix}
+                value={this.state.exprInputValue}
+                onExpressionChange={this.handleExpressionChange}
+                executeQuery={this.executeQuery}
+                loading={this.state.loading}
+                enableAutocomplete={this.props.enableAutocomplete}
+                enableHighlighting={this.props.enableHighlighting}
+                enableLinter={this.props.enableLinter}
+                queryHistory={pastQueries}
+                metricNames={metricNames}
+              />
+            ) : (
+              <ExpressionInput
+                value={this.state.exprInputValue}
+                onExpressionChange={this.handleExpressionChange}
+                executeQuery={this.executeQuery}
+                loading={this.state.loading}
+                enableAutocomplete={this.props.enableAutocomplete}
+                autocompleteSections={{
+                  'Query History': pastQueries,
+                  'Metric Names': metricNames,
+                }}
+              />
+            )}
           </Col>
         </Row>
         <Row>

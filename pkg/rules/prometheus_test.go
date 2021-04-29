@@ -26,7 +26,7 @@ func TestPrometheus_Rules_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	root := filepath.Join(curr, "../../")
 
-	testutil.Ok(t, p.SetConfig(fmt.Sprintf(`
+	p.SetConfig(fmt.Sprintf(`
 global:
   external_labels:
     region: eu-west
@@ -34,7 +34,7 @@ global:
 rule_files:
   - %s/examples/alerts/alerts.yaml
   - %s/examples/alerts/rules.yaml
-`, root, root)))
+`, root, root))
 	testutil.Ok(t, p.Start())
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))

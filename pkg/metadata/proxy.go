@@ -39,7 +39,7 @@ func NewProxy(logger log.Logger, metadata func() []metadatapb.MetadataClient) *P
 	}
 }
 
-func (s *Proxy) Metadata(req *metadatapb.MetadataRequest, srv metadatapb.Metadata_MetadataServer) error {
+func (s *Proxy) MetricMetadata(req *metadatapb.MetricMetadataRequest, srv metadatapb.Metadata_MetricMetadataServer) error {
 	var (
 		g, gctx  = errgroup.WithContext(srv.Context())
 		respChan = make(chan *metadatapb.MetricMetadata, 10)
@@ -47,7 +47,7 @@ func (s *Proxy) Metadata(req *metadatapb.MetadataRequest, srv metadatapb.Metadat
 	)
 
 	for _, metadataClient := range s.metadata() {
-		rs := &metadataStream{
+		rs := &metricMetadataStream{
 			client:  metadataClient,
 			request: req,
 			channel: respChan,
@@ -71,25 +71,25 @@ func (s *Proxy) Metadata(req *metadatapb.MetadataRequest, srv metadatapb.Metadat
 	}
 
 	for _, t := range metas {
-		if err := srv.Send(metadatapb.NewMetadataResponse(t)); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send metadata response").Error())
+		if err := srv.Send(metadatapb.NewMetricMetadataResponse(t)); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send metric metadata response").Error())
 		}
 	}
 
 	return nil
 }
 
-type metadataStream struct {
+type metricMetadataStream struct {
 	client  metadatapb.MetadataClient
-	request *metadatapb.MetadataRequest
+	request *metadatapb.MetricMetadataRequest
 	channel chan<- *metadatapb.MetricMetadata
-	server  metadatapb.Metadata_MetadataServer
+	server  metadatapb.Metadata_MetricMetadataServer
 }
 
-func (stream *metadataStream) receive(ctx context.Context) error {
-	metadataCli, err := stream.client.Metadata(ctx, stream.request)
+func (stream *metricMetadataStream) receive(ctx context.Context) error {
+	metadataCli, err := stream.client.MetricMetadata(ctx, stream.request)
 	if err != nil {
-		err = errors.Wrapf(err, "fetching metadata from metadata client %v", stream.client)
+		err = errors.Wrapf(err, "fetching metric metadata from metadata client %v", stream.client)
 
 		if stream.request.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 			return err
@@ -109,7 +109,7 @@ func (stream *metadataStream) receive(ctx context.Context) error {
 		}
 
 		if err != nil {
-			err = errors.Wrapf(err, "receiving metadata from metadata client %v", stream.client)
+			err = errors.Wrapf(err, "receiving metric metadata from metadata client %v", stream.client)
 
 			if stream.request.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 				return err

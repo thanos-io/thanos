@@ -208,7 +208,7 @@ http_config:
 
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg.PartSize == 1024*1024*128, "when part size not set it should default to 128MiB")
+	testutil.Assert(t, cfg.PartSize == 1024*1024*64, "when part size not set it should default to 128MiB")
 
 	input2 := []byte(`bucket: "bucket-name"
 endpoint: "s3-endpoint"

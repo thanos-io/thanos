@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [ '10', '12' ]
+        node: [ '14' ]
     name: React UI test on Node ${{ matrix.node }}
     steps:
       - uses: actions/checkout@v2

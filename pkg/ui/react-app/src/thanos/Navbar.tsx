@@ -26,34 +26,69 @@ interface NavDropDown {
 
 const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
   query: [
-    { name: 'Graph', uri: '/new/graph' },
-    { name: 'Stores', uri: '/new/stores' },
+    { name: 'Graph', uri: '/graph' },
+    { name: 'Stores', uri: '/stores' },
     {
       name: 'Status',
       children: [
-        { name: 'Runtime & Build Information', uri: '/new/status' },
-        { name: 'Command-Line Flags', uri: '/new/flags' },
+        { name: 'Runtime & Build Information', uri: '/status' },
+        { name: 'Command-Line Flags', uri: '/flags' },
+        // TODO(onprem): Uncomment after `--target` flag on Querier becomes
+        // non-hidden or we move to `--endpoint`.
+        // { name: 'Targets', uri: '/targets' },
       ],
     },
   ],
   rule: [
-    { name: 'Alerts', uri: '/new/alerts' },
-    { name: 'Rules', uri: '/new/rules' },
+    { name: 'Alerts', uri: '/alerts' },
+    { name: 'Rules', uri: '/rules' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/status' },
+        { name: 'Command-Line Flags', uri: '/flags' },
+      ],
+    },
   ],
-  bucket: [{ name: 'Blocks', uri: '/new/blocks' }],
+  bucket: [
+    { name: 'Blocks', uri: '/blocks' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/status' },
+        { name: 'Command-Line Flags', uri: '/flags' },
+      ],
+    },
+  ],
   compact: [
-    { name: 'Global Blocks', uri: '/new/blocks' },
-    { name: 'Loaded Blocks', uri: '/new/loaded' },
+    { name: 'Global Blocks', uri: '/blocks' },
+    { name: 'Loaded Blocks', uri: '/loaded' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/status' },
+        { name: 'Command-Line Flags', uri: '/flags' },
+      ],
+    },
   ],
-  store: [{ name: 'Loaded Blocks', uri: '/new/loaded' }],
+  store: [
+    { name: 'Loaded Blocks', uri: '/loaded' },
+    {
+      name: 'Status',
+      children: [
+        { name: 'Runtime & Build Information', uri: '/status' },
+        { name: 'Command-Line Flags', uri: '/flags' },
+      ],
+    },
+  ],
 };
 
 const defaultClassicUIRoute: { [component: string]: string } = {
-  query: '/graph',
-  rule: '/alerts',
-  bucket: '/',
-  compact: '/loaded',
-  store: '/loaded',
+  query: '/classic/graph',
+  rule: '/classic/alerts',
+  bucket: '/classic',
+  compact: '/classic/loaded',
+  store: '/classic/loaded',
 };
 
 interface NavigationProps {
@@ -67,7 +102,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
       <NavbarToggler onClick={toggle} />
-      <Link className="navbar-brand" to={`${pathPrefix}/new${defaultRoute}`}>
+      <Link className="navbar-brand" to={`${pathPrefix}${defaultRoute}`}>
         Thanos - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
       </Link>
