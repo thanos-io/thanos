@@ -26,7 +26,7 @@ const (
 	azureDefaultEndpoint = "blob.core.windows.net"
 )
 
-// Set default retry values to default Azure values. 0 = use Default Azure
+// Set default retry values to default Azure values. 0 = use Default Azure.
 var DefaultConfig = Config{
 	PipelineConfig: PipelineConfig{
 		MaxTries:      0,
