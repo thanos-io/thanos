@@ -3,6 +3,7 @@
   receive+:: {
     selector: error 'must provide selector for Thanos Receive alerts',
     httpErrorThreshold: 5,
+    ingestionThreshold: 50,
     forwardErrorThreshold: 20,
     refreshErrorThreshold: 0,
     p99LatencyThreshold: 10,
@@ -141,6 +142,24 @@
             'for': '3h',
             labels: {
               severity: 'critical',
+            },
+          },
+          {
+            alert: 'ThanosReceiveTrafficBelowThreshold',
+            annotations: {
+              description: 'At Thanos Receive {{$labels.job}} in {{$labels.namespace}} , the average 1-hr avg. metrics ingestion rate  is {{$value | humanize}}% of 12-hr avg. ingestion rate.',
+              summary: 'Thanos Receive is experiencing low avg. 1-hr ingestion rate relative to avg. 12-hr ingestion rate.',
+            },
+            expr: |||
+              (
+                avg by (%(dimensions)s) (rate(http_requests_total{code=~"2..", %(selector)s, handler="receive"}[1h]))
+              /
+                avg by (%(dimensions)s) (rate(http_requests_total{code=~"2..", %(selector)s, handler="receive"}[12h]))
+              ) * 100 < %(ingestionThreshold)s
+            ||| % thanos.receive,
+            'for': '1h',
+            labels: {
+              severity: 'warning',
             },
           },
         ],
