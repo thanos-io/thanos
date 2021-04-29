@@ -509,15 +509,11 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	vals := []string{}
 	v := p.promVersion()
 
-	version, err := semver.Parse(v)
-	if err == nil {
-		baseVer, err := semver.Make("2.24.0")
-		if err != nil {
-			return nil, err
-		}
-		if version.Compare(baseVer) == 1 {
-			lvc = true
-		}
+	version, err1 := semver.Parse(v)
+	baseVer, err2 := semver.Make("2.24.0")
+
+	if err1 == nil && err2 == nil && version.Compare(baseVer) == 1 {
+		lvc = true
 	}
 
 	if len(r.Matchers) == 0 || lvc {
