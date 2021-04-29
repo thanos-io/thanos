@@ -54,10 +54,9 @@ require (
 	github.com/prometheus/client_golang v1.10.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.23.0
-	github.com/prometheus/exporter-toolkit v0.5.1
-	github.com/prometheus/prometheus v1.8.2-0.20210519120135-d95b0972505f
-	github.com/uber/jaeger-client-go v2.28.0+incompatible
-	github.com/uber/jaeger-lib v2.4.1+incompatible
+	github.com/prometheus/prometheus v1.8.2-0.20210421143221-52df5ef7a3be
+	github.com/uber/jaeger-client-go v2.25.0+incompatible
+	github.com/uber/jaeger-lib v2.4.0+incompatible
 	github.com/weaveworks/common v0.0.0-20210419092856-009d1eebd624
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
@@ -81,6 +80,9 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+
+	// Temporary fix to make our Azure config update work
+	github.com/cortexproject/cortex => github.com/wiardvanrij/cortex v1.8.2-0.20210429193813-a7df1fcbfafc
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 

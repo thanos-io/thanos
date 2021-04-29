@@ -320,22 +320,22 @@ config:
   endpoint: ""
   msi_resource: ""
   pipeline_config:
-    max_tries: ""
-    try_timeout: ""
-    retry_delay: ""
-    max_retry_delay: ""
+    max_tries: 0
+    try_timeout: 0s
+    retry_delay: 0s
+    max_retry_delay: 0s
   reader_config:
-    max_retry_requests: ""
+    max_retry_requests: 0
   http_config:
-    idle_conn_timeout: 1m30s
-    response_header_timeout: 2m
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
     insecure_skip_verify: false
-    tls_handshake_timeout: 10s
-    expect_continue_timeout: 1s
-    max_idle_conns: 100
-    max_idle_conns_per_host: 100
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
     max_conns_per_host: 0
-  
+    disable_compression: false
 ```
 
 #### OpenStack Swift
