@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/prometheus/pkg/relabel"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -69,9 +71,10 @@ type ruleConfig struct {
 	query           queryConfig
 	queryConfigYAML []byte
 
-	alertmgr            alertMgrConfig
-	alertmgrsConfigYAML []byte
-	alertQueryURL       *url.URL
+	alertmgr               alertMgrConfig
+	alertmgrsConfigYAML    []byte
+	alertQueryURL          *url.URL
+	alertRelabelConfigYAML []byte
 
 	resendDelay    time.Duration
 	evalInterval   time.Duration
@@ -170,6 +173,11 @@ func registerRule(app *extkingpin.App) {
 		}
 		if len(conf.alertmgrsConfigYAML) != 0 && len(conf.alertmgr.alertmgrURLs) != 0 {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
+		}
+
+		conf.alertRelabelConfigYAML, err = conf.alertmgr.alertRelabelConfigPath.Content()
+		if err != nil {
+			return err
 		}
 
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
@@ -352,6 +360,14 @@ func runRule(
 		level.Warn(logger).Log("msg", "no alertmanager configured")
 	}
 
+	var alertRelabelConfigs []*relabel.Config
+	if len(conf.alertRelabelConfigYAML) > 0 {
+		alertRelabelConfigs, err = alert.LoadRelabelConfigs(conf.alertRelabelConfigYAML)
+		if err != nil {
+			return err
+		}
+	}
+
 	amProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_rule_alertmanagers_", reg),
@@ -377,7 +393,7 @@ func runRule(
 
 	var (
 		ruleMgr *thanosrules.Manager
-		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels)
+		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
 	)
 	{
 		// Run rule evaluation and alert notifications.

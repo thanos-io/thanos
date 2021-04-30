@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/prometheus/pkg/relabel"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
@@ -129,4 +131,13 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 		Timeout:    model.Duration(timeout),
 		APIVersion: APIv1,
 	}, nil
+}
+
+// LoadRelabelConfigs loads a list of relabel.Config from YAML data.
+func LoadRelabelConfigs(confYaml []byte) ([]*relabel.Config, error) {
+	var cfg []*relabel.Config
+	if err := yaml.UnmarshalStrict(confYaml, &cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }

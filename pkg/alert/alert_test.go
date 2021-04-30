@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/relabel"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 
@@ -24,9 +27,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 	batchsize := 1
 	pushes := 3
 
-	q := NewQueue(
-		nil, nil, qcapacity, batchsize, nil, nil,
-	)
+	q := NewQueue(nil, nil, qcapacity, batchsize, nil, nil, nil)
 	for i := 0; i < pushes; i++ {
 		q.Push([]*Alert{
 			{},
@@ -45,11 +46,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 }
 
 func TestQueue_Push_Relabelled(t *testing.T) {
-	q := NewQueue(
-		nil, nil, 10, 10,
-		labels.FromStrings("a", "1", "replica", "A"), // Labels to be added.
-		[]string{"b", "replica"},                     // Labels to be dropped (excluding those added).
-	)
+	q := NewQueue(nil, nil, 10, 10, labels.FromStrings("a", "1", "replica", "A"), []string{"b", "replica"}, nil)
 
 	q.Push([]*Alert{
 		{Labels: labels.FromStrings("b", "2", "c", "3")},
@@ -61,6 +58,37 @@ func TestQueue_Push_Relabelled(t *testing.T) {
 	testutil.Equals(t, labels.FromStrings("a", "1", "c", "3"), q.queue[0].Labels)
 	testutil.Equals(t, labels.FromStrings("a", "1", "c", "3"), q.queue[1].Labels)
 	testutil.Equals(t, labels.FromStrings("a", "1"), q.queue[2].Labels)
+}
+
+func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
+	q := NewQueue(
+		nil, nil, 10, 10, labels.New(), []string{},
+		[]*relabel.Config{
+			{
+				SourceLabels: model.LabelNames{"a"},
+				Separator:    ";",
+				Regex:        relabel.MustNewRegexp(".*(b).*"),
+				TargetLabel:  "d",
+				Action:       relabel.Replace,
+				Replacement:  "$1",
+			},
+		},
+	)
+
+	q.Push([]*Alert{
+		{Labels: labels.FromMap(map[string]string{
+			"a": "abc",
+		})},
+	})
+
+	testutil.Equals(t, 1, len(q.queue))
+	testutil.Equals(
+		t, labels.FromMap(map[string]string{
+			"a": "abc",
+			"d": "b",
+		}),
+		q.queue[0].Labels,
+	)
 }
 
 func assertSameHosts(t *testing.T, expected []*url.URL, found []*url.URL) {
