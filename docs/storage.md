@@ -318,6 +318,7 @@ config:
   storage_account_key: ""
   container: ""
   endpoint: ""
+  max_retries: 0
   msi_resource: ""
   pipeline_config:
     max_tries: 0
@@ -337,6 +338,9 @@ config:
     max_conns_per_host: 0
     disable_compression: false
 ```
+
+If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://storage.azure.com`.
+The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
 

@@ -55,6 +55,7 @@ type Config struct {
 	StorageAccountKey  string         `yaml:"storage_account_key"`
 	ContainerName      string         `yaml:"container"`
 	Endpoint           string         `yaml:"endpoint"`
+	MaxRetries         int            `yaml:"max_retries"`
 	MSIResource        string         `yaml:"msi_resource"`
 	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
 	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
@@ -143,6 +144,17 @@ func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
 	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
 		return Config{}, err
+	}
+
+	// If we don't have config specific retry values but we do have the generic MaxRetries.
+	// This is part backwards compatibility but also ease of configuration
+	if config.MaxRetries > 0 {
+		if config.PipelineConfig.MaxTries == 0 {
+			config.PipelineConfig.MaxTries = int32(config.MaxRetries)
+		}
+		if config.ReaderConfig.MaxRetryRequests == 0 {
+			config.ReaderConfig.MaxRetryRequests = config.MaxRetries
+		}
 	}
 
 	return config, nil
