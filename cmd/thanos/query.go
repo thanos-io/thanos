@@ -424,7 +424,7 @@ func runQuery(
 		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, stores.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, stores.GetMetadataClients)
-		exemplarsProxy   = exemplars.NewProxy(logger, stores.GetExemplarsClients)
+		exemplarsProxy   = exemplars.NewProxy(logger, stores.GetExemplarsStores, selectorLset)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
