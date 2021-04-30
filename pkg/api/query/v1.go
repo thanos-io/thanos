@@ -686,6 +686,8 @@ func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiErr
 	return statuses, nil, nil
 }
 
+// NewTargetsHandler created handler compatible with HTTP /api/v1/targets https://prometheus.io/docs/prometheus/latest/querying/api/#targets
+// which uses gRPC Unary Targets API.
 func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
@@ -747,8 +749,8 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 	}
 }
 
-// NewExemplarsHandler creates handler compatible with HTTP /api/v1/exemplars [link-to-be-added]
-// which uses gRPC Unary Rules API.
+// NewExemplarsHandler creates handler compatible with HTTP /api/v1/query_exemplars https://prometheus.io/docs/prometheus/latest/querying/api/#querying-exemplars
+// which uses gRPC Unary Exemplars API.
 func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
@@ -901,6 +903,8 @@ func labelValuesByMatchers(sets []storage.SeriesSet, name string) ([]string, sto
 	return labelValues, warnings, nil
 }
 
+// NewMetricMetadataHandler creates handler compatible with HTTP /api/v1/metadata https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata
+// which uses gRPC Unary Metadata API.
 func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
