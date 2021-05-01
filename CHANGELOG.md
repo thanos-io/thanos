@@ -15,6 +15,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Added
 
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
+- [#4134](https://github.com/thanos-io/thanos/pull/4134) Docs: add out-of-order and out-of-bound receiver troubleshoot cases.
 
 ### Fixed
 -
