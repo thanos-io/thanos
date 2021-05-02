@@ -255,6 +255,9 @@ func runSidecar(
 			thanoshttp.WithMaxIdleConns(conf.prometheus.maxIdleConnsPerHost),
 			thanoshttp.WithMaxIdleConnsPerHost(conf.prometheus.maxIdleConnsPerHost),
 		)
+		if err != nil {
+			return errors.Wrap(err, "creating client config")
+		}
 
 		c := promclient.NewWithTracingClient(logger, http.Client{Transport: tracing.HTTPTripperware(logger, hc.Transport)}, thanoshttp.ThanosUserAgent)
 
