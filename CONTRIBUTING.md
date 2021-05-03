@@ -92,7 +92,7 @@ component of the Thanos distributed system. We recommend:
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-  * Make sure you have GOBIN, GOPATH and GOBIN (useful) set to PATH. For example -
+  * Make sure you have GOBIN, GOPATH and GOPROXY (useful) set to PATH. For example -
     ```
     export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
 
