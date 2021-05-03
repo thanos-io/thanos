@@ -184,12 +184,7 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 		})}
 		return logOpts, nil
 	}
-	logOpts, err = NewHTTPOption(configYAML)
-	if err != nil {
-		return logOpts, err
-	}
-
-	return logOpts, nil
+	return NewHTTPOption(configYAML)
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
