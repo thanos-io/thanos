@@ -130,11 +130,6 @@ Flags:
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --prometheus.connection-pool-size=PROMETHEUS.CONNECTION-POOL-SIZE
-                                 Controls the http MaxIdleConns. Default is 0,
-                                 which is unlimited
-      --prometheus.connection-pool-size-per-host=100
-                                 Controls the http MaxIdleConnsPerHost
       --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content of YAML file

@@ -437,6 +437,8 @@ alertmanagers:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
   static_configs: []
   file_sd_configs:
   - files: []
@@ -470,6 +472,8 @@ The configuration format is the following:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
   static_configs: []
   file_sd_configs:
   - files: []

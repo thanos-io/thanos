@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"math"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -44,7 +43,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 func registerSidecar(app *extkingpin.App) {
@@ -109,7 +107,7 @@ func runSidecar(
 		maxt: math.MaxInt64,
 
 		limitMinTime: conf.limitMinTime,
-		client:       promclient.NewWithTracingClient(logger, *httpClient, "thanos-sidecar"),
+		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -247,19 +245,7 @@ func runSidecar(
 		})
 	}
 	{
-		// todo(someshkoli): Not sure how to properly implement RoundTripper for these properties or
-		// access existing transport properties in http client built from thanoshttp.NewHTTPClient method
-		hc, err := thanoshttp.NewHTTPClient(
-			*httpClientConfig,
-			"thanos-sidecar",
-			thanoshttp.WithMaxIdleConns(conf.prometheus.maxIdleConnsPerHost),
-			thanoshttp.WithMaxIdleConnsPerHost(conf.prometheus.maxIdleConnsPerHost),
-		)
-		if err != nil {
-			return errors.Wrap(err, "creating client config")
-		}
-
-		c := promclient.NewWithTracingClient(logger, http.Client{Transport: tracing.HTTPTripperware(logger, hc.Transport)}, thanoshttp.ThanosUserAgent)
+		c := promclient.NewWithTracingClient(logger, httpClient, thanoshttp.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {

@@ -49,6 +49,9 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
+
+	MaxIdleConns        int `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost int `yaml:"max_idle_conns_per_host"`
 }
 
 // TLSConfig configures TLS connections.
@@ -178,7 +181,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, name string, op
 }
 
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg ClientConfig, name string, optFuncs ...HTTPClientOption) (*http.Client, error) {
+func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -209,7 +212,18 @@ func NewHTTPClient(cfg ClientConfig, name string, optFuncs ...HTTPClientOption) 
 		return nil, err
 	}
 
-	rt, err := NewRoundTripperFromConfig(httpClientConfig, name, optFuncs...)
+	// see https://github.com/golang/go/issues/13801
+	if cfg.MaxIdleConns == 0 {
+		cfg.MaxIdleConns = 20000
+	}
+	if cfg.MaxIdleConnsPerHost == 0 {
+		cfg.MaxIdleConnsPerHost = 1000
+	}
+	rt, err := NewRoundTripperFromConfig(
+		httpClientConfig,
+		name,
+		WithMaxIdleConns(cfg.MaxIdleConns),
+		WithMaxIdleConnsPerHost(cfg.MaxIdleConnsPerHost))
 	if err != nil {
 		return nil, err
 	}
