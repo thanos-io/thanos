@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -141,7 +140,7 @@ func registerReceive(app *extkingpin.App) {
 			}
 			parts := strings.Split(*grpcBindAddr, ":")
 			port := parts[len(parts)-1]
-			*localEndpoint = fmt.Sprint(net.JoinHostPort(hostname, port))
+			*localEndpoint = net.JoinHostPort(hostname, port)
 		}
 
 		return runReceive(
