@@ -44,10 +44,7 @@ message InfoResponse {
     ComponentType ComponentType  = 2;
     
     StoreInfo storeInfo = 3;
-    RulesInfo rulesInfo = 4;
-    MetadataInfo metadataInfo = 5;
-    ExemplarsInfo exemplarsInfo = 6;
-    TargetsInfo targetsInfo = 7;
+    ExemplarsInfo exemplarsInfo = 4;
 }
 
 message StoreInfo {
@@ -55,16 +52,7 @@ message StoreInfo {
     int64 max_time = 2;
 }
 
-message RulesInfo {
-}
-
-message MetadataInfo {
-}
-
 message ExemplarsInfo {
     int64 min_time = 1;
     int64 max_time = 2;
-}
-
-message TargetsInfo {
 }
