@@ -105,7 +105,7 @@ level=warn ts=2021-05-01T04:57:12.249429787Z caller=writer.go:100 component=rece
 - Check the pod history of Thanos Receiver to see if it is case #1.
 - For case #2, if you installed Prometheus using the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) helm chart from the Prometheus Community, you can check the "Prometheus / Remote Write dashboard". If the Rate\[5m\] is above 0 for a long period, it is case #2 and you should consider adding replica count or resources to Thanos Receiver.
 
-![Example Grafana dashboard showing the falling-behind remote write case](../img/thanos_receiver_troubleshoot_grafana_remote_write.png)
+<img src="../img/thanos_receiver_troubleshoot_grafana_remote_write.png" class="img-fluid" alt="Example Grafana dashboard showing the falling-behind remote write case" />
 
 ## Out-of-order Samples Error
 
@@ -126,18 +126,18 @@ level=warn ts=2021-05-01T05:02:23.596022921Z caller=writer.go:92 component=recei
 
 - Remote Prometheus is running in high availability mode (more than 1 replica are running). But the replica_external_label_name is not correctly configured (e.g. empty).
 
-![Example topology diagram of out-of-order error case caused by empty replica_external_label_name](../img/thanos_receiver_troubleshoot_empty_replica_external_label_name.png)
+<img src="../img/thanos_receiver_troubleshoot_empty_replica_external_label_name.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by empty replica_external_label_name" />
 
 - Remote Prometheus is running in a federation
   - the remote-writing Prometheus is running in HA
   - federation has both honor_label = true and honor_timestamp = true
   - all layers of Prometheus is using the same replica_external_label_name (e.g. the default "prometheus_replica")
 
-![Example topology diagram of out-of-order error case caused by misconfigured Prometheus federation](../img/thanos_receiver_troubleshoot_federation_idential_replica_name.png)
+<img src="../img/thanos_receiver_troubleshoot_federation_idential_replica_name.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by misconfigured Prometheus federation" />
 
 - There are multiple deployments of remote Prometheus, their external_labels are identical (e.g. all being empty), and they have metrics with no unique label (e.g. aggregated cluster CPU usage).
 
-![Example topology diagram of out-of-order error case caused by missing external_labels](../img/thanos_receiver_troubleshoot_no_external_labels.png)
+<img src="../img/thanos_receiver_troubleshoot_no_external_labels.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by missing external_labels" />
 
 ### Diagnostic
 
