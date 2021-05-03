@@ -5,8 +5,10 @@ package jaeger
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -141,7 +143,7 @@ func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 		if cfg.AgentPort != 0 {
 			port = cfg.AgentPort
 		}
-		rc.LocalAgentHostPort = fmt.Sprintf("%s:%d", host, port)
+		rc.LocalAgentHostPort = fmt.Sprint(net.JoinHostPort(host, strconv.Itoa(port)))
 	}
 
 	return rc, nil
