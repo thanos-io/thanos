@@ -156,14 +156,6 @@ type mockAlertmanager struct {
 	lastError error
 }
 
-func newMockAlertmanager(path string, token string) *mockAlertmanager {
-	return &mockAlertmanager{
-		path:   path,
-		token:  token,
-		alerts: make([]*model.Alert, 0),
-	}
-}
-
 func (m *mockAlertmanager) setLastError(err error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
