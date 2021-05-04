@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -466,10 +465,10 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 	vec := make(promql.Vector, 0, len(vectorResult))
 
 	for _, e := range vectorResult {
-		lset := make(promlabels.Labels, 0, len(e.Metric))
+		lset := make(labels.Labels, 0, len(e.Metric))
 
 		for k, v := range e.Metric {
-			lset = append(lset, promlabels.Label{
+			lset = append(lset, labels.Label{
 				Name:  string(k),
 				Value: string(v),
 			})
