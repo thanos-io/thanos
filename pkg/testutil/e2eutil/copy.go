@@ -40,13 +40,18 @@ func copyRecursive(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer source.Close()
+		defer func() {
+			source.Close()
+		}()
 
 		destination, err := os.Create(filepath.Join(dst, relPath))
 		if err != nil {
 			return err
 		}
-		defer destination.Close()
+		defer func() {
+			destination.Close()
+		}()
+
 		_, err = io.Copy(destination, source)
 		return err
 	})
