@@ -525,10 +525,7 @@ func runCompact(
 					defer iterCancel()
 
 					_, _, err := f.Fetch(iterCtx)
-					if err != nil {
-						return err
-					}
-					return nil
+					return err
 				})
 			})
 		}, func(error) {

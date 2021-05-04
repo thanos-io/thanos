@@ -430,10 +430,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 					defer iterCancel()
 
 					_, _, err := fetcher.Fetch(iterCtx)
-					if err != nil {
-						return err
-					}
-					return nil
+					return err
 				})
 			})
 		}, func(error) {
