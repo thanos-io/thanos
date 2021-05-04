@@ -172,7 +172,7 @@ func registerRule(app *extkingpin.App) {
 
 		// Parse and check remote-write config if it's enabled
 		if conf.rwConfig.remoteWrite {
-			conf.rwConfigYAML, err = conf.rwConfig.remoteWriteConfig.Content()
+			conf.rwConfigYAML, err = conf.rwConfig.configPath.Content()
 			if err != nil {
 				return err
 			}
@@ -342,12 +342,25 @@ func runRule(
 		return errors.Wrap(err, "open TSDB")
 	}
 	if conf.rwConfig.remoteWrite {
-		rw, err := remotewrite.NewStorage(logger, reg, "jfdlsfsl")
+		conf.rwConfigYAML, err = conf.rwConfig.configPath.Content()
 		if err != nil {
-			return errors.Wrap(err, "open WAL storage")
+			return err
 		}
-		appendable = rw
-		queryable = rw
+		var rwCfg remotewrite.Config
+		if len(conf.rwConfigYAML) == 0 {
+			return errors.New("no --remote-write.config was given")
+		}
+		rwCfg, err = remotewrite.LoadRemoteWriteConfig(conf.rwConfigYAML)
+		if err != nil {
+			return err
+		}
+		walDir := filepath.Join(conf.dataDir, rwCfg.Name)
+		remoteStore, err := remotewrite.NewFanoutStorage(logger, reg, walDir, rwCfg)
+		if err != nil {
+			return errors.Wrap(err, "set up remote-write store for ruler")
+		}
+		appendable = remoteStore
+		queryable = remoteStore
 	} else {
 		db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {
