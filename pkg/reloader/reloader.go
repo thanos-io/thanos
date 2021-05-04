@@ -370,9 +370,7 @@ func hashFile(h hash.Hash, fn string) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		f.Close()
-	}()
+	defer runutil.CloseWithErrCapture(&err, f, "close file")
 
 	if _, err := h.Write([]byte{'\xff'}); err != nil {
 		return err

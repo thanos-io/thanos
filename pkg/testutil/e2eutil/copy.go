@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -40,17 +41,13 @@ func copyRecursive(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer func() {
-			source.Close()
-		}()
+		defer runutil.CloseWithErrCapture(&err, source, "close file")
 
 		destination, err := os.Create(filepath.Join(dst, relPath))
 		if err != nil {
 			return err
 		}
-		defer func() {
-			destination.Close()
-		}()
+		defer runutil.CloseWithErrCapture(&err, destination, "close file")
 
 		_, err = io.Copy(destination, source)
 		return err
