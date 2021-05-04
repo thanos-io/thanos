@@ -50,7 +50,7 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 			continue
 		}
 		for _, fn := range matches {
-			level.Info(logger).Log("msg", "checking", "filename", fn)
+			level.Info(logger).Log("msg", "checking", "filename", filepath.Clean(fn))
 			f, er := os.Open(fn)
 			if er != nil {
 				level.Error(logger).Log("result", "FAILED", "error", er)
