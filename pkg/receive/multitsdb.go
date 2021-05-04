@@ -117,7 +117,7 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0777); err != nil {
+	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
 		return err
 	}
 

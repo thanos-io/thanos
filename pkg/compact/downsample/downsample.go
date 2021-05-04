@@ -66,7 +66,7 @@ func Downsample(
 
 	// Create block directory to populate with chunks, meta and index files into.
 	blockDir := filepath.Join(dir, uid.String())
-	if err := os.MkdirAll(blockDir, 0777); err != nil {
+	if err := os.MkdirAll(blockDir, 0750); err != nil {
 		return id, errors.Wrap(err, "mkdir block dir")
 	}
 
