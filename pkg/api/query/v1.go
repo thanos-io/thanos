@@ -42,6 +42,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
+	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -68,6 +69,7 @@ const (
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
 	Step                     = "step"
+	Stat                     = "stat"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -89,6 +91,7 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
+	enableQueryStats                    bool
 	disableCORS                         bool
 
 	replicaLabels []string
@@ -116,6 +119,7 @@ func NewQueryAPI(
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
+	enableQueryStats bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -141,6 +145,7 @@ func NewQueryAPI(
 		enableRulePartialResponse:              enableRulePartialResponse,
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
+		enableQueryStats:                       enableQueryStats,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -189,9 +194,9 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 }
 
 type queryData struct {
-	ResultType parser.ValueType `json:"resultType"`
-	Result     parser.Value     `json:"result"`
-
+	ResultType parser.ValueType  `json:"resultType"`
+	Result     parser.Value      `json:"result"`
+	Stat       *stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
@@ -283,10 +288,20 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 		}
 		return defaultRangeQueryStep, nil
 	}
-
 	// Default step is used this way to make it consistent with UI.
 	d := time.Duration(math.Max(float64(rangeSeconds/250), float64(defaultRangeQueryStep/time.Second))) * time.Second
 	return d, nil
+}
+
+func (qapi *QueryAPI) parseStat(r *http.Request, defaultEnableStat bool) (bool, *api.ApiError) {
+	if val := r.FormValue(Stat); val != "" {
+		stat, err := strconv.ParseBool(val)
+		if err != nil {
+			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Stat)}
+		}
+		return stat, nil
+	}
+	return defaultEnableStat, nil
 }
 
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
@@ -332,6 +347,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
+	enableStat, err := qapi.parseStat(r, qapi.enableQueryStats)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	qe := qapi.queryEngine(maxSourceResolution)
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -364,9 +384,15 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
 	}
 
+	// Optional stats field in response if parameter "stats" is not empty.
+	var qs *stats.QueryStats
+	if enableStat {
+		qs = stats.NewQueryStats(qry.Stats())
+	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
+		Stat:       qs,
 	}, res.Warnings, nil
 }
 
@@ -439,6 +465,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
+	enableStat, err := qapi.parseStat(r, qapi.enableQueryStats)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	qe := qapi.queryEngine(maxSourceResolution)
 
 	// Record the query range requested.
@@ -478,9 +509,15 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
 	}
 
+	// Optional stats field in response if parameter "stats" is not empty.
+	var qs *stats.QueryStats
+	if enableStat {
+		qs = stats.NewQueryStats(qry.Stats())
+	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
+		Stat:       qs,
 	}, res.Warnings, nil
 }
 
