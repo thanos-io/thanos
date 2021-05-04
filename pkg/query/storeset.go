@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"google.golang.org/grpc"
@@ -217,6 +218,8 @@ type StoreSet struct {
 	// Map of statuses used only by UI.
 	storeStatuses         map[string]*StoreStatus
 	unhealthyStoreTimeout time.Duration
+
+	upStatus *prometheus.GaugeVec
 }
 
 // NewStoreSet returns a new set of store APIs and potentially Rules APIs from given specs.
@@ -268,6 +271,11 @@ func NewStoreSet(
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,
+
+		upStatus: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			Name: "thanos_store_status",
+			Help: "Status of a given store node address.",
+		}, []string{"addr"}),
 	}
 	return ss
 }
@@ -622,7 +630,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.MinTime = mint
 		status.MaxTime = maxt
 		status.LastError = nil
+		s.upStatus.WithLabelValues(store.addr).Set(1)
 	} else {
+		s.upStatus.WithLabelValues(store.addr).Set(0)
 		status.LastError = &stringError{originalErr: err}
 	}
 
