@@ -45,7 +45,7 @@ func applyLicenseToProtoAndGo() error {
 			return nil
 		}
 
-		b, err := ioutil.ReadFile(path)
+		b, err := ioutil.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return err
 		}
