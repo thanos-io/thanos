@@ -77,7 +77,7 @@ func NewTracer(ctx context.Context, yamlConfig []byte) (opentracing.Tracer, io.C
 // is an environment variable and `defaultValue` is the value to use in case the env var is not set.
 func parseTags(sTags string) opentracing.Tags {
 	pairs := strings.Split(sTags, ",")
-	tags := make(opentracing.Tags, 0)
+	tags := make(opentracing.Tags)
 	for _, p := range pairs {
 		kv := strings.SplitN(p, "=", 2)
 		k, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
