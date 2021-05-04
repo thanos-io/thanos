@@ -201,7 +201,7 @@ func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []tags.Option{}, logOpts, fmt.Errorf("both log.request.decision and request.logging-config has been enabled. please use one of the flags")
+		return []tags.Option{}, logOpts, fmt.Errorf("both log.request.decision and request.logging-config have been enabled, please use only one of the flags")
 	}
 
 	// If the old flag is empty, use the new YAML config.
