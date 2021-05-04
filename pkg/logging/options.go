@@ -175,7 +175,7 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return logOpts, fmt.Errorf("both log.request.decision and request.logging has been enabled, please use only one of the flags")
+		return logOpts, fmt.Errorf("both log.request.decision and request.logging have been enabled, please use only one of the flags")
 	}
 	// If old flag is enabled.
 	if len(flagDecision) > 0 {
