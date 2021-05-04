@@ -54,10 +54,6 @@ func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefi
 
 // Register registers http routes for bucket UI.
 func (b *Bucket) Register(r *route.Router, registerNewUI bool, ins extpromhttp.InstrumentationMiddleware) {
-	classicPrefix := path.Join("/classic", b.uiPrefix)
-	r.WithPrefix(classicPrefix).Get("/", instrf("bucket", ins, b.bucket))
-	r.WithPrefix(classicPrefix).Get("/static/*filepath", instrf("static", ins, b.serveStaticAsset))
-
 	if registerNewUI {
 		// Redirect the original React UI's path (under "/new") to its new path at the root.
 		r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
@@ -71,13 +67,6 @@ func (b *Bucket) Register(r *route.Router, registerNewUI bool, ins extpromhttp.I
 
 		registerReactApp(r, ins, b.BaseUI)
 	}
-}
-
-// Handle / of bucket UIs.
-func (b *Bucket) bucket(w http.ResponseWriter, r *http.Request) {
-	classicPrefix := path.Join("/classic", b.uiPrefix)
-	prefix := GetWebPrefix(b.logger, path.Join(b.externalPrefix, strings.TrimPrefix(classicPrefix, "/")), b.prefixHeader, r)
-	b.executeTemplate(w, "bucket.html", prefix, b)
 }
 
 func (b *Bucket) Set(blocks []metadata.Meta, err error) {

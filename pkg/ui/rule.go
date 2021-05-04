@@ -38,11 +38,8 @@ func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanos
 		"queryURL":  queryURL,
 	}
 
-	tmplFuncs := ruleTmplFuncs(queryURL)
-	tmplFuncs["uiPrefix"] = func() string { return "/classic" }
-
 	return &Rule{
-		BaseUI:         NewBaseUI(logger, "rule_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Rule),
+		BaseUI:         NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL), tmplVariables, externalPrefix, prefixHeader, component.Rule),
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		ruleManager:    ruleManager,
@@ -126,44 +123,9 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 	}
 }
 
-func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	var groups []thanosrules.Group
-	for _, group := range ru.ruleManager.RuleGroups() {
-		if group.HasAlertingRules() {
-			groups = append(groups, group)
-		}
-	}
-
-	alertStatus := AlertStatus{
-		Groups: groups,
-		AlertStateToRowClass: map[rules.AlertState]string{
-			rules.StateInactive: "success",
-			rules.StatePending:  "warning",
-			rules.StateFiring:   "danger",
-		},
-		Counts: alertCounts(groups),
-	}
-
-	prefix := GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r)
-
-	// TODO(bwplotka): Update HTML to include partial response.
-	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
-}
-
-func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r)
-
-	// TODO(bwplotka): Update HTML to include partial response.
-	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
-}
-
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, path.Join(GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), "/alerts"), http.StatusFound)
-	})
-
-	r.Get("/classic/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join(GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), "/classic/alerts"), http.StatusFound)
 	})
 
 	// Redirect the original React UI's path (under "/new") to its new path at the root.
@@ -171,11 +133,6 @@ func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 		p := route.Param(r.Context(), "path")
 		http.Redirect(w, r, path.Join(GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
 	})
-
-	r.Get("/classic/alerts", instrf("alerts", ins, ru.alerts))
-	r.Get("/classic/rules", instrf("rules", ins, ru.rules))
-
-	r.Get("/classic/static/*filepath", instrf("static", ins, ru.serveStaticAsset))
 	registerReactApp(r, ins, ru.BaseUI)
 }
 
