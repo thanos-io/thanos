@@ -55,7 +55,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	}
 	defer func() {
 		if err := os.RemoveAll(tempdir); err != nil {
-			level.Warn(ctx.Logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
+			_ = level.Warn(ctx.Logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
 		}
 	}()
 
@@ -72,13 +72,13 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 
 	// Block uploaded, so we are ok to remove from src bucket.
 	if ctx.DeleteDelay.Seconds() == 0 {
-		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
+		_ = level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
 		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
 			return errors.Wrap(err, "delete from source")
 		}
 	}
 
-	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
+	_ = level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
 	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
@@ -108,14 +108,14 @@ func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 
 	// Block uploaded, so we are ok to remove from src bucket.
 	if ctx.DeleteDelay.Seconds() == 0 {
-		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
+		_ = level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
 		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
 			return errors.Wrap(err, "delete from source")
 		}
 		return nil
 	}
 
-	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
+	_ = level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
 	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
 		return errors.Wrap(err, "marking delete from source")
 	}
@@ -135,7 +135,7 @@ func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backu
 	}
 
 	// Upload the on disk TSDB block.
-	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
+	_ = level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
 	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc); err != nil {
 		return errors.Wrap(err, "upload to backup")
 	}

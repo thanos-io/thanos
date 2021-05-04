@@ -134,7 +134,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 	}
 
 	logger := log.With(m.Logger, "verifiers", strings.Join(append(m.vs.VerifiersIDs(), m.vs.VerifierRepairersIDs()...), ","))
-	level.Info(logger).Log("msg", "Starting verify task")
+	_ = level.Info(logger).Log("msg", "Starting verify task")
 
 	for _, v := range m.vs.Verifiers {
 		vCtx := m.Context
@@ -153,7 +153,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 		}
 	}
 
-	level.Info(logger).Log("msg", "verify task completed")
+	_ = level.Info(logger).Log("msg", "verify task completed")
 	return nil
 }
 
@@ -165,8 +165,8 @@ func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID)
 	}
 
 	logger := log.With(m.Logger, "verifiers", strings.Join(m.vs.VerifierRepairersIDs(), ","))
-	level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
-	level.Info(logger).Log("msg", "Starting verify and repair task")
+	_ = level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
+	_ = level.Info(logger).Log("msg", "Starting verify and repair task")
 
 	for _, vr := range m.vs.VerifierRepairers {
 		vCtx := m.Context
@@ -177,6 +177,6 @@ func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID)
 		}
 	}
 
-	level.Info(logger).Log("msg", "verify and repair task completed")
+	_ = level.Info(logger).Log("msg", "verify and repair task completed")
 	return nil
 }

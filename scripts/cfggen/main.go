@@ -75,40 +75,40 @@ func main() {
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	if _, err := app.Parse(os.Args[1:]); err != nil {
-		level.Error(logger).Log("err", err)
+		_ = level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
 	for typ, config := range bucketConfigs {
 		if err := generate(client.BucketConfig{Type: typ, Config: config}, generateName("bucket_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			_ = level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
 
 	if err := generate(logging.RequestConfig{}, generateName("logging_", "request"), *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "request_logging", "err", err)
+		_ = level.Error(logger).Log("msg", "failed to generate", "type", "request_logging", "err", err)
 		os.Exit(1)
 
 	}
 
 	for typ, config := range tracingConfigs {
 		if err := generate(trclient.TracingConfig{Type: typ, Config: config}, generateName("tracing_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			_ = level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
 
 	for typ, config := range indexCacheConfigs {
 		if err := generate(storecache.IndexCacheConfig{Type: typ, Config: config}, generateName("index_cache_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			_ = level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
 
 	for typ, config := range queryfrontendCacheConfigs {
 		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			_ = level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
@@ -116,18 +116,18 @@ func main() {
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
 	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
+		_ = level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
 		os.Exit(1)
 	}
 
 	queryCfg := query.DefaultConfig()
 	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
 	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
+		_ = level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)
 	}
 
-	logger.Log("msg", "success")
+	_ = logger.Log("msg", "success")
 }
 
 func generate(obj interface{}, typ string, outputDir string) error {

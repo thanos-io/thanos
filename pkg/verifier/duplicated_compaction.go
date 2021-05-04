@@ -28,7 +28,7 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 		return errors.Errorf("id matching is not supported")
 	}
 
-	level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
+	_ = level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
 	overlaps, err := fetchOverlaps(ctx, ctx.Fetcher)
 	if err != nil {
@@ -54,7 +54,7 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 
 			// Loop over duplicates sets.
 			for _, d := range dups {
-				level.Warn(ctx.Logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max, "kill", sprintMetas(d[1:]))
+				_ = level.Warn(ctx.Logger).Log("msg", "found duplicated blocks", "group", k, "range-min", r.Min, "range-max", r.Max, "kill", sprintMetas(d[1:]))
 
 				for _, m := range d[1:] {
 					if _, ok := toKillLookup[m.ULID]; ok {
@@ -67,13 +67,13 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 			}
 
 			if len(dups) == 0 {
-				level.Warn(ctx.Logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
+				_ = level.Warn(ctx.Logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
 					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks))
 			}
 		}
 	}
 
-	level.Warn(ctx.Logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill))
+	_ = level.Warn(ctx.Logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill))
 	if !repair {
 		return nil
 	}
@@ -82,10 +82,10 @@ func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.
 		if err := BackupAndDelete(ctx, id); err != nil {
 			return err
 		}
-		level.Info(ctx.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
+		_ = level.Info(ctx.Logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1)
 	}
 
-	level.Info(ctx.Logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap")
+	_ = level.Info(ctx.Logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap")
 	return nil
 }
 

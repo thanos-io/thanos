@@ -26,7 +26,7 @@ func (OverlappedBlocksIssue) Verify(ctx Context, idMatcher func(ulid.ULID) bool)
 		return errors.Errorf("id matching is not supported")
 	}
 
-	level.Info(ctx.Logger).Log("msg", "started verifying issue")
+	_ = level.Info(ctx.Logger).Log("msg", "started verifying issue")
 
 	overlaps, err := fetchOverlaps(ctx, ctx.Fetcher)
 	if err != nil {
@@ -39,7 +39,7 @@ func (OverlappedBlocksIssue) Verify(ctx Context, idMatcher func(ulid.ULID) bool)
 	}
 
 	for k, o := range overlaps {
-		level.Warn(ctx.Logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
+		_ = level.Warn(ctx.Logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
 	}
 	return nil
 }
