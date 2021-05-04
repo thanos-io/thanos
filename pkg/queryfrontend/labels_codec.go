@@ -197,7 +197,7 @@ func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req q
 		body, _ := ioutil.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
 	}
-	log, ctx := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
+	log, _ := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
 	defer log.Finish()
 
 	buf, err := ioutil.ReadAll(r.Body)
