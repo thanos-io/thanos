@@ -1064,6 +1064,10 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 	for _, tc := range tcs {
 		mockStoreSet := &StoreSet{
 			storeStatuses: map[string]*StoreStatus{},
+			upStatus: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_store_status",
+				Help: "Status of a given store node address.",
+			}, []string{"addr"}),
 		}
 		mockStoreRef := &storeRef{
 			addr: "mockedStore",
@@ -1080,6 +1084,10 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 func TestUpdateStoreStateForgetsPreviousErrors(t *testing.T) {
 	mockStoreSet := &StoreSet{
 		storeStatuses: map[string]*StoreStatus{},
+		upStatus: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "thanos_store_status",
+			Help: "Status of a given store node address.",
+		}, []string{"addr"}),
 	}
 	mockStoreRef := &storeRef{
 		addr: "mockedStore",
