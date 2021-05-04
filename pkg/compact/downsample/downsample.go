@@ -5,7 +5,7 @@ package downsample
 
 import (
 	"math"
-	"math/rand"
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"time"

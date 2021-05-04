@@ -5,7 +5,7 @@ package logging
 
 import (
 	"fmt"
-	"math/rand"
+	"crypto/rand"
 	"time"
 
 	"github.com/go-kit/kit/log"

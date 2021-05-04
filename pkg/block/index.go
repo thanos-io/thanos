@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
-	"math/rand"
+	"crypto/rand"
 	"path/filepath"
 	"sort"
 	"strings"

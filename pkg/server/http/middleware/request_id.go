@@ -5,7 +5,7 @@ package middleware
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
 	"net/http"
 	"time"
 

@@ -5,7 +5,7 @@ package logging
 
 import (
 	"fmt"
-	"math/rand"
+	"crypto/rand"
 	"sort"
 	"strings"
 	"time"

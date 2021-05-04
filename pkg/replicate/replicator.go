@@ -5,7 +5,7 @@ package replicate
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
 	"strconv"
 	"strings"
 	"time"
