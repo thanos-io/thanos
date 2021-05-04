@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"math/rand"
+	"crypto/rand"
 	"net/http"
 	"os"
 	"os/exec"
