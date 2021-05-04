@@ -15,6 +15,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Added
 
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
+- [#4171](https://github.com/thanos-io/thanos/pull/4171) Docker: Busybox image updated to latest (1.33.1)
 
 ### Fixed
 -
