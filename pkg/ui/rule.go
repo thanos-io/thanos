@@ -148,20 +148,3 @@ type AlertByStateCount struct {
 	Pending  int32
 	Firing   int32
 }
-
-func alertCounts(groups []thanosrules.Group) AlertByStateCount {
-	result := AlertByStateCount{}
-	for _, group := range groups {
-		for _, alert := range group.AlertingRules() {
-			switch alert.State() {
-			case rules.StateInactive:
-				result.Inactive++
-			case rules.StatePending:
-				result.Pending++
-			case rules.StateFiring:
-				result.Firing++
-			}
-		}
-	}
-	return result
-}
