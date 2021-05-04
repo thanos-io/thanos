@@ -88,7 +88,7 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	if logStart && logEnd {
 		return LogStartAndFinishCall, nil
 	}
-	return -1, fmt.Errorf("log start call is not supported.")
+	return -1, fmt.Errorf("log start call is not supported")
 }
 
 // getLevel returns the level based logger.
