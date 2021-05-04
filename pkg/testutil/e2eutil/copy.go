@@ -36,7 +36,7 @@ func copyRecursive(src, dst string) error {
 			return errors.Errorf("%s is not a regular file", path)
 		}
 
-		source, err := os.Open(path)
+		source, err := os.Open(filepath.Clean(path))
 		if err != nil {
 			return err
 		}
