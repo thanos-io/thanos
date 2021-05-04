@@ -501,7 +501,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 	}()
 
-	if err := os.MkdirAll(subDir, 0777); err != nil {
+	if err := os.MkdirAll(subDir, 0750); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 

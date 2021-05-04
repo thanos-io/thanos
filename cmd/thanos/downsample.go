@@ -162,7 +162,7 @@ func downsampleBucket(
 	dir string,
 	hashFunc metadata.HashFunc,
 ) (rerr error) {
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
 
