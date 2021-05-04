@@ -43,8 +43,8 @@ message InfoResponse {
     repeated ZLabelSet label_sets = 1 [(gogoproto.nullable) = false];
     ComponentType ComponentType  = 2;
     
-    StoreInfo storeInfo = 3;
-    ExemplarsInfo exemplarsInfo = 4;
+    StoreInfo store = 3;
+    ExemplarsInfo exemplars = 4;
 }
 
 message StoreInfo {
