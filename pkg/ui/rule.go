@@ -124,10 +124,6 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join(GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), "/alerts"), http.StatusFound)
-	})
-
 	// Redirect the original React UI's path (under "/new") to its new path at the root.
 	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 		p := route.Param(r.Context(), "path")

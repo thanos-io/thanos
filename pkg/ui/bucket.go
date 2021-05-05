@@ -4,16 +4,12 @@
 package ui
 
 import (
-	"encoding/json"
-	"html/template"
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/route"
-	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 )
@@ -23,13 +19,9 @@ type Bucket struct {
 	*BaseUI
 
 	externalPrefix, prefixHeader string
-	uiPrefix                     string
 	// Unique Prometheus label that identifies each shard, used as the title. If
 	// not present, all labels are displayed externally as a legend.
-	Label       string
-	Blocks      template.JS
-	RefreshedAt time.Time
-	Err         error
+	Err error
 }
 
 func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefix string, comp component.Component) *Bucket {
@@ -44,46 +36,17 @@ func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefi
 
 	return &Bucket{
 		BaseUI:         NewBaseUI(log.With(logger, "component", "bucketUI"), "bucket_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, comp),
-		Blocks:         "[]",
-		Label:          label,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
-		uiPrefix:       uiPrefix,
 	}
 }
 
 // Register registers http routes for bucket UI.
-func (b *Bucket) Register(r *route.Router, registerNewUI bool, ins extpromhttp.InstrumentationMiddleware) {
-	if registerNewUI {
-		// Redirect the original React UI's path (under "/new") to its new path at the root.
-		r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
-			p := route.Param(r.Context(), "path")
-			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
-		})
-
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), b.uiPrefix), http.StatusFound)
-		})
-
-		registerReactApp(r, ins, b.BaseUI)
-	}
-}
-
-func (b *Bucket) Set(blocks []metadata.Meta, err error) {
-	if err != nil {
-		// Last view is maintained.
-		b.RefreshedAt = time.Now()
-		b.Err = err
-		return
-	}
-
-	data := "[]"
-	dataB, err := json.Marshal(blocks)
-	if err == nil {
-		data = string(dataB)
-	}
-
-	b.RefreshedAt = time.Now()
-	b.Blocks = template.JS(data)
-	b.Err = err
+func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
+	// Redirect the original React UI's path (under "/new") to its new path at the root.
+	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
+		p := route.Param(r.Context(), "path")
+		http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
+	})
+	registerReactApp(r, ins, b.BaseUI)
 }
