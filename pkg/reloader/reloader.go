@@ -366,11 +366,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 }
 
 func hashFile(h hash.Hash, fn string) error {
-	f, err := os.Open(fn)
+	f, err := os.Open(filepath.Clean(fn))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer runutil.CloseWithErrCapture(&err, f, "close file")
 
 	if _, err := h.Write([]byte{'\xff'}); err != nil {
 		return err

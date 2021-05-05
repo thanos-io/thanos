@@ -1,5 +1,5 @@
 # By default we pin to amd64 sha. Use make docker to automatically adjust for arm64 versions.
-ARG SHA="fca3819d670cdaee0d785499fda202ea01c0640ca0803d26ae6dbf2a1c8c041c"
+ARG SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
 FROM quay.io/prometheus/busybox@sha256:${SHA}
 LABEL maintainer="The Thanos Authors"
 
