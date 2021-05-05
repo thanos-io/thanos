@@ -344,7 +344,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := os.RemoveAll(updir); err != nil {
 		return errors.Wrap(err, "clean upload directory")
 	}
-	if err := os.MkdirAll(updir, 0777); err != nil {
+	if err := os.MkdirAll(updir, 0750); err != nil {
 		return errors.Wrap(err, "create upload dir")
 	}
 	defer func() {
@@ -408,7 +408,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
 func hardlinkBlock(src, dst string) error {
 	chunkDir := filepath.Join(dst, block.ChunksDirname)
 
-	if err := os.MkdirAll(chunkDir, 0777); err != nil {
+	if err := os.MkdirAll(chunkDir, 0750); err != nil {
 		return errors.Wrap(err, "create chunks dir")
 	}
 

@@ -249,7 +249,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 
 // DownloadDir downloads all object found in the directory into the local directory.
 func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
-	if err := os.MkdirAll(dst, 0777); err != nil {
+	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
 

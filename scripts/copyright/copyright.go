@@ -56,7 +56,7 @@ func applyLicenseToProtoAndGo() error {
 			var bb bytes.Buffer
 			_, _ = bb.Write(license)
 			_, _ = bb.Write(b)
-			if err = ioutil.WriteFile(path, bb.Bytes(), 0666); err != nil {
+			if err = ioutil.WriteFile(path, bb.Bytes(), 0600); err != nil {
 				return err
 			}
 		}
