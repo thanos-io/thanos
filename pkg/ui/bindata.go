@@ -104,7 +104,7 @@ func pkgUiStaticReactAssetManifestJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/asset-manifest.json", size: 1317, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/asset-manifest.json", size: 1317, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -124,7 +124,7 @@ func pkgUiStaticReactFaviconIco() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/favicon.ico", size: 16958, mode: os.FileMode(420), modTime: time.Unix(1620124667, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/favicon.ico", size: 16958, mode: os.FileMode(420), modTime: time.Unix(1620220396, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -144,7 +144,7 @@ func pkgUiStaticReactIndexHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/index.html", size: 2367, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/index.html", size: 2367, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -164,7 +164,7 @@ func pkgUiStaticReactManifestJson() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/manifest.json", size: 300, mode: os.FileMode(493), modTime: time.Unix(1620124667, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/manifest.json", size: 300, mode: os.FileMode(493), modTime: time.Unix(1620220396, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -184,7 +184,7 @@ func pkgUiStaticReactPrecacheManifestB05b71f106e17c1ad801a45fe0f1d210Js() (*asse
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/precache-manifest.b05b71f106e17c1ad801a45fe0f1d210.js", size: 869, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/precache-manifest.b05b71f106e17c1ad801a45fe0f1d210.js", size: 869, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -204,7 +204,7 @@ func pkgUiStaticReactServiceWorkerJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/service-worker.js", size: 1183, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/service-worker.js", size: 1183, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -224,7 +224,7 @@ func pkgUiStaticReactStaticCss2A92efa4cChunkCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/css/2.a92efa4c.chunk.css", size: 178302, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/css/2.a92efa4c.chunk.css", size: 178302, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -244,7 +244,7 @@ func pkgUiStaticReactStaticCssMainE1aaea6dChunkCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/css/main.e1aaea6d.chunk.css", size: 7999, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/css/main.e1aaea6d.chunk.css", size: 7999, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -264,7 +264,7 @@ func pkgUiStaticReactStaticJs22de83b5eChunkJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/2.2de83b5e.chunk.js", size: 1723423, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/2.2de83b5e.chunk.js", size: 1723423, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -284,7 +284,7 @@ func pkgUiStaticReactStaticJs22de83b5eChunkJsLicenseTxt() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/2.2de83b5e.chunk.js.LICENSE.txt", size: 4214, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/2.2de83b5e.chunk.js.LICENSE.txt", size: 4214, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -304,7 +304,7 @@ func pkgUiStaticReactStaticJsMain4202eb51ChunkJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/main.4202eb51.chunk.js", size: 125725, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/main.4202eb51.chunk.js", size: 125725, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -324,7 +324,7 @@ func pkgUiStaticReactStaticJsRuntimeMain7e00e584Js() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/runtime-main.7e00e584.js", size: 1552, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/js/runtime-main.7e00e584.js", size: 1552, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -344,7 +344,7 @@ func pkgUiStaticReactStaticMediaCodicon22349029Ttf() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/react/static/media/codicon.22349029.ttf", size: 61024, mode: os.FileMode(420), modTime: time.Unix(1620124677, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/react/static/media/codicon.22349029.ttf", size: 61024, mode: os.FileMode(420), modTime: time.Unix(1620220406, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
