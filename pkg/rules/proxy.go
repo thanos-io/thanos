@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -39,10 +40,14 @@ func NewProxy(logger log.Logger, rules func() []rulespb.RulesClient) *Proxy {
 }
 
 func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "proxy_rules")
+	defer span.Finish()
+
 	var (
-		g, gctx  = errgroup.WithContext(srv.Context())
+		g, gctx  = errgroup.WithContext(ctx)
 		respChan = make(chan *rulespb.RuleGroup, 10)
 		groups   []*rulespb.RuleGroup
+		err      error
 	)
 
 	for _, rulesClient := range s.rules() {
@@ -70,7 +75,10 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 	}
 
 	for _, g := range groups {
-		if err := srv.Send(rulespb.NewRuleGroupRulesResponse(g)); err != nil {
+		tracing.DoInSpan(srv.Context(), "send_rules_response", func(_ context.Context) {
+			err = srv.Send(rulespb.NewRuleGroupRulesResponse(g))
+		})
+		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send rules response").Error())
 		}
 	}
@@ -86,7 +94,15 @@ type rulesStream struct {
 }
 
 func (stream *rulesStream) receive(ctx context.Context) error {
-	rules, err := stream.client.Rules(ctx, stream.request)
+	var (
+		err   error
+		rules rulespb.Rules_RulesClient
+	)
+
+	tracing.DoInSpan(ctx, "receive_stream_request", func(ctx context.Context) {
+		rules, err = stream.client.Rules(ctx, stream.request)
+	})
+
 	if err != nil {
 		err = errors.Wrapf(err, "fetching rules from rules client %v", stream.client)
 
