@@ -24,7 +24,7 @@ func ExampleRepeat() {
 		return nil
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err.Error())
 	}
 }
 
@@ -39,6 +39,6 @@ func ExampleRetry() {
 		return errors.New("Try to retry")
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err.Error())
 	}
 }
