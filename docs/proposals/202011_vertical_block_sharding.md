@@ -90,7 +90,7 @@ index size).
 
 **We propose to vertically shard all blocks which goes beyond the specified index size limit during the compaction process, else efficiently shard the blocks at compaction level 0.**
 
-* Special metadata in meta.json indicating a shard.
+* We'll be using a special metadata in meta.json indicating a shard.
 
 #### Approach 1: Sharding at compaction level 0
 
