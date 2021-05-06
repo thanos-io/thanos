@@ -146,8 +146,6 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	enableQueryStats := cmd.Flag("query.stats", "Enable query stats in response.").Default("false").Bool()
-
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	defaultRangeQueryStep := extkingpin.ModelDuration(cmd.Flag("query.default-step", "Set default step for range queries. Default step is only used when step is not set in UI. In such cases, Thanos UI will use default step to calculate resolution (resolution = max(rangeSeconds / 250, defaultStep)). This will not work from Grafana, but Grafana has __step variable which can be used.").
@@ -254,7 +252,6 @@ func registerQuery(app *extkingpin.App) {
 			*enableRulePartialResponse,
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
-			*enableQueryStats,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -315,7 +312,6 @@ func runQuery(
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
-	enableQueryStats bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -579,7 +575,6 @@ func runQuery(
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
-			enableQueryStats,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,

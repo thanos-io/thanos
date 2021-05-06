@@ -69,7 +69,7 @@ const (
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
 	Step                     = "step"
-	Stat                     = "stat"
+	Stats                    = "stats"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -91,7 +91,6 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
-	enableQueryStats                    bool
 	disableCORS                         bool
 
 	replicaLabels []string
@@ -119,7 +118,6 @@ func NewQueryAPI(
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
-	enableQueryStats bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -145,7 +143,6 @@ func NewQueryAPI(
 		enableRulePartialResponse:              enableRulePartialResponse,
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
-		enableQueryStats:                       enableQueryStats,
 		replicaLabels:                          replicaLabels,
 		storeSet:                               storeSet,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -196,7 +193,7 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 type queryData struct {
 	ResultType parser.ValueType  `json:"resultType"`
 	Result     parser.Value      `json:"result"`
-	Stat       *stats.QueryStats `json:"stats,omitempty"`
+	Stats      *stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
@@ -293,17 +290,6 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 	return d, nil
 }
 
-func (qapi *QueryAPI) parseStat(r *http.Request, defaultEnableStat bool) (bool, *api.ApiError) {
-	if val := r.FormValue(Stat); val != "" {
-		stat, err := strconv.ParseBool(val)
-		if err != nil {
-			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", Stat)}
-		}
-		return stat, nil
-	}
-	return defaultEnableStat, nil
-}
-
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -347,7 +333,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
-	enableStat, err := qapi.parseStat(r, qapi.enableQueryStats)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -386,13 +371,13 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs *stats.QueryStats
-	if enableStat {
+	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-		Stat:       qs,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 
@@ -465,7 +450,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	enableStat, err := qapi.parseStat(r, qapi.enableQueryStats)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -511,13 +495,13 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs *stats.QueryStats
-	if enableStat {
+	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-		Stat:       qs,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 
