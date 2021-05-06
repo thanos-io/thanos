@@ -75,11 +75,6 @@ type endpointTestCase struct {
 }
 type responeCompareFunction func(interface{}, interface{}) bool
 
-// Does a deep compare for two http responses.
-func deepCompare(a interface{}, b interface{}) bool {
-	return reflect.DeepEqual(a, b)
-}
-
 // Checks if both responses have Stats present or not.
 func lookupStats(a interface{}, b interface{}) bool {
 	ra := a.(*queryData)
@@ -611,7 +606,7 @@ func TestQueryEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), deepCompare); !ok {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
 			return
 		}
 	}
@@ -1200,7 +1195,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), deepCompare); !ok {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
 			return
 		}
 	}
