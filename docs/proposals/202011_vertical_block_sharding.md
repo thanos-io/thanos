@@ -77,6 +77,7 @@ index size).
 
 * Automatically cap the size of index per block to X GB without impacting read performance.
   * Optional: CLI for vertical sharding of old blocks. 
+* Alternatively, increase the number of compactions before index size hits the current limitations, to improve performance of querying.
 
 ## Non Goals
 
@@ -87,13 +88,40 @@ index size).
 
 ## Proposal
 
-**We propose to vertically shard all blocks which goes beyond the specified index size limit during the compaction process.**
+**We propose to vertically shard all blocks which goes beyond the specified index size limit during the compaction process, else efficiently shard the blocks at compaction level 0.**
 
 * Special metadata in meta.json indicating a shard.
 
-TBD
+#### Approach 1: Sharding at compaction level 0
 
+The idea behind this approach is to use a hash function which takes the metric_name as an input, and returns an integer value in the range of 1 to X (X denoting the number of shards). As of now, X is static and has been set to an experimental value of 10. We would also like decide whether keeping X dynamic would be a better approach. To do that we would have to include some sort of consistent hashing mechanism so that X can be changed dynamically as per the need of the user.
 
+For this approach, we'd begin by adding an external label, `hash_number` during block creation, which would denote the shard number. We can keep it 0, because subsequently the hash function would return values only between 1 and X (inclusive), so there won't be any chance of a possible clash. During the first compaction of the initially created 2h blocks, we'll divide each block into X blocks. The block number i (1<=i<=X) would contain only those series whose hash value of mertic names is i.
+
+Once this step is completed, we can be certain that all the series that belong to a certain block have the same `hash_number`. Now, we'll allow grouper and planner to group only those blocks together which have the same `hash_number`. This would serve us two purposes : 
+
+ * Allow grouper to group blocks in such a way that we can run X concurrent compactor processes.
+ * Intra-shard horizontal and vertical compaction would mean less variance in metrics and hence we can expect a larger block in terms of the difference in `maxt` and `mint` when a certain blocks index hits the limit, and then marked with `noCompact`.
+
+#### Approach 2: Sharding a block when its index size hits the limit
+
+This approach is a slight modification to Apporach 1. 
+Instead of creating just one external label `hash_number`, we can create a series of hash_numbers and corresponding `hash_function`s.
+This is also a static method, but an optimization over Approach 1. 
+The way it would work is, intially during block creation, we'll add `n` external labels 
+```
+hash_number_1 : 0
+hash_number_2 : 0
+.
+.
+.
+hash_number_n : 0
+```
+Wherein, n is the number of times we want a blocks index to hit the limit. 
+The current method ignores a block for further compaction once its index reaches a limit. We'd let that stay as it is, with a caveat that whenever a blocks index size hits the limit, we'd find the first 0-valued hash_number (let's say i), then further sub-divide (shard) the existing block with the corresponding `hash_function_i`, and then let the compaction process run as usual.
+Here also, we'd allow grouper and planner to compact (horizontally and vertically) only those blocks together whose `hash_number` external labels match completely. 
+The advantage of this method is, that it would allow us to help grow the size of the block in terms of time difference  (`maxt - mint`) exponentially, so we can make an estimated guess that n would not exceed 3 or 4. 
+The negative aspect of this approach would be, as blocks grow larger, it would become difficult to find a subsequent block to compact it with.
 
 ## Alternatives
 
