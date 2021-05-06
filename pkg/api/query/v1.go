@@ -333,10 +333,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
-	if apiErr != nil {
-		return nil, nil, apiErr
-	}
-
 	qe := qapi.queryEngine(maxSourceResolution)
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -446,10 +442,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
-	if apiErr != nil {
-		return nil, nil, apiErr
-	}
-
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
