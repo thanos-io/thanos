@@ -136,10 +136,6 @@ func NewManager(
 		extLset:   extLset,
 		ruleFiles: make(map[string]string),
 	}
-
-	span, ctx := tracing.StartSpan(ctx, "new_manager")
-	defer span.Finish()
-
 	for _, strategy := range storepb.PartialResponseStrategy_value {
 		s := storepb.PartialResponseStrategy(strategy)
 
