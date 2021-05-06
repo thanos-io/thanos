@@ -123,9 +123,31 @@ Here also, we'd allow grouper and planner to compact (horizontally and verticall
 The advantage of this method is, that it would allow us to help grow the size of the block in terms of time difference  (`maxt - mint`) exponentially, so we can make an estimated guess that n would not exceed 3 or 4. 
 The negative aspect of this approach would be, as blocks grow larger, it would become difficult to find a subsequent block to compact it with.
 
+### Design Decisions (Pros and Cons)
+
+#### Decision 1: Shard always by X (static), for everything 
+* Pros
+  * We can grow the time window a block spans, even if total index size reaches cap limit, because we vertically shard it into X blocks.
+  * The compaction process is simple and predictable, as compaction of any sort would take place between blocks that belong to the same shard. 
+* Cons
+  * The problem of index size hitting limit is still present.
+  * Statically sharding the block into X can be an overkill (if X is too large, say 10 for a few cases), or it might underperform (if X is as less as 2 or 3) for some massive TSDB with larger magnitude of metric numbers.  
+
+#### Decision 2: Using metric name as the only parameter for hash_function 
+* Pros
+  * It is simple to implement and can prove to be quite efficient while querying because metric names can be obtained from the query itself, and calculating the corresponding hash would take minimal time as well.
+  * For deeper hash layers, we can statistically be certain of having an even distribution (for Approach 2).
+* Cons 
+  * If the nested hashing is shallow, then there's a possibility of uneven sharding.
+
 ## Alternatives
 
-* Shard number stored in external label.
+* Keep the system as it is.
+* In the above approach, keep the number of shards dynamic, depending on the use case.
+  * Pros
+    * We can dynamically adjust to the situation. If a certain block stream has only few metrics, we can keep 1 shard, and if during the 2w period, suddenly we have 100 millions series (or some number beyond index size), we can horizontally split to 10 or more. And then later back to 1.
+   * Cons
+     * With dynamically changing metas, it would become difficult to group blocks together for vertical compaction.
 
 ## Future Work
 
