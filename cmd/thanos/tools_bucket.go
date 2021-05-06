@@ -639,19 +639,21 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		}
 
 		var line []string
-		line = append(line, blockMeta.ULID.String())
-		line = append(line, time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"))
-		line = append(line, time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"))
-		line = append(line, timeRange.String())
-		line = append(line, untilDown)
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSeries))
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSamples))
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumChunks))
-		line = append(line, p.Sprintf("%d", blockMeta.Compaction.Level))
-		line = append(line, p.Sprintf("%t", blockMeta.Compaction.Failed))
-		line = append(line, strings.Join(labels, ","))
-		line = append(line, time.Duration(blockMeta.Thanos.Downsample.Resolution*int64(time.Millisecond)).String())
-		line = append(line, string(blockMeta.Thanos.Source))
+		line = append(line,
+			blockMeta.ULID.String(),
+			time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"),
+			time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"),
+			timeRange.String(),
+			untilDown,
+			p.Sprintf("%d", blockMeta.Stats.NumSeries),
+			p.Sprintf("%d", blockMeta.Stats.NumSamples),
+			p.Sprintf("%d", blockMeta.Stats.NumChunks),
+			p.Sprintf("%d", blockMeta.Compaction.Level),
+			p.Sprintf("%t", blockMeta.Compaction.Failed),
+			strings.Join(labels, ","),
+			time.Duration(blockMeta.Thanos.Downsample.Resolution*int64(time.Millisecond)).String(),
+			string(blockMeta.Thanos.Source))
+
 		lines = append(lines, line)
 	}
 
