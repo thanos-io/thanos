@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package_manager: "gomod"
+    directory: "/"
+    vendor: false
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies"]
+  - package_manager: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies"]
+
