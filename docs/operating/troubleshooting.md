@@ -126,18 +126,18 @@ level=warn ts=2021-05-01T05:02:23.596022921Z caller=writer.go:92 component=recei
 
 - Remote Prometheus is running in high availability mode (more than 1 replica are running). But the replica_external_label_name is not correctly configured (e.g. empty).
 
-<img src="../img/thanos_receiver_troubleshoot_empty_replica_external_label_name.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by empty replica_external_label_name" />
+<img src="../img/thanos_receiver_troubleshoot_empty_replica_external_label_name.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by empty replica_external_label_name" />
 
 - Remote Prometheus is running in a federation
   - the remote-writing Prometheus is running in HA
   - federation has both honor_label = true and honor_timestamp = true
   - all layers of Prometheus is using the same replica_external_label_name (e.g. the default "prometheus_replica")
 
-<img src="../img/thanos_receiver_troubleshoot_federation_idential_replica_name.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by misconfigured Prometheus federation" />
+<img src="../img/thanos_receiver_troubleshoot_federation_idential_replica_name.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by misconfigured Prometheus federation" />
 
 - There are multiple deployments of remote Prometheus, their external_labels are identical (e.g. all being empty), and they have metrics with no unique label (e.g. aggregated cluster CPU usage).
 
-<img src="../img/thanos_receiver_troubleshoot_no_external_labels.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by missing external_labels" />
+<img src="../img/thanos_receiver_troubleshoot_no_external_labels.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by missing external_labels" />
 
 ### Diagnostic
 
