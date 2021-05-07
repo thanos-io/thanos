@@ -906,7 +906,10 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			finishedAllGroups      = true
 			mtx                    sync.Mutex
 		)
-		defer workCtxCancel()
+
+		defer func() {
+			workCtxCancel()
+		}()
 
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.

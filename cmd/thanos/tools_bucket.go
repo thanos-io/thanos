@@ -895,7 +895,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					if err != nil {
 						return err
 					}
-					defer runutil.CloseWithLogOnErr(logger, f, "close changelog")
+					defer func() { runutil.CloseWithLogOnErr(logger, f, "close changelog") }()
 
 					changeLog = compactv2.NewChangeLog(f)
 					level.Info(logger).Log("msg", "changelog will be available", "file", filepath.Join(*tmpDir, newID.String(), "change.log"))
