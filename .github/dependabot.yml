@@ -1,12 +1,12 @@
 version: 2
 updates:
-  - package_manager: "gomod"
+  - package-ecosystem: "gomod"
     directory: "/"
     vendor: false
     schedule:
       interval: "weekly"
     labels: ["dependencies"]
-  - package_manager: "docker"
+  - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
