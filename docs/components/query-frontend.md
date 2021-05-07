@@ -43,70 +43,13 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 
 ### Caching
 
-Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
-Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers.
-Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
-Currently, in-memory cache (fifo cache) and memcached are supported.
+The Query Frontend component allows `in-memory` or `memcached` caching types for `query-range` and `labels` caching. Please refer to [Query frontend cache](../thanos/caching.md/#query-frontend-cache) to read more about caching in Thanos.
 
-#### In-memory
+Caching can be configured using `--labels.response-cache-config-file` and `--query-range.response-cache-config-file` to reference to the configuration file or `--labels.response-cache-config` and `--query-range.response-cache-config` to insert the yaml config directly
 
-[embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
-```yaml
-type: IN-MEMORY
-config:
-  max_size: ""
-  max_size_items: 0
-  validity: 0s
-```
-`max_size: ` Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.
-
-**_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
-
-If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
-For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
-
-Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-query-frontend-deployment.yaml#L50-L54)
-
-#### Memcached
-
-[embedmd]:# (../flags/config_response_cache_memcached.txt yaml)
-```yaml
-type: MEMCACHED
-config:
-  addresses: []
-  timeout: 0s
-  max_idle_connections: 0
-  max_async_concurrency: 0
-  max_async_buffer_size: 0
-  max_get_multi_concurrency: 0
-  max_item_size: 0
-  max_get_multi_batch_size: 0
-  dns_provider_update_interval: 0s
-  expiration: 0s
-```
-
-`expiration` specifies memcached cache valid time.  If set to 0s, so using a default of 24 hours expiration time.
-
-If a `set` operation is skipped because of the item size is larger than `max_item_size`, this event is tracked by a counter metric `cortex_memcache_client_set_skip_total`.
-
-Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
-
-The default memcached config is:
-
-```yaml
-type: MEMCACHED
-config:
-  addresses: [your-memcached-addresses]
-  timeout: 500ms
-  max_idle_connections: 100
-  max_item_size: 1MiB
-  max_async_concurrency: 10
-  max_async_buffer_size: 10000
-  max_get_multi_concurrency: 100
-  max_get_multi_batch_size: 0
-  dns_provider_update_interval: 10s
-  expiration: 24h
-```
+Caching configuration:
+- [Memcached Query Frontend](../thanos/caching.md/#memcached-query-frontend)
+- [In-memory Query Frontend](../thanos/caching.md/#in-memory-query-frontend)
 
 ### Slow Query Log
 

@@ -247,139 +247,33 @@ Check more [here](https://thanos.io/tip/thanos/sharding.md/).
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
 
-## Index cache
+## Caching
 
-Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Two types of caches are supported:
+The store component allows for two types of caches: [index cache](../thanos/caching.md/#index-cache) and [bucket cache](../thanos/caching.md/#bucket-cache). Both support `in-memory` and `memcached` types.
 
-- `in-memory` (_default_)
-- `memcached`
+**The index cache uses `in-memory` by default.**
 
-### In-memory index cache
+### In-memory index cache flags
 
 The `in-memory` index cache is enabled by default and its max size can be configured through the flag `--index-cache-size`.
 
-Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to insert the yaml config directly.
 
-[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
-```yaml
-type: IN-MEMORY
-config:
-  max_size: 0
-  max_item_size: 0
-```
+The [In-memory index cache configuration](../thanos/caching.md/#in-memory-index-cache) can be found on the caching page.
 
-All the settings are **optional**:
+### Memcached index cache flags
 
-- `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
-- `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
+The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to insert the yaml config directly
 
-### Memcached index cache
+The [Memcached index cache configuration](../thanos/caching.md/#memcached-index-cache) can be found on the caching page.
 
-The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
-
-[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
-```yaml
-type: MEMCACHED
-config:
-  addresses: []
-  timeout: 0s
-  max_idle_connections: 0
-  max_async_concurrency: 0
-  max_async_buffer_size: 0
-  max_get_multi_concurrency: 0
-  max_item_size: 0
-  max_get_multi_batch_size: 0
-  dns_provider_update_interval: 0s
-```
-
-The **required** settings are:
-
-- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
-
-While the remaining settings are **optional**:
-
-- `timeout`: the socket read/write timeout.
-- `max_idle_connections`: maximum number of idle connections that will be maintained per address.
-- `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
-- `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
-- `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
-- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
-- `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
-- `dns_provider_update_interval`: the DNS discovery update interval.
-
-## Caching Bucket
+## Caching Bucket flags
 
 Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chunk) and metadata caching to speed up loading of [chunks](../design.md/#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 
-Both memcached and in-memory cache "backend"s are supported:
-
-### Memcached Caching Bucket
-
-[embedmd]:# (../flags/config_bucket_cache_memcached.txt yaml)
-```yaml
-type: MEMCACHED
-config:
-  addresses: []
-  timeout: 0s
-  max_idle_connections: 0
-  max_async_concurrency: 0
-  max_async_buffer_size: 0
-  max_get_multi_concurrency: 0
-  max_item_size: 0
-  max_get_multi_batch_size: 0
-  dns_provider_update_interval: 0s
-chunk_subrange_size: 0
-max_chunks_get_range_requests: 0
-chunk_object_attrs_ttl: 0s
-chunk_subrange_ttl: 0s
-blocks_iter_ttl: 0s
-metafile_exists_ttl: 0s
-metafile_doesnt_exist_ttl: 0s
-metafile_content_ttl: 0s
-metafile_max_size: 0
-```
-
-### In-memory Caching Bucket
-
-[embedmd]:# (../flags/config_bucket_cache_in_memory.txt yaml)
-```yaml
-type: IN-MEMORY
-config:
-  max_size: 0
-  max_item_size: 0
-chunk_subrange_size: 0
-max_chunks_get_range_requests: 0
-chunk_object_attrs_ttl: 0s
-chunk_subrange_ttl: 0s
-blocks_iter_ttl: 0s
-metafile_exists_ttl: 0s
-metafile_doesnt_exist_ttl: 0s
-metafile_content_ttl: 0s
-metafile_max_size: 0
-```
-
-### Options for the Caching Bucket
-
-`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
-
-Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
-
-- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
-- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
-- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
-- `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
-
-Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
-
-- `blocks_iter_ttl`: how long to cache result of iterating blocks.
-- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
-- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
-- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
-- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
-
-The yml structure for setting the in memory cache configs for caching bucket are the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
-
-Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+Both memcached and in-memory cache "backend"s are supported. Their configuration settings can be found at the caching page:
+- [Memcached caching bucket configuration](../thanos/caching.md/#memcached-bucket-cache)
+- [In-memory caching bucket configuration](../thanos/caching.md/#in-memory-bucket-cache)
 
 ## Index Header
 

@@ -80,10 +80,24 @@ config:
   dns_provider_update_interval: 0s
 ```
 
-Please refer to [Memcached index cache](../components/store.md/#memcached-index-cache) for more information about flags and configuration definitions.
+The **required** settings are:
 
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
 
-## [memcached] Caching bucket
+While the remaining settings are **optional**:
+
+- `timeout`: the socket read/write timeout.
+- `max_idle_connections`: maximum number of idle connections that will be maintained per address.
+- `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
+- `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
+- `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
+- `dns_provider_update_interval`: the DNS discovery update interval.
+
+This caching type is part of the [Store component](../components/store.md) component. Refer to that page for more information about flags and configuration definitions.
+
+## [memcached] Bucket cache
 
 Uses the [base configuration](caching.md/#memcached-base-configuration).
 
@@ -114,7 +128,28 @@ metafile_content_ttl: 0s
 metafile_max_size: 0
 ```
 
-Please refer to [Memcached caching bucket](../components/store.md/#memcached-caching-bucket) and [Options for the caching bucket](../components/store.md/#options-for-the-caching-bucket) for more information about flags and configuration definitions.
+`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
+
+Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
+
+- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
+- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
+- `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
+
+Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
+
+- `blocks_iter_ttl`: how long to cache result of iterating blocks.
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
+- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
+- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
+
+The yml structure for setting the in memory cache configs for caching bucket are the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+
+This caching type is part of the [Store component](../components/store.md) component. Refer to that page for more information about flags and configuration definitions.
 
 ## [memcached] Query frontend
 
@@ -122,15 +157,26 @@ Uses the [base configuration](caching.md/#memcached-base-configuration) with an 
 
 `expiration` specifies how long memcached itself keeps items. After that time, memcached evicts those items. `0s` means the default duration of `24h`.
 
-[embedmd]:# (flags/config_index_cache_in_memory.txt yaml)
+[embedmd]:# (flags/config_index_cache_memcached.txt yaml)
 ```yaml
-type: IN-MEMORY
+type: MEMCACHED
 config:
-  max_size: 0
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
   max_item_size: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
 ```
 
-Please refer to [Memcached Query frontend](../components/query-frontend.md/#memcached) for more information about flags and configuration definitions.
+`expiration` specifies memcached cache valid time.  If set to 0s, so using a default of 24 hours expiration time.
+
+If a `set` operation is skipped because of the item size is larger than `max_item_size`, this event is tracked by a counter metric `cortex_memcache_client_set_skip_total`.
+
+This caching type is part of the [Memcached Query frontend](../components/query-frontend.md/) component. Refer to that page for more information about flags and configuration definitions.
 
 # Configurations for in-memory
 
@@ -144,7 +190,6 @@ config:
   max_item_size: 0
 ```
 
-
 ## [in-memory] Index cache
 
 The index cache has no exceptions on the [base configuration](caching.md/#in-memory-base-configuration).
@@ -157,7 +202,12 @@ config:
   max_item_size: 0
 ```
 
-Please refer to [In-memory index cache](../components/store.md/#in-memory-index-cache) for more information about flags and configuration definitions.
+These settings are **optional**:
+
+- `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
+- `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
+
+This caching type is part of the [Store component](../components/store.md) component. Refer to that page for more information about flags and configuration definitions.
 
 ## [in-memory] Bucket cache
 
@@ -182,7 +232,28 @@ metafile_content_ttl: 0s
 metafile_max_size: 0
 ```
 
-Please refer to [In-memory caching bucket](../components/store.md/#in-memory-caching-bucket) and [Options for the caching bucket](../components/store.md/#options-for-the-caching-bucket) for more information about flags and configuration definitions.
+`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
+
+Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
+
+- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
+- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
+- `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
+
+Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
+
+- `blocks_iter_ttl`: how long to cache result of iterating blocks.
+- `metafile_exists_ttl`: how long to cache information about whether meta.json or deletion mark file exists.
+- `metafile_doesnt_exist_ttl`: how long to cache information about whether meta.json or deletion mark file doesn't exist.
+- `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
+- `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
+
+The yml structure for setting the in memory cache configs for caching bucket are the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
+
+Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
+
+This caching type is part of the [Store component](../components/store.md) component. Refer to that page for more information about flags and configuration definitions.
 
 ## [in-memory] Query frontend
 
@@ -199,7 +270,16 @@ config:
   validity: 0s
 ```
 
-Please refer to [In-memory Query frontend](../components/query-frontend.md/#in-memory) for more information about flags and configuration definitions.
+`max_size: ` Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.
+
+**_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
+
+If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
+For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
+
+Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-query-frontend-deployment.yaml#L50-L54)
+
+This caching type is part of the [Memcached Query frontend](../components/query-frontend.md/) component. Refer to that page for more information about flags and configuration definitions.
 
 # Tips & Tricks
 
