@@ -62,6 +62,11 @@ var (
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
 	}
 
+	bucketCacheConfigs = map[storecache.BucketCacheProvider]interface{}{
+		storecache.InMemoryBucketCacheProvider:  storecache.InMemoryIndexCacheConfig{},
+		storecache.MemcachedBucketCacheProvider: cacheutil.MemcachedClientConfig{},
+	}
+
 	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]interface{}{
 		queryfrontend.INMEMORY:  queryfrontend.InMemoryResponseCacheConfig{},
 		queryfrontend.MEMCACHED: queryfrontend.MemcachedResponseCacheConfig{},
@@ -101,6 +106,13 @@ func main() {
 
 	for typ, config := range indexCacheConfigs {
 		if err := generate(storecache.IndexCacheConfig{Type: typ, Config: config}, generateName("index_cache_", string(typ)), *outputDir); err != nil {
+			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			os.Exit(1)
+		}
+	}
+
+	for typ, config := range bucketCacheConfigs {
+		if err := generate(storecache.CachingWithBackendConfig{Type: typ, BackendConfig: config}, generateName("bucket_cache_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}

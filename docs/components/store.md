@@ -313,27 +313,28 @@ Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chu
 
 Both memcached and in-memory cache "backend"s are supported:
 
+[embedmd]:# (../flags/config_bucket_cache_memcached.txt yaml)
 ```yaml
-type: MEMCACHED # Case-insensitive
+type: MEMCACHED
 config:
   addresses: []
-  timeout: 500ms
-  max_idle_connections: 100
-  max_async_concurrency: 20
-  max_async_buffer_size: 10000
-  max_item_size: 1MiB
-  max_get_multi_concurrency: 100
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_item_size: 0
   max_get_multi_batch_size: 0
-  dns_provider_update_interval: 10s
-chunk_subrange_size: 16000
-max_chunks_get_range_requests: 3
-chunk_object_attrs_ttl: 24h
-chunk_subrange_ttl: 24h
-blocks_iter_ttl: 5m
-metafile_exists_ttl: 2h
-metafile_doesnt_exist_ttl: 15m
-metafile_content_ttl: 24h
-metafile_max_size: 1MiB
+  dns_provider_update_interval: 0s
+chunk_subrange_size: 0
+max_chunks_get_range_requests: 0
+chunk_object_attrs_ttl: 0s
+chunk_subrange_ttl: 0s
+blocks_iter_ttl: 0s
+metafile_exists_ttl: 0s
+metafile_doesnt_exist_ttl: 0s
+metafile_content_ttl: 0s
+metafile_max_size: 0
 ```
 
 `config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
