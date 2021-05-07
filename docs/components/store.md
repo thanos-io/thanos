@@ -313,6 +313,8 @@ Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chu
 
 Both memcached and in-memory cache "backend"s are supported:
 
+### Memcached Caching Bucket
+
 [embedmd]:# (../flags/config_bucket_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
@@ -336,6 +338,27 @@ metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s
 metafile_max_size: 0
 ```
+
+### In-memory Caching Bucket
+
+[embedmd]:# (../flags/config_bucket_cache_in_memory.txt yaml)
+```yaml
+type: IN-MEMORY
+config:
+  max_size: 0
+  max_item_size: 0
+chunk_subrange_size: 0
+max_chunks_get_range_requests: 0
+chunk_object_attrs_ttl: 0s
+chunk_subrange_ttl: 0s
+blocks_iter_ttl: 0s
+metafile_exists_ttl: 0s
+metafile_doesnt_exist_ttl: 0s
+metafile_content_ttl: 0s
+metafile_max_size: 0
+```
+
+### Options for the Caching Bucket
 
 `config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
 

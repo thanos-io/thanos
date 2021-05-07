@@ -20,9 +20,9 @@ However it is possible to give guidance on what each component tries to achieve,
 
 | Caching type                                                                                           | Component           | Backends             | Configuration | Extra             |
 | -------------------------------------------------------------------------------------------------- | ------------------ | --------------------- | ----------------- | ----------------------- |
-| Index cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration | Enabled by default `in_memory`
-| Bucket cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration + specific bucket cache extra's | Has extra metadata and chunk configuration options
-| Query frontend cache | [Query-frontend](components/query-frontend.md)  | `in_memory` and `memcached` | base configuration + extra field `expiration` |
+| Index cache | [Store gateway](../components/store.md) | `in_memory` and `memcached` | base configuration | Enabled by default `in_memory`
+| Bucket cache | [Store gateway](../components/store.md) | `in_memory` and `memcached` | base configuration + specific bucket cache extra's | Has extra metadata and chunk configuration options
+| Query frontend cache | [Query-frontend](../components/query-frontend.md)  | `in_memory` and `memcached` | base configuration + extra field `expiration` |
 
 ## Index cache
 
@@ -80,6 +80,8 @@ config:
   dns_provider_update_interval: 0s
 ```
 
+Please refer to [Memcached index cache](../components/store.md/#memcached-index-cache) for more information about flags and configuration definitions.
+
 
 ## [memcached] Caching bucket
 
@@ -112,6 +114,8 @@ metafile_content_ttl: 0s
 metafile_max_size: 0
 ```
 
+Please refer to [Memcached caching bucket](../components/store.md/#memcached-caching-bucket) and [Options for the caching bucket](../components/store.md/#options-for-the-caching-bucket) for more information about flags and configuration definitions.
+
 ## [memcached] Query frontend
 
 Uses the [base configuration](caching.md/#memcached-base-configuration) with an extra option:
@@ -125,6 +129,8 @@ config:
   max_size: 0
   max_item_size: 0
 ```
+
+Please refer to [Memcached Query frontend](../components/query-frontend.md/#memcached) for more information about flags and configuration definitions.
 
 # Configurations for in-memory
 
@@ -151,6 +157,8 @@ config:
   max_item_size: 0
 ```
 
+Please refer to [In-memory index cache](../components/store.md/#in-memory-index-cache) for more information about flags and configuration definitions.
+
 ## [in-memory] Bucket cache
 
 Uses the [base configuration](caching.md/#in-memory-base-configuration).
@@ -174,6 +182,8 @@ metafile_content_ttl: 0s
 metafile_max_size: 0
 ```
 
+Please refer to [In-memory caching bucket](../components/store.md/#in-memory-caching-bucket) and [Options for the caching bucket](../components/store.md/#options-for-the-caching-bucket) for more information about flags and configuration definitions.
+
 ## [in-memory] Query frontend
 
 Uses the [base configuration](caching.md/#in-memory-base-configuration) with an extra option:
@@ -189,8 +199,9 @@ config:
   validity: 0s
 ```
 
+Please refer to [In-memory Query frontend](../components/query-frontend.md/#in-memory) for more information about flags and configuration definitions.
 
-# Notes about Memcached configuration
+# Tips & Tricks
 
 When implementing memcached as caching backend, one should be familiar with such setup. There are some key points to understand when configuring for memcached
 
