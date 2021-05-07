@@ -1,4 +1,3 @@
-
 ---
 title: Caching
 type: docs
@@ -23,8 +22,7 @@ However it is possible to give guidance on what each component tries to achieve,
 | -------------------------------------------------------------------------------------------------- | ------------------ | --------------------- | ----------------- | ----------------------- |
 | Index cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration | Enabled by default `in_memory`
 | Bucket cache | [Store gateway](components/store.md) | `in_memory` and `memcached` | base configuration + specific bucket cache extra's | Has extra metadata and chunk configuration options
-| Query frontend cache | [Query-frontend](components/query-frontend.md)  | `in_memory` and `memcached` | base configuration + extra field `expiration` | 
-
+| Query frontend cache | [Query-frontend](components/query-frontend.md)  | `in_memory` and `memcached` | base configuration + extra field `expiration` |
 
 ## Index cache
 
@@ -120,27 +118,19 @@ Uses the [base configuration](caching.md/#memcached-base-configuration) with an 
 
 `expiration` specifies how long memcached itself keeps items. After that time, memcached evicts those items. `0s` means the default duration of `24h`.
 
-[embedmd]:# (flags/config_response_cache_memcached.txt yaml)
+[embedmd]:# (flags/config_index_cache_in_memory.txt yaml)
 ```yaml
-type: MEMCACHED
+type: IN-MEMORY
 config:
-  addresses: []
-  timeout: 0s
-  max_idle_connections: 0
-  max_async_concurrency: 0
-  max_async_buffer_size: 0
-  max_get_multi_concurrency: 0
+  max_size: 0
   max_item_size: 0
-  max_get_multi_batch_size: 0
-  dns_provider_update_interval: 0s
-  expiration: 0s 
- ``` 
+```
 
 # Configurations for in-memory
 
-## [in-memory] Base configuration 
+## [in-memory] Base configuration
 
-[embedmd]:# (flags/config_bucket_cache_in_memory.txt yaml)
+[embedmd]:# (flags/config_index_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -153,7 +143,7 @@ config:
 
 The index cache has no exceptions on the [base configuration](caching.md/#in-memory-base-configuration).
 
-[embedmd]:# (flags/config_bucket_cache_in_memory.txt yaml)
+[embedmd]:# (flags/config_index_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -194,8 +184,8 @@ Uses the [base configuration](caching.md/#in-memory-base-configuration) with an 
 ```yaml
 type: IN-MEMORY
 config:
-  max_size: 0
-  max_item_size: 0
+  max_size: ""
+  max_size_items: 0
   validity: 0s
 ```
 
@@ -221,7 +211,7 @@ or
     - redis-2:11211
 ```
 
-The Thanos memcached client does **not** support autodiscovery of memcached instances. Therefore it is vital to either define each memcached host by itself or via `dnssrv`. 
+The Thanos memcached client does **not** support autodiscovery of memcached instances. Therefore it is vital to either define each memcached host by itself or via `dnssrv`.
 
 ## Do not use a Loadbalancer as address
 
@@ -236,7 +226,7 @@ Therefore one should always use `node` endpoints and not `cluster` endpoints for
 
 Syntax:
 
-```
+```yaml
 dnssrv+_{service-port-name}._{service-protocol}.{service-name}.{namespace}.cluster.local
 ```
 
@@ -263,15 +253,15 @@ Which would result in the following address:
 
 `dnssrv+_memcached._tcp.memcached-service.memcached.cluster.local`
 
-
 ## Max item size
 
-The Thanos configuration option: ` max_item_size` such as:
+The Thanos configuration option: `max_item_size` such as:
 
 ```yaml
  max_item_size: 1MiB
 ```
-should be lower or equal to the max item size that memcached allows. 
+
+should be lower or equal to the max item size that memcached allows.
 
 Memcached can be configured to allow larger items sizes than the default `1MiB` by setting the `-I` flag, such as `-I 16M` to allow up to `16MiB`
 
@@ -279,12 +269,11 @@ It is not required to increase this, as Thanos simply ignores larger objects. Th
 
 ## One or multiple memcached instances?
 
-There is no technical limit on using just one instance as backend for all the Thanos caching components. However it might be useful to spread the load over seperated instances to lower the impact in case of incidents. 
+There is no technical limit on using just one instance as backend for all the Thanos caching components. However it might be useful to spread the load over seperated instances to lower the impact in case of incidents.
 
 It however is not possible to use one memcached instance for multiple store backends as this provides conflicts on index keys.
 
+## In-memory versus memcached
 
-# In-memory versus memcached
-
-- In-memory causes each replica to have it's own cache. If multiple replica's are required it could be more logical by cost/benefit to implement memcached. 
+- In-memory causes each replica to have it's own cache. If multiple replica's are required it could be more logical by cost/benefit to implement memcached.
 - Memcached adds extra complexity which should be used in consideration.
