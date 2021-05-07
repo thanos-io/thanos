@@ -14,6 +14,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1061,16 +1063,20 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 		{&errThatMarshalsToEmptyDict{"the error message"}, `"the error message"`},
 	}
 
+	upStatusVec := promauto.With(prometheus.NewRegistry()).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_store_status",
+		Help: "Status of a given Store API. A value of 1 means store API available for Querier",
+	}, []string{"external_labels", "store_type"})
+
 	for _, tc := range tcs {
 		mockStoreSet := &StoreSet{
 			storeStatuses: map[string]*StoreStatus{},
-			upStatus: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-				Name: "thanos_store_status",
-				Help: "Status of a given store node address.",
-			}, []string{"addr"}),
+			upStatus:      upStatusVec,
 		}
 		mockStoreRef := &storeRef{
-			addr: "mockedStore",
+			addr:      "mockedStore",
+			labelSets: []labels.Labels{labels.FromStrings("a", "b")},
+			storeType: component.UnknownStoreAPI,
 		}
 
 		mockStoreSet.updateStoreStatus(mockStoreRef, tc.InputError)
@@ -1082,15 +1088,19 @@ func TestUpdateStoreStateLastError(t *testing.T) {
 }
 
 func TestUpdateStoreStateForgetsPreviousErrors(t *testing.T) {
+	upStatusVec := promauto.With(prometheus.NewRegistry()).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_store_status",
+		Help: "Status of a given Store API. A value of 1 means store API available for Querier",
+	}, []string{"external_labels", "store_type"})
+
 	mockStoreSet := &StoreSet{
 		storeStatuses: map[string]*StoreStatus{},
-		upStatus: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "thanos_store_status",
-			Help: "Status of a given store node address.",
-		}, []string{"addr"}),
+		upStatus:      upStatusVec,
 	}
 	mockStoreRef := &storeRef{
-		addr: "mockedStore",
+		addr:      "mockedStore",
+		labelSets: []labels.Labels{labels.FromStrings("a", "b")},
+		storeType: component.UnknownStoreAPI,
 	}
 
 	mockStoreSet.updateStoreStatus(mockStoreRef, errors.New("test err"))

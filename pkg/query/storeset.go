@@ -274,8 +274,8 @@ func NewStoreSet(
 
 		upStatus: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "thanos_store_status",
-			Help: "Status of a given store node address.",
-		}, []string{"addr"}),
+			Help: "Status of a given Store API. A value of 1 means store API available for Querier",
+		}, []string{"external_labels", "store_type"}),
 	}
 	return ss
 }
@@ -630,9 +630,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.MinTime = mint
 		status.MaxTime = maxt
 		status.LastError = nil
-		s.upStatus.WithLabelValues(store.addr).Set(1)
+		s.upStatus.WithLabelValues(labelpb.PromLabelSetsToString(store.LabelSets()), store.StoreType().String()).Set(1)
 	} else {
-		s.upStatus.WithLabelValues(store.addr).Set(0)
+		s.upStatus.WithLabelValues(labelpb.PromLabelSetsToString(store.LabelSets()), store.StoreType().String()).Set(0)
 		status.LastError = &stringError{originalErr: err}
 	}
 
