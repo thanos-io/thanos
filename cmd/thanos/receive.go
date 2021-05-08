@@ -652,7 +652,7 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
 	}
 
-	if err := os.MkdirAll(defaultTenantDataDir, 0777); err != nil {
+	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
 		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
 	}
 

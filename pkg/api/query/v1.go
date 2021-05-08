@@ -42,6 +42,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
+	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -68,6 +69,7 @@ const (
 	MatcherParam             = "match[]"
 	StoreMatcherParam        = "storeMatch[]"
 	Step                     = "step"
+	Stats                    = "stats"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -189,9 +191,9 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 }
 
 type queryData struct {
-	ResultType parser.ValueType `json:"resultType"`
-	Result     parser.Value     `json:"result"`
-
+	ResultType parser.ValueType  `json:"resultType"`
+	Result     parser.Value      `json:"result"`
+	Stats      *stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
@@ -283,7 +285,6 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 		}
 		return defaultRangeQueryStep, nil
 	}
-
 	// Default step is used this way to make it consistent with UI.
 	d := time.Duration(math.Max(float64(rangeSeconds/250), float64(defaultRangeQueryStep/time.Second))) * time.Second
 	return d, nil
@@ -364,9 +365,15 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
 	}
 
+	// Optional stats field in response if parameter "stats" is not empty.
+	var qs *stats.QueryStats
+	if r.FormValue(Stats) != "" {
+		qs = stats.NewQueryStats(qry.Stats())
+	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 
@@ -478,9 +485,15 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}
 	}
 
+	// Optional stats field in response if parameter "stats" is not empty.
+	var qs *stats.QueryStats
+	if r.FormValue(Stats) != "" {
+		qs = stats.NewQueryStats(qry.Stats())
+	}
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 
