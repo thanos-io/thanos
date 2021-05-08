@@ -391,8 +391,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 }
 
 // Rules returns specified rules from manager. This is used by gRPC and locally for HTTP and UI purposes.
-func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) error {
-	var err error
+func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) (err error) {
 	groups := m.protoRuleGroups()
 
 	pgs := make([]*rulespb.RuleGroup, 0, len(groups))
