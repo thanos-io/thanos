@@ -62,11 +62,8 @@ func (b *Bucket) Register(r *route.Router, registerNewUI bool, ins extpromhttp.I
 		// Redirect the original React UI's path (under "/new") to its new path at the root.
 		r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 			p := route.Param(r.Context(), "path")
-			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
-		})
-
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), b.uiPrefix), http.StatusFound)
+			prefix := GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r)
+			http.Redirect(w, r, path.Join("/", prefix, p)+"?"+r.URL.RawQuery, http.StatusFound)
 		})
 
 		registerReactApp(r, ins, b.BaseUI)

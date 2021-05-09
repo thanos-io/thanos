@@ -23,6 +23,7 @@ import (
 )
 
 var reactRouterPaths = []string{
+	"/",
 	"/alerts",
 	"/blocks",
 	"/config",
