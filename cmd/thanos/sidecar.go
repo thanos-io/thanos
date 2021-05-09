@@ -118,6 +118,7 @@ func runSidecar(
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
+		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
 
 	g.Add(func() error {

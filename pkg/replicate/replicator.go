@@ -75,6 +75,7 @@ func RunReplicate(
 	reg *prometheus.Registry,
 	_ opentracing.Tracer,
 	httpBindAddr string,
+	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	labelSelector labels.Selector,
 	resolutions []compact.ResolutionLevel,
@@ -98,6 +99,7 @@ func RunReplicate(
 	s := http.New(logger, reg, component.Replicate, httpProbe,
 		http.WithListen(httpBindAddr),
 		http.WithGracePeriod(httpGracePeriod),
+		http.WithTLSConfig(httpTLSConfig),
 	)
 
 	g.Add(func() error {

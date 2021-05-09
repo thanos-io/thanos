@@ -47,9 +47,8 @@ import (
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
 
-	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
-
 	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
 	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS.").Default("").String()
@@ -155,6 +154,7 @@ func registerReceive(app *extkingpin.App) {
 			*grpcKey,
 			*grpcClientCA,
 			*httpBindAddr,
+			*httpTLSConfig,
 			time.Duration(*httpGracePeriod),
 			*rwAddress,
 			*rwServerCert,
@@ -199,6 +199,7 @@ func runReceive(
 	grpcKey string,
 	grpcClientCA string,
 	httpBindAddr string,
+	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	rwAddress string,
 	rwServerCert string,
@@ -478,6 +479,7 @@ func runReceive(
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
+		httpserver.WithTLSConfig(httpTLSConfig),
 	)
 	g.Add(func() error {
 		statusProber.Healthy()

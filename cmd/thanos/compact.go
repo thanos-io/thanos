@@ -177,6 +177,7 @@ func runCompact(
 	srv := httpserver.New(logger, reg, component, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
+		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
 
 	g.Add(func() error {
