@@ -130,7 +130,7 @@ pipeline_config:
 		name: "Valid MSI Resource",
 		config: []byte(`storage_account: "myAccount"
 storage_account_key: ""
-msi_resource: "https://storage.azure.com"
+msi_resource: "https://example.blob.core.windows.net"
 container: "MyContainer"
 endpoint: "not.valid" 
 reader_config:
