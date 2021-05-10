@@ -108,14 +108,14 @@ separate what have changed between release candidates.
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part
        of the repository now
 
-1. Update website's [hugo.yaml](../website/hugo.yaml) to have correct links for new release (
+1. Update website's [hugo.yaml](https://github.com/thanos-io/thanos/blob/main/website/hugo.yaml) to have correct links for new release (
    add `0.y.z: "/:sections/:filename.md"`).
 
 1. Update tutorials:
 
     1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
     1. In case of any breaking changes or necessary updates adjust the manifests so the tutorial stays up to date.
-    1. Update the [scripts/quickstart.sh](../scripts/quickstart.sh) script if needed.
+    1. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/main/scripts/quickstart.sh) script if needed.
 
 1. After review, merge the PR and immediately after this tag a version:
 
