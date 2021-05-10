@@ -37,6 +37,7 @@ permalinks:
   v0.23: "/:sections/:filename.md"
   v0.22: "/:sections/:filename.md"
   v0.21: "/:sections/:filename.md"
+  v0.20: "/:sections/:filename.md"
   v0.19: "/:sections/:filename.md"
   v0.18: "/:sections/:filename.md"
   v0.17: "/:sections/:filename.md"
