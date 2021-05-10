@@ -101,6 +101,8 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http-tls-config=""       [EXPERIMENTAL] Path to configuration file that
+                                 can enable TLS or authentication.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
                                  tsdb instances is added.

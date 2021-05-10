@@ -136,6 +136,8 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http-tls-config=""       [EXPERIMENTAL] Path to configuration file that
+                                 can enable TLS or authentication.
       --labels.default-time-range=24h
                                  The default metadata time range duration for
                                  retrieving labels through Labels and Series API
