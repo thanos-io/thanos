@@ -3,7 +3,7 @@ title: "Vertical Block Sharding"
 type: proposal
 menu: proposals
 status: proposed
-owner: @bwplotka
+owner: @bwplotka @biswajitghosh98
 Date: 2 November 2020
 ---
 
@@ -75,9 +75,8 @@ index size).
 
 ## Goals
 
-* Automatically cap the size of index per block to X GB without impacting read performance.
-  * Optional: CLI for vertical sharding of old blocks. 
-* Alternatively, increase the number of compactions before index size hits the current limitations, to improve performance of querying.
+* Automatically cap the size of index per block to X GB without impacting read performance. 
+* Alternatively, allow grouping series within blocks that spans over larger time windows defined in compaction level (e.g up to 2w), to leverage downsampling for querying.
 
 ## Non Goals
 
@@ -88,66 +87,33 @@ index size).
 
 ## Proposal
 
-**We propose to vertically shard all blocks which goes beyond the specified index size limit during the compaction process, else efficiently shard the blocks at compaction level 0.**
+**We propose to vertically shard blocks when it reaches the cap limit in terms of number of series or size of index file, and then adaptively decide the number of shards depending on the users requirement**
 
 * We'll be using a special metadata in meta.json indicating a shard.
 
-#### Approach 1: Sharding at compaction level 0
+### Adaptive Binary Sharding
 
-The idea behind this approach is to use a hash function which takes the metric_name as an input, and returns an integer value in the range of 1 to X (X denoting the number of shards). As of now, X is static and has been set to an experimental value of 10. We would also like decide whether keeping X dynamic would be a better approach. To do that we would have to include some sort of consistent hashing mechanism so that X can be changed dynamically as per the need of the user.
+The idea behind this approach is to leverage on the structural benefits of a binary tree to adaptively shard blocks which hit the maximum limit, either in terms of index size or number of series (set by user). 
 
-For this approach, we'd begin by adding an external label, `hash_number` during block creation, which would denote the shard number. We can keep it 0, because subsequently the hash function would return values only between 1 and X (inclusive), so there won't be any chance of a possible clash. During the first compaction of the initially created 2h blocks, we'll divide each block into X blocks. The block number i (1<=i<=X) would contain only those series whose hash value of mertic names is i.
+For this approach, we'd need to add two extra external label `hash_number`, initialized to 0, `shard_level` initialized to 0, denoting the number of times it has been sharded during the compaction process, and a set of 16 `hash_function`s. The reason for chosing 16 is because 2 raised to the power 16 is 65536, which is a logical upper bound for the number of shards a user might want to have.
 
-Once this step is completed, we can be certain that all the series that belong to a certain block have the same `hash_number`. Now, we'll allow grouper and planner to group only those blocks together which have the same `hash_number`. This would serve us two purposes : 
+We'll be using `hash_level` and `hash_number` to group and plan blocks to compact together. The way it'd work is, we'll allow grouper to group only those blocks together whose `hash_level`s are same. Also, we'd allow planner to compact only those blocks together that share the same `hash_number`. So, with this, the compactor would run as it is unless a compacted block has hit the limit for the first time.
 
- * Allow grouper to group blocks in such a way that we can run X concurrent compactor processes.
- * Intra-shard horizontal and vertical compaction would mean less variance in metrics and hence we can expect a larger block in terms of the difference in `maxt` and `mint` when a certain blocks index hits the limit, and then marked with `noCompact`.
+<insert image 1 here>
 
-#### Approach 2: Sharding a block when its index size hits the limit
+We're allowing a compacted block to hit the limit for a maximum of 16 times (if not specified otherwise by the user), and at the 16th level, if/when it further compacts and hits the limit, we're marking it for no more further compactions. 
 
-This approach is a slight modification to Apporach 1. 
-Instead of creating just one external label `hash_number`, we can create a series of hash_numbers and corresponding `hash_function`s.
-This is also a static method, but an optimization over Approach 1. 
-The way it would work is, intially during block creation, we'll add `n` external labels 
-```
-hash_number_1 : 0
-hash_number_2 : 0
-.
-.
-.
-hash_number_n : 0
-```
-Wherein, n is the number of times we want a blocks index to hit the limit. 
-The current method ignores a block for further compaction once its index reaches a limit. We'd let that stay as it is, with a caveat that whenever a blocks index size hits the limit, we'd find the first 0-valued hash_number (let's say i), then further sub-divide (shard) the existing block with the corresponding `hash_function_i`, and then let the compaction process run as usual.
-Here also, we'd allow grouper and planner to compact (horizontally and vertically) only those blocks together whose `hash_number` external labels match completely. 
-The advantage of this method is, that it would allow us to help grow the size of the block in terms of time difference  (`maxt - mint`) exponentially, so we can make an estimated guess that n would not exceed 3 or 4. 
-The negative aspect of this approach would be, as blocks grow larger, it would become difficult to find a subsequent block to compact it with.
+We can keep growing the binary tree by recursively using the same logic. The reason for calling this adaptive is because at any point of time, the total number of shards is equal to the number of nodes on the tree (say x). If any of the leaves overloads (a block in that particular shards hits the limit), that particular leaf would split into 2, effectively increasing the number of shards to x+2, hence providing just the right amount of shards to get the job done. 
 
-### Design Decisions (Pros and Cons)
+<insert images 2 and 3>
 
-#### Decision 1: Shard always by X (static), for everything 
-* Pros
-  * We can grow the time window a block spans, even if total index size reaches cap limit, because we vertically shard it into X blocks.
-  * The compaction process is simple and predictable, as compaction of any sort would take place between blocks that belong to the same shard. 
-* Cons
-  * The problem of index size hitting limit is still present.
-  * Statically sharding the block into X can be an overkill (if X is too large, say 10 for a few cases), or it might underperform (if X is as less as 2 or 3) for some massive TSDB with larger magnitude of metric numbers.  
+### Pros and cons 
 
-#### Decision 2: Using metric name as the only parameter for hash_function 
-* Pros
-  * It is simple to implement and can prove to be quite efficient while querying because metric names can be obtained from the query itself, and calculating the corresponding hash would take minimal time as well.
-  * For deeper hash layers, we can statistically be certain of having an even distribution (for Approach 2).
-* Cons 
-  * If the nested hashing is shallow, then there's a possibility of uneven sharding.
+### Design Decisions
 
-## Alternatives
+#### Decision 1: Using size of index file vs number of metrics in a block as an indicator for sharding
 
-* Keep the system as it is.
-* In the above approach, keep the number of shards dynamic, depending on the use case.
-  * Pros
-    * We can dynamically adjust to the situation. If a certain block stream has only few metrics, we can keep 1 shard, and if during the 2w period, suddenly we have 100 millions series (or some number beyond index size), we can horizontally split to 10 or more. And then later back to 1.
-   * Cons
-     * With dynamically changing metas, it would become difficult to group blocks together for vertical compaction.
+The pros and cons for selecting one design choice over the other is yet to be discovered, and would be more clear after implementation and testing.
 
 ## Future Work
 
