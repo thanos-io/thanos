@@ -339,7 +339,7 @@ config:
     disable_compression: false
 ```
 
-If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://storage.azure.com`.
+If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
 The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
