@@ -48,7 +48,7 @@ func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *m
 	httpGracePeriod = ModelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
 	httpTLSConfig = cmd.Flag(
 		"http-tls-config",
-		"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
 	).Default("").String()
 	return httpBindAddr, httpGracePeriod, httpTLSConfig
 }

@@ -63,7 +63,6 @@ func (s *Server) ListenAndServe() error {
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
 	err := toolkit_web.Validate(s.opts.tlsConfigPath)
 	if err != nil {
-		level.Error(s.logger).Log("msg", "server could not be started", "err", err)
 		return errors.Wrap(err, "server could not be started")
 	}
 	return errors.Wrap(toolkit_web.ListenAndServe(s.srv, s.opts.tlsConfigPath, s.logger), "serve HTTP and metrics")

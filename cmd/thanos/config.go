@@ -57,7 +57,7 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 		Default("2m").SetValue(&hc.gracePeriod)
 	cmd.Flag(
 		"http-tls-config",
-		"[EXPERIMENTAL] Path to configuration file that can enable TLS or authentication.",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
 	).Default("").StringVar(&hc.tlsConfig)
 	return hc
 }
