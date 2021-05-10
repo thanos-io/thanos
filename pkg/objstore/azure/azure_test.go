@@ -116,7 +116,7 @@ pipeline_config:
 		name: "msi resource used with storage accounts",
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: "asdfsdf"
-msi_resource: "https://storage.azure.com"
+msi_resource: "https://example.blob.core.windows.net"
 container: "MyContainer"
 endpoint: "not.valid" 
 reader_config:
