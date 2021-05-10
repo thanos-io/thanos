@@ -32,6 +32,8 @@ input[type='checkbox']:checked + label {
 
 .expression-input .cm-expression-input {
   border: 1px solid #ced4da;
+  -webkit-box-flex: 1;
+  -ms-flex: 1 1 auto;
   flex: 1 1 auto;
   padding: 4px 0 0 8px;
   font-size: 15px;
@@ -159,12 +161,15 @@ button.execute-btn {
 
 .legend-item {
   cursor: pointer;
+  display: -webkit-box;
+  display: -ms-flexbox;
   display: flex;
   padding: 0 5px;
   border-radius: 3px;
   line-height: 1.7;
 }
 .legend-item div {
+  -ms-flex-wrap: wrap;
   flex-wrap: wrap;
 }
 
@@ -237,7 +242,11 @@ button.execute-btn {
 }
 
 .group-info {
+  display: -webkit-box;
+  display: -ms-flexbox;
   display: flex;
+  -webkit-box-pack: justify;
+  -ms-flex-pack: justify;
   justify-content: space-between;
   margin-bottom: 10px;
   padding: 10px;
@@ -260,6 +269,8 @@ button.execute-btn {
 }
 
 .store-filter-wrapper {
+  display: -webkit-box;
+  display: -ms-flexbox;
   display: flex;
 }
 
