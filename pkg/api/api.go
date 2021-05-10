@@ -129,23 +129,25 @@ type BaseAPI struct {
 	runtimeInfo RuntimeInfoFn
 	buildInfo   *ThanosVersion
 	Now         func() time.Time
+	disableCORS bool
 }
 
 // NewBaseAPI returns a new initialized BaseAPI type.
-func NewBaseAPI(logger log.Logger, flagsMap map[string]string) *BaseAPI {
+func NewBaseAPI(logger log.Logger, disableCORS bool, flagsMap map[string]string) *BaseAPI {
 
 	return &BaseAPI{
 		logger:      logger,
 		flagsMap:    flagsMap,
 		runtimeInfo: GetRuntimeInfoFunc(logger),
 		buildInfo:   BuildInfo,
+		disableCORS: disableCORS,
 		Now:         time.Now,
 	}
 }
 
 // Register registers the common API endpoints.
 func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
-	instr := GetInstr(tracer, logger, ins, logMiddleware)
+	instr := GetInstr(tracer, logger, ins, logMiddleware, api.disableCORS)
 
 	r.Options("/*path", instr("options", api.options))
 
@@ -199,10 +201,13 @@ func GetInstr(
 	logger log.Logger,
 	ins extpromhttp.InstrumentationMiddleware,
 	logMiddleware *logging.HTTPServerMiddleware,
+	disableCORS bool,
 ) InstrFunc {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			SetCORS(w)
+			if !disableCORS {
+				SetCORS(w)
+			}
 			if data, warnings, err := f(r); err != nil {
 				RespondError(w, err, data)
 			} else if data != nil {
@@ -211,7 +216,16 @@ func GetInstr(
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return ins.NewHandler(name, logMiddleware.HTTPMiddleware(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(middleware.RequestID(hf)))))
+
+		return tracing.HTTPMiddleware(tracer, name, logger,
+			ins.NewHandler(name,
+				logMiddleware.HTTPMiddleware(name,
+					gziphandler.GzipHandler(
+						middleware.RequestID(hf),
+					),
+				),
+			),
+		)
 	}
 	return instr
 }

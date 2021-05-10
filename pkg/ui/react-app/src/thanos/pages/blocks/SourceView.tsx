@@ -11,7 +11,7 @@ export const BlocksRow: FC<{
 }> = ({ blocks, gridMinTime, gridMaxTime, selectBlock }) => {
   return (
     <div className={styles.row}>
-      {blocks.map<JSX.Element>(b => (
+      {blocks.map<JSX.Element>((b) => (
         <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
       ))}
     </div>
@@ -34,14 +34,18 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
           <span>{title}</span>
         </div>
         <div className={styles.rowsContainer}>
-          {Object.keys(data).map(k => (
-            <BlocksRow
-              selectBlock={selectBlock}
-              blocks={data[k]}
-              key={k}
-              gridMaxTime={gridMaxTime}
-              gridMinTime={gridMinTime}
-            />
+          {Object.keys(data).map((k) => (
+            <React.Fragment key={k}>
+              {data[k].map((b, i) => (
+                <BlocksRow
+                  selectBlock={selectBlock}
+                  blocks={b}
+                  key={`${k}-${i}`}
+                  gridMaxTime={gridMaxTime}
+                  gridMinTime={gridMinTime}
+                />
+              ))}
+            </React.Fragment>
           ))}
         </div>
       </div>

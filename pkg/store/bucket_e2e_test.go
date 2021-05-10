@@ -14,10 +14,15 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/gogo/status"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/grpc/codes"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -41,20 +46,22 @@ var (
 	}
 )
 
-type noopCache struct{}
-
-func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return map[labels.Label][]byte{}, keys
-}
-
-func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return map[uint64][]byte{}, ids
-}
-
 type swappableCache struct {
 	ptr storecache.IndexCache
+}
+
+type customLimiter struct {
+	limiter *Limiter
+	code    codes.Code
+}
+
+func (c *customLimiter) Reserve(num uint64) error {
+	err := c.limiter.Reserve(num)
+	if err != nil {
+		return httpgrpc.Errorf(int(c.code), err.Error())
+	}
+
+	return nil
 }
 
 func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
@@ -102,21 +109,21 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
+		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
-		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
+		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 
-		// Add labels to the meta of the second block.
+		// Replace labels to the meta of the second block.
 		meta, err := metadata.ReadFromDir(dir2)
 		testutil.Ok(t, err)
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
 		testutil.Ok(t, meta.WriteToDir(logger, dir2))
 
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
-		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1, metadata.NoneFunc))
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2, metadata.NoneFunc))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -125,7 +132,25 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxChunksLimit uint64, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
+func newCustomChunksLimiterFactory(limit uint64, code codes.Code) ChunksLimiterFactory {
+	return func(failedCounter prometheus.Counter) ChunksLimiter {
+		return &customLimiter{
+			limiter: NewLimiter(limit, failedCounter),
+			code:    code,
+		}
+	}
+}
+
+func newCustomSeriesLimiterFactory(limit uint64, code codes.Code) SeriesLimiterFactory {
+	return func(failedCounter prometheus.Counter) SeriesLimiter {
+		return &customLimiter{
+			limiter: NewLimiter(limit, failedCounter),
+			code:    code,
+		}
+	}
+}
+
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -138,8 +163,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
-		series, extLset)
+	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt, series, extLset)
 
 	s := &storeSuite{
 		logger:  log.NewLogfmtLogger(os.Stderr),
@@ -155,24 +179,21 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	testutil.Ok(t, err)
 
 	store, err := NewBucketStore(
-		s.logger,
-		nil,
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
 		dir,
-		s.cache,
-		nil,
-		0,
-		NewChunksLimiterFactory(maxChunksLimit),
-		NewSeriesLimiterFactory(0),
-		false,
+		chunksLimiterFactory,
+		seriesLimiterFactory,
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
-		filterConf,
 		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		true,
 		time.Minute,
+		WithLogger(s.logger),
+		WithIndexCache(s.cache),
+		WithFilterConfig(filterConf),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -192,6 +213,8 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 // TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
+	t.Helper()
+
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)
@@ -434,7 +457,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
 
 		if ok := t.Run("no index cache", func(t *testing.T) {
 			s.cache.SwapWith(noopCache{})
@@ -469,10 +492,10 @@ func TestBucketStore_e2e(t *testing.T) {
 
 type naivePartitioner struct{}
 
-func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
+func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
 	for i := 0; i < length; i++ {
 		s, e := rng(i)
-		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
 	return parts
 }
@@ -489,7 +512,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
 
 		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
 			MaxItemSize: 1e5,
@@ -517,7 +540,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	// The query will fetch 2 series from 2 blocks, so we do expect to hit a total of 4 chunks.
 	expectedChunks := uint64(2 * 2)
 
-	s := prepareStoreWithTestBlocks(t, dir, bkt, false, expectedChunks, emptyRelabelConfig, &FilterConfig{
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(expectedChunks), NewSeriesLimiterFactory(0), emptyRelabelConfig, &FilterConfig{
 		MinTime: minTimeDuration,
 		MaxTime: filterMaxTime,
 	})
@@ -563,14 +586,28 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 	cases := map[string]struct {
 		maxChunksLimit uint64
+		maxSeriesLimit uint64
 		expectedErr    string
+		code           codes.Code
 	}{
 		"should succeed if the max chunks limit is not exceeded": {
 			maxChunksLimit: expectedChunks,
 		},
-		"should fail if the max chunks limit is exceeded": {
+		"should fail if the max chunks limit is exceeded - ResourceExhausted": {
 			maxChunksLimit: expectedChunks - 1,
 			expectedErr:    "exceeded chunks limit",
+			code:           codes.ResourceExhausted,
+		},
+		"should fail if the max chunks limit is exceeded - 422": {
+			maxChunksLimit: expectedChunks - 1,
+			expectedErr:    "exceeded chunks limit",
+			code:           422,
+		},
+		"should fail if the max series limit is exceeded - 422": {
+			maxChunksLimit: expectedChunks,
+			expectedErr:    "exceeded series limit",
+			maxSeriesLimit: 1,
+			code:           422,
 		},
 	}
 
@@ -584,7 +621,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, testData.maxChunksLimit, emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, newCustomChunksLimiterFactory(testData.maxChunksLimit, testData.code), newCustomSeriesLimiterFactory(testData.maxSeriesLimit, testData.code), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{
@@ -604,6 +641,9 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			} else {
 				testutil.NotOk(t, err)
 				testutil.Assert(t, strings.Contains(err.Error(), testData.expectedErr))
+				status, ok := status.FromError(err)
+				testutil.Equals(t, true, ok)
+				testutil.Equals(t, testData.code, status.Code())
 			}
 		})
 	}
@@ -618,27 +658,96 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s.cache.SwapWith(noopCache{})
 
 		mint, maxt := s.store.TimeRange()
 		testutil.Equals(t, s.minTime, mint)
 		testutil.Equals(t, s.maxTime, maxt)
 
-		vals, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
-			Start: timestamp.FromTime(minTime),
-			End:   timestamp.FromTime(maxTime),
-		})
-		testutil.Ok(t, err)
-		// ext2 is added by the prepareStoreWithTestBlocks function.
-		testutil.Equals(t, []string{"a", "b", "c", "ext1", "ext2"}, vals.Names)
+		for name, tc := range map[string]struct {
+			req      *storepb.LabelNamesRequest
+			expected []string
+		}{
+			"basic labelNames": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+				},
+				expected: []string{"a", "b", "c", "ext1", "ext2"}, // ext2 is added by the prepareStoreWithTestBlocks function.
+			},
+			"outside the time range": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
+					End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
+				},
+				expected: nil,
+			},
+			"matcher matching everything": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "a",
+							Value: "1",
+						},
+					},
+				},
+				expected: []string{"a", "b", "c", "ext1", "ext2"},
+			},
+			"b=1 matcher": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "b",
+							Value: "1",
+						},
+					},
+				},
+				expected: []string{"a", "b", "ext1"},
+			},
 
-		// Outside the time range.
-		vals, err = s.store.LabelNames(ctx, &storepb.LabelNamesRequest{
-			Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
-			End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
-		})
-		testutil.Ok(t, err)
-		testutil.Equals(t, []string(nil), vals.Names)
+			"b='' matcher": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "b",
+							Value: "",
+						},
+					},
+				},
+				expected: []string{"a", "c", "ext2"},
+			},
+			"outside the time range, with matcher": {
+				req: &storepb.LabelNamesRequest{
+					Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
+					End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "a",
+							Value: "1",
+						},
+					},
+				},
+				expected: nil,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				vals, err := s.store.LabelNames(ctx, tc.req)
+				testutil.Ok(t, err)
+
+				testutil.Equals(t, tc.expected, vals.Names)
+			})
+		}
 	})
 }
 
@@ -651,27 +760,105 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig, allowAllFilterConf)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s.cache.SwapWith(noopCache{})
 
 		mint, maxt := s.store.TimeRange()
 		testutil.Equals(t, s.minTime, mint)
 		testutil.Equals(t, s.maxTime, maxt)
 
-		vals, err := s.store.LabelValues(ctx, &storepb.LabelValuesRequest{
-			Label: "a",
-			Start: timestamp.FromTime(minTime),
-			End:   timestamp.FromTime(maxTime),
-		})
-		testutil.Ok(t, err)
-		testutil.Equals(t, []string{"1", "2"}, vals.Values)
+		for name, tc := range map[string]struct {
+			req      *storepb.LabelValuesRequest
+			expected []string
+		}{
+			"label a": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+				},
+				expected: []string{"1", "2"},
+			},
+			"label a, outside time range": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
+					End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
+				},
+				expected: nil,
+			},
+			"label a, a=1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "a",
+							Value: "1",
+						},
+					},
+				},
+				expected: []string{"1"},
+			},
+			"label a, a=2, c=2": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "a",
+							Value: "2",
+						},
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "c",
+							Value: "2",
+						},
+					},
+				},
+				expected: []string{"2"},
+			},
+			"label ext1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "ext1",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+				},
+				expected: []string{"value1"},
+			},
+			"label ext1, c=1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "ext1",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  storepb.LabelMatcher_EQ,
+							Name:  "c",
+							Value: "1",
+						},
+					},
+				},
+				expected: nil, // ext1 is replaced with ext2 for series with c
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				vals, err := s.store.LabelValues(ctx, tc.req)
+				testutil.Ok(t, err)
 
-		// Outside the time range.
-		vals, err = s.store.LabelValues(ctx, &storepb.LabelValuesRequest{
-			Label: "a",
-			Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
-			End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
-		})
-		testutil.Ok(t, err)
-		testutil.Equals(t, []string(nil), vals.Values)
+				testutil.Equals(t, tc.expected, emptyToNil(vals.Values))
+			})
+		}
 	})
+}
+
+func emptyToNil(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }

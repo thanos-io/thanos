@@ -333,18 +333,24 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 }
 
 // LabelValues returns all potential values for a label name.
-func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
+func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
+	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "convert matchers")
+	}
+
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label:                   name,
 		PartialResponseDisabled: !q.partialResponse,
 		Start:                   q.mint,
 		End:                     q.maxt,
+		Matchers:                pbMatchers,
 	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelValues()")

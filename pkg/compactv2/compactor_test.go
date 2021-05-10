@@ -274,6 +274,129 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 				NumChunks:  2,
 			},
 		},
+		{
+			name: "1 blocks + delete modifier, deletion request contains multiple matchers, delete second series",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "3"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithDeletionModifier(
+				metadata.DeletionRequest{
+					Matchers: []*labels.Matcher{
+						labels.MustNewMatcher(labels.MatchEqual, "a", "1"),
+						labels.MustNewMatcher(labels.MatchEqual, "b", "2"),
+					},
+				})},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "a", Value: "3"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\", b=\"2\"} [{0 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 12,
+				NumSeries:  2,
+				NumChunks:  2,
+			},
+		},
+		{
+			name: "1 blocks + delete modifier. For deletion request, full match is required. Delete the first two series",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "foo", Value: "bar"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "b", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "c", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithDeletionModifier(
+				metadata.DeletionRequest{
+					Matchers: []*labels.Matcher{
+						labels.MustNewMatcher(labels.MatchEqual, "a", "1"),
+						labels.MustNewMatcher(labels.MatchEqual, "b", "2"),
+					},
+				})},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "b", Value: "2"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "c", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 12}, {11, 11}, {20, 20}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\", b=\"2\"} [{0 20}]\nDeleted {a=\"1\", b=\"2\", foo=\"bar\"} [{0 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 18,
+				NumSeries:  3,
+				NumChunks:  3,
+			},
+		},
+		{
+			name: "1 blocks + delete modifier. Deletion request contains non-equal matchers.",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "foo", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "foo", Value: "bar"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "3"}, {Name: "foo", Value: "baz"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "foo", Value: "bat"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+
+					// Label a is present but with an empty value.
+					{lset: labels.Labels{{Name: "a", Value: ""}, {Name: "foo", Value: "bat"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+					// Series with unrelated labels.
+					{lset: labels.Labels{{Name: "c", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithDeletionModifier(
+				metadata.DeletionRequest{
+					Matchers: []*labels.Matcher{
+						labels.MustNewMatcher(labels.MatchNotEqual, "a", "1"),
+						labels.MustNewMatcher(labels.MatchRegexp, "foo", "^ba.$"),
+					},
+				})},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: ""}, {Name: "foo", Value: "bat"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "a", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "a", Value: "2"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "foo", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "c", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+				{lset: labels.Labels{{Name: "foo", Value: "bat"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 11}, {11, 11}, {20, 20}}}},
+			},
+			expectedChanges: "Deleted {a=\"2\", foo=\"bar\"} [{0 20}]\nDeleted {a=\"3\", foo=\"baz\"} [{0 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 36,
+				NumSeries:  6,
+				NumChunks:  12,
+			},
+		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			tmpDir, err := ioutil.TempDir("", "test-series-writer")

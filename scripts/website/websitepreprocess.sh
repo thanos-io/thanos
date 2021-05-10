@@ -13,7 +13,7 @@ git remote add origin https://github.com/thanos-io/thanos.git
 git remote -v
 git fetch origin
 
-RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}" | egrep --invert-match '(:?HEAD|master)$' | sort -V)
+RELEASE_BRANCHES=$(git branch --all | grep -P "remotes/origin/${RELEASE_FILTER_RE}" | egrep --invert-match '(:?HEAD|main)$' | sort -V)
 echo ">> chosen $(echo ${RELEASE_BRANCHES}) releases to deploy docs from"
 
 rm -rf ${OUTPUT_CONTENT_DIR}

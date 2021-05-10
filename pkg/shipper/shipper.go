@@ -81,6 +81,7 @@ type Shipper struct {
 
 	uploadCompacted        bool
 	allowOutOfOrderUploads bool
+	hashFunc               metadata.HashFunc
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
@@ -95,6 +96,7 @@ func New(
 	source metadata.SourceType,
 	uploadCompacted bool,
 	allowOutOfOrderUploads bool,
+	hashFunc metadata.HashFunc,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -112,6 +114,7 @@ func New(
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
 		uploadCompacted:        uploadCompacted,
+		hashFunc:               hashFunc,
 	}
 }
 
@@ -341,7 +344,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := os.RemoveAll(updir); err != nil {
 		return errors.Wrap(err, "clean upload directory")
 	}
-	if err := os.MkdirAll(updir, 0777); err != nil {
+	if err := os.MkdirAll(updir, 0750); err != nil {
 		return errors.Wrap(err, "create upload dir")
 	}
 	defer func() {
@@ -363,7 +366,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return block.Upload(ctx, s.logger, s.bucket, updir)
+	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir
@@ -405,7 +408,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
 func hardlinkBlock(src, dst string) error {
 	chunkDir := filepath.Join(dst, block.ChunksDirname)
 
-	if err := os.MkdirAll(chunkDir, 0777); err != nil {
+	if err := os.MkdirAll(chunkDir, 0750); err != nil {
 		return errors.Wrap(err, "create chunks dir")
 	}
 
@@ -470,7 +473,7 @@ func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
 
 // ReadMetaFile reads the given meta from <dir>/thanos.shipper.json.
 func ReadMetaFile(dir string) (*Meta, error) {
-	b, err := ioutil.ReadFile(filepath.Join(dir, MetaFilename))
+	b, err := ioutil.ReadFile(filepath.Join(dir, filepath.Clean(MetaFilename)))
 	if err != nil {
 		return nil, err
 	}

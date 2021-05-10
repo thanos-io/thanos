@@ -15,6 +15,8 @@ import QueryStatsView, { QueryStats } from './QueryStatsView';
 import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
+import { parseRange } from '../../utils/index';
+import CMExpressionInput from './CMExpressionInput';
 
 interface PanelProps {
   id: string;
@@ -26,7 +28,11 @@ interface PanelProps {
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
   stores: Store[];
+  useExperimentalEditor: boolean;
   enableAutocomplete: boolean;
+  enableHighlighting: boolean;
+  enableLinter: boolean;
+  defaultStep: string;
 }
 
 interface PanelState {
@@ -140,7 +146,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     const endTime = this.getEndTime().valueOf() / 1000; // TODO: shouldn't valueof only work when it's a moment?
     const startTime = endTime - this.props.options.range;
-    const resolution = this.props.options.resolution || Math.max(Math.floor(this.props.options.range / 250), 1);
+    const resolution =
+      this.props.options.resolution ||
+      Math.max(Math.floor(this.props.options.range / 250), parseRange(this.props.defaultStep) as number);
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
       dedup: this.props.options.useDeduplication.toString(),
@@ -148,6 +156,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     });
 
     // Add storeMatches to query params.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     this.props.options.storeMatches?.forEach((store: Store) =>
       params.append('storeMatch[]', `{__address__="${store.name}"}`)
     );
@@ -175,8 +184,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then(resp => resp.json())
-      .then(json => {
+      .then((resp) => resp.json())
+      .then((json) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -208,7 +217,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         });
         this.abortInFlightFetch = null;
       })
-      .catch(error => {
+      .catch((error) => {
         if (error.name === 'AbortError') {
           // Aborts are expected, don't show an error for them.
           return;
@@ -220,7 +229,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       });
   };
 
-  setOptions(opts: object): void {
+  setOptions(opts: any): void {
     const newOpts = { ...this.props.options, ...opts };
     this.props.onOptionsChanged(newOpts);
   }
@@ -279,17 +288,32 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       <div className="panel">
         <Row>
           <Col>
-            <ExpressionInput
-              value={this.state.exprInputValue}
-              onExpressionChange={this.handleExpressionChange}
-              executeQuery={this.executeQuery}
-              loading={this.state.loading}
-              enableAutocomplete={this.props.enableAutocomplete}
-              autocompleteSections={{
-                'Query History': pastQueries,
-                'Metric Names': metricNames,
-              }}
-            />
+            {this.props.useExperimentalEditor ? (
+              <CMExpressionInput
+                pathPrefix={this.props.pathPrefix}
+                value={this.state.exprInputValue}
+                onExpressionChange={this.handleExpressionChange}
+                executeQuery={this.executeQuery}
+                loading={this.state.loading}
+                enableAutocomplete={this.props.enableAutocomplete}
+                enableHighlighting={this.props.enableHighlighting}
+                enableLinter={this.props.enableLinter}
+                queryHistory={pastQueries}
+                metricNames={metricNames}
+              />
+            ) : (
+              <ExpressionInput
+                value={this.state.exprInputValue}
+                onExpressionChange={this.handleExpressionChange}
+                executeQuery={this.executeQuery}
+                loading={this.state.loading}
+                enableAutocomplete={this.props.enableAutocomplete}
+                autocompleteSections={{
+                  'Query History': pastQueries,
+                  'Metric Names': metricNames,
+                }}
+              />
+            )}
           </Col>
         </Row>
         <Row>

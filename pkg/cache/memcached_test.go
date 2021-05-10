@@ -15,7 +15,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestMemcachedIndexCache(t *testing.T) {
+func TestMemcachedCache(t *testing.T) {
 	t.Parallel()
 
 	// Init some data to conveniently define test cases later one.

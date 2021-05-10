@@ -27,13 +27,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
 	yaml "gopkg.in/yaml.v2"
@@ -110,7 +112,7 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 
 	req, err := http.NewRequest(method, u.String(), b)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "create GET request")
+		return nil, 0, errors.Wrapf(err, "create %s request", method)
 	}
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
@@ -121,7 +123,7 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 
 	resp, err := c.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "perform GET request against %s", u.String())
+		return nil, 0, errors.Wrapf(err, "perform %s request against %s", method, u.String())
 	}
 	defer runutil.ExhaustCloseWithErrCapture(&err, resp.Body, "%s: close body", req.URL.String())
 
@@ -463,10 +465,10 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 	vec := make(promql.Vector, 0, len(vectorResult))
 
 	for _, e := range vectorResult {
-		lset := make(promlabels.Labels, 0, len(e.Metric))
+		lset := make(labels.Labels, 0, len(e.Metric))
 
 		for k, v := range e.Metric {
-			lset = append(lset, promlabels.Label{
+			lset = append(lset, labels.Label{
 				Name:  string(k),
 				Value: string(v),
 			})
@@ -606,6 +608,39 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 	return v.Data, nil
 }
 
+// BuildVersion returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
+// For Prometheus versions < 2.14.0 it returns "0" as Prometheus version.
+func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/buildinfo")
+
+	level.Debug(c.logger).Log("msg", "build version", "url", u.String())
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_buildversion HTTP[client]")
+	defer span.Finish()
+
+	// We get status code 404 for prometheus versions lower than 2.14.0
+	body, code, err := c.req2xx(ctx, &u, http.MethodGet)
+	if err != nil {
+		if code == http.StatusNotFound {
+			return "0", nil
+		}
+		return "", err
+	}
+
+	var b struct {
+		Data struct {
+			Version string `json:"version"`
+		} `json:"data"`
+	}
+
+	if err = json.Unmarshal(body, &b); err != nil {
+		return "", errors.Wrap(err, "unmarshal build info API response")
+	}
+
+	return b.Data.Version, nil
+}
+
 func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
@@ -735,4 +770,65 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 		g.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
 	}
 	return m.Data.Groups, nil
+}
+
+// MetricMetadataInGRPC returns the metadata from Prometheus metric metadata API. It uses gRPC errors.
+func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/metadata")
+	q := u.Query()
+
+	if metric != "" {
+		q.Add("metric", metric)
+	}
+	// We only set limit when it is >= 0.
+	if limit >= 0 {
+		q.Add("limit", strconv.Itoa(limit))
+	}
+
+	u.RawQuery = q.Encode()
+
+	var v struct {
+		Data map[string][]metadatapb.Meta `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v)
+}
+
+// ExemplarsInGRPC returns the exemplars from Prometheus exemplars API. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, query string, startTime, endTime int64) ([]*exemplarspb.ExemplarData, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/query_exemplars")
+	q := u.Query()
+
+	q.Add("query", query)
+	q.Add("start", formatTime(timestamp.Time(startTime)))
+	q.Add("end", formatTime(timestamp.Time(endTime)))
+	u.RawQuery = q.Encode()
+
+	var m struct {
+		Data []*exemplarspb.ExemplarData `json:"data"`
+	}
+
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_exemplars HTTP[client]", &u, &m); err != nil {
+		return nil, err
+	}
+
+	return m.Data, nil
+}
+
+func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets string) (*targetspb.TargetDiscovery, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/targets")
+
+	if stateTargets != "" {
+		q := u.Query()
+		q.Add("state", stateTargets)
+		u.RawQuery = q.Encode()
+	}
+
+	var v struct {
+		Data *targetspb.TargetDiscovery `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
 }

@@ -32,7 +32,7 @@ Thanos aims for a simple deployment and maintenance model. The only dependencies
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
-Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>` in
+Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in
 [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
@@ -45,7 +45,7 @@ See [release process docs](release-process.md) for details.
 
 Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.15+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+If you want to build Thanos from source you would need a working installation of the Go 1.16+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 
@@ -90,11 +90,13 @@ If you want to add yourself to this list, let us know!
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/master/mixin/README.md)
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md)
 We also have example Grafana dashboards [here](/examples/dashboards/dashboards.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
 
 ## Talks
 
+* 12.2020: [Absorbing Thanos Infinite Powers for Multi-Cluster Telemetry](https://www.youtube.com/watch?v=6Nx2BFyr7qQ)
+* 12.2020: [Turn It Up to a Million: Ingesting Millions of Metrics with Thanos Receive](https://www.youtube.com/watch?v=5MJqdJq41Ms)
 * 02.2018: [Very first Prometheus Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * 02.2019: [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
 * 03.2019: [Alibaba Cloud user story](https://www.youtube.com/watch?v=ZS6zMksfipc)

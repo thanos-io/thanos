@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"path/filepath"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -42,7 +43,7 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 	tlsCfg.Certificates = []tls.Certificate{tlsCert}
 
 	if clientCA != "" {
-		caPEM, err := ioutil.ReadFile(clientCA)
+		caPEM, err := ioutil.ReadFile(filepath.Clean(clientCA))
 		if err != nil {
 			return nil, errors.Wrap(err, "reading client CA")
 		}
@@ -61,10 +62,10 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 }
 
 // NewClientConfig provides new client TLS configuration.
-func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string) (*tls.Config, error) {
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
-		caPEM, err := ioutil.ReadFile(caCert)
+		caPEM, err := ioutil.ReadFile(filepath.Clean(caCert))
 		if err != nil {
 			return nil, errors.Wrap(err, "reading client CA")
 		}
@@ -89,6 +90,10 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string) (*
 
 	if serverName != "" {
 		tlsCfg.ServerName = serverName
+	}
+
+	if skipVerify {
+		tlsCfg.InsecureSkipVerify = true
 	}
 
 	if (key != "") != (cert != "") {

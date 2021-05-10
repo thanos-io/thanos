@@ -328,7 +328,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	}
 
 	for _, fn := range files {
-		b, err := ioutil.ReadFile(fn)
+		b, err := ioutil.ReadFile(filepath.Clean(fn))
 		if err != nil {
 			errs.Add(err)
 			continue

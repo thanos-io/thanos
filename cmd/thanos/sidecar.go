@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -22,11 +24,14 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/logging"
+	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -38,6 +43,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -47,6 +53,11 @@ func registerSidecar(app *extkingpin.App) {
 	conf := &sidecarConfig{}
 	conf.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
 		rl := reloader.New(log.With(logger, "component", "reloader"),
 			extprom.WrapRegistererWithPrefix("thanos_sidecar_", reg),
 			&reloader.Options{
@@ -58,7 +69,7 @@ func registerSidecar(app *extkingpin.App) {
 				RetryInterval: conf.reloader.retryInterval,
 			})
 
-		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf)
+		return runSidecar(g, logger, reg, tracer, rl, component.Sidecar, *conf, grpcLogOpts, tagOpts)
 	})
 }
 
@@ -70,6 +81,8 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	comp component.Component,
 	conf sidecarConfig,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
 ) error {
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
@@ -133,15 +146,34 @@ func runSidecar(
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
-				// Check prometheus's flags to ensure sane sidecar flags.
+				// Check prometheus's flags to ensure same sidecar flags.
 				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
 				}
 			}
 
+			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
+			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				if err := m.BuildVersion(ctx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus version",
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to get prometheus version")
+			}
+
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			err = runutil.Retry(2*time.Second, ctx.Done(), func() error {
 				if err := m.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
@@ -197,14 +229,13 @@ func runSidecar(
 			cancel()
 		})
 	}
-
 	{
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
 		t.MaxIdleConns = conf.connection.maxIdleConns
 		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -215,9 +246,12 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe,
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -268,7 +302,7 @@ func runSidecar(
 			}
 
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
-				conf.shipper.uploadCompacted, conf.shipper.allowOutOfOrderUpload)
+				conf.shipper.uploadCompacted, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
@@ -332,10 +366,11 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 type promMetadata struct {
 	promURL *url.URL
 
-	mtx    sync.Mutex
-	mint   int64
-	maxt   int64
-	labels labels.Labels
+	mtx         sync.Mutex
+	mint        int64
+	maxt        int64
+	labels      labels.Labels
+	promVersion string
 
 	limitMinTime thanosmodel.TimeOrDurationValue
 
@@ -381,6 +416,26 @@ func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 	return s.mint, s.maxt
 }
 
+func (s *promMetadata) BuildVersion(ctx context.Context) error {
+	ver, err := s.client.BuildVersion(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.promVersion = ver
+	return nil
+}
+
+func (s *promMetadata) Version() string {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.promVersion
+}
+
 type sidecarConfig struct {
 	http         httpConfig
 	grpc         grpcConfig
@@ -388,6 +443,7 @@ type sidecarConfig struct {
 	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
+	reqLogConfig *extflag.PathOrContent
 	objStore     extflag.PathOrContent
 	shipper      shipperConfig
 	limitMinTime thanosmodel.TimeOrDurationValue
@@ -400,6 +456,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
+	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").

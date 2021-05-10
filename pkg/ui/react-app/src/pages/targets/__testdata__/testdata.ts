@@ -1,4 +1,4 @@
-/* eslint @typescript-eslint/camelcase: 0 */
+/* eslint-disable camelcase */
 
 import { ScrapePools } from '../target';
 

@@ -10,7 +10,6 @@ import (
 	"github.com/NYTimes/gziphandler"
 	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend"
 	"github.com/cortexproject/cortex/pkg/frontend/transport"
-	cortexfrontendv1 "github.com/cortexproject/cortex/pkg/frontend/v1"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
@@ -36,7 +35,8 @@ import (
 )
 
 type queryFrontendConfig struct {
-	http httpConfig
+	http           httpConfig
+	webDisableCORS bool
 	queryfrontend.Config
 	orgIdHeaders []string
 }
@@ -61,9 +61,15 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	cfg.http.registerFlag(cmd)
 
+	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
+		Default("false").BoolVar(&cfg.webDisableCORS)
+
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
+
+	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
+		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
@@ -72,13 +78,13 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.Limits.MaxQueryLength)
+		Default("0").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxQueryLength))
 
 	cmd.Flag("query-range.max-query-parallelism", "Maximum number of query range requests will be scheduled in parallel by the Frontend.").
 		Default("14").IntVar(&cfg.QueryRangeConfig.Limits.MaxQueryParallelism)
 
 	cmd.Flag("query-range.response-cache-max-freshness", "Most recent allowed cacheable result for query range requests, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness)
+		Default("1m").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxCacheFreshness))
 
 	cmd.Flag("query-range.partial-response", "Enable partial response for query range requests if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.PartialResponseStrategy)
@@ -96,7 +102,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		Default("14").IntVar(&cfg.LabelsConfig.Limits.MaxQueryParallelism)
 
 	cmd.Flag("labels.response-cache-max-freshness", "Most recent allowed cacheable result for labels requests, to prevent caching very recent results that might still be in flux.").
-		Default("1m").DurationVar(&cfg.LabelsConfig.Limits.MaxCacheFreshness)
+		Default("1m").DurationVar((*time.Duration)(&cfg.LabelsConfig.Limits.MaxCacheFreshness))
 
 	cmd.Flag("labels.partial-response", "Enable partial response for labels requests if no partial_response param is specified. --no-labels.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.LabelsConfig.PartialResponseStrategy)
@@ -123,10 +129,16 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"If multiple headers match the request, the first matching arg specified will take precedence. "+
 		"If no headers match 'anonymous' will be used.").PlaceHolder("<http-header-name>").StringsVar(&cfg.orgIdHeaders)
 
-	cmd.Flag("log.request.decision", "Request Logging for logging the start and end of requests. LogFinishCall is enabled by default. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("LogFinishCall").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall")
+	cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall : Logs the finish call of the requests. LogStartAndFinishCall : Logs the start and finish call of the requests. NoLogCall : Disable request logging.").Default("").EnumVar(&cfg.RequestLoggingDecision, "NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
+	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return runQueryFrontend(g, logger, reg, tracer, cfg, comp)
+		httpLogOpts, err := logging.ParseHTTPOptions(cfg.RequestLoggingDecision, reqLogConfig)
+		if err != nil {
+			return errors.Wrap(err, "error while parsing config for request logging")
+		}
+
+		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)
 	})
 }
 
@@ -135,6 +147,7 @@ func runQueryFrontend(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	httpLogOpts []logging.Option,
 	cfg *queryFrontendConfig,
 	comp component.Component,
 ) error {
@@ -172,12 +185,6 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	fe, err := cortexfrontendv1.New(cortexfrontendv1.Config{}, nil, logger, reg)
-	if err != nil {
-		return errors.Wrap(err, "setup query frontend")
-	}
-	defer fe.Close()
-
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
 		return errors.Wrap(err, "setup tripperwares")
@@ -205,11 +212,8 @@ func runQueryFrontend(
 	)
 
 	// Configure Request Logging for HTTP calls.
-	opts := []logging.Option{logging.WithDecider(func() logging.Decision {
-		return logging.LogDecision[cfg.RequestLoggingDecision]
-	})}
-	logMiddleware := logging.NewHTTPServerMiddleware(logger, opts...)
-	ins := extpromhttp.NewInstrumentationMiddleware(reg)
+	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
+	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 	// Start metrics HTTP server.
 	{
@@ -222,15 +226,17 @@ func runQueryFrontend(
 			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				orgId := extractOrgId(cfg, r)
 				name := "query-frontend"
-				api.SetCORS(w)
-				ins.NewHandler(
+				if !cfg.webDisableCORS {
+					api.SetCORS(w)
+				}
+				tracing.HTTPMiddleware(
+					tracer,
 					name,
-					logMiddleware.HTTPMiddleware(
+					logger,
+					ins.NewHandler(
 						name,
-						tracing.HTTPMiddleware(
-							tracer,
+						logMiddleware.HTTPMiddleware(
 							name,
-							logger,
 							gziphandler.GzipHandler(middleware.RequestID(f)),
 						),
 					),

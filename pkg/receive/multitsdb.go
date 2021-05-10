@@ -42,6 +42,7 @@ type MultiTSDB struct {
 	mtx                   *sync.RWMutex
 	tenants               map[string]*tenant
 	allowOutOfOrderUpload bool
+	hashFunc              metadata.HashFunc
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -55,6 +56,7 @@ func NewMultiTSDB(
 	tenantLabelName string,
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
+	hashFunc metadata.HashFunc,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -71,6 +73,7 @@ func NewMultiTSDB(
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
+		hashFunc:              hashFunc,
 	}
 }
 
@@ -114,7 +117,7 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0777); err != nil {
+	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
 		return err
 	}
 
@@ -293,6 +296,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			metadata.ReceiveSource,
 			false,
 			t.allowOutOfOrderUpload,
+			t.hashFunc,
 		)
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship)

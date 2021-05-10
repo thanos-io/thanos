@@ -116,6 +116,9 @@ type File struct {
 	RelPath string `json:"rel_path"`
 	// SizeBytes is optional (e.g meta.json does not show size).
 	SizeBytes int64 `json:"size_bytes,omitempty"`
+
+	// Hash is an optional hash of this file. Used for potentially avoiding an extra download.
+	Hash *ObjectHash `json:"hash,omitempty"`
 }
 
 type ThanosDownsample struct {
@@ -194,7 +197,7 @@ func renameFile(logger log.Logger, from, to string) error {
 
 // ReadFromDir reads the given meta from <dir>/meta.json.
 func ReadFromDir(dir string) (*Meta, error) {
-	f, err := os.Open(filepath.Join(dir, MetaFilename))
+	f, err := os.Open(filepath.Join(dir, filepath.Clean(MetaFilename)))
 	if err != nil {
 		return nil, err
 	}

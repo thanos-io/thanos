@@ -10,13 +10,13 @@ interface StatusIndicatorProps {
   componentTitle?: string;
 }
 
-export const withStatusIndicator = <T extends {}>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> => ({
+export const withStatusIndicator = <T extends any>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> => ({
   error,
   isLoading,
   customErrorMsg,
   componentTitle,
   ...rest
-}) => {
+}: StatusIndicatorProps) => {
   if (error) {
     return (
       <UncontrolledAlert color="danger">
@@ -42,5 +42,5 @@ export const withStatusIndicator = <T extends {}>(Component: ComponentType<T>): 
       />
     );
   }
-  return <Component {...(rest as T)} />;
+  return <Component {...(rest as any)} />;
 };

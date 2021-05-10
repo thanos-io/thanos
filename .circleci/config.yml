@@ -7,10 +7,10 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.15-node
+      - image: cimg/go:1.16-node
   golang-test:
     docker:
-      - image: cimg/go:1.15-node
+      - image: cimg/go:1.16-node
       - image: beaukode/docker-swift-onlyone-authv2-keystone
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
           paths:
             - .build
 
-  publish_master:
+  publish_main:
     executor: golang
     steps:
       - checkout
@@ -116,12 +116,12 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - publish_master:
+      - publish_main:
           requires:
             - test
           filters:
             branches:
-              only: master
+              only: main
       - cross_build:
           requires:
             - test

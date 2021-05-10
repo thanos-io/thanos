@@ -47,11 +47,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_replicate_replication_runs_total{result=\"error\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) / sum(rate(thanos_replicate_replication_runs_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_replication_runs_total{result=\"error\", job=\"$job\"}[$interval])) / sum by (job) (rate(thanos_replicate_replication_runs_total{job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -124,7 +123,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_replicate_replication_runs_total{result=\"error\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) by (result)",
+                     "expr": "sum by (job, result) (rate(thanos_replicate_replication_runs_total{result=\"error\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{result}}",
@@ -194,34 +193,59 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "p99",
+                     "color": "#FA6400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p90",
+                     "color": "#E0B400",
+                     "fill": 1,
+                     "fillGradient": 1
+                  },
+                  {
+                     "alias": "p50",
+                     "color": "#37872D",
+                     "fill": 10,
+                     "fillGradient": 0
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(thanos_replicate_replication_run_duration_seconds_bucket{result=\"success\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{result=\"success\",  job=\"$job\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99 {{job}}",
-                     "refId": "A",
+                     "legendFormat": "p50 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_replicate_replication_run_duration_seconds_sum{result=\"success\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) by (job) * 1 / sum(rate(thanos_replicate_replication_run_duration_seconds_count{result=\"success\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) by (job)",
+                     "expr": "histogram_quantile(0.90, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{result=\"success\",  job=\"$job\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}}",
-                     "refId": "B",
+                     "legendFormat": "p90 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.50, sum(rate(thanos_replicate_replication_run_duration_seconds_bucket{result=\"success\", namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval])) by (job, le)) * 1",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{result=\"success\",  job=\"$job\"}[$interval]))) * 1",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50 {{job}}",
-                     "refId": "C",
+                     "legendFormat": "p99 {{job}}",
+                     "logBase": 10,
+                     "max": null,
+                     "min": null,
                      "step": 10
                   }
                ],
@@ -305,7 +329,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(blocks_meta_synced{state=\"loaded\",namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"loaded\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "meta loads",
@@ -313,7 +337,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(blocks_meta_synced{state=\"failed\",namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"failed\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "partial meta reads",
@@ -321,7 +345,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_replicate_blocks_already_replicated_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_blocks_already_replicated_total{job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "already replicated blocks",
@@ -329,7 +353,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_replicate_blocks_replicated_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_blocks_replicated_total{job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "replicated blocks",
@@ -337,7 +361,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum(rate(thanos_replicate_objects_replicated_total{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_objects_replicated_total{job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "replicated objects",
@@ -399,8 +423,8 @@
       "list": [
          {
             "current": {
-               "text": "Prometheus",
-               "value": "Prometheus"
+               "text": "default",
+               "value": "default"
             },
             "hide": 0,
             "label": null,
@@ -410,49 +434,6 @@
             "refresh": 1,
             "regex": "",
             "type": "datasource"
-         },
-         {
-            "allValue": null,
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": false,
-            "label": "namespace",
-            "multi": false,
-            "name": "namespace",
-            "options": [ ],
-            "query": "label_values(kube_pod_info{}, namespace)",
-            "refresh": 1,
-            "regex": "",
-            "sort": 2,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": "thanos-bucket-replicate.*",
-            "current": {
-               "text": "all",
-               "value": "$__all"
-            },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": true,
-            "label": "job",
-            "multi": false,
-            "name": "job",
-            "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-bucket-replicate.*\"}, job)",
-            "refresh": 1,
-            "regex": "",
-            "sort": 2,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
          },
          {
             "auto": true,
@@ -468,6 +449,29 @@
             "query": "5m,10m,30m,1h,6h,12h",
             "refresh": 2,
             "type": "interval"
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": "all",
+               "value": "$__all"
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "job",
+            "multi": false,
+            "name": "job",
+            "options": [ ],
+            "query": "label_values(up{job=~\".*thanos-bucket-replicate.*\"}, job)",
+            "refresh": 1,
+            "regex": "",
+            "sort": 2,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
          }
       ]
    },
@@ -502,6 +506,6 @@
    },
    "timezone": "UTC",
    "title": "Thanos / BucketReplicate",
-   "uid": "65ffb86cd2688b9e4db4d1ea231a5a9a",
+   "uid": "49f644ecf8e31dd1a5084ae2a5f10e80",
    "version": 0
 }

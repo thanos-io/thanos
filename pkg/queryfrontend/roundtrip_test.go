@@ -14,10 +14,11 @@ import (
 	"time"
 
 	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/cortexproject/cortex/pkg/ingester/client"
+	"github.com/cortexproject/cortex/pkg/cortexpb"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
@@ -33,9 +34,9 @@ const (
 )
 
 var defaultLimits = &cortexvalidation.Limits{
-	MaxQueryLength:      7 * 24 * time.Hour,
+	MaxQueryLength:      model.Duration(7 * 24 * time.Hour),
 	MaxQueryParallelism: 14,
-	MaxCacheFreshness:   time.Minute,
+	MaxCacheFreshness:   model.Duration(time.Minute),
 }
 
 // fakeRoundTripper implements the RoundTripper interface.
@@ -694,8 +695,8 @@ func promqlResults(fail bool) (*int, http.Handler) {
 			ResultType: string(parser.ValueTypeMatrix),
 			Result: []queryrange.SampleStream{
 				{
-					Labels: []client.LabelAdapter{},
-					Samples: []client.Sample{
+					Labels: []cortexpb.LabelAdapter{},
+					Samples: []cortexpb.Sample{
 						{Value: 0, TimestampMs: 0},
 						{Value: 1, TimestampMs: 1},
 					},

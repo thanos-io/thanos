@@ -56,7 +56,13 @@ Concretely the aims of the project are:
 
 ## Architecture Overview
 
-![architecture_overview](docs/img/arch.jpg)
+Deployment with Sidecar:
+
+![Sidecar](https://docs.google.com/drawings/d/e/2PACX-1vTBFKKgf8YDInJyRakPE8eZZg9phTlOsBB2ogNkFvhNGbZ8YDvz_cGMbxWZBG1G6hpsQfSX145FpYcv/pub?w=960&h=720)
+
+Deployment with Receive:
+
+![Receive](https://docs.google.com/drawings/d/e/2PACX-1vTfko27YB_3ab7ZL8ODNG5uCcrpqKxhmqaz3lW-yhGN3_oNxkTrqXmwwlcZjaWf3cGgAJIM4CMwwkEV/pub?w=960&h=720)
 
 ## Thanos Philosophy
 
@@ -71,7 +77,7 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 
 ## Releases
 
-Master should be stable and usable. Every commit to master builds docker image named `master-<date>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
+Main branch should be stable and usable. Every commit to main builds docker image named `main-<date>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
 

@@ -5,7 +5,9 @@ package runutil
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,4 +123,54 @@ func TestCloseMoreThanOnce(t *testing.T) {
 
 	CloseWithLogOnErr(lc, r, "should be called")
 	testutil.Equals(t, true, lc.WasCalled)
+}
+
+func TestDeleteAll(t *testing.T) {
+	dir, err := ioutil.TempDir("", "example")
+	testutil.Ok(t, err)
+
+	t.Cleanup(func() {
+		testutil.Ok(t, os.RemoveAll(dir))
+	})
+
+	f, err := os.Create(filepath.Join(dir, "file1"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "a"), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "b"), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(dir, "c", "innerc"), os.ModePerm))
+	f, err = os.Create(filepath.Join(dir, "a", "file2"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+	f, err = os.Create(filepath.Join(dir, "c", "file3"))
+	testutil.Ok(t, err)
+	testutil.Ok(t, f.Close())
+
+	testutil.Ok(t, DeleteAll(dir, "file1", "a", filepath.Join("c", "innerc")))
+
+	// Deleted.
+	_, err = os.Stat(filepath.Join(dir, "file1"))
+	testutil.Assert(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dir, "b/"))
+	testutil.Assert(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(dir, "file3"))
+	testutil.Assert(t, os.IsNotExist(err))
+
+	// Exists.
+	_, err = os.Stat(filepath.Join(dir, "a", "file2"))
+	testutil.Ok(t, err)
+	_, err = os.Stat(filepath.Join(dir, "a/"))
+	testutil.Ok(t, err)
+	_, err = os.Stat(filepath.Join(dir, "c", "innerc"))
+	testutil.Ok(t, err)
+}
+
+func TestDeleteAll_ShouldReturnNoErrorIfDirectoryDoesNotExists(t *testing.T) {
+	dir, err := ioutil.TempDir("", "example")
+	testutil.Ok(t, err)
+	testutil.Ok(t, os.RemoveAll(dir))
+
+	// Calling DeleteAll() on a non-existent directory should return no error.
+	testutil.Ok(t, DeleteAll(dir))
 }

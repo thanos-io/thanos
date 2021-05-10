@@ -4,37 +4,25 @@
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     errorThreshold: 10,
     p99LatencyThreshold: 20,
+    dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if thanos.bucket_replicate == null then [] else [
+      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-bucket-replicate',
         rules: [
           {
-            alert: 'ThanosBucketReplicateIsDown',
-            expr: |||
-              absent(up{%(selector)s})
-            ||| % thanos.bucket_replicate,
-            'for': '5m',
-            labels: {
-              severity: 'critical',
-            },
-            annotations: {
-              description: 'Thanos Replicate has disappeared from Prometheus target discovery.',
-              summary: 'Thanos Replicate has disappeared from Prometheus target discovery.',
-            },
-          },
-          {
             alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
-              description: 'Thanos Replicate failing to run, {{ $value | humanize }}% of attempts failed.',
-              summary: 'Thanose Replicate is failing to run.',
+              description: 'Thanos Replicate is failing to run%s, {{$value | humanize}}%% of attempts failed.' % location,
+              summary: 'Thanose Replicate is failing to run%s.' % location,
             },
             expr: |||
               (
-                sum(rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
-              / on (namespace) group_left
-                sum(rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[5m]))
+              / on (%(dimensions)s) group_left
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= %(errorThreshold)s
             ||| % thanos.bucket_replicate,
             'for': '5m',
@@ -45,14 +33,14 @@
           {
             alert: 'ThanosBucketReplicateRunLatency',
             annotations: {
-              description: 'Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for the replicate operations.',
+              description: 'Thanos Replicate {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for the replicate operations.' % location,
               summary: 'Thanos Replicate has a high latency for replicate operations.',
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
+                histogram_quantile(0.99, sum by (%(dimensions)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m]))) > %(p99LatencyThreshold)s
               and
-                sum by (job) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
+                sum by (%(dimensions)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
             ||| % thanos.bucket_replicate,
             'for': '5m',

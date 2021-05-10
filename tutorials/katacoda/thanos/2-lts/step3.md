@@ -6,7 +6,7 @@ In this step, we will learn about Thanos Store Gateway and how to deploy it.
 
 Let's take a look at all the Thanos commands:
 
-```docker run --rm quay.io/thanos/thanos:v0.16.0 --help```{{execute}}
+```docker run --rm quay.io/thanos/thanos:v0.20.0 --help```{{execute}}
 
 You should see multiple commands that solve different purposes, block storage based long-term storage for Prometheus.
 
@@ -32,7 +32,7 @@ You can read more about [Store](https://thanos.io/tip/components/store.md/) here
 docker run -d --net=host --rm \
     -v /root/editor/bucket_storage.yaml:/etc/thanos/minio-bucket.yaml \
     --name store-gateway \
-    quay.io/thanos/thanos:v0.16.0 \
+    quay.io/thanos/thanos:v0.20.0 \
     store \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
     --http-address 0.0.0.0:19091 \
@@ -49,7 +49,7 @@ Currently querier does not know about store yet. Let's change it by adding Store
 docker stop querier && \
 docker run -d --net=host --rm \
    --name querier \
-   quay.io/thanos/thanos:v0.16.0 \
+   quay.io/thanos/thanos:v0.20.0 \
    query \
    --http-address 0.0.0.0:9091 \
    --query.replica-label replica \
@@ -59,7 +59,7 @@ docker run -d --net=host --rm \
 
 Click on the Querier UI `Graph` page and try querying data for a year or two by inserting metrics `continuous_app_metric0` ([Query UI](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1y&g0.max_source_resolution=0s&g0.expr=continuous_app_metric0&g0.tab=0)). Make sure `deduplication` is selected and you will be able to discover all the data fetched by Thanos store.
 
-![](https://github.com/thanos-io/thanos/raw/master/tutorials/katacoda/thanos/2-lts/query.png)
+![](https://github.com/thanos-io/thanos/raw/main/tutorials/katacoda/thanos/2-lts/query.png)
 
 Also, you can check all the active endpoints located by thanos-store by clicking on [Stores](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/stores).
 

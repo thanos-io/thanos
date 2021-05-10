@@ -7,15 +7,16 @@
   dashboard:: {
     prefix: 'Thanos / ',
     tags: error 'must provide dashboard tags',
-    namespaceQuery: error 'must provide a query for namespace variable for dashboard template',
+    timezone: 'UTC',
   },
 
   // Automatically add a uid to each dashboard based on the base64 encoding
   // of the file name and set the timezone to be 'default'.
   grafanaDashboards:: {
+    local component = std.split(filename, '.')[0],
     [filename]: grafanaDashboards[filename] {
       uid: std.md5(filename),
-      timezone: 'UTC',
+      timezone: thanos.dashboard.timezone,
       tags: thanos.dashboard.tags,
 
       // Modify tooltip to only show a single value
@@ -43,7 +44,39 @@
           ),
         ],
       },
-    }
+    } {
+      templating+: {
+        list+: [
+          template.new(
+            level,
+            '$datasource',
+            'label_values(%s, %s)' % [thanos.targetGroups[level], level],
+            label=level,
+            refresh=1,
+            sort=2,
+          )
+          for level in std.objectFields(thanos.targetGroups)
+        ],
+      },
+    } + if std.objectHas(thanos[component], 'selector') then {
+      templating+: {
+        local name = 'job',
+        local selector = std.join(', ', thanos.dashboard.selector + [thanos[component].selector]),
+        list+: [
+          template.new(
+            name,
+            '$datasource',
+            'label_values(up{%s}, %s)' % [selector, name],
+            label=name,
+            refresh=1,
+            sort=2,
+            current='all',
+            allValues=null,
+            includeAll=true
+          ),
+        ],
+      },
+    } else {}
     for filename in std.objectFields(grafanaDashboards)
   },
 }

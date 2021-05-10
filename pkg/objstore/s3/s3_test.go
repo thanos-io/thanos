@@ -4,8 +4,16 @@
 package s3
 
 import (
+	"context"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -200,7 +208,7 @@ http_config:
 
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg.PartSize == 1024*1024*128, "when part size not set it should default to 128MiB")
+	testutil.Assert(t, cfg.PartSize == 1024*1024*64, "when part size not set it should default to 128MiB")
 
 	input2 := []byte(`bucket: "bucket-name"
 endpoint: "s3-endpoint"
@@ -255,4 +263,71 @@ list_objects_version: "abcd"`)
 	if cfg2.ListObjectsVersion != "abcd" {
 		t.Errorf("parsing of list_objects_version failed: got %v, expected %v", cfg.ListObjectsVersion, "abcd")
 	}
+}
+
+func TestBucket_getServerSideEncryption(t *testing.T) {
+	// Default config should return no SSE config.
+	cfg := DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err := bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, nil, sse)
+
+	// If SSE is configured in the client config it should be used.
+	cfg = DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	cfg.SSEConfig = SSEConfig{Type: SSES3}
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.S3, sse.Type())
+
+	// If SSE is configured in the context it should win.
+	cfg = DefaultConfig
+	cfg.Endpoint = "localhost:80"
+	cfg.SSEConfig = SSEConfig{Type: SSES3}
+	override, err := encrypt.NewSSEKMS("test", nil)
+	testutil.Ok(t, err)
+
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.WithValue(context.Background(), sseConfigKey, override))
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.KMS, sse.Type())
+}
+
+func TestBucket_Get_ShouldReturnErrorIfServerTruncateResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.Header().Set("Content-Length", "100")
+
+		// Write less bytes than the content length.
+		_, err := w.Write([]byte("12345"))
+		testutil.Ok(t, err)
+	}))
+	defer srv.Close()
+
+	cfg := DefaultConfig
+	cfg.Bucket = "test-bucket"
+	cfg.Endpoint = srv.Listener.Addr().String()
+	cfg.Insecure = true
+	cfg.Region = "test"
+	cfg.AccessKey = "test"
+	cfg.SecretKey = "test"
+
+	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	reader, err := bkt.Get(context.Background(), "test")
+	testutil.Ok(t, err)
+
+	// We expect an error when reading back.
+	_, err = ioutil.ReadAll(reader)
+	testutil.Equals(t, io.ErrUnexpectedEOF, err)
 }

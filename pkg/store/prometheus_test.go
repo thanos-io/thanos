@@ -45,11 +45,11 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -64,7 +64,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	limitMinT := int64(0)
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return limitMinT, -1 }) // Maxt does not matter.
+		func() (int64, int64) { return limitMinT, -1 }, nil) // Maxt does not matter.
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -179,13 +179,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b", "b", "d"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "b", "d"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c", "b", "d", "job", "test"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "c", "b", "d", "job", "test"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "d", "b", "d", "job", "test"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "d", "b", "d", "job", "test"), baseT+300, 3)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("b", "d", "job", "test"), baseT+400, 4)
+	_, err = a.Append(0, labels.FromStrings("b", "d", "job", "test"), baseT+400, 4)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -199,7 +199,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 
 	promStore, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
+		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 }, nil)
 	testutil.Ok(t, err)
 
 	for _, tcase := range []struct {
@@ -359,11 +359,11 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -375,7 +375,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
@@ -404,11 +404,11 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -420,7 +420,11 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	version, err := promclient.NewDefaultClient().BuildVersion(ctx, u)
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil,
+		func() string { return version })
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -441,6 +445,32 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), resp.Warnings)
 	testutil.Equals(t, []string{}, resp.Values)
+
+	// check label value matcher
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{"b"}, resp.Values)
+
+	// check another label value matcher
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "d"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), resp.Warnings)
+	testutil.Equals(t, []string{}, resp.Values)
 }
 
 // Test to check external label values retrieve.
@@ -452,9 +482,9 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("ext_a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("ext_a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -466,7 +496,10 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil)
+	version, err := promclient.NewDefaultClient().BuildVersion(ctx, u)
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, func() string { return version })
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -494,11 +527,11 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -512,7 +545,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 0, math.MaxInt64 })
+		func() (int64, int64) { return 0, math.MaxInt64 }, nil)
 	testutil.Ok(t, err)
 	srv := newStoreSeriesServer(ctx)
 
@@ -557,7 +590,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), nil, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 123, 456 })
+		func() (int64, int64) { return 123, 456 }, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
@@ -574,7 +607,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 	offset := int64(2*math.MaxUint16 + 5)
 	for i := int64(0); i < offset; i++ {
-		_, err := appender.Add(labels.FromStrings("a", "b"), baseT+i, 1)
+		_, err := appender.Append(0, labels.FromStrings("a", "b"), baseT+i, 1)
 		testutil.Ok(t, err)
 	}
 
@@ -635,7 +668,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testin
 
 		proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-			func() (int64, int64) { return 0, math.MaxInt64 })
+			func() (int64, int64) { return 0, math.MaxInt64 }, nil)
 		testutil.Ok(t, err)
 
 		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.

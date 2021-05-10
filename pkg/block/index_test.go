@@ -33,7 +33,7 @@ func TestRewrite(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
-	}, 150, 0, 1000, nil, 124)
+	}, 150, 0, 1000, nil, 124, metadata.NoneFunc)
 	testutil.Ok(t, err)
 
 	ir, err := index.NewFileReader(filepath.Join(tmpDir, b.String(), IndexFilename))

@@ -15,6 +15,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -135,7 +136,7 @@ func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backu
 
 	// Upload the on disk TSDB block.
 	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
-	if err := block.Upload(ctx, logger, backupBkt, bdir); err != nil {
+	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc); err != nil {
 		return errors.Wrap(err, "upload to backup")
 	}
 

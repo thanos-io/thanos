@@ -29,7 +29,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"golang.org/x/sync/errgroup"
 
@@ -47,6 +46,9 @@ const (
 	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
 	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
+
+	// A placeholder for actual Prometheus instance address in the scrape config.
+	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
 )
 
 func PrometheusBinary() string {
@@ -81,6 +83,8 @@ type Prometheus struct {
 	cmd                *exec.Cmd
 	disabledCompaction bool
 	addr               string
+
+	config string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -177,6 +181,11 @@ func (p *Prometheus) start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
+	// Write the final config to the config file.
+	// The address placeholder will be replaced with the actual address.
+	if err := p.writeConfig(strings.ReplaceAll(p.config, PromAddrPlaceHolder, p.addr)); err != nil {
+		return err
+	}
 	args := append([]string{
 		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
 		"--storage.tsdb.path=" + p.db.Dir(),
@@ -200,7 +209,7 @@ func (p *Prometheus) start() error {
 	return nil
 }
 
-func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
+func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) error {
 	if !p.running {
 		return errors.New("method Start was not invoked.")
 	}
@@ -209,6 +218,7 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
 
 		if r.StatusCode != 200 {
 			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
@@ -239,15 +249,19 @@ func (p *Prometheus) DisableCompaction() {
 	p.disabledCompaction = true
 }
 
-// SetConfig updates the contents of the config file. By default it is empty.
-func (p *Prometheus) SetConfig(s string) (err error) {
+// SetConfig updates the contents of the config.
+func (p *Prometheus) SetConfig(s string) {
+	p.config = s
+}
+
+// writeConfig writes the Prometheus config to the config file.
+func (p *Prometheus) writeConfig(config string) (err error) {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
 		return err
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
-
-	_, err = f.Write([]byte(s))
+	_, err = f.Write([]byte(config))
 	return err
 }
 
@@ -344,8 +358,9 @@ func CreateBlock(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
@@ -357,8 +372,9 @@ func CreateBlockWithTombstone(
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
@@ -373,8 +389,9 @@ func CreateBlockWithBlockDelay(
 	blockDelay time.Duration,
 	extLset labels.Labels,
 	resolution int64,
+	hashFunc metadata.HashFunc,
 ) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -408,15 +425,18 @@ func createBlock(
 	extLset labels.Labels,
 	resolution int64,
 	tombstones bool,
+	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	chunksRootDir := filepath.Join(dir, "chunks")
-	h, err := tsdb.NewHead(nil, nil, nil, 10000000000, chunksRootDir, nil, chunks.DefaultWriteBufferSize, tsdb.DefaultStripeSize, nil)
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
+	headOpts.ChunkRange = 10000000000
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
 	defer func() {
 		runutil.CloseWithErrCapture(&err, h, "TSDB Head")
-		if e := os.RemoveAll(chunksRootDir); e != nil {
+		if e := os.RemoveAll(headOpts.ChunkDirRoot); e != nil {
 			err = errors.Wrap(e, "delete chunks dir")
 		}
 	}()
@@ -440,7 +460,7 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					_, err := app.Add(lset, t, rand.Float64())
+					_, err := app.Append(0, lset, t, rand.Float64())
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
 							err = errors.Wrapf(err, "rollback failed: %v", rerr)
@@ -475,10 +495,37 @@ func createBlock(
 	}
 
 	blockDir := filepath.Join(dir, id.String())
+
+	files := []metadata.File{}
+	if hashFunc != metadata.NoneFunc {
+		paths := []string{}
+		if err := filepath.Walk(blockDir, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			paths = append(paths, path)
+			return nil
+		}); err != nil {
+			return id, errors.Wrapf(err, "walking %s", dir)
+		}
+
+		for _, p := range paths {
+			pHash, err := metadata.CalculateHash(p, metadata.SHA256Func, log.NewNopLogger())
+			if err != nil {
+				return id, errors.Wrapf(err, "calculating hash of %s", blockDir+p)
+			}
+			files = append(files, metadata.File{
+				RelPath: strings.TrimPrefix(p, blockDir+"/"),
+				Hash:    &pHash,
+			})
+		}
+	}
+
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), blockDir, metadata.Thanos{
 		Labels:     extLset.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,
+		Files:      files,
 	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}

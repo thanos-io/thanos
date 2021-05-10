@@ -4,6 +4,8 @@
 package objstore
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -19,12 +21,12 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsDuration))
 
 	AcceptanceTest(t, bkt.WithExpectedErrs(bkt.IsObjNotFoundErr))
-	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(OpIter)))
+	testutil.Equals(t, float64(9), promtest.ToFloat64(bkt.ops.WithLabelValues(OpIter)))
 	testutil.Equals(t, float64(2), promtest.ToFloat64(bkt.ops.WithLabelValues(OpAttributes)))
 	testutil.Equals(t, float64(3), promtest.ToFloat64(bkt.ops.WithLabelValues(OpGet)))
 	testutil.Equals(t, float64(3), promtest.ToFloat64(bkt.ops.WithLabelValues(OpGetRange)))
 	testutil.Equals(t, float64(2), promtest.ToFloat64(bkt.ops.WithLabelValues(OpExists)))
-	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(OpUpload)))
+	testutil.Equals(t, float64(8), promtest.ToFloat64(bkt.ops.WithLabelValues(OpUpload)))
 	testutil.Equals(t, float64(2), promtest.ToFloat64(bkt.ops.WithLabelValues(OpDelete)))
 	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.ops))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(OpIter)))
@@ -42,12 +44,12 @@ func TestMetricBucket_Close(t *testing.T) {
 	// Clear bucket, but don't clear metrics to ensure we use same.
 	bkt.bkt = NewInMemBucket()
 	AcceptanceTest(t, bkt)
-	testutil.Equals(t, float64(12), promtest.ToFloat64(bkt.ops.WithLabelValues(OpIter)))
+	testutil.Equals(t, float64(18), promtest.ToFloat64(bkt.ops.WithLabelValues(OpIter)))
 	testutil.Equals(t, float64(4), promtest.ToFloat64(bkt.ops.WithLabelValues(OpAttributes)))
 	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(OpGet)))
 	testutil.Equals(t, float64(6), promtest.ToFloat64(bkt.ops.WithLabelValues(OpGetRange)))
 	testutil.Equals(t, float64(4), promtest.ToFloat64(bkt.ops.WithLabelValues(OpExists)))
-	testutil.Equals(t, float64(12), promtest.ToFloat64(bkt.ops.WithLabelValues(OpUpload)))
+	testutil.Equals(t, float64(16), promtest.ToFloat64(bkt.ops.WithLabelValues(OpUpload)))
 	testutil.Equals(t, float64(4), promtest.ToFloat64(bkt.ops.WithLabelValues(OpDelete)))
 	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.ops))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(bkt.opsFailures.WithLabelValues(OpIter)))
@@ -62,4 +64,25 @@ func TestMetricBucket_Close(t *testing.T) {
 	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsFailures))
 	testutil.Equals(t, 7, promtest.CollectAndCount(bkt.opsDuration))
 	testutil.Assert(t, promtest.ToFloat64(bkt.lastSuccessfulUploadTime) > lastUpload)
+}
+
+func TestTracingReader(t *testing.T) {
+	r := bytes.NewReader([]byte("hello world"))
+	tr := newTracingReadCloser(NopCloserWithSize(r), nil)
+
+	size, err := TryToGetSize(tr)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, int64(11), size)
+
+	smallBuf := make([]byte, 4)
+	n, err := io.ReadFull(tr, smallBuf)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 4, n)
+
+	// Verify that size is still the same, after reading 4 bytes.
+	size, err = TryToGetSize(tr)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, int64(11), size)
 }

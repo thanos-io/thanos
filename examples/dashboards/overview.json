@@ -14,15 +14,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -55,18 +47,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, handler, status_code)",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
-                     "refId": "A",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "step": 10
                   }
                ],
@@ -149,11 +161,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"query\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -234,7 +245,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -308,15 +319,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -349,18 +352,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, handler, status_code)",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
-                     "refId": "A",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "step": 10
                   }
                ],
@@ -443,11 +466,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"query_range\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -528,7 +550,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query_range\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -602,26 +624,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -654,18 +657,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{namespace=\"$namespace\",job=~\"thanos-store.*\",grpc_type=\"unary\"}[$interval])) by (job, grpc_method, grpc_code)",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -748,11 +823,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",namespace=\"$namespace\",job=~\"thanos-store.*\",grpc_type=\"unary\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"thanos-store.*\",grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -833,7 +907,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\",namespace=\"$namespace\",job=~\"thanos-store.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -907,26 +981,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "Aborted": "#EAB839",
-                  "AlreadyExists": "#7EB26D",
-                  "Canceled": "#E24D42",
-                  "DataLoss": "#E24D42",
-                  "DeadlineExceeded": "#E24D42",
-                  "FailedPrecondition": "#6ED0E0",
-                  "Internal": "#E24D42",
-                  "InvalidArgument": "#EF843C",
-                  "NotFound": "#EF843C",
-                  "OK": "#7EB26D",
-                  "OutOfRange": "#E24D42",
-                  "PermissionDenied": "#EF843C",
-                  "ResourceExhausted": "#E24D42",
-                  "Unauthenticated": "#EF843C",
-                  "Unavailable": "#E24D42",
-                  "Unimplemented": "#6ED0E0",
-                  "Unknown": "#E24D42",
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -959,18 +1014,90 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/Aborted/",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/AlreadyExists/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/FailedPrecondition/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/Unimplemented/",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/InvalidArgument/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/NotFound/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/PermissionDenied/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Unauthenticated/",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/Canceled/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DataLoss/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/DeadlineExceeded/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Internal/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OutOfRange/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/ResourceExhausted/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unavailable/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/Unknown/",
+                     "color": "#C4162A"
+                  },
+                  {
+                     "alias": "/OK/",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "error",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{namespace=\"$namespace\",job=~\"thanos-sidecar.*\",grpc_type=\"unary\"}[$interval])) by (job, grpc_method, grpc_code)",
+                     "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{grpc_method}} {{grpc_code}}",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1053,11 +1180,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",namespace=\"$namespace\",job=~\"thanos-sidecar.*\",grpc_type=\"unary\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"thanos-sidecar.*\",grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum by (job) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1138,7 +1264,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\",namespace=\"$namespace\",job=~\"thanos-sidecar.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1212,15 +1338,7 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "1xx": "#EAB839",
-                  "2xx": "#7EB26D",
-                  "3xx": "#6ED0E0",
-                  "4xx": "#EF843C",
-                  "5xx": "#E24D42",
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
@@ -1253,18 +1371,38 @@
                "pointradius": 5,
                "points": false,
                "renderer": "flot",
-               "seriesOverrides": [ ],
+               "seriesOverrides": [
+                  {
+                     "alias": "/1../",
+                     "color": "#EAB839"
+                  },
+                  {
+                     "alias": "/2../",
+                     "color": "#37872D"
+                  },
+                  {
+                     "alias": "/3../",
+                     "color": "#E0B400"
+                  },
+                  {
+                     "alias": "/4../",
+                     "color": "#1F60C4"
+                  },
+                  {
+                     "alias": "/5../",
+                     "color": "#C4162A"
+                  }
+               ],
                "spaceLength": 10,
                "span": 4,
                "stack": true,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, handler, status_code)",
+                     "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{job}} {{handler}} {{status_code}}",
-                     "refId": "A",
+                     "legendFormat": "{{job}} {{handler}} {{code}}",
                      "step": 10
                   }
                ],
@@ -1347,11 +1485,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(http_requests_total{handler=\"receive\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1432,7 +1569,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"receive\"}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1546,7 +1683,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) by (job, alertmanager)",
+                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
@@ -1633,11 +1770,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_alert_sender_errors_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) / sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_alert_sender_errors_total{}[$interval])) / sum by (job) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1718,7 +1854,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(thanos_alert_sender_latency_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_alert_sender_latency_seconds_bucket{}[$interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1832,7 +1968,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval])) by (job)",
+                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "compaction {{job}}",
@@ -1919,11 +2055,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_compact_group_compactions_failures_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval])) / sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_failures_total{}[$interval])) / sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
-                     "refId": "A",
                      "step": 10
                   }
                ],
@@ -1981,8 +2116,8 @@
       "list": [
          {
             "current": {
-               "text": "Prometheus",
-               "value": "Prometheus"
+               "text": "default",
+               "value": "default"
             },
             "hide": 0,
             "label": null,
@@ -1992,26 +2127,6 @@
             "refresh": 1,
             "regex": "",
             "type": "datasource"
-         },
-         {
-            "allValue": null,
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": false,
-            "label": "namespace",
-            "multi": false,
-            "name": "namespace",
-            "options": [ ],
-            "query": "label_values(kube_pod_info{}, namespace)",
-            "refresh": 1,
-            "regex": "",
-            "sort": 2,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
          },
          {
             "auto": true,
