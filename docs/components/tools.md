@@ -676,7 +676,7 @@ Flags:
 
 ### Bucket Rewrite
 
-`tools bucket rewrite` reewrites chosen blocks in the bucket, while deleting or modifying series.
+`tools bucket rewrite` rewrites chosen blocks in the bucket, while deleting or modifying series.
 
 For example we can remove all non counters from the block you have on your disk (e.g in Prometheus dir):
 
@@ -820,7 +820,7 @@ Flags:
 #### Probes
 
 - The downsample service exposes two endpoints for probing:
-  - `/-/healthy` starts as soon as initial setup completed.
+  - `/-/healthy` starts as soon as the initial setup is completed.
   - `/-/ready` starts after all the bootstrapping completed (e.g object store bucket connection) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
