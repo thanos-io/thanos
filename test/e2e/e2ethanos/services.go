@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
@@ -36,6 +37,10 @@ var defaultBackoffConfig = util.BackoffConfig{
 	MaxRetries: 50,
 }
 
+const (
+	FeatureExemplarStorage = "exemplar-storage"
+)
+
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
 	return "quay.io/prometheus/prometheus:v2.26.0"
@@ -55,7 +60,7 @@ func DefaultImage() string {
 	return "thanos"
 }
 
-func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2e.HTTPService, string, error) {
+func NewPrometheus(sharedDir string, name string, config string, promImage string, enableFeatures ...string) (*e2e.HTTPService, string, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -73,6 +78,10 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 		"--log.level":                       infoLogLevel,
 		"--web.listen-address":              ":9090",
 	})
+
+	if len(enableFeatures) > 0 {
+		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
+	}
 	prom := e2e.NewHTTPService(
 		fmt.Sprintf("prometheus-%s", name),
 		promImage,
@@ -86,8 +95,8 @@ func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string) (*e2e.HTTPService, *Service, error) {
-	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage)
+func NewPrometheusWithSidecar(sharedDir string, netName string, name string, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
+	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,11 +124,75 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses, targetAddresses []string, metadataAddresses, exemplarAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
+type QuerierBuilder struct {
+	sharedDir      string
+	name           string
+	routePrefix    string
+	externalPrefix string
+
+	storeAddresses       []string
+	fileSDStoreAddresses []string
+	ruleAddresses        []string
+	metadataAddresses    []string
+	targetAddresses      []string
+	exemplarAddresses    []string
+
+	tracingConfig string
+}
+
+func NewQuerierBuilder(sharedDir, name string, storeAddresses []string) *QuerierBuilder {
+	return &QuerierBuilder{
+		sharedDir:      sharedDir,
+		name:           name,
+		storeAddresses: storeAddresses,
+	}
+}
+
+func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses []string) *QuerierBuilder {
+	q.fileSDStoreAddresses = fileSDStoreAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses []string) *QuerierBuilder {
+	q.ruleAddresses = ruleAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithTargetAddresses(targetAddresses []string) *QuerierBuilder {
+	q.targetAddresses = targetAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses []string) *QuerierBuilder {
+	q.exemplarAddresses = exemplarAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses []string) *QuerierBuilder {
+	q.metadataAddresses = metadataAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithRoutePrefix(routePrefix string) *QuerierBuilder {
+	q.routePrefix = routePrefix
+	return q
+}
+
+func (q *QuerierBuilder) WithExternalPrefix(externalPrefix string) *QuerierBuilder {
+	q.externalPrefix = externalPrefix
+	return q
+}
+
+func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder {
+	q.tracingConfig = tracingConfig
+	return q
+}
+
+func (q *QuerierBuilder) Build() (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
-		"--debug.name":            fmt.Sprintf("querier-%v", name),
+		"--debug.name":            fmt.Sprintf("querier-%v", q.name),
 		"--grpc-address":          ":9091",
 		"--grpc-grace-period":     "0s",
 		"--http-address":          ":8080",
@@ -129,35 +202,35 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
 	})
-	for _, addr := range storeAddresses {
+	for _, addr := range q.storeAddresses {
 		args = append(args, "--store="+addr)
 	}
 
-	for _, addr := range ruleAddresses {
+	for _, addr := range q.ruleAddresses {
 		args = append(args, "--rule="+addr)
 	}
 
-	for _, addr := range targetAddresses {
+	for _, addr := range q.targetAddresses {
 		args = append(args, "--target="+addr)
 	}
 
-	for _, addr := range metadataAddresses {
+	for _, addr := range q.metadataAddresses {
 		args = append(args, "--metadata="+addr)
 	}
 
-	for _, addr := range exemplarAddresses {
+	for _, addr := range q.exemplarAddresses {
 		args = append(args, "--exemplar="+addr)
 	}
 
-	if len(fileSDStoreAddresses) > 0 {
-		queryFileSDDir := filepath.Join(sharedDir, "data", "querier", name)
-		container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", name)
+	if len(q.fileSDStoreAddresses) > 0 {
+		queryFileSDDir := filepath.Join(q.sharedDir, "data", "querier", q.name)
+		container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", q.name)
 		if err := os.MkdirAll(queryFileSDDir, 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
 		fileSD := []*targetgroup.Group{{}}
-		for _, a := range fileSDStoreAddresses {
+		for _, a := range q.fileSDStoreAddresses {
 			fileSD[0].Targets = append(fileSD[0].Targets, model.LabelSet{model.AddressLabel: model.LabelValue(a)})
 		}
 
@@ -173,16 +246,20 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
 	}
 
-	if routePrefix != "" {
-		args = append(args, "--web.route-prefix="+routePrefix)
+	if q.routePrefix != "" {
+		args = append(args, "--web.route-prefix="+q.routePrefix)
 	}
 
-	if externalPrefix != "" {
-		args = append(args, "--web.external-prefix="+externalPrefix)
+	if q.externalPrefix != "" {
+		args = append(args, "--web.external-prefix="+q.externalPrefix)
+	}
+
+	if q.tracingConfig != "" {
+		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
 
 	querier := NewService(
-		fmt.Sprintf("querier-%v", name),
+		fmt.Sprintf("querier-%v", q.name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
 		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
