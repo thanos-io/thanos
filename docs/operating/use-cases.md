@@ -6,7 +6,7 @@ menu: operating
 
 # Overview
 
-There are many great use cases of [Thanos](thanos.io), we collect them here for others to refer to.
+There are many great use cases of [Thanos](https://thanos.io/), we collect them here for others to refer to.
 
 ## Horizontal scaleable Prometheus Scraping with Kvass
 
