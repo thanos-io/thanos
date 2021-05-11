@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 	testutil.TolerantVerifyLeakMain(m)
 }
 
-func TestDedupExemplarsData(t *testing.T) {
+func TestDedupExemplarsSeriesLabels(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		exemplars, want []*exemplarspb.ExemplarData
@@ -135,128 +135,7 @@ func TestDedupExemplarsData(t *testing.T) {
 			for _, lbl := range tc.replicaLabels {
 				replicaLabels[lbl] = struct{}{}
 			}
-			testutil.Equals(t, tc.want, dedupExemplarsData(tc.exemplars, replicaLabels))
-		})
-	}
-}
-
-func TestDedupExemplars(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		exemplars, want []*exemplarspb.Exemplar
-		replicaLabels   []string
-	}{
-		{
-			name:      "nil slice",
-			exemplars: nil,
-			want:      nil,
-		},
-		{
-			name:      "empty exemplars slice",
-			exemplars: []*exemplarspb.Exemplar{},
-			want:      []*exemplarspb.Exemplar{},
-		},
-		{
-			name: "duplicate exemplars",
-			exemplars: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-			},
-			want: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-			},
-		},
-		{
-			name: "distinct exemplars",
-			exemplars: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 20,
-					Ts:    1600096955479,
-				},
-			},
-			want: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 20,
-					Ts:    1600096955479,
-				},
-			},
-		},
-		{
-			name:          "exemplars with replica labels",
-			replicaLabels: []string{"replica"},
-			exemplars: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-						{Name: "replica", Value: "0"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-						{Name: "replica", Value: "1"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-			},
-			want: []*exemplarspb.Exemplar{
-				{
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "traceID", Value: "EpTxMJ40fUus7aGY"},
-					}},
-					Value: 19,
-					Ts:    1600096955479,
-				},
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			replicaLabels := make(map[string]struct{})
-			for _, lbl := range tc.replicaLabels {
-				replicaLabels[lbl] = struct{}{}
-			}
-			testutil.Equals(t, tc.want, dedupExemplars(tc.exemplars, replicaLabels))
+			testutil.Equals(t, tc.want, dedupExemplarsSeriesLabels(tc.exemplars, replicaLabels))
 		})
 	}
 }

@@ -79,15 +79,11 @@ func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsR
 		return nil, nil, errors.Wrap(err, "proxy Exemplars")
 	}
 
-	resp.data = dedupExemplarsData(resp.data, rr.replicaLabels)
-	for _, d := range resp.data {
-		d.Exemplars = dedupExemplars(d.Exemplars, rr.replicaLabels)
-	}
-
+	resp.data = dedupExemplarsSeriesLabels(resp.data, rr.replicaLabels)
 	return resp.data, resp.warnings, nil
 }
 
-func dedupExemplarsData(exemplarsData []*exemplarspb.ExemplarData, replicaLabels map[string]struct{}) []*exemplarspb.ExemplarData {
+func dedupExemplarsSeriesLabels(exemplarsData []*exemplarspb.ExemplarData, replicaLabels map[string]struct{}) []*exemplarspb.ExemplarData {
 	if len(exemplarsData) == 0 {
 		return exemplarsData
 	}
@@ -117,35 +113,6 @@ func dedupExemplarsData(exemplarsData []*exemplarspb.ExemplarData, replicaLabels
 	}
 
 	return exemplarsData[:i+1]
-}
-
-func dedupExemplars(exemplars []*exemplarspb.Exemplar, replicaLabels map[string]struct{}) []*exemplarspb.Exemplar {
-	if len(exemplars) == 0 {
-		return exemplars
-	}
-
-	for _, e := range exemplars {
-		sort.Slice(e.Labels.Labels, func(i, j int) bool {
-			return e.Labels.Labels[i].Name < e.Labels.Labels[j].Name
-		})
-	}
-
-	sort.Slice(exemplars, func(i, j int) bool {
-		return exemplars[i].Compare(exemplars[j]) < 0
-	})
-
-	i := 0
-	exemplars[i].Labels.Labels = removeReplicaLabels(exemplars[i].Labels.Labels, replicaLabels)
-	for j := 1; j < len(exemplars); j++ {
-		exemplars[j].Labels.Labels = removeReplicaLabels(exemplars[j].Labels.Labels, replicaLabels)
-		if exemplars[i].Compare(exemplars[j]) != 0 {
-			// Effectively retain exemplars[j] in the resulting slice.
-			i++
-			exemplars[i] = exemplars[j]
-		}
-	}
-
-	return exemplars[:i+1]
 }
 
 func removeReplicaLabels(labels []labelpb.ZLabel, replicaLabels map[string]struct{}) []labelpb.ZLabel {
