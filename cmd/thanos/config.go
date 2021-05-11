@@ -56,7 +56,7 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 		"Time to wait after an interrupt received for HTTP Server.").
 		Default("2m").SetValue(&hc.gracePeriod)
 	cmd.Flag(
-		"http-tls-config",
+		"http.config",
 		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
 	).Default("").StringVar(&hc.tlsConfig)
 	return hc

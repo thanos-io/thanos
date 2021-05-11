@@ -8,7 +8,7 @@ menu: operating
 
 Thanos supports basic authentication and TLS. This is **experimental** and might change in the future.
 
-To specify which HTTP TLS configuration file to load, use the `--http-tls-config` flag.
+To specify which HTTP TLS configuration file to load, use the `--http.config` flag.
 The file is written in [YAML format](https://en.wikipedia.org/wiki/YAML), defined by the scheme described below.
 
 ## Scheme

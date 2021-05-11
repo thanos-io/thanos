@@ -136,7 +136,7 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
-      --http-tls-config=""       [EXPERIMENTAL] Path to the configuration file
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
       --labels.default-time-range=24h

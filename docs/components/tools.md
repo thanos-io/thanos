@@ -218,7 +218,7 @@ Flags:
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
-      --http-tls-config=""      [EXPERIMENTAL] Path to the configuration file
+      --http.config=""          [EXPERIMENTAL] Path to the configuration file
                                 that can enable TLS or authentication for all
                                 HTTP endpoints.
       --label=LABEL             Prometheus label to use as timeline title
@@ -488,7 +488,7 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
-      --http-tls-config=""       [EXPERIMENTAL] Path to the configuration file
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
       --id=ID ...                Block to be replicated to the destination
@@ -595,7 +595,7 @@ Flags:
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
                               Server.
-      --http-tls-config=""    [EXPERIMENTAL] Path to the configuration file that
+      --http.config=""        [EXPERIMENTAL] Path to the configuration file that
                               can enable TLS or authentication for all HTTP
                               endpoints.
       --log.format=logfmt     Log format to use. Possible options: logfmt or
