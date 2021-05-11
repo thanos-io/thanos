@@ -12,6 +12,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
+// ExemplarStore wraps the ExemplarsClient and contains the info of external labels.
+type ExemplarStore struct {
+	ExemplarsClient
+	LabelSets []labels.Labels
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 func (m *Exemplar) UnmarshalJSON(b []byte) error {
 	v := struct {

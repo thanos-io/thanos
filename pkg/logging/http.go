@@ -50,7 +50,7 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 			return
 		}
 
-		decision := m.opts.shouldLog(fmt.Sprintf("%s:%s", r.URL, port), nil)
+		decision := m.opts.shouldLog(net.JoinHostPort(r.URL.String(), port), nil)
 
 		switch decision {
 		case NoLogCall:
@@ -88,7 +88,7 @@ func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
 	if logStart && logEnd {
 		return LogStartAndFinishCall, nil
 	}
-	return -1, fmt.Errorf("log start call is not supported.")
+	return -1, fmt.Errorf("log start call is not supported")
 }
 
 // getLevel returns the level based logger.

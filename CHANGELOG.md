@@ -15,6 +15,9 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Added
 - [#4117](https://github.com/thanos-io/thanos/pull/4117) Mixin:  new alert ThanosReceiveTrafficBelowThreshold to flag if the ingestion average of the last hour dips below 50% of the ingestion average for the last 12 hours.
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
+- [#4171](https://github.com/thanos-io/thanos/pull/4171) Docker: Busybox image updated to latest (1.33.1)
+- [#4175](https://github.com/thanos-io/thanos/pull/4175) Added Tag Configuration Support Lightstep Tracing
+- [#4176](https://github.com/thanos-io/thanos/pull/4176) Query API: Adds optional `Stats param` to return stats for query APIs
 
 ### Fixed
 -
@@ -23,6 +26,16 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Removed
 -
 
+## [v0.20.1](https://github.com/thanos-io/thanos/releases/tag/v0.20.1) - 2021.04.30
+
+### Fixed
+
+- [#4123](https://github.com/thanos-io/thanos/pull/4123) Query: match external labels for exemplars API.
+
+### Changed
+-
+### Removed
+-
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
 ### Added
@@ -31,7 +44,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#4019](https://github.com/thanos-io/thanos/pull/4019) Query: Adds query range histogram.
 - [#3846](https://github.com/thanos-io/thanos/pull/3846) Query: Added federated exemplars API support.
 - [#3350](https://github.com/thanos-io/thanos/pull/3350) Query/Sidecar: Added targets API support. You can now configure you Querier to fetch Prometheus targets from leaf Prometheus-es!
-- [#3977](https://github.com/thanos-io/thanos/pull/3903) Expose exemplars for `http_request_duration_seconds` histogram if tracing is enabled.
+- [#3977](https://github.com/thanos-io/thanos/pull/3977) Expose exemplars for `http_request_duration_seconds` histogram if tracing is enabled.
 - [#3903](https://github.com/thanos-io/thanos/pull/3903) Store: Returning custom grpc code when reaching series/chunk limits.
 - [#3919](https://github.com/thanos-io/thanos/pull/3919) Allow to disable automatically setting CORS headers using `--web.disable-cors` flag in each component that exposes an API.
 - [#3840](https://github.com/thanos-io/thanos/pull/3840) Tools: Added a flag to support rewrite Prometheus TSDB blocks.

@@ -92,14 +92,14 @@ component of the Thanos distributed system. We recommend:
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-  * Make sure you have GOBIN, GOPATH and GOBIN (useful) set to PATH. For example -
+  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. For example -
     ```
     export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
 
-    export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the dir where you have installed golang will be used.
+    export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the directory where you have installed golang will be used.
 
     export GOPROXY="https://proxy.golang.org"
-    export PATH="$GOBIN:$GOROOT/bin:$PATH"
+    export PATH="$GOBIN:$PATH"
     ```
 
   * Consider adding the environment variables to your host machine (e.g `/.bashrc` or [`.envrc`](https://direnv.net/)) file so that those environment variables are persisted across sessions.
