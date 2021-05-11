@@ -101,13 +101,28 @@ We'll be using `hash_level` and `hash_number` to group and plan blocks to compac
 
 <insert image 1 here>
 
-We're allowing a compacted block to hit the limit for a maximum of 16 times (if not specified otherwise by the user), and at the 16th level, if/when it further compacts and hits the limit, we're marking it for no more further compactions. 
+We're allowing a compacted block to hit the limit for a maximum of 16 times (if not specified otherwise by the user), and at the 16th level, if/when it further compacts and hits the limit, we're marking it for no more further compactions. The algorithm for sharding would come into play once a compacted block is declared invalid, or its size hits the limit. If the compacted block is still valid, but its index size is too large (or the number of series it holds exceeds the limit decided by the user), we'll look at the current `hash_level`(say `hl`) of the compacted block (if valid), or the blocks participating in the compaction process (if the compacted block is invalid), then we'll either shard the compacted block or the participating blocks (depending on the situation), `using hash_function[hl+1]`, and hence set the `hash_level` of the newly created blocks to `hl+1`, and then upload them for further compaction processes, if `hl` is not equal to `max_shard_level_limit`, which is 16 by default. In case `hl` is equal to `max_shard_level_limit`, we will take one of the 2 decisions depending on whether the compacted block is valid or invalid. 
+* If the compacted block is valid, then continue the usual compaction process until it results into an invalid block.
+* If the compacted block is invalid, then add the no compact filter to all the participating blocks.
 
 We can keep growing the binary tree by recursively using the same logic. The reason for calling this adaptive is because at any point of time, the total number of shards is equal to the number of nodes on the tree (say x). If any of the leaves overloads (a block in that particular shards hits the limit), that particular leaf would split into 2, effectively increasing the number of shards to x+2, hence providing just the right amount of shards to get the job done. 
 
 <insert images 2 and 3>
 
+To give the user control over selecting number of shards (if needed), we can add a flag `max_shard_level_limit`, and the user can change the value from the default value of 16 to anything between 0 and 16 (inclusive). Let the current value for `max_shard_level_limit` be `max_l`. Then, instead of compactors grouper grouping blocks with the same `shard_level` together, it'd group blocks on the basis of same `max(shard_level,max_l)`, hence reverting the sharding process in a controlled manner. A similar logic would work if we decide to increase the value of `max_shard_level_limit`.   
+
 ### Pros and cons 
+
+#### Pros 
+
+* This layered sharding approach would statistically give more evenly distributed shards as compared to using only one hash function and hence sharding the blocks into some x    shards. For layered binary sharding, let's assume that all the 16 hash functions are bad hash functions, and each one of them gives a skewed distribution, even then we'll get a fairly even distribution after sharding through all the layers. This is pictorially explained below <Insert image 4>
+* The process is adaptive, hence any user can opt to go for default configuration and not worry about setting the number of shards.
+* If for some reasons, the user decides to decrease the number of shards, it can be done by setting a `max_shard_level_limit` to any value between 0 and 16.
+
+#### Cons
+
+* We didn't solve the problem completely, but we delayed it as much as we could to get some benefits out of the delaying process.
+* Cases were large number of blocks participate in a compaction process and result in an invalid block would cause the sharding algorithm to be triggered, even though sharding at that point might not be necessary. 
 
 ### Design Decisions
 
