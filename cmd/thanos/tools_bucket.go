@@ -326,13 +326,16 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			blockMetas = append(blockMetas, meta)
 		}
 
-		if outputType(*output) == CSV {
+		switch o := outputType(*output); o {
+		case CSV:
 			return printBlockData(blockMetas, selectorLabels, *sortBy, printCSV)
-		}
-		if outputType(*output) == TSV {
+		case TSV:
 			return printBlockData(blockMetas, selectorLabels, *sortBy, printTSV)
+		case TABLE:
+			return printBlockData(blockMetas, selectorLabels, *sortBy, printTable)
+		default:
+			return fmt.Errorf("Invalid output type %s", *output)
 		}
-		return printBlockData(blockMetas, selectorLabels, *sortBy, printTable)
 	})
 }
 
