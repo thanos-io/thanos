@@ -282,7 +282,9 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	sortBy := cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
+
 	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, and, tsv.").Default("table").String()
+	opType := outputType(*output)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
@@ -325,16 +327,14 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		for _, meta := range metas {
 			blockMetas = append(blockMetas, meta)
 		}
-
-		switch o := outputType(*output); o {
-		case CSV:
-			return printBlockData(blockMetas, selectorLabels, *sortBy, printCSV)
-		case TSV:
-			return printBlockData(blockMetas, selectorLabels, *sortBy, printTSV)
-		case TABLE:
+		if opType == TABLE {
 			return printBlockData(blockMetas, selectorLabels, *sortBy, printTable)
-		default:
-			return fmt.Errorf("Invalid output type %s", *output)
+		} else if opType == TSV {
+			return printBlockData(blockMetas, selectorLabels, *sortBy, printTSV)
+		} else if opType == CSV {
+			return printBlockData(blockMetas, selectorLabels, *sortBy, printCSV)
+		} else {
+			return fmt.Errorf("Invalid output type %s.", *output)
 		}
 	})
 }
