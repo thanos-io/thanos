@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/relabel"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/go-openapi/strfmt"
@@ -26,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
