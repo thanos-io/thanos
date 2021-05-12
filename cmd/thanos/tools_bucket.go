@@ -635,9 +635,9 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	})
 }
 
-type tablePrinter func(t Table)
+type tablePrinter func(t Table) error
 
-func printTable(t Table) {
+func printTable(t Table) error {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader(t.Header)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
@@ -647,21 +647,36 @@ func printTable(t Table) {
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 	table.AppendBulk(t.Lines)
 	table.Render()
+	return nil
 }
 
-func printCSV(t Table) {
+func printCSV(t Table) error {
 	csv := csv.NewWriter(os.Stdout)
-	csv.Write(t.Header)
-	csv.WriteAll(t.Lines)
+	err := csv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = csv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
 	csv.Flush()
+	return nil
 }
 
-func printTSV(t Table) {
+func printTSV(t Table) error {
 	csv := csv.NewWriter(os.Stdout)
 	csv.Comma = '\t'
-	csv.Write(t.Header)
-	csv.WriteAll(t.Lines)
+	err := csv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = csv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
 	csv.Flush()
+	return nil
 }
 
 func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string, printer tablePrinter) error {
@@ -716,7 +731,10 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 
 	t := Table{Header: header, Lines: lines, SortIndices: sortByColNum}
 	sort.Sort(t)
-	printer(t)
+	err := printer(t)
+	if err != nil {
+		return errors.Errorf("unable to write output.")
+	}
 	return nil
 }
 
