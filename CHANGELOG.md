@@ -22,7 +22,9 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Fixed
 -
 ### Changed
--
+
+- [#4223](https://github.com/thanos-io/thanos/pull/4223) Query: federated exemplars API only add replica labels to series labels, not to exemplar labels.
+
 ### Removed
 -
 
