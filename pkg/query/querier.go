@@ -274,7 +274,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 			tenantSpecified = true
 		}
 	}
-	if tenantSpecified == false {
+	if !tenantSpecified {
 		sms = append(sms, storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "tenant", Value: q.tenant})
 	}
 
