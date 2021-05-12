@@ -116,7 +116,7 @@ docker run -d --net=host --rm \
     --prometheus.url "http://127.0.0.1:${PROM_US1_0_PORT}"
 ```{{execute}}
 
-We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/) (or `localhost:9000`) It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
+We can check whether the data is uploaded into `thanos` bucket by visiting [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/) (or `localhost:9000`) It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
 
 See [this](https://thanos.io/tip/components/sidecar.md/#upload-compacted-blocks) to read more about uploading old data already touched by Prometheus.
 
@@ -156,7 +156,7 @@ docker run -d --net=host --rm \
 
 Visit https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com to see Thanos UI.
 
-### Long term maintainance, retention, dedup and downsampling:
+### Long term maintenance, retention, dedup and downsampling:
 
 ```
 docker run -d --net=host --rm \
@@ -172,7 +172,7 @@ docker run -d --net=host --rm \
 
 Visit https://[[HOST_SUBDOMAIN]]-19095-[[KATACODA_HOST]].environments.katacoda.com/new/loaded to see Compactor Web UI.
 
-### Data should be immdiately downsampled as well for smooth expierience!
+### Data should be immediately downsampled as well for smooth experience!
 
 Visit https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com to see Thanos UI and query for 1 year.
 

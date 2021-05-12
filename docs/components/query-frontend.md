@@ -33,7 +33,7 @@ is `24h`. When caching is enabled it should be greater than `0`.
 
 There are some benefits from query splitting:
 
-1. Safe guard. It prevents large queries from causing OOM issues to Queries.
+1. Safeguard. It prevents large queries from causing OOM issues to Queries.
 2. Better parallelization.
 3. Better load balancing for Queries.
 
@@ -62,7 +62,7 @@ config:
 
 **_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
 
-If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
+If either of `max_size` or `max_size_items` is set, then there is no limit on other field.
 For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
 
 Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-query-frontend-deployment.yaml#L50-L54)

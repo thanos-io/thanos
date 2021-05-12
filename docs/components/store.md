@@ -242,7 +242,7 @@ Check more [here](https://thanos.io/tip/thanos/sharding.md/).
 ## Probes
 
 - Thanos Store exposes two endpoints for probing.
-  - `/-/healthy` starts as soon as initial setup completed.
+  - `/-/healthy` starts as soon as initial setup is completed.
   - `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
@@ -258,7 +258,7 @@ Thanos Store Gateway supports an index cache to speed up postings and series loo
 
 The `in-memory` index cache is enabled by default and its max size can be configured through the flag `--index-cache-size`.
 
-Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+Alternatively, the `in-memory` index cache can also be configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 [embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
 ```yaml
@@ -275,7 +275,7 @@ All the settings are **optional**:
 
 ### Memcached index cache
 
-The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 [embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
 ```yaml
@@ -353,12 +353,12 @@ Following options are used for metadata caching (meta.json files, deletion mark 
 - `metafile_content_ttl`: how long to cache content of meta.json and deletion mark files.
 - `metafile_max_size`: maximum size of cached meta.json and deletion mark file. Larger files are not cached.
 
-The yml structure for setting the in memory cache configs for caching bucket are the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
+The yml structure for setting the in memory cache configs for caching bucket is the same as the [in-memory index cache](https://thanos.io/tip/components/store.md/#in-memory-index-cache) and all the options to configure Caching Buket mentioned above can be used.
 
 Note that chunks and metadata cache is an experimental feature, and these fields may be renamed or removed completely in the future.
 
 ## Index Header
 
-In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
+In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build by downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
 
 For more information, please refer to the [Binary index-header](../operating/binary-index-header.md) operational guide.

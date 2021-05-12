@@ -147,7 +147,7 @@ The subject must be prefixed with `[VOTE]`. In the body, the call to vote must s
 
 Votes may take the form of a single proposal, with the option to vote yes or no, or the form of multiple alternatives.
 
-A vote on a single proposal is considered successful if at least two thirds of those eligible to vote vote in favor.
+A vote on a single proposal is considered successful if at least two thirds of those eligible to vote, vote in favor.
 
 If there are multiple alternatives, members may vote for one or more alternatives, or vote “no” to object to all alternatives.
 A vote on multiple alternatives is considered decided in favor of one alternative if it has received the most votes in favor, and a vote from at least two thirds of those eligible to vote. Should no alternative reach this quorum, another vote on a reduced number of options may be called separately.
@@ -183,7 +183,7 @@ Should the decision be in favor, your new membership will also be announced on t
 
 As a team member, propose the new project on the [Thanos GitHub Issue][issues]. However, currently to maintain project in our organization you have to become Thanos Maintainers.
 
-All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject in appriopriate page e.g https://thanos.io/tip/thanos/integrations.md/
+All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject inappropriate page e.g https://thanos.io/tip/thanos/integrations.md/
 
 ### How do I remove a Maintainer or Triage member?
 

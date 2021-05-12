@@ -85,7 +85,7 @@ Once started you should be able to reach the Querier, Query Frontend and Prometh
 
 Now, go and execute a query on [Querier](https://[[HOST_SUBDOMAIN]]-10902-[[KATACODA_HOST]].environments.katacoda.com/) and observe the latency.
 And then go and execute the same query on [Query Frontend](https://[[HOST_SUBDOMAIN]]-20902-[[KATACODA_HOST]].environments.katacoda.com/).
-For the fist execution you will observe that the query execution takes longer than the query on Querier.
+For the first execution you will observe that the query execution takes longer than the query on Querier.
 That's because we have an nginx proxy between Query Frontend and Querier.
 
 Now if you execute the same query again on Query Frontend for the same time frame using time selector in graph section in the UI (time is always shifting).

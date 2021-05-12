@@ -3,7 +3,7 @@
 
 > NOTE: Click `Copy To Editor` for each config to propagate the configs to each file.
 
-Let's imagine we have to deliver centralized metrics platform to multiple teams. For each team we will have a dedicated Prometheus. These could be in the same environment of in different environments (data centers, regions, clusters etc).
+Let's imagine we have to deliver centralized metrics platform to multiple teams. For each team we will have a dedicated Prometheus. These could be in the same environment or in different environments (data centers, regions, clusters etc).
 
 And then we will try to provide low cost, fast global overview. Let's see how we achieve that with Thanos.
 

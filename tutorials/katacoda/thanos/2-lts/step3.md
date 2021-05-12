@@ -95,4 +95,4 @@ To see the answer to this question click `SHOW SOLUTION` below.
 
 ## Next
 
-Voila! In the next step, we will talk about Thanos Compactor, it's retention capabilities, and how it improves query efficiency and reduce the required storage size.
+Voila! In the next step, we will talk about Thanos Compactor, its retention capabilities, and how it improves query efficiency and reduce the required storage size.
