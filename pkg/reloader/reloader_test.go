@@ -111,10 +111,11 @@ config:
 
 	reloadsSeen := 0
 	attemptsCnt := 0
+Outer:
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			break Outer
 		case <-time.After(300 * time.Millisecond):
 		}
 
@@ -558,10 +559,11 @@ config:
 		testutil.Ok(t, reloader.Watch(rctx))
 	}()
 
+Outer:
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			break Outer
 		case <-time.After(300 * time.Millisecond):
 		}
 		if reloads.Load().(int) == 0 {
