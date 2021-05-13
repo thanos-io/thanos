@@ -642,10 +642,10 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	})
 }
 
-type tablePrinter func(t Table) error
+type tablePrinter func(w io.Writer, t Table) error
 
-func printTable(t Table) error {
-	table := tablewriter.NewWriter(os.Stdout)
+func printTable(w io.Writer, t Table) error {
+	table := tablewriter.NewWriter(w)
 	table.SetHeader(t.Header)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 	table.SetCenterSeparator("|")
@@ -657,8 +657,8 @@ func printTable(t Table) error {
 	return nil
 }
 
-func printCSV(t Table) error {
-	csv := csv.NewWriter(os.Stdout)
+func printCSV(w io.Writer, t Table) error {
+	csv := csv.NewWriter(w)
 	err := csv.Write(t.Header)
 	if err != nil {
 		return err
@@ -677,8 +677,8 @@ func newTSVWriter(w io.Writer) *csv.Writer {
 	return writer
 }
 
-func printTSV(t Table) error {
-	tsv := newTSVWriter(os.Stdout)
+func printTSV(w io.Writer, t Table) error {
+	tsv := newTSVWriter(w)
 	err := tsv.Write(t.Header)
 	if err != nil {
 		return err
@@ -743,7 +743,7 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 
 	t := Table{Header: header, Lines: lines, SortIndices: sortByColNum}
 	sort.Sort(t)
-	err := printer(t)
+	err := printer(os.Stdout, t)
 	if err != nil {
 		return errors.Errorf("unable to write output.")
 	}
