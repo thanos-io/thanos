@@ -13,7 +13,7 @@ const NotFound: FC<NotFoundProps & PathPrefixProps> = ({ pathPrefix, defaultRout
     <Container className={styles.container}>
       <h1>404, Page not Found!</h1>
       <h5>
-        <a href={`${pathPrefix}/new${defaultRoute}`}>Go back to home page</a>
+        <a href={`${pathPrefix}${defaultRoute}`}>Go back to home page</a>
       </h5>
     </Container>
   );
