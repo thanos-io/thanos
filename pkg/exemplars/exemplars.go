@@ -79,43 +79,71 @@ func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsR
 		return nil, nil, errors.Wrap(err, "proxy Exemplars")
 	}
 
-	resp.data = dedupExemplarsSeriesLabels(resp.data, rr.replicaLabels)
+	resp.data = dedupExemplarsResponse(resp.data, rr.replicaLabels)
 	return resp.data, resp.warnings, nil
 }
 
-func dedupExemplarsSeriesLabels(exemplarsData []*exemplarspb.ExemplarData, replicaLabels map[string]struct{}) []*exemplarspb.ExemplarData {
+func dedupExemplarsResponse(exemplarsData []*exemplarspb.ExemplarData, replicaLabels map[string]struct{}) []*exemplarspb.ExemplarData {
 	if len(exemplarsData) == 0 {
 		return exemplarsData
 	}
 
-	// Sort each exemplar's label names such that they are comparable.
-	for _, d := range exemplarsData {
-		sort.Slice(d.SeriesLabels.Labels, func(i, j int) bool {
-			return d.SeriesLabels.Labels[i].Name < d.SeriesLabels.Labels[j].Name
-		})
-	}
-
-	// Sort exemplars data such that they appear next to each other.
-	sort.Slice(exemplarsData, func(i, j int) bool {
-		return exemplarsData[i].Compare(exemplarsData[j]) < 0
-	})
-
-	i := 0
-	exemplarsData[i].SeriesLabels.Labels = removeReplicaLabels(exemplarsData[i].SeriesLabels.Labels, replicaLabels)
-	for j := 1; j < len(exemplarsData); j++ {
-		exemplarsData[j].SeriesLabels.Labels = removeReplicaLabels(exemplarsData[j].SeriesLabels.Labels, replicaLabels)
-		if exemplarsData[i].Compare(exemplarsData[j]) != 0 {
-			// Effectively retain exemplarsData[j] in the resulting slice.
-			i++
-			exemplarsData[i] = exemplarsData[j]
+	// Deduplicate series labels.
+	hashToExemplar := make(map[uint64]*exemplarspb.ExemplarData)
+	for _, e := range exemplarsData {
+		if len(e.Exemplars) == 0 {
 			continue
+		}
+		e.SeriesLabels.Labels = removeReplicaLabels(e.SeriesLabels.Labels, replicaLabels)
+		h := labelpb.ZLabelsToPromLabels(e.SeriesLabels.Labels).Hash()
+		if ref, ok := hashToExemplar[h]; ok {
+			ref.Exemplars = append(ref.Exemplars, e.Exemplars...)
+		} else {
+			hashToExemplar[h] = e
 		}
 	}
 
-	return exemplarsData[:i+1]
+	res := make([]*exemplarspb.ExemplarData, 0, len(hashToExemplar))
+	for _, e := range hashToExemplar {
+		// Dedup exemplars with the same series labels.
+		e.Exemplars = dedupExemplars(e.Exemplars)
+		res = append(res, e)
+	}
+
+	// Sort by series labels.
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Compare(res[j]) < 0
+	})
+	return res
+}
+
+func dedupExemplars(exemplars []*exemplarspb.Exemplar) []*exemplarspb.Exemplar {
+	for _, e := range exemplars {
+		sort.Slice(e.Labels.Labels, func(i, j int) bool {
+			return e.Labels.Labels[i].Compare(e.Labels.Labels[j]) < 0
+		})
+	}
+
+	sort.Slice(exemplars, func(i, j int) bool {
+		return exemplars[i].Compare(exemplars[j]) < 0
+	})
+
+	i := 0
+	for j := 1; j < len(exemplars); j++ {
+		if exemplars[i].Compare(exemplars[j]) != 0 {
+			// Effectively retain exemplars[j] in the resulting slice.
+			i++
+			exemplars[i] = exemplars[j]
+		}
+	}
+
+	return exemplars[:i+1]
 }
 
 func removeReplicaLabels(labels []labelpb.ZLabel, replicaLabels map[string]struct{}) []labelpb.ZLabel {
+	if len(replicaLabels) == 0 {
+		return labels
+	}
 	newLabels := make([]labelpb.ZLabel, 0, len(labels))
 	for _, l := range labels {
 		if _, ok := replicaLabels[l.Name]; !ok {
