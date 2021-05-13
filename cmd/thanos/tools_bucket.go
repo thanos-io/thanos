@@ -285,7 +285,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 
-	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, and, tsv.").Default("table").Enum(outputTypes...)
+	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, tsv.").Default("table").Enum(outputTypes...)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
