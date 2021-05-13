@@ -85,6 +85,57 @@ rule_files:
 	return config
 }
 
+// TenentSpecificPromConfig returns Prometheus config that sets Prometheus to:
+// * expose 3 external labels, source and replica.
+// * scrape fake target. This will produce up == 0 metric which we can assert on.
+// * optionally remote write endpoint to write into.
+func TenentSpecificPromConfig(name string, replica int, remoteWriteEndpoint,tenant string, ruleFile string, scrapeTargets ...string) string {
+	targets := "localhost:9090"
+	if len(scrapeTargets) > 0 {
+		targets = strings.Join(scrapeTargets, ",")
+	}
+	config := fmt.Sprintf(`
+global:
+  external_labels:
+    prometheus: %v
+    replica: %v
+	tenant_id: %v
+scrape_configs:
+- job_name: 'myself'
+  # Quick scrapes for test purposes.
+  scrape_interval: 1s
+  scrape_timeout: 1s
+  static_configs:
+  - targets: [%s]
+  relabel_configs:
+  - source_labels: ['__address__']
+    regex: '^.+:80$'
+    action: drop
+`, name, replica, tenant, targets)
+
+	if remoteWriteEndpoint != "" {
+		config = fmt.Sprintf(`
+%s
+remote_write:
+- url: "%s"
+  # Don't spam receiver on mistake.
+  queue_config:
+    min_backoff: 2s
+    max_backoff: 10s
+`, config, remoteWriteEndpoint)
+	}
+
+	if ruleFile != "" {
+		config = fmt.Sprintf(`
+%s
+rule_files:
+-  "%s"
+`, config, ruleFile)
+	}
+
+	return config
+}
+
 func sortResults(res model.Vector) {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].String() < res[j].String()
@@ -379,7 +430,7 @@ func mustURLParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int, tenant string) model.Vector {
 	t.Helper()
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
@@ -388,7 +439,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts, "")
 		if err != nil {
 			return err
 		}
@@ -410,7 +461,16 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
-	result := instantQuery(t, ctx, addr, q, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, opts, len(expected), "")
+	for i, exp := range expected {
+		testutil.Equals(t, exp, result[i].Metric)
+	}
+}
+
+func queryAndAssertTenantSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric, tenant string) {
+	t.Helper()
+
+	result := instantQuery(t, ctx, addr, q, opts, len(expected), tenant)
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -420,7 +480,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, op
 	t.Helper()
 
 	sortResults(expected)
-	result := instantQuery(t, ctx, addr, q, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, opts, len(expected), "")
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
@@ -524,4 +584,56 @@ func queryExemplars(t *testing.T, ctx context.Context, addr string, q string, st
 
 		return errors.Errorf("unexpected results size %d", len(res))
 	}))
+}
+
+func TestQueryMultiTenancy(t *testing.T) {
+	t.Parallel()
+
+	s, err := e2e.NewScenario("e2e_test_query_mul")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+	receiver1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
+	receiver3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(receiver1, receiver2, receiver3))
+
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(),s.NetworkName(), "remote-and-sidecar-1", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), "tenant-a", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-2", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-2", 0, e2ethanos.RemoteWriteEndpoint(receiver2.NetworkEndpoint(8081)), "tenant-b", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-3", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-3", 0, e2ethanos.RemoteWriteEndpoint(receiver3.NetworkEndpoint(8081)), "tenant-c", ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
+
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{receiver1.GRPCNetworkEndpoint(), receiver2.GRPCNetworkEndpoint(), receiver3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	// Use of below function ?
+	// testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))	
+	const query = "sum(up{tenant=tenant-a})";
+	queryAndAssertTenantSeries(t, ctx, q.HTTPEndpoint(), query, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar-1",
+			"receive":    "1",
+			"replica":    "0",
+			"tenant_id":  "tenant-a",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar-2",
+			"receive":    "2",
+			"replica":    "0",
+			"tenant_id":  "tenant-b",
+		},
+	},  "tenant-a | tenant-b")
+
 }
