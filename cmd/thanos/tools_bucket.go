@@ -9,6 +9,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -71,6 +72,7 @@ var (
 		},
 	}
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
+	outputTypes    = []string{"table", "tsv", "csv"}
 )
 
 type outputType string
@@ -283,8 +285,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 
-	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, and, tsv.").Default("table").String()
-	opType := outputType(*output)
+	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, and, tsv.").Default("table").Enum(outputTypes...)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
@@ -327,15 +328,18 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		for _, meta := range metas {
 			blockMetas = append(blockMetas, meta)
 		}
-		if opType == TABLE {
-			return printBlockData(blockMetas, selectorLabels, *sortBy, printTable)
-		} else if opType == TSV {
-			return printBlockData(blockMetas, selectorLabels, *sortBy, printTSV)
-		} else if opType == CSV {
-			return printBlockData(blockMetas, selectorLabels, *sortBy, printCSV)
-		} else {
-			return fmt.Errorf("Invalid output type %s.", *output)
+
+		var opPrinter tablePrinter
+		op := outputType(*output)
+		switch op {
+		case TABLE:
+			opPrinter = printTable
+		case TSV:
+			opPrinter = printTSV
+		case CSV:
+			opPrinter = printCSV
 		}
+		return printBlockData(blockMetas, selectorLabels, *sortBy, opPrinter)
 	})
 }
 
@@ -667,18 +671,23 @@ func printCSV(t Table) error {
 	return nil
 }
 
+func newTSVWriter(w io.Writer) *csv.Writer {
+	writer := csv.NewWriter(w)
+	writer.Comma = rune('\t')
+	return writer
+}
+
 func printTSV(t Table) error {
-	csv := csv.NewWriter(os.Stdout)
-	csv.Comma = '\t'
-	err := csv.Write(t.Header)
+	tsv := newTSVWriter(os.Stdout)
+	err := tsv.Write(t.Header)
 	if err != nil {
 		return err
 	}
-	err = csv.WriteAll(t.Lines)
+	err = tsv.WriteAll(t.Lines)
 	if err != nil {
 		return err
 	}
-	csv.Flush()
+	tsv.Flush()
 	return nil
 }
 
