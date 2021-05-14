@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -85,11 +86,12 @@ func (a *Alert) ResolvedAt(ts time.Time) bool {
 // Queue is a queue of alert notifications waiting to be sent. The queue is consumed in batches
 // and entries are dropped at the front if it runs full.
 type Queue struct {
-	logger          log.Logger
-	maxBatchSize    int
-	capacity        int
-	toAddLset       labels.Labels
-	toExcludeLabels labels.Labels
+	logger              log.Logger
+	maxBatchSize        int
+	capacity            int
+	toAddLset           labels.Labels
+	toExcludeLabels     labels.Labels
+	alertRelabelConfigs []*relabel.Config
 
 	mtx   sync.Mutex
 	queue []*Alert
@@ -120,19 +122,20 @@ func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd labels.Label
 
 // NewQueue returns a new queue. The given label set is attached to all alerts pushed to the queue.
 // The given exclude label set tells what label names to drop including external labels.
-func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSize int, externalLset labels.Labels, excludeLabels []string) *Queue {
+func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSize int, externalLset labels.Labels, excludeLabels []string, alertRelabelConfigs []*relabel.Config) *Queue {
 	toAdd, toExclude := relabelLabels(externalLset, excludeLabels)
 
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	q := &Queue{
-		logger:          logger,
-		capacity:        capacity,
-		morec:           make(chan struct{}, 1),
-		maxBatchSize:    maxBatchSize,
-		toAddLset:       toAdd,
-		toExcludeLabels: toExclude,
+		logger:              logger,
+		capacity:            capacity,
+		morec:               make(chan struct{}, 1),
+		maxBatchSize:        maxBatchSize,
+		toAddLset:           toAdd,
+		toExcludeLabels:     toExclude,
+		alertRelabelConfigs: alertRelabelConfigs,
 
 		dropped: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_queue_alerts_dropped_total",
@@ -214,7 +217,6 @@ func (q *Queue) Push(alerts []*Alert) {
 	q.pushed.Add(float64(len(alerts)))
 
 	// Attach external labels and drop excluded labels before sending.
-	// TODO(bwplotka): User proper relabelling with https://github.com/thanos-io/thanos/issues/660.
 	for _, a := range alerts {
 		lb := labels.NewBuilder(labels.Labels{})
 		for _, l := range a.Labels {
@@ -226,7 +228,7 @@ func (q *Queue) Push(alerts []*Alert) {
 		for _, l := range q.toAddLset {
 			lb.Set(l.Name, l.Value)
 		}
-		a.Labels = lb.Labels()
+		a.Labels = relabel.Process(lb.Labels(), q.alertRelabelConfigs...)
 	}
 
 	// Queue capacity should be significantly larger than a single alert
