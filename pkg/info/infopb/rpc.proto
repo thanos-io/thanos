@@ -28,20 +28,9 @@ service Info {
 
 message InfoRequest {}
 
-enum ComponentType {
-    UNKNOWN = 0;
-    QUERY = 1;
-    RULE = 2;
-    SIDECAR = 3;
-    STORE = 4;
-    RECEIVE = 5;
-    // DEBUG represents some debug StoreAPI components e.g. thanos tools store-api-serve.
-    DEBUG = 6;
-  }
-
 message InfoResponse {
     repeated ZLabelSet label_sets = 1 [(gogoproto.nullable) = false];
-    ComponentType ComponentType  = 2;
+    string ComponentType  = 2;
     
     StoreInfo store = 3;
     ExemplarsInfo exemplars = 4;
