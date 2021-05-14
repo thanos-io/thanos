@@ -214,222 +214,45 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
-		log.With(logger, "component", "storage")
-		dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_receive_multi_db_updates_attempted_total",
-			Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
-		})
-		dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "thanos_receive_multi_db_updates_completed_total",
-			Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
-		})
-
-		level.Debug(logger).Log("msg", "removing storage lock files if any")
-		if err := dbs.RemoveLockFilesIfAny(); err != nil {
-			return errors.Wrap(err, "remove storage lock files")
+		if err := startTSDB(g, logger, reg, dbs, dbReady, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+			return err
 		}
-
-		// TSDBs reload logic, listening on hashring changes.
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			defer close(dbReady)
-			defer close(uploadC)
-
-			// Before quitting, ensure the WAL is flushed and the DBs are closed.
-			defer func() {
-				level.Info(logger).Log("msg", "shutting down storage")
-				if err := dbs.Flush(); err != nil {
-					level.Error(logger).Log("err", err, "msg", "failed to flush storage")
-				} else {
-					level.Info(logger).Log("msg", "storage is flushed successfully")
-				}
-				if err := dbs.Close(); err != nil {
-					level.Error(logger).Log("err", err, "msg", "failed to close storage")
-					return
-				}
-				level.Info(logger).Log("msg", "storage is closed")
-			}()
-
-			for {
-				select {
-				case <-cancel:
-					return nil
-				case _, ok := <-hashringChangedChan:
-					if !ok {
-						return nil
-					}
-					dbUpdatesStarted.Inc()
-					level.Info(logger).Log("msg", "updating storage")
-
-					if err := dbs.Flush(); err != nil {
-						return errors.Wrap(err, "flushing storage")
-					}
-					if err := dbs.Open(); err != nil {
-						return errors.Wrap(err, "opening storage")
-					}
-					if upload {
-						uploadC <- struct{}{}
-						<-uploadDone
-					}
-					statusProber.Ready()
-					level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-					dbUpdatesCompleted.Inc()
-					dbReady <- struct{}{}
-				}
-			}
-		}, func(err error) {
-			close(cancel)
-		})
 	}
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		// Note: the hashring configuration watcher
-		// is the sender and thus closes the chan.
-		// In the single-node case, which has no configuration
-		// watcher, we close the chan ourselves.
-		updates := make(chan receive.Hashring, 1)
-
-		// The Hashrings config file path is given initializing config watcher.
-		if conf.hashringsFilePath != "" {
-			cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, conf.hashringsFilePath, *conf.refreshInterval)
-			if err != nil {
-				return errors.Wrap(err, "failed to initialize config watcher")
-			}
-
-			// Check the hashring configuration on before running the watcher.
-			if err := cw.ValidateConfig(); err != nil {
-				cw.Stop()
-				close(updates)
-				return errors.Wrap(err, "failed to validate hashring configuration file")
-			}
-
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-				return receive.HashringFromConfigWatcher(ctx, updates, cw)
-			}, func(error) {
-				cancel()
-			})
-		} else {
-			var ring receive.Hashring
-			// The Hashrings config file content given initialize configuration from content.
-			if len(conf.hashringsFileContent) > 0 {
-				ring, err = receive.HashringFromConfig(conf.hashringsFileContent)
-				if err != nil {
-					close(updates)
-					return errors.Wrap(err, "failed to validate hashring configuration file")
-				}
-				level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
-			} else {
-				level.Info(logger).Log("msg", "the hashring file is not specified use single node hashring.")
-				ring = receive.SingleNodeHashring(conf.endpoint)
-			}
-
-			cancel := make(chan struct{})
-			g.Add(func() error {
-				defer close(updates)
-				updates <- ring
-				<-cancel
-				return nil
-			}, func(error) {
-				close(cancel)
-			})
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber); err != nil {
+			return err
 		}
-
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			defer close(hashringChangedChan)
-			for {
-				select {
-				case h, ok := <-updates:
-					if !ok {
-						return nil
-					}
-					webHandler.Hashring(h)
-					msg := "hashring has changed; server is not ready to receive web requests"
-					statusProber.NotReady(errors.New(msg))
-					level.Info(logger).Log("msg", msg)
-					hashringChangedChan <- struct{}{}
-				case <-cancel:
-					return nil
-				}
-			}
-		}, func(err error) {
-			close(cancel)
-		},
-		)
 	}
 
 	level.Debug(logger).Log("msg", "setting up http server")
-	srv := httpserver.New(logger, reg, comp, httpProbe,
-		httpserver.WithListen(*conf.httpBindAddr),
-		httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
-		httpserver.WithTLSConfig(*conf.httpTLSConfig),
-	)
-	g.Add(func() error {
-		statusProber.Healthy()
+	{
+		srv := httpserver.New(logger, reg, comp, httpProbe,
+			httpserver.WithListen(*conf.httpBindAddr),
+			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
+			httpserver.WithTLSConfig(*conf.httpTLSConfig),
+		)
+		g.Add(func() error {
+			statusProber.Healthy()
 
-		return srv.ListenAndServe()
-	}, func(err error) {
-		statusProber.NotReady(err)
-		defer statusProber.NotHealthy(err)
+			return srv.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
 
-		srv.Shutdown(err)
-	})
+			srv.Shutdown(err)
+		})
+	}
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
 		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
-		g.Add(func() error {
-			defer close(startGRPC)
 
-			tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
-			if err != nil {
-				return errors.Wrap(err, "setup gRPC server")
-			}
-
-			for range dbReady {
-				if s != nil {
-					s.Shutdown(errors.New("reload hashrings"))
-				}
-
-				rw := store.ReadWriteTSDBStore{
-					StoreServer: store.NewMultiTSDBStore(
-						logger,
-						reg,
-						comp,
-						dbs.TSDBStores,
-					),
-					WriteableStoreServer: webHandler,
-				}
-
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-					grpcserver.WithServer(store.RegisterStoreServer(rw)),
-					grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
-					grpcserver.WithListen(*conf.grpcBindAddr),
-					grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
-					grpcserver.WithTLSConfig(tlsCfg),
-				)
-				startGRPC <- struct{}{}
-			}
-			if s != nil {
-				s.Shutdown(err)
-			}
-			return nil
-		}, func(error) {})
-		// We need to be able to start and stop the gRPC server
-		// whenever the DB changes, thus it needs its own run group.
-		g.Add(func() error {
-			for range startGRPC {
-				level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
-				if err := s.ListenAndServe(); err != nil {
-					return errors.Wrap(err, "serve gRPC")
-				}
-			}
-			return nil
-		}, func(error) {})
+		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPC, dbReady, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
+			return err
+		}
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
@@ -443,6 +266,250 @@ func runReceive(
 			},
 		)
 	}
+
+	level.Info(logger).Log("msg", "starting receiver")
+	return nil
+}
+
+func setupGRPCServer(g *run.Group,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
+	conf *receiveConfig, s *grpcserver.Server,
+	startGRPC chan struct{},
+	dbReady chan struct{},
+	comp component.SourceStoreAPI,
+	dbs *receive.MultiTSDB,
+	webHandler *receive.Handler,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
+	grpcProbe *prober.GRPCProbe,
+
+) error {
+	g.Add(func() error {
+		defer close(startGRPC)
+
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
+		}
+
+		for range dbReady {
+			if s != nil {
+				s.Shutdown(errors.New("reload hashrings"))
+			}
+
+			rw := store.ReadWriteTSDBStore{
+				StoreServer: store.NewMultiTSDBStore(
+					logger,
+					reg,
+					comp,
+					dbs.TSDBStores,
+				),
+				WriteableStoreServer: webHandler,
+			}
+
+			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+				grpcserver.WithServer(store.RegisterStoreServer(rw)),
+				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+				grpcserver.WithListen(*conf.grpcBindAddr),
+				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
+				grpcserver.WithTLSConfig(tlsCfg),
+			)
+			startGRPC <- struct{}{}
+		}
+		if s != nil {
+			s.Shutdown(err)
+		}
+		return nil
+	}, func(error) {})
+	// We need to be able to start and stop the gRPC server
+	// whenever the DB changes, thus it needs its own run group.
+	g.Add(func() error {
+		for range startGRPC {
+			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
+			if err := s.ListenAndServe(); err != nil {
+				return errors.Wrap(err, "serve gRPC")
+			}
+		}
+		return nil
+	}, func(error) {})
+
+	return nil
+
+}
+
+func setupHashring(g *run.Group,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	conf *receiveConfig,
+	hashringChangedChan chan struct{},
+	webHandler *receive.Handler,
+	statusProber prober.Probe,
+
+) error {
+	// Note: the hashring configuration watcher
+	// is the sender and thus closes the chan.
+	// In the single-node case, which has no configuration
+	// watcher, we close the chan ourselves.
+	updates := make(chan receive.Hashring, 1)
+
+	// The Hashrings config file path is given initializing config watcher.
+	if conf.hashringsFilePath != "" {
+		cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, conf.hashringsFilePath, *conf.refreshInterval)
+		if err != nil {
+			return errors.Wrap(err, "failed to initialize config watcher")
+		}
+
+		// Check the hashring configuration on before running the watcher.
+		if err := cw.ValidateConfig(); err != nil {
+			cw.Stop()
+			close(updates)
+			return errors.Wrap(err, "failed to validate hashring configuration file")
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
+			return receive.HashringFromConfigWatcher(ctx, updates, cw)
+		}, func(error) {
+			cancel()
+		})
+	} else {
+		var (
+			ring receive.Hashring
+			err  error
+		)
+		// The Hashrings config file content given initialize configuration from content.
+		if len(conf.hashringsFileContent) > 0 {
+			ring, err = receive.HashringFromConfig(conf.hashringsFileContent)
+			if err != nil {
+				close(updates)
+				return errors.Wrap(err, "failed to validate hashring configuration file")
+			}
+			level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
+		} else {
+			level.Info(logger).Log("msg", "the hashring file is not specified use single node hashring.")
+			ring = receive.SingleNodeHashring(conf.endpoint)
+		}
+
+		cancel := make(chan struct{})
+		g.Add(func() error {
+			defer close(updates)
+			updates <- ring
+			<-cancel
+			return nil
+		}, func(error) {
+			close(cancel)
+		})
+	}
+
+	cancel := make(chan struct{})
+	g.Add(func() error {
+		defer close(hashringChangedChan)
+		for {
+			select {
+			case h, ok := <-updates:
+				if !ok {
+					return nil
+				}
+				webHandler.Hashring(h)
+				msg := "hashring has changed; server is not ready to receive web requests"
+				statusProber.NotReady(errors.New(msg))
+				level.Info(logger).Log("msg", msg)
+				hashringChangedChan <- struct{}{}
+			case <-cancel:
+				return nil
+			}
+		}
+	}, func(err error) {
+		close(cancel)
+	},
+	)
+	return nil
+}
+
+// startTSDB starts up the multi-tsdb and sets up the rungroup to flush the tsdb on hashring change.
+func startTSDB(g *run.Group,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	dbs *receive.MultiTSDB,
+	dbReady chan struct{},
+	uploadC chan struct{},
+	hashringChangedChan chan struct{},
+	upload bool,
+	uploadDone chan struct{},
+	statusProber prober.Probe,
+	bkt objstore.Bucket,
+
+) error {
+
+	log.With(logger, "component", "storage")
+	dbUpdatesStarted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_multi_db_updates_attempted_total",
+		Help: "Number of Multi DB attempted reloads with flush and potential upload due to hashring changes",
+	})
+	dbUpdatesCompleted := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_multi_db_updates_completed_total",
+		Help: "Number of Multi DB completed reloads with flush and potential upload due to hashring changes",
+	})
+
+	level.Debug(logger).Log("msg", "removing storage lock files if any")
+	if err := dbs.RemoveLockFilesIfAny(); err != nil {
+		return errors.Wrap(err, "remove storage lock files")
+	}
+
+	// TSDBs reload logic, listening on hashring changes.
+	cancel := make(chan struct{})
+	g.Add(func() error {
+		defer close(dbReady)
+		defer close(uploadC)
+
+		// Before quitting, ensure the WAL is flushed and the DBs are closed.
+		defer func() {
+			level.Info(logger).Log("msg", "shutting down storage")
+			if err := dbs.Flush(); err != nil {
+				level.Error(logger).Log("err", err, "msg", "failed to flush storage")
+			} else {
+				level.Info(logger).Log("msg", "storage is flushed successfully")
+			}
+			if err := dbs.Close(); err != nil {
+				level.Error(logger).Log("err", err, "msg", "failed to close storage")
+				return
+			}
+			level.Info(logger).Log("msg", "storage is closed")
+		}()
+
+		for {
+			select {
+			case <-cancel:
+				return nil
+			case _, ok := <-hashringChangedChan:
+				if !ok {
+					return nil
+				}
+				dbUpdatesStarted.Inc()
+				level.Info(logger).Log("msg", "updating storage")
+
+				if err := dbs.Flush(); err != nil {
+					return errors.Wrap(err, "flushing storage")
+				}
+				if err := dbs.Open(); err != nil {
+					return errors.Wrap(err, "opening storage")
+				}
+				if upload {
+					uploadC <- struct{}{}
+					<-uploadDone
+				}
+				statusProber.Ready()
+				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
+				dbUpdatesCompleted.Inc()
+				dbReady <- struct{}{}
+			}
+		}
+	}, func(err error) {
+		close(cancel)
+	})
 
 	if upload {
 		logger := log.With(logger, "component", "uploader")
@@ -516,7 +583,6 @@ func runReceive(
 		}
 	}
 
-	level.Info(logger).Log("msg", "starting receiver")
 	return nil
 }
 
