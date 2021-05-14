@@ -89,7 +89,7 @@ rule_files:
 // * expose 3 external labels, source and replica.
 // * scrape fake target. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func TenentSpecificPromConfig(name string, replica int, remoteWriteEndpoint,tenant string, ruleFile string, scrapeTargets ...string) string {
+func TenentSpecificPromConfig(name string, replica int, remoteWriteEndpoint, tenant string, ruleFile string, scrapeTargets ...string) string {
 	targets := "localhost:9090"
 	if len(scrapeTargets) > 0 {
 		targets = strings.Join(scrapeTargets, ",")
@@ -599,7 +599,7 @@ func TestQueryMultiTenancy(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver1, receiver2, receiver3))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(),s.NetworkName(), "remote-and-sidecar-1", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), "tenant-a", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-1", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), "tenant-a", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-2", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-2", 0, e2ethanos.RemoteWriteEndpoint(receiver2.NetworkEndpoint(8081)), "tenant-b", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
@@ -615,8 +615,8 @@ func TestQueryMultiTenancy(t *testing.T) {
 	t.Cleanup(cancel)
 
 	// Use of below function ?
-	// testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))	
-	const query = "sum(up{tenant=tenant-a})";
+	// testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	const query = "sum(up{tenant=tenant-a})"
 	queryAndAssertTenantSeries(t, ctx, q.HTTPEndpoint(), query, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
@@ -634,6 +634,6 @@ func TestQueryMultiTenancy(t *testing.T) {
 			"replica":    "0",
 			"tenant_id":  "tenant-b",
 		},
-	},  "tenant-a | tenant-b")
+	}, "tenant-a | tenant-b")
 
 }

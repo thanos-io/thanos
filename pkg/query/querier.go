@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	ef "github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promgate "github.com/prometheus/prometheus/pkg/gate"
@@ -261,22 +262,35 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
+	mtch := labels.Matcher{
+		Name:  "tenant",
+		Type:  labels.MatchEqual,
+		Value: q.tenant,
+	}
+	e := ef.Enforcer{
+		LabelMatchers: map[string]*labels.Matcher{
+			"tenant": &mtch,
+		},
+	}
+
+	ms = e.EnforceMatchers(ms...)
+
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
 
-	tenantSpecified := false
-	for _, sms := range sms {
-		if sms.Name == "tenant" {
-			sms.Type = storepb.LabelMatcher_RE
-			sms.Value = q.tenant
-			tenantSpecified = true
-		}
-	}
-	if !tenantSpecified {
-		sms = append(sms, storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "tenant", Value: q.tenant})
-	}
+	// tenantSpecified := false
+	// for _, sms := range sms {
+	// 	if sms.Name == "tenant" {
+	// 		sms.Type = storepb.LabelMatcher_RE
+	// 		sms.Value = q.tenant
+	// 		tenantSpecified = true
+	// 	}
+	// }
+	// if !tenantSpecified {
+	// 	sms = append(sms, storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "tenant", Value: q.tenant})
+	// }
 
 	aggrs := aggrsFromFunc(hints.Func)
 
