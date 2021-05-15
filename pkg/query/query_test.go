@@ -53,7 +53,7 @@ func TestQuerier_Proxy(t *testing.T) {
 					name:        fmt.Sprintf("store number %v", i),
 				})
 			}
-			return q(true, nil, nil, 0, false, false, "tenant-header")
+			return q(true, nil, nil, 0, false, false, "tenant-header", "tenant_id")
 		}
 
 		for _, fn := range files {

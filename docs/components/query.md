@@ -461,5 +461,9 @@ Flags:
                                  to the value of --web.external-prefix. This
                                  option is analogous to --web.route-prefix of
                                  Prometheus.
+      --query.tenant-header="THANOS-TENANT"
+                                 HTTP header to determine tenant access for a query.
+      --query.tenant-label-name="tenant_id"
+                                 Tenant label name in query.                                 
 
 ```
