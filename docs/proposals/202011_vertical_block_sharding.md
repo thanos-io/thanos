@@ -123,7 +123,7 @@ To give the user control over selecting number of shards (if needed), we can add
 #### Cons
 
 * We didn't solve the problem completely, but we delayed it as much as we could to get some benefits out of the delaying process.
-* Cases were large number of blocks participate in a compaction process and result in an invalid block would cause the sharding algorithm to be triggered, even though sharding at that point might not be necessary. 
+* Cases where large number of blocks participate in a compaction process and result in an invalid block would cause the sharding algorithm to be triggered, even though sharding at that point might not be necessary. 
 
 ### Design Decisions
 
