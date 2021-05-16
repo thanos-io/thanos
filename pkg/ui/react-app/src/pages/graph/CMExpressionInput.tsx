@@ -12,11 +12,12 @@ import { commentKeymap } from '@codemirror/comment';
 import { lintKeymap } from '@codemirror/lint';
 import { PromQLExtension, CompleteStrategy } from 'codemirror-promql';
 import { autocompletion, completionKeymap, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
-import { theme, promqlHighlighter } from './CMTheme';
+import { baseTheme, lightTheme, darkTheme, promqlHighlighter } from './CMTheme';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { newCompleteStrategy } from 'codemirror-promql/cjs/complete';
 import PathPrefixProps from '../../types/PathPrefixProps';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const promqlExtension = new PromQLExtension();
 
@@ -88,6 +89,7 @@ const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const { theme } = useTheme();
 
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
@@ -103,7 +105,11 @@ const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
           queryHistory
         ),
       });
-    const dynamicConfig = [enableHighlighting ? promqlHighlighter : [], promqlExtension.asExtension()];
+    const dynamicConfig = [
+      enableHighlighting ? promqlHighlighter : [],
+      promqlExtension.asExtension(),
+      theme === 'dark' ? darkTheme : lightTheme,
+    ];
 
     // Create or reconfigure the editor.
     const view = viewRef.current;
@@ -116,7 +122,7 @@ const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
       const startState = EditorState.create({
         doc: value,
         extensions: [
-          theme,
+          baseTheme,
           highlightSpecialChars(),
           history(),
           EditorState.allowMultipleSelections.of(true),
@@ -189,7 +195,7 @@ const CMExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
     // re-run this effect every time that "value" changes.
     //
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enableAutocomplete, enableHighlighting, enableLinter, executeQuery, onExpressionChange, queryHistory]);
+  }, [enableAutocomplete, enableHighlighting, enableLinter, executeQuery, onExpressionChange, queryHistory, theme]);
 
   return (
     <>

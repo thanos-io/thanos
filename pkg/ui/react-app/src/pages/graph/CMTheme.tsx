@@ -1,7 +1,13 @@
+/* THIS FILE WAS COPIED INTO THANOS FROM PROMETHEUS 
+   (LIVING AT https://github.com/prometheus/prometheus/blob/main/web/ui/react-app/src/pages/graph/CMTheme.tsx),
+   PROMETHEUS CODE WAS LICENSED UNDER AN APACHE 2.0 LICENSE, SEE
+   https://github.com/prometheus/prometheus/blob/main/LICENSE.
+*/
+
 import { HighlightStyle, tags } from '@codemirror/highlight';
 import { EditorView } from '@codemirror/view';
 
-export const theme = EditorView.theme({
+export const baseTheme = EditorView.theme({
   '&': {
     '&.cm-focused': {
       outline: 'none',
@@ -25,11 +31,6 @@ export const theme = EditorView.theme({
   },
   '.cm-nonmatchingBracket': { borderColor: 'red' },
 
-  '.cm-tooltip': {
-    backgroundColor: '#f8f8f8',
-    borderColor: 'rgba(52, 79, 113, 0.2)',
-  },
-
   '.cm-tooltip.cm-tooltip-autocomplete': {
     '& > ul': {
       maxHeight: '350px',
@@ -38,13 +39,6 @@ export const theme = EditorView.theme({
     },
     '& > ul > li': {
       padding: '2px 1em 2px 3px',
-    },
-    '& li:hover': {
-      backgroundColor: '#ddd',
-    },
-    '& > ul > li[aria-selected]': {
-      backgroundColor: '#d6ebff',
-      color: 'unset',
     },
     minWidth: '30%',
   },
@@ -59,7 +53,6 @@ export const theme = EditorView.theme({
     padding: '10px',
     fontFamily: "'Open Sans', 'Lucida Sans Unicode', 'Lucida Grande', sans-serif;",
     border: 'none',
-    backgroundColor: '#d6ebff',
     minWidth: '250px',
     maxWidth: 'min-content',
   },
@@ -71,8 +64,9 @@ export const theme = EditorView.theme({
       position: 'absolute',
       width: '0',
       left: '-20px',
-      border: '10px solid transparent',
-      borderRightColor: '#d6ebff',
+      borderWidth: '10px',
+      borderStyle: 'solid',
+      borderColor: 'transparent',
     },
     marginLeft: '12px',
   },
@@ -83,8 +77,9 @@ export const theme = EditorView.theme({
       position: 'absolute',
       width: '0',
       right: '-20px',
-      border: '10px solid transparent',
-      borderLeftColor: '#d6ebff',
+      borderWidth: '10px',
+      borderStyle: 'solid',
+      borderColor: 'transparent',
     },
     marginRight: '12px',
   },
@@ -93,15 +88,6 @@ export const theme = EditorView.theme({
     textDecoration: 'none',
     fontWeight: 'bold',
     color: '#0066bf',
-  },
-
-  '.cm-line': {
-    '&::selection': {
-      backgroundColor: '#add6ff',
-    },
-    '& > span::selection': {
-      backgroundColor: '#add6ff',
-    },
   },
 
   '.cm-selectionMatch': {
@@ -165,6 +151,83 @@ export const theme = EditorView.theme({
     color: '#ee9d28',
   },
 });
+
+export const lightTheme = EditorView.theme(
+  {
+    '.cm-tooltip': {
+      backgroundColor: '#f8f8f8',
+      borderColor: 'rgba(52, 79, 113, 0.2)',
+    },
+
+    '.cm-tooltip.cm-tooltip-autocomplete': {
+      '& li:hover': {
+        backgroundColor: '#ddd',
+      },
+      '& > ul > li[aria-selected]': {
+        backgroundColor: '#d6ebff',
+        color: 'unset',
+      },
+    },
+
+    '.cm-tooltip.cm-completionInfo': {
+      backgroundColor: '#d6ebff',
+    },
+
+    '.cm-tooltip > .cm-completionInfo.cm-completionInfo-right': {
+      '&:before': {
+        borderRightColor: '#d6ebff',
+      },
+    },
+    '.cm-tooltip > .cm-completionInfo.cm-completionInfo-left': {
+      '&:before': {
+        borderLeftColor: '#d6ebff',
+      },
+    },
+
+    '.cm-line': {
+      '&::selection': {
+        backgroundColor: '#add6ff',
+      },
+      '& > span::selection': {
+        backgroundColor: '#add6ff',
+      },
+    },
+  },
+  { dark: false }
+);
+
+export const darkTheme = EditorView.theme(
+  {
+    '.cm-content': {
+      caretColor: '#fff',
+    },
+
+    '.cm-tooltip.cm-completionInfo': {
+      backgroundColor: '#333338',
+    },
+
+    '.cm-tooltip > .cm-completionInfo.cm-completionInfo-right': {
+      '&:before': {
+        borderRightColor: '#333338',
+      },
+    },
+    '.cm-tooltip > .cm-completionInfo.cm-completionInfo-left': {
+      '&:before': {
+        borderLeftColor: '#333338',
+      },
+    },
+
+    '.cm-line': {
+      '&::selection': {
+        backgroundColor: '#767676',
+      },
+      '& > span::selection': {
+        backgroundColor: '#767676',
+      },
+    },
+  },
+  { dark: true }
+);
 
 export const promqlHighlighter = HighlightStyle.define([
   { tag: tags.name, color: '#000' },
