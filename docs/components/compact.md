@@ -343,6 +343,15 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --compact.dedup-func=     Experimental. Deduplication algorithm for
+                                merging overlapping blocks. Possible values are:
+                                "", "penalty". If no value is specified, the
+                                default compact deduplication merger is used,
+                                which performs 1:1 deduplication for samples.
+                                When set to penalty, penalty based deduplication
+                                algorithm will be used. At least one replica
+                                label has to be set via
+                                --deduplication.replica-label flag.
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of

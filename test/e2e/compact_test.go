@@ -70,8 +70,15 @@ func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration,
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {
-	t.Parallel()
+	testCompactWithStoreGateway(t, false)
+}
 
+func TestCompactWithStoreGatewayWithPenaltyDedup(t *testing.T) {
+	testCompactWithStoreGateway(t, true)
+}
+
+func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
+	t.Parallel()
 	logger := log.NewLogfmtLogger(os.Stdout)
 
 	justAfterConsistencyDelay := 30 * time.Minute
@@ -325,7 +332,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		},
 	)
 
-	s, err := e2e.NewScenario("e2e_test_compact")
+	name := "e2e_test_compact"
+	if penaltyDedup {
+		name = "e2e_test_compact_penalty_dedup"
+	}
+	s, err := e2e.NewScenario(name)
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
@@ -537,6 +548,49 @@ func TestCompactWithStoreGateway(t *testing.T) {
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
 	}
 
+	if penaltyDedup {
+		expectedEndVector = model.Vector{
+			// NOTE(bwplotka): Even after deduplication some series has still replica labels. This is because those blocks did not overlap yet with anything.
+			// This is fine as querier deduplication will remove it if needed.
+			{Value: 360, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "no-compaction", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-one-block-marked-for-no-compact"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-one-block-marked-for-no-compact"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-after-dedup"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-after-dedup"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-after-dedup", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "a-partial-overlap-dedup-ready"}},
+			// If no penalty dedup enabled, the value should be 360.
+			{Value: 200, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "a-partial-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "a-partial-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "a-partial-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "partial-multi-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			// If no penalty dedup enabled, the value should be 240.
+			{Value: 195, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "partial-multi-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "partial-multi-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "partial-multi-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "partial-multi-replica-overlap-dedup-ready", "replica": "1", "rule_replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "1", "case": "full-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready"}},
+			{Value: 240, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "full-replica-overlap-dedup-ready"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "full-replica-overlap-dedup-ready", "replica": "1"}},
+		}
+	}
+
 	// No replica label with overlaps should halt compactor. This test is sequential
 	// because we do not want two Thanos Compact instances deleting the same partially
 	// uploaded blocks and blocks with deletion marks. We also check that Thanos Compactor
@@ -617,8 +671,13 @@ func TestCompactWithStoreGateway(t *testing.T) {
 			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", compact.DefaultGroupKey(m.Thanos), id.String())))
 		}
 
+		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}
+		if penaltyDedup {
+			extArgs = append(extArgs, "--compact.dedup-func=penalty")
+		}
+
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica")
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, extArgs...)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 
@@ -679,7 +738,11 @@ func TestCompactWithStoreGateway(t *testing.T) {
 	}
 
 	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, "--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s")
+		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s"}
+		if penaltyDedup {
+			extArgs = append(extArgs, "--compact.dedup-func=penalty")
+		}
+		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, extArgs...)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(c))
 

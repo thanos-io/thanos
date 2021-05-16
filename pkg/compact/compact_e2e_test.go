@@ -22,9 +22,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -167,7 +170,16 @@ func MetricCount(c prometheus.Collector) int {
 	return mCount
 }
 
-func TestGroup_Compact_e2e(t *testing.T) {
+func TestGroupCompactE2E(t *testing.T) {
+	testGroupCompactE2e(t, nil)
+}
+
+// Penalty based merger should get the same result as the blocks don't have overlap.
+func TestGroupCompactPenaltyDedupE2E(t *testing.T) {
+	testGroupCompactE2e(t, dedup.NewDedupChunkSeriesMerger())
+}
+
+func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMergeFunc) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -194,7 +206,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 5)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, nil)
+		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, mergeFunc)
 		testutil.Ok(t, err)
 
 		planner := NewTSDBBasedPlanner(logger, []int64{1000, 3000})

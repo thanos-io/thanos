@@ -23,13 +23,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -302,9 +305,20 @@ func runCompact(
 			cancel()
 		}
 	}()
+
+	var mergeFunc storage.VerticalChunkSeriesMergeFunc
+	switch conf.dedupFunc {
+	case compact.DedupAlgorithmPenalty:
+		mergeFunc = dedup.NewDedupChunkSeriesMerger()
+
+		if len(conf.dedupReplicaLabels) == 0 {
+			return errors.New("penalty based deduplication needs at least one replica label specified")
+		}
+	}
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), nil)
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -564,6 +578,7 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	dedupFunc                                      string
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -627,6 +642,12 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
+	cmd.Flag("compact.dedup-func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
+		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
+		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
+		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
+
+	// Update this. This flag works for both dedup version compactor and the original compactor.
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
 		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
