@@ -44,6 +44,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 
 type httpConfig struct {
 	bindAddress string
+	tlsConfig   string
 	gracePeriod model.Duration
 }
 
@@ -54,6 +55,10 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 	cmd.Flag("http-grace-period",
 		"Time to wait after an interrupt received for HTTP Server.").
 		Default("2m").SetValue(&hc.gracePeriod)
+	cmd.Flag(
+		"http.config",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
+	).Default("").StringVar(&hc.tlsConfig)
 	return hc
 }
 

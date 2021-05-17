@@ -43,11 +43,14 @@ func RegisterGRPCFlags(cmd FlagClause) (
 }
 
 // RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.
-func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {
+func RegisterHTTPFlags(cmd FlagClause) (httpBindAddr *string, httpGracePeriod *model.Duration, httpTLSConfig *string) {
 	httpBindAddr = cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 	httpGracePeriod = ModelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("2m")) // by default it's the same as query.timeout.
-
-	return httpBindAddr, httpGracePeriod
+	httpTLSConfig = cmd.Flag(
+		"http.config",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
+	).Default("").String()
+	return httpBindAddr, httpGracePeriod, httpTLSConfig
 }
 
 // RegisterCommonObjStoreFlags register flags to specify object storage configuration.

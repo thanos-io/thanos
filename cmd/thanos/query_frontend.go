@@ -220,6 +220,7 @@ func runQueryFrontend(
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(cfg.http.bindAddress),
 			httpserver.WithGracePeriod(time.Duration(cfg.http.gracePeriod)),
+			httpserver.WithTLSConfig(cfg.http.tlsConfig),
 		)
 
 		instr := func(f http.HandlerFunc) http.HandlerFunc {
