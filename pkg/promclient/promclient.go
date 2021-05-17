@@ -382,7 +382,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 }
 
 // QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
-func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions, tenant string) (model.Vector, []string, error) {
+func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions, tenantAccess string) (model.Vector, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
@@ -407,7 +407,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 		method = http.MethodGet
 	}
 
-	body, _, err := c.req2xx(ctx, &u, method, tenant)
+	body, _, err := c.req2xx(ctx, &u, method, tenantAccess)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "read query instant response")
 	}

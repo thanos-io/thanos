@@ -153,9 +153,9 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	tenantHeader := cmd.Flag("query.tenant-header", "HTTP header to determine tenant access for a query").Default(DefaultTenantHeader).String()
+	tenantHeader := cmd.Flag("query.tenant-header", "HTTP header to determine tenant access for a query.").Default(DefaultTenantHeader).String()
 
-	tenantLabelName := cmd.Flag("query.tenant-label-name", "Tenant label name in query").Default(DefaultTenantLabel).String()
+	tenantLabelName := cmd.Flag("query.tenant-label-name", "Tenant label name in query.").Default(DefaultTenantLabel).String()
 
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 

@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -61,57 +63,6 @@ scrape_configs:
     regex: '^.+:80$'
     action: drop
 `, name, replica, targets)
-
-	if remoteWriteEndpoint != "" {
-		config = fmt.Sprintf(`
-%s
-remote_write:
-- url: "%s"
-  # Don't spam receiver on mistake.
-  queue_config:
-    min_backoff: 2s
-    max_backoff: 10s
-`, config, remoteWriteEndpoint)
-	}
-
-	if ruleFile != "" {
-		config = fmt.Sprintf(`
-%s
-rule_files:
--  "%s"
-`, config, ruleFile)
-	}
-
-	return config
-}
-
-// TenentSpecificPromConfig returns Prometheus config that sets Prometheus to:
-// * expose 3 external labels, source and replica.
-// * scrape fake target. This will produce up == 0 metric which we can assert on.
-// * optionally remote write endpoint to write into.
-func TenentSpecificPromConfig(name string, replica int, remoteWriteEndpoint, tenant string, ruleFile string, scrapeTargets ...string) string {
-	targets := "localhost:9090"
-	if len(scrapeTargets) > 0 {
-		targets = strings.Join(scrapeTargets, ",")
-	}
-	config := fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: %v
-    replica: %v
-	tenant_id: %v
-scrape_configs:
-- job_name: 'myself'
-  # Quick scrapes for test purposes.
-  scrape_interval: 1s
-  scrape_timeout: 1s
-  static_configs:
-  - targets: [%s]
-  relabel_configs:
-  - source_labels: ['__address__']
-    regex: '^.+:80$'
-    action: drop
-`, name, replica, tenant, targets)
 
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
@@ -430,7 +381,7 @@ func mustURLParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int, tenant string) model.Vector {
+func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int, tenantAccess string) model.Vector {
 	t.Helper()
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
@@ -439,7 +390,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts, "")
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts, tenantAccess)
 		if err != nil {
 			return err
 		}
@@ -467,10 +418,10 @@ func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q stri
 	}
 }
 
-func queryAndAssertTenantSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric, tenant string) {
+func queryAndAssertTenantSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric, tenantAccess string) {
 	t.Helper()
 
-	result := instantQuery(t, ctx, addr, q, opts, len(expected), tenant)
+	result := instantQuery(t, ctx, addr, q, opts, len(expected), tenantAccess)
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -589,51 +540,67 @@ func queryExemplars(t *testing.T, ctx context.Context, addr string, q string, st
 func TestQueryMultiTenancy(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_query_mul")
+	s, err := e2e.NewScenario("e2e_test_query_multitenancy")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
 	receiver1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	testutil.Ok(t, err)
 	receiver2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
-	receiver3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(receiver1, receiver2, receiver3))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-1", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), "tenant-a", ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-2", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-2", 0, e2ethanos.RemoteWriteEndpoint(receiver2.NetworkEndpoint(8081)), "tenant-b", ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), s.NetworkName(), "remote-and-sidecar-3", TenentSpecificPromConfig("prom-both-remote-write-and-sidecar-3", 0, e2ethanos.RemoteWriteEndpoint(receiver3.NetworkEndpoint(8081)), "tenant-c", ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
+	h := receive.HashringConfig{
+		Endpoints: []string{
+			receiver1.GRPCNetworkEndpointFor(s.NetworkName()),
+			receiver2.GRPCNetworkEndpointFor(s.NetworkName()),
+		},
+	}
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{receiver1.GRPCNetworkEndpoint(), receiver2.GRPCNetworkEndpoint(), receiver3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	// Recreate again, but with hashring config.
+	receiver1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+	testutil.Ok(t, err)
+	receiver2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1, h)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, s.StartAndWaitReady(receiver1, receiver2))
+
+	conf1 := ReverseProxyConfig{
+		tenantId: "tenant-a",
+		port:     "9097",
+		target:   "http://" + receiver1.Endpoint(8081),
+	}
+
+	conf2 := ReverseProxyConfig{
+		tenantId: "tenant-b",
+		port:     "9098",
+		target:   "http://" + receiver1.Endpoint(8081),
+	}
+
+	go generateProxy(conf1)
+	go generateProxy(conf2)
+
+	prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "prom-remote-1", defaultPromConfig("prom-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "prom-remote-2", defaultPromConfig("prom-2", 0, e2ethanos.RemoteWriteEndpoint(receiver2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
+
+	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{receiver1.GRPCNetworkEndpoint(), receiver2.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
-	// Use of below function ?
-	// testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
-	const query = "sum(up{tenant=tenant-a})"
-	queryAndAssertTenantSeries(t, ctx, q.HTTPEndpoint(), query, promclient.QueryOptions{
+	queryAndAssertTenantSeries(t, ctx, q.HTTPEndpoint(), "sum(up{tenant_id=~\"tenant-a | tenant-b\"}) without (instance)", promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
 			"job":        "myself",
-			"prometheus": "prom-both-remote-write-and-sidecar-1",
+			"prometheus": "prom-1",
 			"receive":    "1",
 			"replica":    "0",
 			"tenant_id":  "tenant-a",
 		},
-		{
-			"job":        "myself",
-			"prometheus": "prom-both-remote-write-and-sidecar-2",
-			"receive":    "2",
-			"replica":    "0",
-			"tenant_id":  "tenant-b",
-		},
-	}, "tenant-a | tenant-b")
-
+	}, "tenant-a")
 }
