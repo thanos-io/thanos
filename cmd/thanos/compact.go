@@ -304,7 +304,7 @@ func runCompact(
 	}()
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), nil)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
