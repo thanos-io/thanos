@@ -32,11 +32,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
 
-var defaultHTTPClientOptions = httpClientOptions{
-	maxIdleConns:        0,
-	maxIdleConnsPerHost: 100, // see https://github.com/golang/go/issues/13801
-}
-
 // ClientConfig configures an HTTP client.
 type ClientConfig struct {
 	// The HTTP basic authentication credentials for the targets.
@@ -49,9 +44,8 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
-
-	MaxIdleConns        int `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost int `yaml:"max_idle_conns_per_host"`
+	// TransportConfig for Client transport properties
+	TransportConfig TransportConfig `yaml:"transport_config"`
 }
 
 // TLSConfig configures TLS connections.
@@ -80,54 +74,52 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
+// Transport configures client transport properties
+type TransportConfig struct {
+	MaxIdleConns          int  `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int  `yaml:"max_idle_conns_per_host"`
+	IdleConnTimeout       int  `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout int  `yaml:"response_header_timeout"`
+	ExpectContinueTimeout int  `yaml:"expect_continue_timeout"`
+	MaxConnsPerHost       int  `yaml:"max_conns_per_host"`
+	DisableCompression    bool `yaml:"disable_compression"`
+	TLSHandshakeTimeout   int  `yaml:"tls_handshake_timeout"`
+}
+
+var defaultTransportConfig TransportConfig = TransportConfig{
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   2,
+	ResponseHeaderTimeout: 0,
+	MaxConnsPerHost:       0,
+	IdleConnTimeout:       int(90 * time.Second),
+	ExpectContinueTimeout: int(10 * time.Second),
+	DisableCompression:    false,
+	TLSHandshakeTimeout:   int(10 * time.Second),
+}
+
 func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
-	conf := &ClientConfig{}
-	if err := yaml.UnmarshalStrict(cfg, conf); err != nil {
+	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
+	if err := yaml.Unmarshal(cfg, conf); err != nil {
 		return nil, err
 	}
 	return conf, nil
 }
 
-type httpClientOptions struct {
-	maxIdleConns        int
-	maxIdleConnsPerHost int
-}
-
-type HTTPClientOption func(options *httpClientOptions)
-
-func WithMaxIdleConns(maxIdleConns int) HTTPClientOption {
-	return func(opts *httpClientOptions) {
-		opts.maxIdleConns = maxIdleConns
-	}
-}
-
-func WithMaxIdleConnsPerHost(maxIdleConnsPerHost int) HTTPClientOption {
-	return func(opts *httpClientOptions) {
-		opts.maxIdleConnsPerHost = maxIdleConnsPerHost
-	}
-}
-
 // NewRoundTripperFromConfig returns a new HTTP RoundTripper configured for the
 // given http.HTTPClientConfig and http.HTTPClientOption.
-func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, name string, optFuncs ...HTTPClientOption) (http.RoundTripper, error) {
-	opts := defaultHTTPClientOptions
-	for _, f := range optFuncs {
-		f(&opts)
-	}
-
+func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig TransportConfig, name string) (http.RoundTripper, error) {
 	newRT := func(tlsConfig *tls.Config) (http.RoundTripper, error) {
 		var rt http.RoundTripper = &http.Transport{
-			Proxy:               http.ProxyURL(cfg.ProxyURL.URL),
-			MaxIdleConns:        opts.maxIdleConns,
-			MaxIdleConnsPerHost: opts.maxIdleConnsPerHost,
-			DisableKeepAlives:   true,
-			TLSClientConfig:     tlsConfig,
-			DisableCompression:  true,
-			// 5 minutes is typically above the maximum sane scrape interval. So we can
-			// use keepalive for all configurations.
-			IdleConnTimeout:       5 * time.Minute,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			Proxy:                 http.ProxyURL(cfg.ProxyURL.URL),
+			MaxIdleConns:          transportConfig.MaxIdleConns,
+			MaxIdleConnsPerHost:   transportConfig.MaxIdleConnsPerHost,
+			MaxConnsPerHost:       transportConfig.MaxConnsPerHost,
+			TLSClientConfig:       tlsConfig,
+			DisableCompression:    transportConfig.DisableCompression,
+			IdleConnTimeout:       time.Duration(transportConfig.IdleConnTimeout),
+			ResponseHeaderTimeout: time.Duration(transportConfig.ResponseHeaderTimeout),
+			ExpectContinueTimeout: time.Duration(transportConfig.ExpectContinueTimeout),
+			TLSHandshakeTimeout:   time.Duration(transportConfig.TLSHandshakeTimeout),
 			DialContext: conntrack.NewDialContextFunc(
 				conntrack.DialWithTracing(),
 				conntrack.DialWithName(name)),
@@ -208,28 +200,31 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 			PasswordFile: cfg.BasicAuth.PasswordFile,
 		}
 	}
+
+	if cfg.BearerToken != "" {
+		httpClientConfig.BearerToken = config_util.Secret(cfg.BearerToken)
+	}
+
+	if cfg.BearerTokenFile != "" {
+		httpClientConfig.BearerTokenFile = cfg.BearerTokenFile
+	}
+
 	if err := httpClientConfig.Validate(); err != nil {
 		return nil, err
 	}
 
-	// see https://github.com/golang/go/issues/13801
-	if cfg.MaxIdleConns == 0 {
-		cfg.MaxIdleConns = 20000
-	}
-	if cfg.MaxIdleConnsPerHost == 0 {
-		cfg.MaxIdleConnsPerHost = 1000
-	}
 	rt, err := NewRoundTripperFromConfig(
 		httpClientConfig,
+		cfg.TransportConfig,
 		name,
-		WithMaxIdleConns(cfg.MaxIdleConns),
-		WithMaxIdleConnsPerHost(cfg.MaxIdleConnsPerHost))
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
 	client := &http.Client{Transport: rt}
 
-	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: client.Transport}
 	return client, nil
 }
 
