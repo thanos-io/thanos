@@ -12,7 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	ef "github.com/prometheus-community/prom-label-proxy/injectproxy"
+	promLabelProxy "github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promgate "github.com/prometheus/prometheus/pkg/gate"
@@ -98,8 +98,7 @@ type querier struct {
 	skipChunks          bool
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
-	tenantAccess        string
-	tenantLabelName     string
+	enforcer			promLabelProxy.Enforcer
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -128,6 +127,13 @@ func newQuerier(
 	for _, replicaLabel := range replicaLabels {
 		rl[replicaLabel] = struct{}{}
 	}
+	enforcer := promLabelProxy.NewEnforcer(
+		&labels.Matcher{
+			Name:  tenantLabelName,
+			Type:  labels.MatchEqual,
+			Value: tenantAccess,
+		},
+	)
 	return &querier{
 		ctx:           ctx,
 		logger:        logger,
@@ -144,8 +150,7 @@ func newQuerier(
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		skipChunks:          skipChunks,
-		tenantAccess:        tenantAccess,
-		tenantLabelName:     tenantLabelName,
+		enforcer: 			 *enforcer,
 	}
 }
 
@@ -268,20 +273,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	// If tenant headers are not set we assume that the user has the access to tenant it has specified in query
-	if q.tenantAccess != "" {
-		mtch := labels.Matcher{
-			Name:  q.tenantLabelName,
-			Type:  labels.MatchEqual,
-			Value: q.tenantAccess,
-		}
-		e := ef.Enforcer{
-			LabelMatchers: map[string]*labels.Matcher{
-				"tenant": &mtch,
-			},
-		}
-
-		ms = e.EnforceMatchers(ms...)
-	}
+	ms = q.enforcer.EnforceMatchers(ms)
 
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {

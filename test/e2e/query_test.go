@@ -23,7 +23,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-io/thanos/pkg/receive"
+	// "github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -544,44 +544,31 @@ func TestQueryMultiTenancy(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	receiver1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+	receiver1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 0)
 	testutil.Ok(t, err)
-	receiver2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
-	testutil.Ok(t, err)
-
-	h := receive.HashringConfig{
-		Endpoints: []string{
-			receiver1.GRPCNetworkEndpointFor(s.NetworkName()),
-			receiver2.GRPCNetworkEndpointFor(s.NetworkName()),
-		},
-	}
-
-	// Recreate again, but with hashring config.
-	receiver1, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
-	testutil.Ok(t, err)
-	receiver2, err = e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 1, h)
+	receiver2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "2", 0)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, s.StartAndWaitReady(receiver1, receiver2))
 
 	conf1 := ReverseProxyConfig{
 		tenantId: "tenant-a",
-		port:     "9097",
+		port:     ":9097",
 		target:   "http://" + receiver1.Endpoint(8081),
 	}
 
 	conf2 := ReverseProxyConfig{
 		tenantId: "tenant-b",
-		port:     "9098",
-		target:   "http://" + receiver1.Endpoint(8081),
+		port:     ":9098",
+		target:   "http://" + receiver2.Endpoint(8081),
 	}
 
 	go generateProxy(conf1)
 	go generateProxy(conf2)
 
-	prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "prom-remote-1", defaultPromConfig("prom-1", 0, e2ethanos.RemoteWriteEndpoint(receiver1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "http://172.17.0.1:9097/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "prom-remote-2", defaultPromConfig("prom-2", 0, e2ethanos.RemoteWriteEndpoint(receiver2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, "http://172.17.0.1:9098/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
 
@@ -589,15 +576,16 @@ func TestQueryMultiTenancy(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
+	// Query to tenant-a and tenant-b data is scoped down according to tenant access specified in header(tenant-a in this case).
 	queryAndAssertTenantSeries(t, ctx, q.HTTPEndpoint(), "sum(up{tenant_id=~\"tenant-a | tenant-b\"}) without (instance)", promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
 			"job":        "myself",
-			"prometheus": "prom-1",
+			"prometheus": "prom1",
 			"receive":    "1",
 			"replica":    "0",
 			"tenant_id":  "tenant-a",
