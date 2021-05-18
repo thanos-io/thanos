@@ -41,5 +41,5 @@ func (p *Prometheus) MetricMetadata(r *metadatapb.MetricMetadataRequest, s metad
 		return err
 	}
 
-	return nil
+	return err
 }

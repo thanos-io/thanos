@@ -33,7 +33,7 @@ func NewGRPCClient(ts metadatapb.MetadataServer) *GRPCClient {
 }
 
 func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, storage.Warnings, error) {
-	span, ctx := tracing.StartSpan(ctx, "metadata_request")
+	span, ctx := tracing.StartSpan(ctx, "metadata_grpc_request")
 	defer span.Finish()
 
 	srv := &metadataServer{ctx: ctx, metric: req.Metric, limit: int(req.Limit)}

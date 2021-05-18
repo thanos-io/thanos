@@ -100,7 +100,7 @@ func (stream *metricMetadataStream) receive(ctx context.Context) error {
 		metadataCli metadatapb.Metadata_MetricMetadataClient
 	)
 
-	tracing.DoInSpan(ctx, "receive_stream_request", func(ctx context.Context) {
+	tracing.DoInSpan(ctx, "receive_metadata_stream_request", func(ctx context.Context) {
 		metadataCli, err = stream.client.MetricMetadata(ctx, stream.request)
 	})
 

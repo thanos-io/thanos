@@ -925,7 +925,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
-		span, ctx := tracing.StartSpan(r.Context(), "receive_http_request")
+		span, ctx := tracing.StartSpan(r.Context(), "metadata_http_request")
 		defer span.Finish()
 
 		var (
