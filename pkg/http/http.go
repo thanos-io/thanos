@@ -74,7 +74,7 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
-// Transport configures client transport properties
+// Transport configures client's transport properties.
 type TransportConfig struct {
 	MaxIdleConns          int  `yaml:"max_idle_conns"`
 	MaxIdleConnsPerHost   int  `yaml:"max_idle_conns_per_host"`
