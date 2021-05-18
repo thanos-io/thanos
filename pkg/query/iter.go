@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -189,7 +190,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
-		return newBoundedSeriesIterator(sit, s.mint, s.maxt)
+		return dedup.NewBoundedSeriesIterator(sit, s.mint, s.maxt)
 	}
 
 	if len(s.aggrs) != 2 {
@@ -212,7 +213,7 @@ func (s *chunkSeries) Iterator() chunkenc.Iterator {
 	default:
 		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 	}
-	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
+	return dedup.NewBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
 
 func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
@@ -245,52 +246,6 @@ func (errSeriesIterator) Seek(int64) bool      { return false }
 func (errSeriesIterator) Next() bool           { return false }
 func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
 func (it errSeriesIterator) Err() error        { return it.err }
-
-// boundedSeriesIterator wraps a series iterator and ensures that it only emits
-// samples within a fixed time range.
-type boundedSeriesIterator struct {
-	it         chunkenc.Iterator
-	mint, maxt int64
-}
-
-func newBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
-	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
-}
-
-func (it *boundedSeriesIterator) Seek(t int64) (ok bool) {
-	if t > it.maxt {
-		return false
-	}
-	if t < it.mint {
-		t = it.mint
-	}
-	return it.it.Seek(t)
-}
-
-func (it *boundedSeriesIterator) At() (t int64, v float64) {
-	return it.it.At()
-}
-
-func (it *boundedSeriesIterator) Next() bool {
-	if !it.it.Next() {
-		return false
-	}
-	t, _ := it.it.At()
-
-	// Advance the iterator if we are before the valid interval.
-	if t < it.mint {
-		if !it.Seek(it.mint) {
-			return false
-		}
-		t, _ = it.it.At()
-	}
-	// Once we passed the valid interval, there is no going back.
-	return t <= it.maxt
-}
-
-func (it *boundedSeriesIterator) Err() error {
-	return it.it.Err()
-}
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.

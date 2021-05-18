@@ -334,3 +334,49 @@ func (it *dedupSeriesIterator) Err() error {
 	}
 	return it.b.Err()
 }
+
+// boundedSeriesIterator wraps a series iterator and ensures that it only emits
+// samples within a fixed time range.
+type boundedSeriesIterator struct {
+	it         chunkenc.Iterator
+	mint, maxt int64
+}
+
+func NewBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
+	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
+}
+
+func (it *boundedSeriesIterator) Seek(t int64) (ok bool) {
+	if t > it.maxt {
+		return false
+	}
+	if t < it.mint {
+		t = it.mint
+	}
+	return it.it.Seek(t)
+}
+
+func (it *boundedSeriesIterator) At() (t int64, v float64) {
+	return it.it.At()
+}
+
+func (it *boundedSeriesIterator) Next() bool {
+	if !it.it.Next() {
+		return false
+	}
+	t, _ := it.it.At()
+
+	// Advance the iterator if we are before the valid interval.
+	if t < it.mint {
+		if !it.Seek(it.mint) {
+			return false
+		}
+		t, _ = it.it.At()
+	}
+	// Once we passed the valid interval, there is no going back.
+	return t <= it.maxt
+}
+
+func (it *boundedSeriesIterator) Err() error {
+	return it.it.Err()
+}
