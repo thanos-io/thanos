@@ -128,13 +128,17 @@ func newQuerier(
 	for _, replicaLabel := range replicaLabels {
 		rl[replicaLabel] = struct{}{}
 	}
-	enforcer := promLabelProxy.NewEnforcer(
-		&labels.Matcher{
-			Name:  tenant.LabelName,
-			Type:  labels.MatchEqual,
-			Value: tenant.Access,
-		},
-	)
+	enforcer := promLabelProxy.NewEnforcer()
+	// If tenant headers are not set we assume that the user has the access to tenant it has specified in query
+	if tenant.Access != "" {
+		enforcer = promLabelProxy.NewEnforcer(
+			&labels.Matcher{
+				Name:  tenant.LabelName,
+				Type:  labels.MatchEqual,
+				Value: tenant.Access,
+			},
+		)
+	}
 	return &querier{
 		ctx:           ctx,
 		logger:        logger,
@@ -273,7 +277,6 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 }
 
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
-	// If tenant headers are not set we assume that the user has the access to tenant it has specified in query
 	ms = q.enforcer.EnforceMatchers(ms)
 
 	sms, err := storepb.PromMatchersToMatchers(ms...)

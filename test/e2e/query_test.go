@@ -552,22 +552,22 @@ func TestQueryMultiTenancy(t *testing.T) {
 
 	conf1 := ReverseProxyConfig{
 		tenantId: "tenant-a",
-		port:     ":9097",
+		port:     ":10002",
 		target:   "http://" + receiver1.Endpoint(8081),
 	}
 
 	conf2 := ReverseProxyConfig{
 		tenantId: "tenant-b",
-		port:     ":9098",
+		port:     ":10003",
 		target:   "http://" + receiver2.Endpoint(8081),
 	}
 
 	go generateProxy(conf1)
 	go generateProxy(conf2)
 
-	prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "http://172.17.0.1:9097/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "http://172.17.0.1:10002/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, "http://172.17.0.1:9098/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
+	prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, "http://172.17.0.1:10003/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
 
