@@ -213,6 +213,7 @@ func RunReplicate(
 		defer runutil.CloseWithLogOnErr(logger, fromBkt, "from bucket client")
 		defer runutil.CloseWithLogOnErr(logger, toBkt, "to bucket client")
 
+		statusProber.Ready()
 		if singleRun || len(blockIDs) > 0 {
 			return replicateFn()
 		}
