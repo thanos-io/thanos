@@ -28,13 +28,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+type TenantInfo struct {
+	Access, LabelName string
+}
+
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenantAccess string, tenantLabelName string) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant TenantInfo) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -42,7 +46,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenantAccess string, tenantLabelName string) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant TenantInfo) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -57,8 +61,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
-			tenantAccess:         tenantAccess,
-			tenantLabelName:      tenantLabelName,
+			tenant:               tenant,
 		}
 	}
 }
@@ -75,13 +78,12 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
-	tenantAccess         string
-	tenantLabelName      string
+	tenant               TenantInfo
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.tenantAccess, q.tenantLabelName), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.tenant), nil
 }
 
 type querier struct {
@@ -98,7 +100,7 @@ type querier struct {
 	skipChunks          bool
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
-	enforcer			promLabelProxy.Enforcer
+	enforcer            promLabelProxy.Enforcer
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -115,8 +117,7 @@ func newQuerier(
 	partialResponse, skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
-	tenantAccess string,
-	tenantLabelName string,
+	tenant TenantInfo,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -129,9 +130,9 @@ func newQuerier(
 	}
 	enforcer := promLabelProxy.NewEnforcer(
 		&labels.Matcher{
-			Name:  tenantLabelName,
+			Name:  tenant.LabelName,
 			Type:  labels.MatchEqual,
-			Value: tenantAccess,
+			Value: tenant.Access,
 		},
 	)
 	return &querier{
@@ -150,7 +151,7 @@ func newQuerier(
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		skipChunks:          skipChunks,
-		enforcer: 			 *enforcer,
+		enforcer:            *enforcer,
 	}
 }
 

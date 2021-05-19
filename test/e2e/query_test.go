@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	// "github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -576,7 +575,7 @@ func TestQueryMultiTenancy(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
 	// Query to tenant-a and tenant-b data is scoped down according to tenant access specified in header(tenant-a in this case).
