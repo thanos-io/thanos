@@ -52,7 +52,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.23.0
 	github.com/prometheus/exporter-toolkit v0.5.1
-	github.com/prometheus/prometheus v1.8.2-0.20210518163837-0a8912433a45
+	github.com/prometheus/prometheus v1.8.2-0.20210519120135-d95b0972505f
 	github.com/uber/jaeger-client-go v2.28.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	github.com/weaveworks/common v0.0.0-20210419092856-009d1eebd624
@@ -84,7 +84,7 @@ replace (
 	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210518163837-0a8912433a45
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210519120135-d95b0972505f
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
