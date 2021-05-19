@@ -51,7 +51,7 @@ func registerReceive(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		lset, err := parseFlagLabels(*conf.labelStrs)
+		lset, err := parseFlagLabels(conf.labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
@@ -576,7 +576,7 @@ type receiveConfig struct {
 	rwClientServerName string
 
 	dataDir   string
-	labelStrs *[]string
+	labelStrs []string
 
 	objStoreConfig *extflag.PathOrContent
 	retention      *model.Duration
@@ -632,7 +632,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").StringVar(&rc.dataDir)
 
-	cmd.Flag("label", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").StringsVar(rc.labelStrs)
+	cmd.Flag("label", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").StringsVar(&rc.labelStrs)
 
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
