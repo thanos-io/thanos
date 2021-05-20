@@ -11,7 +11,7 @@ local lower(x) =
 {
   _config+:: {
     runbookURLPattern: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-%s',
-    runbookURLAnchorsToLowercase: true
+    runbookURLAnchorsToLowercase: true,
   },
 
   prometheusAlerts+::
