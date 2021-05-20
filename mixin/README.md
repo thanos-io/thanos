@@ -119,8 +119,9 @@ This project is intended to be used as a library. You can extend and customize d
   //  runbookURLPattern: 'http://yourRunbookUrlPlace.biz/runbook#%s',
   //  // Whether you want runbook URL anchors as lowercase for runbooks
   //  // e.g. ThanosCompactMultipleRunning -> thanoscompactmultiplerunning
-  //  // Set to `false` if you have a wiki that supports CamelCase url anchors
-  //  runbookURLToLower: true
+  //  // Set to `false` if your runbook hosting of choice supports CamelCase 
+  //  // url anchors
+  //  runbookURLAnchorsToLowercase: true
   //},
 
   dashboard+:: {
