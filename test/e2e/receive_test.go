@@ -141,7 +141,7 @@ func TestReceive(t *testing.T) {
 	t.Run("hashring with config watcher", func(t *testing.T) {
 		t.Parallel()
 
-		s, err := e2e.NewScenario("e2e_test_receive_hashring")
+		s, err := e2e.NewScenario("e2e_test_receive_hashring_config_watcher")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
