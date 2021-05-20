@@ -6,10 +6,8 @@ package main
 import (
 	"context"
 	"io/ioutil"
-	"net"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -77,18 +75,6 @@ func registerReceive(app *extkingpin.App) {
 		// enable ingestion if endpoint is specified, or both the hashrings config are empty,
 		// otherwise run receiver in distributor mode.
 		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
-
-		// If endpoint and hashrings are empty, so try to generate a local endpoint
-		// based on the hostname and the listening port.
-		if conf.endpoint == "" && (conf.hashringsFileContent == "" && conf.hashringsFilePath == "") {
-			hostname, err := os.Hostname()
-			if hostname == "" || err != nil {
-				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
-			}
-			parts := strings.Split(*conf.grpcBindAddr, ":")
-			port := parts[len(parts)-1]
-			conf.endpoint = net.JoinHostPort(hostname, port)
-		}
 
 		return runReceive(
 			g,
@@ -219,7 +205,7 @@ func runReceive(
 	// initial config and mark ourselves as ready after it completed.
 
 	// reloadGRPCServer signals when - (1)TSDB is ready and the Store gRPC server can start.
-	// (2) The Hashring files have changed.
+	// (2) The Hashring files have changed if tsdb ingestion is disabled.
 	reloadGRPCServer := make(chan struct{}, 1)
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
