@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -72,8 +74,21 @@ func registerReceive(app *extkingpin.App) {
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
 		}
 
-		// enable ingestion if local endpoint is specified, otherwise run receiver in distributor mode.
-		enableIngestion := conf.endpoint != ""
+		// enable ingestion if endpoint is specified, or both the hashrings config are empty,
+		// otherwise run receiver in distributor mode.
+		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
+
+		// If endpoint and hashrings are empty, so try to generate a local endpoint
+		// based on the hostname and the listening port.
+		if conf.endpoint == "" && (conf.hashringsFileContent == "" && conf.hashringsFilePath == "") {
+			hostname, err := os.Hostname()
+			if hostname == "" || err != nil {
+				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
+			}
+			parts := strings.Split(*conf.grpcBindAddr, ":")
+			port := parts[len(parts)-1]
+			conf.endpoint = net.JoinHostPort(hostname, port)
+		}
 
 		return runReceive(
 			g,
@@ -203,8 +218,9 @@ func runReceive(
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
 
-	// dbReady signals when TSDB is ready and the Store gRPC server can start.
-	dbReady := make(chan struct{}, 1)
+	// reloadGRPCServer signals when - (1)TSDB is ready and the Store gRPC server can start.
+	// (2) The Hashring files have changed.
+	reloadGRPCServer := make(chan struct{}, 1)
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
 	// uploadC signals when new blocks should be uploaded.
@@ -215,7 +231,7 @@ func runReceive(
 	if enableIngestion {
 		level.Debug(logger).Log("msg", "setting up tsdb")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, dbReady, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
 				return err
 			}
 		}
@@ -223,7 +239,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber); err != nil {
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, reloadGRPCServer, enableIngestion); err != nil {
 			return err
 		}
 	}
@@ -250,12 +266,13 @@ func runReceive(
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
 		var s *grpcserver.Server
-		startGRPC := make(chan struct{})
+		// startGRPCListening re-starts the gRPC server once it receives a signal.
+		startGRPCListening := make(chan struct{})
 
-		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPC, dbReady, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
+		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPCListening, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
 			return err
 		}
-		if err := runGRPCServer(g, logger, s, startGRPC, conf); err != nil {
+		if err := runGRPCServer(g, logger, s, startGRPCListening, conf); err != nil {
 			return err
 		}
 	}
@@ -276,18 +293,18 @@ func runReceive(
 	return nil
 }
 
-// runGRPCServer starts the grpc server, once it receives a signal from the startGRPC channel.
+// runGRPCServer starts the grpc server, once it receives a signal from the startGRPCListening channel.
 func runGRPCServer(g *run.Group,
 	logger log.Logger,
 	s *grpcserver.Server,
-	startGRPC chan struct{},
+	startGRPCListening chan struct{},
 	conf *receiveConfig,
 
 ) error {
 	// We need to be able to start and stop the gRPC server
 	// whenever the DB changes, thus it needs its own run group.
 	g.Add(func() error {
-		for range startGRPC {
+		for range startGRPCListening {
 			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
 			if err := s.ListenAndServe(); err != nil {
 				return errors.Wrap(err, "serve gRPC")
@@ -306,8 +323,8 @@ func setupGRPCServer(g *run.Group,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	conf *receiveConfig, s *grpcserver.Server,
-	startGRPC chan struct{},
-	dbReady chan struct{},
+	startGRPCListening chan struct{},
+	reloadGRPCServer chan struct{},
 	comp component.SourceStoreAPI,
 	dbs *receive.MultiTSDB,
 	webHandler *receive.Handler,
@@ -317,14 +334,14 @@ func setupGRPCServer(g *run.Group,
 
 ) error {
 	g.Add(func() error {
-		defer close(startGRPC)
+		defer close(startGRPCListening)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		for range dbReady {
+		for range reloadGRPCServer {
 			if s != nil {
 				s.Shutdown(errors.New("reload hashrings"))
 			}
@@ -346,7 +363,7 @@ func setupGRPCServer(g *run.Group,
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),
 			)
-			startGRPC <- struct{}{}
+			startGRPCListening <- struct{}{}
 		}
 		if s != nil {
 			s.Shutdown(err)
@@ -367,6 +384,8 @@ func setupHashring(g *run.Group,
 	hashringChangedChan chan struct{},
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
+	reloadGRPCServer chan struct{},
+	enableIngestion bool,
 
 ) error {
 	// Note: the hashring configuration watcher
@@ -427,7 +446,11 @@ func setupHashring(g *run.Group,
 
 	cancel := make(chan struct{})
 	g.Add(func() error {
-		defer close(hashringChangedChan)
+
+		if enableIngestion {
+			defer close(hashringChangedChan)
+		}
+
 		for {
 			select {
 			case h, ok := <-updates:
@@ -438,7 +461,16 @@ func setupHashring(g *run.Group,
 				msg := "hashring has changed; server is not ready to receive web requests"
 				statusProber.NotReady(errors.New(msg))
 				level.Info(logger).Log("msg", msg)
-				hashringChangedChan <- struct{}{}
+
+				if enableIngestion {
+					// send a signal to tsdb to reload, and then restart the gRPC server.
+					hashringChangedChan <- struct{}{}
+				} else {
+					// we dont need tsdb to reload, so restart the gRPC server.
+					level.Info(logger).Log("msg", "server has reloaded, ready to start accepting requests")
+					statusProber.Ready()
+					reloadGRPCServer <- struct{}{}
+				}
 			case <-cancel:
 				return nil
 			}
@@ -456,7 +488,7 @@ func startTSDBAndUpload(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	dbs *receive.MultiTSDB,
-	dbReady chan struct{},
+	reloadGRPCServer chan struct{},
 	uploadC chan struct{},
 	hashringChangedChan chan struct{},
 	upload bool,
@@ -484,7 +516,7 @@ func startTSDBAndUpload(g *run.Group,
 	// TSDBs reload logic, listening on hashring changes.
 	cancel := make(chan struct{})
 	g.Add(func() error {
-		defer close(dbReady)
+		defer close(reloadGRPCServer)
 		defer close(uploadC)
 
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
@@ -526,7 +558,7 @@ func startTSDBAndUpload(g *run.Group,
 				statusProber.Ready()
 				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
 				dbUpdatesCompleted.Inc()
-				dbReady <- struct{}{}
+				reloadGRPCServer <- struct{}{}
 			}
 		}
 	}, func(err error) {
