@@ -113,6 +113,16 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~".*thanos-bucket-replicate.*"',
     title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },
+
+  //_config+:: {
+  //  // The Base URL for your runbooks.
+  //  runbookURLPattern: 'http://yourRunbookUrlPlace.biz/runbook#%s',
+  //  // Whether you want runbook URL anchors as lowercase for runbooks
+  //  // e.g. ThanosCompactMultipleRunning -> thanoscompactmultiplerunning
+  //  // Set to `false` if you have a wiki that supports CamelCase url anchors
+  //  runbookURLToLower: true
+  //},
+
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
