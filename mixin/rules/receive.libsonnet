@@ -5,7 +5,7 @@
     dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusRules+:: {
-    groups+: [
+    groups+: if thanos.receive == null then [] else [
       {
         name: 'thanos-receive.rules',
         rules: [
