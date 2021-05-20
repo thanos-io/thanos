@@ -9,13 +9,11 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
-
-const sep = '\xff'
 
 // insufficientNodesError is returned when a hashring does not
 // have enough nodes to satisfy a request for a node.
@@ -37,23 +35,6 @@ type Hashring interface {
 	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
 	// GetN returns the nth node that should handle the given tenant and time series.
 	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
-}
-
-// hash returns a hash for the given tenant and time series.
-func hash(tenant string, ts *prompb.TimeSeries) uint64 {
-	// Sort labelset to ensure a stable hash.
-	sort.Slice(ts.Labels, func(i, j int) bool { return ts.Labels[i].Name < ts.Labels[j].Name })
-
-	b := make([]byte, 0, 1024)
-	b = append(b, []byte(tenant)...)
-	b = append(b, sep)
-	for _, v := range ts.Labels {
-		b = append(b, v.Name...)
-		b = append(b, sep)
-		b = append(b, v.Value...)
-		b = append(b, sep)
-	}
-	return xxhash.Sum64(b)
 }
 
 // SingleNodeHashring always returns the same node.
@@ -85,7 +66,10 @@ func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	if n >= uint64(len(s)) {
 		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
-	return s[(hash(tenant, ts)+n)%uint64(len(s))], nil
+
+	sort.Slice(ts.Labels, func(i, j int) bool { return ts.Labels[i].Name < ts.Labels[j].Name })
+
+	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
 }
 
 // multiHashring represents a set of hashrings.

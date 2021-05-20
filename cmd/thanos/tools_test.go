@@ -29,3 +29,18 @@ func Test_CheckRules(t *testing.T) {
 		testutil.NotOk(t, checkRulesFiles(logger, &fn), "expected err for file %s", fn)
 	}
 }
+
+func Test_CheckRules_Glob(t *testing.T) {
+	// regex path
+	files := &[]string{"./testdata/rules-files/valid*.yaml"}
+	logger := log.NewNopLogger()
+	testutil.Ok(t, checkRulesFiles(logger, files))
+
+	// direct path
+	files = &[]string{"./testdata/rules-files/valid.yaml"}
+	testutil.Ok(t, checkRulesFiles(logger, files))
+
+	// invalid path
+	files = &[]string{"./testdata/rules-files/*.yamlaaa"}
+	testutil.NotOk(t, checkRulesFiles(logger, files), "expected err for file %s", files)
+}

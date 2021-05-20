@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
@@ -42,6 +44,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 
 type httpConfig struct {
 	bindAddress string
+	tlsConfig   string
 	gracePeriod model.Duration
 }
 
@@ -52,6 +55,10 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 	cmd.Flag("http-grace-period",
 		"Time to wait after an interrupt received for HTTP Server.").
 		Default("2m").SetValue(&hc.gracePeriod)
+	cmd.Flag(
+		"http.config",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
+	).Default("").StringVar(&hc.tlsConfig)
 	return hc
 }
 
@@ -147,12 +154,16 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 }
 
 type webConfig struct {
+	routePrefix      string
 	externalPrefix   string
 	prefixHeaderName string
 	disableCORS      bool
 }
 
 func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
+	cmd.Flag("web.route-prefix",
+		"Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Prometheus.").
+		Default("").StringVar(&wc.routePrefix)
 	cmd.Flag("web.external-prefix",
 		"Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
 		Default("").StringVar(&wc.externalPrefix)
@@ -160,4 +171,56 @@ func (wc *webConfig) registerFlag(cmd extkingpin.FlagClause) *webConfig {
 		Default("").StringVar(&wc.prefixHeaderName)
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").BoolVar(&wc.disableCORS)
 	return wc
+}
+
+type queryConfig struct {
+	addrs         []string
+	sdFiles       []string
+	sdInterval    time.Duration
+	configPath    *extflag.PathOrContent
+	dnsSDInterval time.Duration
+	httpMethod    string
+	dnsSDResolver string
+}
+
+func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
+	cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
+		PlaceHolder("<query>").StringsVar(&qc.addrs)
+	qc.configPath = extflag.RegisterPathOrContent(cmd, "query.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", false)
+	cmd.Flag("query.sd-files", "Path to file that contains addresses of query API servers. The path can be a glob pattern (repeatable).").
+		PlaceHolder("<path>").StringsVar(&qc.sdFiles)
+	cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5m").DurationVar(&qc.sdInterval)
+	cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s").DurationVar(&qc.dnsSDInterval)
+	cmd.Flag("query.http-method", "HTTP method to use when sending queries. Possible options: [GET, POST]").
+		Default("POST").EnumVar(&qc.httpMethod, "GET", "POST")
+	cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
+		Default("golang").Hidden().StringVar(&qc.dnsSDResolver)
+	return qc
+}
+
+type alertMgrConfig struct {
+	configPath             *extflag.PathOrContent
+	alertmgrURLs           []string
+	alertmgrsTimeout       time.Duration
+	alertmgrsDNSSDInterval time.Duration
+	alertExcludeLabels     []string
+	alertQueryURL          *string
+	alertRelabelConfigPath *extflag.PathOrContent
+}
+
+func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
+	ac.configPath = extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
+	cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
+		StringsVar(&ac.alertmgrURLs)
+	cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").
+		DurationVar(&ac.alertmgrsTimeout)
+	cmd.Flag("alertmanagers.sd-dns-interval", "Interval between DNS resolutions of Alertmanager hosts.").
+		Default("30s").DurationVar(&ac.alertmgrsDNSSDInterval)
+	ac.alertQueryURL = cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
+	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
+		StringsVar(&ac.alertExcludeLabels)
+	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", false)
+	return ac
 }

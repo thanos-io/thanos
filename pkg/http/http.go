@@ -95,7 +95,7 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 		return nil, err
 	}
 
-	client, err := config_util.NewClientFromConfig(httpClientConfig, name, false, false)
+	client, err := config_util.NewClientFromConfig(httpClientConfig, name, config_util.WithHTTP2Disabled())
 	if err != nil {
 		return nil, err
 	}
@@ -156,10 +156,7 @@ func (c FileSDConfig) convert() (file.SDConfig, error) {
 		return fileSDConfig, err
 	}
 	err = yaml.Unmarshal(b, &fileSDConfig)
-	if err != nil {
-		return fileSDConfig, err
-	}
-	return fileSDConfig, nil
+	return fileSDConfig, err
 }
 
 type AddressProvider interface {

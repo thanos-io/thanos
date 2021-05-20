@@ -5,18 +5,18 @@ DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
-SHA=''
+BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
 # Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
-# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly (dependabot?)
-# Update at 2020.2.01
+# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
+# Update at 2021.6.07
 ifeq ($(arch), x86_64)
     # amd64
-    SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
+    BASE_DOCKER_SHA="de4af55df1f648a334e16437c550a2907e0aed4f0b0edf454b0b215a9349bdbb"
 else ifeq ($(arch), armv8)
     # arm64
-    SHA="4dd2d3bba195563e6cb2b286f23dc832d0fda6c6662e6de2e86df454094b44d8"
+    BASE_DOCKER_SHA="5591971699f6cf8abf6776495385e9d62751111a8cba56bf4946cf1d0de425ed"
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
@@ -147,7 +147,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" --build-arg SHA=$(SHA) .
+	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage
@@ -157,7 +157,7 @@ endif
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
 docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg SHA=$(SHA) .
+	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
 .PHONY: docker-push
 docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".

@@ -19,7 +19,24 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/component"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 )
+
+var reactRouterPaths = []string{
+	"/alerts",
+	"/blocks",
+	"/config",
+	"/flags",
+	"/global",
+	"/graph",
+	"/loaded",
+	"/rules",
+	"/service-discovery",
+	"/status",
+	"/stores",
+	"/targets",
+	"/tsdb-status",
+}
 
 type BaseUI struct {
 	logger                       log.Logger
@@ -46,12 +63,7 @@ func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 }
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
-	fp := route.Param(req.Context(), "filepath")
-	fp = filepath.Join("pkg/ui/static/react/", fp)
-	if err := bu.serveAsset(fp, w, req); err != nil {
-		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
-
-	}
+	bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
 }
 
 func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http.Request) {
@@ -159,6 +171,38 @@ func GetWebPrefix(logger log.Logger, externalPrefix, prefixHeader string, r *htt
 	}
 
 	return prefix
+}
+
+func instrf(name string, ins extpromhttp.InstrumentationMiddleware, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return ins.NewHandler(name, http.HandlerFunc(next))
+}
+
+func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware, bu *BaseUI) {
+	for _, p := range reactRouterPaths {
+		r.Get(p, instrf("react-static", ins, bu.serveReactUI))
+	}
+
+	// The favicon and manifest are bundled as part of the React app, but we want to serve
+	// them on the root.
+	for _, p := range []string{"/favicon.ico", "/manifest.json"} {
+		assetPath := "pkg/ui/static/react" + p
+		r.Get(p, func(w http.ResponseWriter, r *http.Request) {
+			if err := bu.serveAsset(assetPath, w, r); err != nil {
+				level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", assetPath)
+				w.WriteHeader(http.StatusNotFound)
+			}
+		})
+	}
+
+	// Static files required by the React app.
+	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
+		fp := route.Param(r.Context(), "filepath")
+		fp = filepath.Join("pkg/ui/static/react/static", fp)
+		if err := bu.serveAsset(fp, w, r); err != nil {
+			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
 }
 
 // SanitizePrefix makes sure that path prefix value is valid.

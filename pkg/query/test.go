@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -104,7 +105,7 @@ func newTest(t testing.TB, input string) (*test, error) {
 }
 
 func newTestFromFile(t testing.TB, filename string) (*test, error) {
-	content, err := ioutil.ReadFile(filename)
+	content, err := ioutil.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}

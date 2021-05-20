@@ -197,7 +197,7 @@ func renameFile(logger log.Logger, from, to string) error {
 
 // ReadFromDir reads the given meta from <dir>/meta.json.
 func ReadFromDir(dir string) (*Meta, error) {
-	f, err := os.Open(filepath.Join(dir, MetaFilename))
+	f, err := os.Open(filepath.Join(dir, filepath.Clean(MetaFilename)))
 	if err != nil {
 		return nil, err
 	}

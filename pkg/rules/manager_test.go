@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
@@ -35,9 +36,12 @@ func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nop
 type nopAppender struct{}
 
 func (n nopAppender) Append(uint64, labels.Labels, int64, float64) (uint64, error) { return 0, nil }
-func (n nopAppender) Commit() error                                                { return nil }
-func (n nopAppender) Rollback() error                                              { return nil }
-func (n nopAppender) Appender(_ context.Context) (storage.Appender, error)         { return n, nil }
+func (n nopAppender) AppendExemplar(uint64, labels.Labels, exemplar.Exemplar) (uint64, error) {
+	return 0, nil
+}
+func (n nopAppender) Commit() error                                        { return nil }
+func (n nopAppender) Rollback() error                                      { return nil }
+func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }
 
 type nopQueryable struct{}
 

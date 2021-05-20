@@ -118,7 +118,7 @@ func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, hand
 					span := opentracing.SpanFromContext(r.Context())
 					if span != nil {
 						spanCtx, ok := span.Context().(jaeger.SpanContext)
-						if ok {
+						if ok && spanCtx.IsSampled() {
 							observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
 								time.Since(now).Seconds(),
 								prometheus.Labels{

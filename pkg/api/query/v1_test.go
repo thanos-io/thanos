@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -42,6 +44,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/thanos/pkg/compact"
 
@@ -70,8 +73,16 @@ type endpointTestCase struct {
 	response interface{}
 	errType  baseAPI.ErrorType
 }
+type responeCompareFunction func(interface{}, interface{}) bool
 
-func testEndpoint(t *testing.T, test endpointTestCase, name string) bool {
+// Checks if both responses have Stats present or not.
+func lookupStats(a interface{}, b interface{}) bool {
+	ra := a.(*queryData)
+	rb := b.(*queryData)
+	return (ra.Stats == nil && rb.Stats == nil) || (ra.Stats != nil && rb.Stats != nil)
+}
+
+func testEndpoint(t *testing.T, test endpointTestCase, name string, responseCompareFunc responeCompareFunction) bool {
 	return t.Run(name, func(t *testing.T) {
 		// Build a context with the correct request params.
 		ctx := context.Background()
@@ -113,7 +124,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string) bool {
 			t.Fatalf("Expected error of type %q but got none", test.errType)
 		}
 
-		if !reflect.DeepEqual(resp, test.response) {
+		if !responseCompareFunc(resp, test.response) {
 			t.Fatalf("Response does not match, expected:\n%+v\ngot:\n%+v", test.response, resp)
 		}
 	})
@@ -186,6 +197,9 @@ func TestQueryEndpoints(t *testing.T) {
 		},
 		gate:                  gate.New(nil, 4),
 		defaultRangeQueryStep: time.Second,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 
 	start := time.Unix(0, 0)
@@ -592,7 +606,35 @@ func TestQueryEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode())); !ok {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+
+	tests = []endpointTestCase{
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query": []string{"2"},
+				"time":  []string{"123.4"},
+			},
+			response: &queryData{},
+		},
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query": []string{"2"},
+				"time":  []string{"123.4"},
+				"stats": []string{"true"},
+			},
+			response: &queryData{
+				Stats: &stats.QueryStats{},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), lookupStats); !ok {
 			return
 		}
 	}
@@ -695,6 +737,9 @@ func TestMetadataEndpoints(t *testing.T) {
 			return qe
 		},
 		gate: gate.New(nil, 4),
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 	apiWithLabelLookback := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -706,6 +751,9 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 		gate:                     gate.New(nil, 4),
 		defaultMetadataTimeRange: apiLookbackDelta,
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
 	}
 
 	var tests = []endpointTestCase{
@@ -1147,7 +1195,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode()))); !ok {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
 			return
 		}
 	}
@@ -1326,6 +1374,9 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
 			gate:                   gate.New(nil, 4),
+			queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+				Name: "query_range_hist",
+			}),
 		}
 		v := url.Values{}
 		v.Set(MaxSourceResolutionParam, test.maxSourceResolutionParam)
@@ -1374,6 +1425,9 @@ func TestParseStoreDebugMatchersParam(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			api := QueryAPI{
 				gate: promgate.New(4),
+				queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+					Name: "query_range_hist",
+				}),
 			}
 			v := url.Values{}
 			v.Set(StoreMatcherParam, tc.storeMatchers)

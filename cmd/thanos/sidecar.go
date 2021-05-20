@@ -43,6 +43,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -117,6 +118,7 @@ func runSidecar(
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
+		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
 
 	g.Add(func() error {
@@ -145,15 +147,34 @@ func runSidecar(
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
-				// Check prometheus's flags to ensure sane sidecar flags.
+				// Check prometheus's flags to ensure same sidecar flags.
 				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
 				}
 			}
 
+			// We retry infinitely until we reach and fetch BuildVersion from our Prometheus.
+			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				if err := m.BuildVersion(ctx); err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch prometheus version. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					return err
+				}
+
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus version",
+				)
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to get prometheus version")
+			}
+
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			err = runutil.Retry(2*time.Second, ctx.Done(), func() error {
 				if err := m.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
@@ -209,14 +230,13 @@ func runSidecar(
 			cancel()
 		})
 	}
-
 	{
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
 		t.MaxIdleConns = conf.connection.maxIdleConns
 		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -230,6 +250,7 @@ func runSidecar(
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithListen(conf.grpc.bindAddress),
@@ -346,10 +367,11 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 type promMetadata struct {
 	promURL *url.URL
 
-	mtx    sync.Mutex
-	mint   int64
-	maxt   int64
-	labels labels.Labels
+	mtx         sync.Mutex
+	mint        int64
+	maxt        int64
+	labels      labels.Labels
+	promVersion string
 
 	limitMinTime thanosmodel.TimeOrDurationValue
 
@@ -393,6 +415,26 @@ func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 	defer s.mtx.Unlock()
 
 	return s.mint, s.maxt
+}
+
+func (s *promMetadata) BuildVersion(ctx context.Context) error {
+	ver, err := s.client.BuildVersion(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.promVersion = ver
+	return nil
+}
+
+func (s *promMetadata) Version() string {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.promVersion
 }
 
 type sidecarConfig struct {

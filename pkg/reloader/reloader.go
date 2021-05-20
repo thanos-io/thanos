@@ -197,6 +197,11 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		}
 	}
 
+	if r.watchInterval == 0 {
+		// Skip watching the file-system.
+		return nil
+	}
+
 	for _, dir := range r.watchedDirs {
 		if err := r.watcher.addDirectory(dir); err != nil {
 			return errors.Wrapf(err, "add directory %s to watcher", dir)
@@ -285,7 +290,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			defer func() {
 				_ = os.Remove(tmpFile)
 			}()
-			if err := ioutil.WriteFile(tmpFile, b, 0666); err != nil {
+			if err := ioutil.WriteFile(tmpFile, b, 0600); err != nil {
 				return errors.Wrap(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
@@ -336,6 +341,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	if err := runutil.RetryWithLog(r.logger, r.retryInterval, ctx.Done(), func() error {
+		if r.watchInterval == 0 {
+			return nil
+		}
 		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()
@@ -358,11 +366,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 }
 
 func hashFile(h hash.Hash, fn string) error {
-	f, err := os.Open(fn)
+	f, err := os.Open(filepath.Clean(fn))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer runutil.CloseWithErrCapture(&err, f, "close file")
 
 	if _, err := h.Write([]byte{'\xff'}); err != nil {
 		return err

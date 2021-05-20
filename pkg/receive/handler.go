@@ -4,10 +4,11 @@
 package receive
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	stdlog "log"
 	"net"
 	"net/http"
@@ -266,7 +267,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 		replicated: rep != 0,
 	}
 
-	// on-the-wire format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
+	// On the wire, format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
 	if r.replicated {
 		r.n--
 	}
@@ -281,17 +282,24 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	// TODO(bwplotka): Optimize readAll https://github.com/thanos-io/thanos/pull/3334/files.
-	compressed, err := ioutil.ReadAll(r.Body)
+	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+	// Since this is receive hot path, grow upfront saving allocations and CPU time.
+	compressed := bytes.Buffer{}
+	if r.ContentLength >= 0 {
+		compressed.Grow(int(r.ContentLength))
+	} else {
+		compressed.Grow(512)
+	}
+	_, err := io.Copy(&compressed, r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
 
-	reqBuf, err := snappy.Decode(nil, compressed)
+	reqBuf, err := snappy.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -318,9 +326,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// Exit early if the request contained no data.
+	// TODO(yeya24): handle remote write metadata and exemplars.
+	// exit early if the request contained no data
 	if len(wreq.Timeseries) == 0 {
-		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
+		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
 		return
 	}
 	// exit if the request contains samples more than configured 'receive.samples-limit-per-each-write'.
@@ -420,9 +429,9 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		}
 	}()
 
-	logger := log.With(h.logger, "tenant", tenant)
+	logTags := []interface{}{"tenant", tenant}
 	if id, ok := middleware.RequestIDFromContext(pctx); ok {
-		logger = log.With(logger, "request-id", id)
+		logTags = append(logTags, "request-id", id)
 	}
 
 	ec := make(chan error)
@@ -472,7 +481,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
-					level.Debug(h.logger).Log("msg", "local tsdb write failed", "err", err.Error())
+					level.Debug(h.logger).Log(append(logTags, "msg", "local tsdb write failed", "err", err.Error()))
 					ec <- errors.Wrapf(determineWriteErrorCause(err, 1), "store locally for endpoint %v", endpoint)
 					return
 				}
@@ -535,7 +544,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 							b.attempt++
 							dur := h.expBackoff.ForAttempt(b.attempt)
 							b.nextAllowed = time.Now().Add(dur)
-							level.Debug(h.logger).Log("msg", "target unavailable backing off", "for", dur)
+							level.Debug(h.logger).Log(append(logTags, "msg", "target unavailable backing off", "for", dur))
 						} else {
 							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
 						}
@@ -564,7 +573,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		go func() {
 			for err := range ec {
 				if err != nil {
-					level.Debug(logger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
+					level.Debug(h.logger).Log(append(logTags, "msg", "request failed, but not needed to achieve quorum", "err", err))
 				}
 			}
 		}()

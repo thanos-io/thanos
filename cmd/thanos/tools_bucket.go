@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -320,10 +321,12 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 // registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
 func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("web", "Web interface for remote storage bucket.")
-	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 	webDisableCORS := cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").Default("false").Bool()
+
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
@@ -339,9 +342,33 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(*httpBindAddr),
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
+			httpserver.WithTLSConfig(*httpTLSConfig),
 		)
 
+		if *webRoutePrefix == "" {
+			*webRoutePrefix = *webExternalPrefix
+		}
+
+		if *webRoutePrefix != *webExternalPrefix {
+			level.Warn(logger).Log("msg", "different values for --web.route-prefix and --web.external-prefix detected, web UI may not work without a reverse-proxy.")
+		}
+
 		router := route.New()
+
+		// RoutePrefix must always start with '/'.
+		*webRoutePrefix = "/" + strings.Trim(*webRoutePrefix, "/")
+
+		// Redirect from / to /webRoutePrefix.
+		if *webRoutePrefix != "/" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
+			})
+			router.Get(*webRoutePrefix, func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix+"/", http.StatusFound)
+			})
+			router = router.WithPrefix(*webRoutePrefix)
+		}
+
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		bucketUI := ui.NewBucketUI(logger, *label, *webExternalPrefix, *webPrefixHeaderName, "", component.Bucket)
@@ -403,10 +430,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 					defer iterCancel()
 
 					_, _, err := fetcher.Fetch(iterCtx)
-					if err != nil {
-						return err
-					}
-					return nil
+					return err
 				})
 			})
 		}, func(error) {
@@ -438,7 +462,7 @@ func listResLevel() []string {
 
 func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("replicate", fmt.Sprintf("Replicate data from one object storage to another. NOTE: Currently it works only with Thanos blocks (%v has to have Thanos metadata).", block.MetaFilename))
-	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 	toObjStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
 	resolutions := cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationList()
 	compactions := cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").Ints()
@@ -476,6 +500,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			reg,
 			tracer,
 			*httpBindAddr,
+			*httpTLSConfig,
 			time.Duration(*httpGracePeriod),
 			matchers,
 			resolutionLevels,
@@ -492,14 +517,14 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Downsample.String(), "Continuously downsamples blocks in an object store bucket.")
-	httpAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	httpAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").Enum("SHA256", "")
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return RunDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, component.Downsample, metadata.HashFunc(*hashFunc))
+		return RunDownsample(g, logger, reg, *httpAddr, *httpTLSConfig, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, component.Downsample, metadata.HashFunc(*hashFunc))
 	})
 }
 
@@ -560,7 +585,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					duplicateBlocksFilter,
 				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
 			)
-			sy, err = compact.NewSyncer(
+			sy, err = compact.NewMetaSyncer(
 				logger,
 				reg,
 				bkt,
@@ -615,19 +640,21 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		}
 
 		var line []string
-		line = append(line, blockMeta.ULID.String())
-		line = append(line, time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"))
-		line = append(line, time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"))
-		line = append(line, timeRange.String())
-		line = append(line, untilDown)
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSeries))
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSamples))
-		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumChunks))
-		line = append(line, p.Sprintf("%d", blockMeta.Compaction.Level))
-		line = append(line, p.Sprintf("%t", blockMeta.Compaction.Failed))
-		line = append(line, strings.Join(labels, ","))
-		line = append(line, time.Duration(blockMeta.Thanos.Downsample.Resolution*int64(time.Millisecond)).String())
-		line = append(line, string(blockMeta.Thanos.Source))
+		line = append(line,
+			blockMeta.ULID.String(),
+			time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"),
+			time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"),
+			timeRange.String(),
+			untilDown,
+			p.Sprintf("%d", blockMeta.Stats.NumSeries),
+			p.Sprintf("%d", blockMeta.Stats.NumSamples),
+			p.Sprintf("%d", blockMeta.Stats.NumChunks),
+			p.Sprintf("%d", blockMeta.Compaction.Level),
+			p.Sprintf("%t", blockMeta.Compaction.Failed),
+			strings.Join(labels, ","),
+			time.Duration(blockMeta.Thanos.Downsample.Resolution*int64(time.Millisecond)).String(),
+			string(blockMeta.Thanos.Source))
+
 		lines = append(lines, line)
 	}
 

@@ -56,6 +56,7 @@
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-mixin'],
+    timezone: 'UTC',
     selector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.targetGroups)],
     dimensions: ['%s' % level for level in std.objectFields(thanos.targetGroups)],
 

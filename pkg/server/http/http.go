@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	toolkit_web "github.com/prometheus/exporter-toolkit/web"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -60,7 +61,11 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 // ListenAndServe listens on the TCP network address and handles requests on incoming connections.
 func (s *Server) ListenAndServe() error {
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
-	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
+	err := toolkit_web.Validate(s.opts.tlsConfigPath)
+	if err != nil {
+		return errors.Wrap(err, "server could not be started")
+	}
+	return errors.Wrap(toolkit_web.ListenAndServe(s.srv, s.opts.tlsConfigPath, s.logger), "serve HTTP and metrics")
 }
 
 // Shutdown gracefully shuts down the server by waiting,

@@ -119,4 +119,5 @@ config:
     port: 0
     plaintext: false
     custom_ca_cert_file: ""
+  tags: ""
 ```

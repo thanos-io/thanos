@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -36,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
 	yaml "gopkg.in/yaml.v2"
@@ -465,10 +465,10 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 	vec := make(promql.Vector, 0, len(vectorResult))
 
 	for _, e := range vectorResult {
-		lset := make(promlabels.Labels, 0, len(e.Metric))
+		lset := make(labels.Labels, 0, len(e.Metric))
 
 		for k, v := range e.Metric {
-			lset = append(lset, promlabels.Label{
+			lset = append(lset, labels.Label{
 				Name:  string(k),
 				Value: string(v),
 			})
@@ -608,6 +608,39 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 	return v.Data, nil
 }
 
+// BuildVersion returns Prometheus version from /api/v1/status/buildinfo Prometheus endpoint.
+// For Prometheus versions < 2.14.0 it returns "0" as Prometheus version.
+func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/buildinfo")
+
+	level.Debug(c.logger).Log("msg", "build version", "url", u.String())
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_buildversion HTTP[client]")
+	defer span.Finish()
+
+	// We get status code 404 for prometheus versions lower than 2.14.0
+	body, code, err := c.req2xx(ctx, &u, http.MethodGet)
+	if err != nil {
+		if code == http.StatusNotFound {
+			return "0", nil
+		}
+		return "", err
+	}
+
+	var b struct {
+		Data struct {
+			Version string `json:"version"`
+		} `json:"data"`
+	}
+
+	if err = json.Unmarshal(body, &b); err != nil {
+		return "", errors.Wrap(err, "unmarshal build info API response")
+	}
+
+	return b.Data.Version, nil
+}
+
 func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
@@ -739,7 +772,8 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 	return m.Data.Groups, nil
 }
 
-func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
+// MetricMetadataInGRPC returns the metadata from Prometheus metric metadata API. It uses gRPC errors.
+func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/metadata")
 	q := u.Query()
@@ -757,7 +791,7 @@ func (c *Client) MetadataInGRPC(ctx context.Context, base *url.URL, metric strin
 	var v struct {
 		Data map[string][]metadatapb.Meta `json:"data"`
 	}
-	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/metadata HTTP[client]", &u, &v)
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_metric_metadata HTTP[client]", &u, &v)
 }
 
 // ExemplarsInGRPC returns the exemplars from Prometheus exemplars API. It uses gRPC errors.
@@ -781,4 +815,20 @@ func (c *Client) ExemplarsInGRPC(ctx context.Context, base *url.URL, query strin
 	}
 
 	return m.Data, nil
+}
+
+func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets string) (*targetspb.TargetDiscovery, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/targets")
+
+	if stateTargets != "" {
+		q := u.Query()
+		q.Add("state", stateTargets)
+		u.RawQuery = q.Encode()
+	}
+
+	var v struct {
+		Data *targetspb.TargetDiscovery `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
 }

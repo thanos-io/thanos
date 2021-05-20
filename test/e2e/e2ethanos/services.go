@@ -38,7 +38,7 @@ var defaultBackoffConfig = util.BackoffConfig{
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.19.3"
+	return "quay.io/prometheus/prometheus:v2.26.0"
 }
 
 func DefaultAlertmanagerImage() string {
@@ -58,11 +58,11 @@ func DefaultImage() string {
 func NewPrometheus(sharedDir string, name string, config, promImage string) (*e2e.HTTPService, string, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, "", errors.Wrap(err, "create prometheus dir")
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(config), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(config), 0600); err != nil {
 		return nil, "", errors.Wrap(err, "creating prom config failed")
 	}
 
@@ -115,7 +115,7 @@ func NewPrometheusWithSidecar(sharedDir string, netName string, name string, con
 	return prom, sidecar, nil
 }
 
-func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses, metadataAddresses, exemplarAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
+func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ruleAddresses, targetAddresses []string, metadataAddresses, exemplarAddresses []string, routePrefix, externalPrefix string) (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -137,6 +137,10 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 		args = append(args, "--rule="+addr)
 	}
 
+	for _, addr := range targetAddresses {
+		args = append(args, "--target="+addr)
+	}
+
 	for _, addr := range metadataAddresses {
 		args = append(args, "--metadata="+addr)
 	}
@@ -148,7 +152,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 	if len(fileSDStoreAddresses) > 0 {
 		queryFileSDDir := filepath.Join(sharedDir, "data", "querier", name)
 		container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", name)
-		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
+		if err := os.MkdirAll(queryFileSDDir, 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
@@ -162,7 +166,7 @@ func NewQuerier(sharedDir, name string, storeAddresses, fileSDStoreAddresses, ru
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.yaml", b, 0666); err != nil {
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
@@ -202,7 +206,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 	dir := filepath.Join(sharedDir, "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
-	if err := os.MkdirAll(dataDir, 0777); err != nil {
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
 	b, err := json.Marshal(hashring)
@@ -247,7 +251,7 @@ func NewReceiverWithConfigWatcher(sharedDir string, networkName string, name str
 	dir := filepath.Join(sharedDir, "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
-	if err := os.MkdirAll(dataDir, 0777); err != nil {
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
 	b, err := json.Marshal(hashring)
@@ -255,7 +259,7 @@ func NewReceiverWithConfigWatcher(sharedDir string, networkName string, name str
 		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0600); err != nil {
 		return nil, errors.Wrap(err, "creating receive config")
 	}
 
@@ -291,7 +295,7 @@ func NewReceiverWithConfigWatcher(sharedDir string, networkName string, name str
 func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*Service, error) {
 	dir := filepath.Join(sharedDir, "data", "rule", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "rule", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create rule dir")
 	}
 
@@ -339,7 +343,7 @@ func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.Al
 func NewAlertmanager(sharedDir string, name string) (*e2e.HTTPService, error) {
 	dir := filepath.Join(sharedDir, "data", "am", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "am", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create am dir")
 	}
 	const config = `
@@ -351,7 +355,7 @@ route:
 receivers:
 - name: 'null'
 `
-	if err := ioutil.WriteFile(filepath.Join(dir, "config.yaml"), []byte(config), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(dir, "config.yaml"), []byte(config), 0600); err != nil {
 		return nil, errors.Wrap(err, "creating alertmanager config file failed")
 	}
 
@@ -378,7 +382,7 @@ receivers:
 func NewStoreGW(sharedDir string, name string, bucketConfig client.BucketConfig, relabelConfig ...relabel.Config) (*Service, error) {
 	dir := filepath.Join(sharedDir, "data", "store", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "store", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create store dir")
 	}
 
@@ -424,7 +428,7 @@ func NewCompactor(sharedDir string, name string, bucketConfig client.BucketConfi
 	dir := filepath.Join(sharedDir, "data", "compact", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
 
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create compact dir")
 	}
 
@@ -499,4 +503,40 @@ func NewMemcached(name string) *e2e.ConcreteService {
 	memcached.SetBackoff(defaultBackoffConfig)
 
 	return memcached
+}
+
+func NewToolsBucketWeb(name string, bucketConfig client.BucketConfig, routePrefix, externalPrefix string) (*Service, error) {
+	bktConfigBytes, err := yaml.Marshal(bucketConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig)
+	}
+
+	args := e2e.BuildArgs(map[string]string{
+		"--debug.name":      fmt.Sprintf("toolsBucketWeb-%s", name),
+		"--http-address":    ":8080",
+		"--log.level":       infoLogLevel,
+		"--objstore.config": string(bktConfigBytes),
+	})
+	if routePrefix != "" {
+		args = append(args, "--web.route-prefix="+routePrefix)
+	}
+
+	if externalPrefix != "" {
+		args = append(args, "--web.external-prefix="+externalPrefix)
+	}
+
+	args = append([]string{"bucket", "web"}, args...)
+
+	toolsBucketWeb := NewService(
+		fmt.Sprintf("toolsBucketWeb-%s", name),
+		DefaultImage(),
+		e2e.NewCommand("tools", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+	)
+	toolsBucketWeb.SetUser(strconv.Itoa(os.Getuid()))
+	toolsBucketWeb.SetBackoff(defaultBackoffConfig)
+
+	return toolsBucketWeb, nil
 }

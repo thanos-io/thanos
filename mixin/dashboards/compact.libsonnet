@@ -35,7 +35,7 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_group_compactions_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.compact.dashboard.dimensions
           )
         )
       )
@@ -57,7 +57,7 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_downsample_failed_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_downsample_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.compact.dashboard.dimensions
           )
         )
       )
@@ -79,12 +79,12 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_compact_garbage_collection_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_compact_garbage_collection_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.compact.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute garbage collection in quantiles.') +
-          g.latencyPanel('thanos_compact_garbage_collection_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
+          g.latencyPanel('thanos_compact_garbage_collection_duration_seconds', thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
         )
       )
       .addRow(
@@ -139,12 +139,12 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_blocks_meta_sync_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_blocks_meta_syncs_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.compact.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute meta file sync, in quantiles.') +
-          g.latencyPanel('thanos_blocks_meta_sync_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
+          g.latencyPanel('thanos_blocks_meta_sync_duration_seconds', thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
         )
       )
       .addRow(
@@ -162,16 +162,16 @@ local utils = import '../lib/utils.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_objstore_bucket_operation_failures_total{%(selector)s}' % thanos.compact.dashboard.selector,
             'thanos_objstore_bucket_operations_total{%(selector)s}' % thanos.compact.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.compact.dashboard.dimensions
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute operations against the bucket, in quantiles.') +
-          g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
+          g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
         )
       )
       .addRow(
-        g.resourceUtilizationRow(thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
+        g.resourceUtilizationRow(thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
       ),
 
     __overviewRows__+:: [
@@ -196,7 +196,7 @@ local utils = import '../lib/utils.libsonnet';
         g.qpsErrTotalPanel(
           'thanos_compact_group_compactions_failures_total{%(selector)s}' % thanos.dashboard.overview.selector,
           'thanos_compact_group_compactions_total{%(selector)s}' % thanos.dashboard.overview.selector,
-          thanos.rule.dashboard.dimensions
+          thanos.compact.dashboard.dimensions
         ) +
         g.addDashboardLink(thanos.compact.title)
       ) +

@@ -91,13 +91,19 @@ forLoop:
 	return response, nil
 }
 
+// minResponseTime returns earliest timestamp in r.Data.Result.
+// -1 is returned if r contains no data points.
+// Each SampleStream within r.Data.Result must be sorted by timestamp.
 func minResponseTime(r queryrange.Response) int64 {
 	var res = r.(*queryrange.PrometheusResponse).Data.Result
-	if len(res) == 0 {
+	if len(res) == 0 || len(res[0].Samples) == 0 {
 		return -1
 	}
-	if len(res[0].Samples) == 0 {
-		return -1
+	var minTs = res[0].Samples[0].TimestampMs
+	for _, sampleStream := range res[1:] {
+		if ts := sampleStream.Samples[0].TimestampMs; ts < minTs {
+			minTs = ts
+		}
 	}
-	return res[0].Samples[0].TimestampMs
+	return minTs
 }
