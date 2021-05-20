@@ -194,7 +194,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 5)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
+		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, nil)
 		testutil.Ok(t, err)
 
 		planner := NewTSDBBasedPlanner(logger, []int64{1000, 3000})
