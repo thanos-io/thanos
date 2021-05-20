@@ -6,10 +6,8 @@ package main
 import (
 	"context"
 	"io/ioutil"
-	"net"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -74,17 +72,8 @@ func registerReceive(app *extkingpin.App) {
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
 		}
 
-		// Local is empty, so try to generate a local endpoint
-		// based on the hostname and the listening port.
-		if conf.endpoint == "" {
-			hostname, err := os.Hostname()
-			if hostname == "" || err != nil {
-				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
-			}
-			parts := strings.Split(*conf.grpcBindAddr, ":")
-			port := parts[len(parts)-1]
-			conf.endpoint = net.JoinHostPort(hostname, port)
-		}
+		// enable ingestion if local endpoint is specified, otherwise run receiver in distributor mode.
+		enableIngestion := conf.endpoint != ""
 
 		return runReceive(
 			g,
@@ -96,6 +85,7 @@ func registerReceive(app *extkingpin.App) {
 			lset,
 			component.Receive,
 			metadata.HashFunc(conf.hashFunc),
+			enableIngestion,
 			conf,
 		)
 	})
@@ -112,14 +102,21 @@ func runReceive(
 	lset labels.Labels,
 	comp component.SourceStoreAPI,
 	hashFunc metadata.HashFunc,
+	enableIngestion bool,
 	conf *receiveConfig,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive")
+
+	if !enableIngestion {
+		level.Info(logger).Log("msg", "ingestion is disabled for receiver")
+	}
+
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
 	if err != nil {
 		return err
 	}
+
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(
 		logger,
 		reg,
@@ -140,23 +137,26 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+
 	upload := len(confContentYaml) > 0
-	if upload {
-		if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
-			if !conf.ignoreBlockSize {
-				return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
-					"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+	if enableIngestion {
+		if upload {
+			if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+				if !conf.ignoreBlockSize {
+					return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
+						"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+				}
+				level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
 			}
-			level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+			// The background shipper continuously scans the data directory and uploads
+			// new blocks to object storage service.
+			bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
+			if err != nil {
+				return err
+			}
+		} else {
+			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		}
-		// The background shipper continuously scans the data directory and uploads
-		// new blocks to object storage service.
-		bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
-		if err != nil {
-			return err
-		}
-	} else {
-		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 	}
 
 	// TODO(brancz): remove after a couple of versions
@@ -212,10 +212,12 @@ func runReceive(
 	// uploadDone signals when uploading has finished.
 	uploadDone := make(chan struct{}, 1)
 
-	level.Debug(logger).Log("msg", "setting up tsdb")
-	{
-		if err := startTSDB(g, logger, reg, dbs, dbReady, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
-			return err
+	if enableIngestion {
+		level.Debug(logger).Log("msg", "setting up tsdb")
+		{
+			if err := startTSDBAndUpload(g, logger, reg, dbs, dbReady, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -253,6 +255,9 @@ func runReceive(
 		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPC, dbReady, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
 			return err
 		}
+		if err := runGRPCServer(g, logger, s, startGRPC, conf); err != nil {
+			return err
+		}
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
@@ -271,6 +276,31 @@ func runReceive(
 	return nil
 }
 
+// runGRPCServer starts the grpc server, once it receives a signal from the startGRPC channel.
+func runGRPCServer(g *run.Group,
+	logger log.Logger,
+	s *grpcserver.Server,
+	startGRPC chan struct{},
+	conf *receiveConfig,
+
+) error {
+	// We need to be able to start and stop the gRPC server
+	// whenever the DB changes, thus it needs its own run group.
+	g.Add(func() error {
+		for range startGRPC {
+			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
+			if err := s.ListenAndServe(); err != nil {
+				return errors.Wrap(err, "serve gRPC")
+			}
+		}
+		return nil
+	}, func(error) {})
+
+	return nil
+}
+
+// setupGRPCServer sets up the configuration for the gRPC server.
+// It also sets up a handler for reloading the server if tsdb reloads.
 func setupGRPCServer(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -323,22 +353,13 @@ func setupGRPCServer(g *run.Group,
 		}
 		return nil
 	}, func(error) {})
-	// We need to be able to start and stop the gRPC server
-	// whenever the DB changes, thus it needs its own run group.
-	g.Add(func() error {
-		for range startGRPC {
-			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
-			if err := s.ListenAndServe(); err != nil {
-				return errors.Wrap(err, "serve gRPC")
-			}
-		}
-		return nil
-	}, func(error) {})
 
 	return nil
 
 }
 
+// setupHashring sets up the hashring configuration provided.
+// If no hashring is provided, we setup a single node hashring with local endpoint.
 func setupHashring(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -429,8 +450,9 @@ func setupHashring(g *run.Group,
 	return nil
 }
 
-// startTSDB starts up the multi-tsdb and sets up the rungroup to flush the tsdb on hashring change.
-func startTSDB(g *run.Group,
+// startTSDBAndUpload starts up the multi-tsdb and sets up the rungroup to flush the tsdb and reload on hashring change.
+// It also uploads the tsdb to object store if upload is enabled.
+func startTSDBAndUpload(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	dbs *receive.MultiTSDB,
