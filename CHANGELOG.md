@@ -38,6 +38,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#4211](https://github.com/thanos-io/thanos/pull/4211) Add TLS and basic authentication to Thanos APIs
 - [#4249](https://github.com/thanos-io/thanos/pull/4249) UI: add dark theme
 - [#3707](https://github.com/thanos-io/thanos/pull/3707) Tools: Added `--rewrite.to-relabel-config` to bucket rewrite tool to support series relabel from given blocks.
+- [#4239](https://github.com/thanos-io/thanos/pull/4239) Add penalty based deduplication mode for compactor.
 
 ### Fixed
 

@@ -8,8 +8,11 @@ import (
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
 func TestDedupChunkSeriesMerger(t *testing.T) {
@@ -138,4 +141,185 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 			require.Equal(t, expChks, actChks)
 		})
 	}
+}
+
+func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
+	m := NewDedupChunkSeriesMerger()
+
+	defaultLabels := labels.FromStrings("bar", "baz")
+	emptySamples := downsample.SamplesFromTSDBSamples([]tsdbutil.Sample{})
+	// Samples are created with step 1m. So the 5m downsampled chunk has 2 samples.
+	samples1 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(0, 10, 60*1000))
+	// Non overlapping samples with samples1. 5m downsampled chunk has 2 samples.
+	samples2 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(600000, 10, 60*1000))
+
+	samples3 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(120000, 10, 60*1000))
+
+	for _, tc := range []struct {
+		name     string
+		input    []storage.ChunkSeries
+		expected storage.ChunkSeries
+	}{
+		{
+			name: "single empty series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(emptySamples, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator()
+				},
+			},
+		},
+		{
+			name: "single series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+				},
+			},
+		},
+		{
+			name: "two empty series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(emptySamples, downsample.ResLevel1)...)
+					},
+				},
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(emptySamples, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator()
+				},
+			},
+		},
+		{
+			name: "two non overlapping series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples2, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator(
+						append(downsample.DownsampleRaw(samples1, downsample.ResLevel1),
+							downsample.DownsampleRaw(samples2, downsample.ResLevel1)...)...)
+				},
+			},
+		},
+		{
+			// 1:1 duplicated chunks are deduplicated.
+			name: "two same series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator(
+						downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+				},
+			},
+		},
+		{
+			name: "two overlapping series",
+			input: []storage.ChunkSeries{
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
+					},
+				},
+				&storage.ChunkSeriesEntry{
+					Lset: defaultLabels,
+					ChunkIteratorFn: func() chunks.Iterator {
+						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples3, downsample.ResLevel1)...)
+					},
+				},
+			},
+			expected: &storage.ChunkSeriesEntry{
+				Lset: defaultLabels,
+				ChunkIteratorFn: func() chunks.Iterator {
+					return storage.NewListChunkSeriesIterator(chunks.Meta{
+						MinTime: 299999,
+						MaxTime: 540000,
+						Chunk: downsample.EncodeAggrChunk([5]chunkenc.Chunk{
+							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 3}, sample{540000, 5}}).Chunk,
+							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 540000}, sample{540000, 2100000}}).Chunk,
+							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 120000}, sample{540000, 300000}}).Chunk,
+							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{540000, 540000}}).Chunk,
+							tsdbutil.ChunkFromSamples([]tsdbutil.Sample{sample{299999, 240000}, sample{299999, 240000}}).Chunk,
+						}),
+					})
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := m(tc.input...)
+			require.Equal(t, tc.expected.Labels(), merged.Labels())
+			actChks, actErr := storage.ExpandChunks(merged.Iterator())
+			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator())
+
+			require.Equal(t, expErr, actErr)
+			require.Equal(t, expChks, actChks)
+		})
+	}
+}
+
+func createSamplesWithStep(start, numOfSamples, step int) []tsdbutil.Sample {
+	res := make([]tsdbutil.Sample, numOfSamples)
+	cur := start
+	for i := 0; i < numOfSamples; i++ {
+		res[i] = sample{t: int64(cur), v: float64(cur)}
+		cur += step
+	}
+
+	return res
 }

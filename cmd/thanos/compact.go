@@ -638,7 +638,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("48h").SetValue(&cc.deleteDelay)
 
 	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+		"Please note that this uses a NAIVE algorithm for merging. If you need a smarter deduplication algorithm, please set it via -- compact.dedup-func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
