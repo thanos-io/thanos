@@ -258,9 +258,9 @@ func runReceive(
 		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPCListening, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
 			return err
 		}
-		if err := runGRPCServer(g, logger, s, startGRPCListening, conf); err != nil {
-			return err
-		}
+		// if err := runGRPCServer(g, logger, s, startGRPCListening, conf); err != nil {
+		// 	return err
+		// }
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
@@ -353,6 +353,18 @@ func setupGRPCServer(g *run.Group,
 		}
 		if s != nil {
 			s.Shutdown(err)
+		}
+		return nil
+	}, func(error) {})
+
+	// We need to be able to start and stop the gRPC server
+	// whenever the DB changes, thus it needs its own run group.
+	g.Add(func() error {
+		for range startGRPCListening {
+			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
+			if err := s.ListenAndServe(); err != nil {
+				return errors.Wrap(err, "serve gRPC")
+			}
 		}
 		return nil
 	}, func(error) {})
