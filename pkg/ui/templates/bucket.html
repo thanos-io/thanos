@@ -1,7 +1,7 @@
 {{define "head"}}
     <meta http-equiv="refresh" content="300"/>
 
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript" src="{{ pathPrefix }}/static/vendor/charts/loader.js?v={{ buildVersion }}"></script>
     <script src="{{ pathPrefix }}/static/js/bucket.js?v={{ buildVersion }}"></script>
     <script src="{{ pathPrefix }}/static/vendor/moment/moment.min.js?v={{ buildVersion }}"></script>
 {{end}}
