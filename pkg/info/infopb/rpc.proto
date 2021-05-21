@@ -30,15 +30,27 @@ message InfoRequest {}
 
 message InfoResponse {
     repeated ZLabelSet label_sets = 1 [(gogoproto.nullable) = false];
-    string ComponentType  = 2;
+    string ComponentType          = 2;
     
-    StoreInfo store = 3;
-    ExemplarsInfo exemplars = 4;
+    StoreInfo store               = 3;
+    RulesInfo rules               = 4;
+    MetadataInfo metadata         = 5;
+    TargetsInfo targets           = 6;
+    ExemplarsInfo exemplars       = 7;
 }
 
 message StoreInfo {
     int64 min_time = 1;
     int64 max_time = 2;
+}
+
+message RulesInfo {
+}
+
+message MetadataInfo {
+}
+
+message TargetsInfo {
 }
 
 message ExemplarsInfo {
