@@ -6,41 +6,41 @@ menu: thanos
 
 # Tracing
 
-Thanos supports different tracing backends that implements `opentracing.Tracer` interface.
+Thanos supports different tracing backends that implement the` opentracing.Tracer` interface.
 
-All clients are configured using `--tracing.config-file` to reference to the configuration file or `--tracing.config` to put yaml config directly.
+All clients are configured using `--tracing.config-file` to refer to the configuration file or `--tracing.config` to put YAML config directly.
 
 ## How to use `config` flags?
 
-You can either pass YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`.
-We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
+You can either pass the YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`.
+We recommend the latter as it gives a clear static view of the configuration for each component. It also saves you the fuss of creating and managing the additional file.
 
 Don't be afraid of multiline flags!
 
-In Kubernetes it is as easy as (on Thanos sidecar example):
+In Kubernetes, it is as easy as (on Thanos sidecar example):
 
 ```yaml
-      - args:
-        - sidecar
-        - |
-          --objstore.config=type: GCS
-          config:
-            bucket: <bucket>
-        - --prometheus.url=http://localhost:9090
-        - |
-          --tracing.config=type: STACKDRIVER
-          config:
-            service_name: ""
-            project_id: <project>
-            sample_factor: 16
-        - --tsdb.path=/prometheus-data
+- args:
+ - sidecar
+ - |
+ --objstore.config=type: GCS
+ config:
+ bucket: <bucket>
+ - --prometheus.url=http://localhost:9090
+ - |
+ --tracing.config=type: STACKDRIVER
+ config:
+ service_name: ""
+ project_id: <project>
+ sample_factor: 16
+ - --tsdb.path=/prometheus-data
 ```
 
 ## How to add a new client?
 
 1. Create new directory under `pkg/tracing/<provider>`
 2. Implement `opentracing.Tracer` interface
-3. Add client implementation to the factory in [factory](/pkg/tracing/client/factory.go) code. (Using as small amount of flags as possible in every command)
+3. Add client implementation to the factory in [factory](/pkg/tracing/client/factory.go) code. (Using a small amount of flags as possible in every command)
 4. Add client struct config to [cfggen](/scripts/cfggen/main.go) to allow config auto generation.
 
 At that point, anyone can use your provider by spec.
@@ -53,7 +53,8 @@ Current tracing supported backends:
 
 Client for https://github.com/jaegertracing/jaeger tracing.
 
-[embedmd]:# (flags/config_tracing_jaeger.txt yaml)
+[embedmd]: # "flags/config_tracing_jaeger.txt yaml"
+
 ```yaml
 type: JAEGER
 config:
@@ -80,7 +81,8 @@ config:
 
 Client for https://cloud.google.com/trace/ tracing.
 
-[embedmd]:# (flags/config_tracing_stackdriver.txt yaml)
+[embedmd]: # "flags/config_tracing_stackdriver.txt yaml"
+
 ```yaml
 type: STACKDRIVER
 config:
@@ -88,11 +90,13 @@ config:
   project_id: ""
   sample_factor: 0
 ```
+
 ### Elastic APM
 
 Client for https://www.elastic.co/products/apm tracing.
 
-[embedmd]:# (flags/config_tracing_elastic_apm.txt yaml)
+[embedmd]: # "flags/config_tracing_elastic_apm.txt yaml"
+
 ```yaml
 type: ELASTIC_APM
 config:
@@ -106,18 +110,19 @@ config:
 
 Client for [Lightstep](https://lightstep.com).
 
-In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
+In order to configure Thanos to interact with Lightstep, you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
-[embedmd]:# (flags/config_tracing_lightstep.txt yaml)
+[embedmd]: # "flags/config_tracing_lightstep.txt yaml"
+
 ```yaml
 type: LIGHTSTEP
 config:
   access_token: ""
   collector:
-    scheme: ""
-    host: ""
-    port: 0
-    plaintext: false
-    custom_ca_cert_file: ""
+  scheme: ""
+  host: ""
+  port: 0
+  plaintext: false
+  custom_ca_cert_file: ""
   tags: ""
 ```
