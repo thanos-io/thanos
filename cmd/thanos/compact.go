@@ -650,7 +650,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
 		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
-		"If you need a smarter deduplication algorithm, please set it via --deduplication.func.").
+		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
 
 	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
