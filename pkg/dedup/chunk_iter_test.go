@@ -16,7 +16,7 @@ import (
 )
 
 func TestDedupChunkSeriesMerger(t *testing.T) {
-	m := NewDedupChunkSeriesMerger()
+	m := NewChunkSeriesMerger()
 
 	for _, tc := range []struct {
 		name     string
@@ -121,7 +121,7 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 			),
 		},
 		{
-			name: "150 overlapping samples, split chunk",
+			name: "150 overlapping samples, no chunk splitting due to penalty deduplication",
 			input: []storage.ChunkSeries{
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), tsdbutil.GenerateSamples(0, 90)),  // [0 - 90)
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), tsdbutil.GenerateSamples(60, 90)), // [90 - 150)
@@ -144,7 +144,7 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 }
 
 func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
-	m := NewDedupChunkSeriesMerger()
+	m := NewChunkSeriesMerger()
 
 	defaultLabels := labels.FromStrings("bar", "baz")
 	emptySamples := downsample.SamplesFromTSDBSamples([]tsdbutil.Sample{})
@@ -152,7 +152,7 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	samples1 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(0, 10, 60*1000))
 	// Non overlapping samples with samples1. 5m downsampled chunk has 2 samples.
 	samples2 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(600000, 10, 60*1000))
-
+	// Overlapped with samples1.
 	samples3 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(120000, 10, 60*1000))
 
 	for _, tc := range []struct {

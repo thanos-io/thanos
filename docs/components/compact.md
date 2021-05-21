@@ -89,8 +89,8 @@ which compacts overlapping blocks into single one. This is mainly used for **bac
 
 In Thanos, it works similarly, but on bigger scale and using external labels for grouping as explained in [Compaction section](#compaction).
 
-In both systems, series with the same labels are merged together. Merging samples is **naive**. It works by deduplicating samples within
-exactly the same timestamps. Otherwise samples are added in sorted by time order.
+In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within
+exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#Vertical Compaction Use Cases).
 
 > **NOTE:** Both Prometheus and Thanos default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, within the same external labels).
 
@@ -101,12 +101,12 @@ There can be few valid use cases for vertical compaction:
 * Races between multiple compactions, for example multiple compactors or between compactor and Prometheus compactions. While this will have extra
 computation overhead for Compactor it's safe to enable vertical compaction for this case.
 * Backfilling. If you want to add blocks of data to any stream where there is existing data already there for the time range, you will need enabled vertical compaction.
-* Offline deduplication of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common series duplications, `one-to-one` and `realistic`:
-  * `one-to-one` duplication is when same series (series with the same labels from different blocks) for the same range have **exactly** the same samples: Same values and timestamps.
+* Offline deduplication of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common series deduplications, `one-to-one` and `penalty`:
+  * `one-to-one` deduplication is when same series (series with the same labels from different blocks) for the same range have **exactly** the same samples: Same values and timestamps.
 This is very common while using [Receivers](../components/receive.md) with replication greater than 1 as receiver replication copies exactly the same timestamps and values to different receive instances.
-  * `realistic` duplication is when same series data is **logically duplicated**. For example, it comes from the same application, but scraped by two different Prometheus-es. Ideally
+  * `penalty` deduplication is when same series data is **logically duplicated**. For example, it comes from the same application, but scraped by two different Prometheus-es. Ideally
 this requires more complex deduplication algorithms. For example one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is common
-case when Prometheus HA replicas are used. [Offline deduplication for this is in progress](https://github.com/thanos-io/thanos/issues/1014).
+case when Prometheus HA replicas are used. You can enable this deduplication via `--deduplication.func=penalty` flag.
 
 #### Vertical Compaction Risks
 
@@ -142,6 +142,8 @@ external_labels: {cluster="us1", receive="true", environment="staging"}
 ```
 
 On next compaction multiple streams' blocks will be compacted into one.
+
+If you need a different deduplication algorithm, use `deduplication.func` flag. The default value is the original `one-to-one` deduplication.
 
 ## Enforcing Retention of Data
 
@@ -343,7 +345,13 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
-      --compact.dedup-func=     Experimental. Deduplication algorithm for
+      --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
+                                before they are being processed. Malformed
+                                blocks older than the maximum of
+                                consistency-delay and 48h0m0s will be removed.
+      --data-dir="./data"       Data directory in which to cache blocks and
+                                process compactions.
+      --deduplication.func=     Experimental. Deduplication algorithm for
                                 merging overlapping blocks. Possible values are:
                                 "", "penalty". If no value is specified, the
                                 default compact deduplication merger is used,
@@ -352,12 +360,6 @@ Flags:
                                 algorithm will be used. At least one replica
                                 label has to be set via
                                 --deduplication.replica-label flag.
-      --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
-                                before they are being processed. Malformed
-                                blocks older than the maximum of
-                                consistency-delay and 48h0m0s will be removed.
-      --data-dir="./data"       Data directory in which to cache blocks and
-                                process compactions.
       --delete-delay=48h        Time before a block marked for deletion is
                                 deleted from bucket. If delete-delay is non
                                 zero, blocks will be marked for deletion and

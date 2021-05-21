@@ -309,7 +309,7 @@ func runCompact(
 	var mergeFunc storage.VerticalChunkSeriesMergeFunc
 	switch conf.dedupFunc {
 	case compact.DedupAlgorithmPenalty:
-		mergeFunc = dedup.NewDedupChunkSeriesMerger()
+		mergeFunc = dedup.NewChunkSeriesMerger()
 
 		if len(conf.dedupReplicaLabels) == 0 {
 			return errors.New("penalty based deduplication needs at least one replica label specified")
@@ -638,20 +638,19 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("48h").SetValue(&cc.deleteDelay)
 
 	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
-		"Please note that this uses a NAIVE algorithm for merging. If you need a smarter deduplication algorithm, please set it via -- compact.dedup-func."+
+		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
-	cmd.Flag("compact.dedup-func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
+	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
 		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
 		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
 		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
 
-	// Update this. This flag works for both dedup version compactor and the original compactor.
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
 		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
-		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
+		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
+		"If you need a smarter deduplication algorithm, please set it via --deduplication.func.").
 		Hidden().StringsVar(&cc.dedupReplicaLabels)
 
 	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.

@@ -14,9 +14,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
-// NewDedupChunkSeriesMerger merges several chunk series into one.
+// NewChunkSeriesMerger merges several chunk series into one.
 // Deduplication is based on penalty based deduplication algorithm without handling counter reset.
-func NewDedupChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
+func NewChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
 	return func(series ...storage.ChunkSeries) storage.ChunkSeries {
 		if len(series) == 0 {
 			return nil

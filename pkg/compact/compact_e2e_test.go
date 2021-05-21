@@ -176,7 +176,7 @@ func TestGroupCompactE2E(t *testing.T) {
 
 // Penalty based merger should get the same result as the blocks don't have overlap.
 func TestGroupCompactPenaltyDedupE2E(t *testing.T) {
-	testGroupCompactE2e(t, dedup.NewDedupChunkSeriesMerger())
+	testGroupCompactE2e(t, dedup.NewChunkSeriesMerger())
 }
 
 func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMergeFunc) {

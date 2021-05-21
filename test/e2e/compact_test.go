@@ -673,7 +673,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}
 		if penaltyDedup {
-			extArgs = append(extArgs, "--compact.dedup-func=penalty")
+			extArgs = append(extArgs, "--deduplication.func=penalty")
 		}
 
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
@@ -740,7 +740,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s"}
 		if penaltyDedup {
-			extArgs = append(extArgs, "--compact.dedup-func=penalty")
+			extArgs = append(extArgs, "--deduplication.func=penalty")
 		}
 		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, extArgs...)
 		testutil.Ok(t, err)
