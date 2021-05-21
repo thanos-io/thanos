@@ -251,16 +251,10 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
-		var s *grpcserver.Server
-		// startGRPCListening re-starts the gRPC server once it receives a signal.
-		startGRPCListening := make(chan struct{})
 
-		if err := setupGRPCServer(g, logger, reg, tracer, conf, s, startGRPCListening, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
+		if err := setupAndRunGRPCServer(g, logger, reg, tracer, conf, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
 			return err
 		}
-		// if err := runGRPCServer(g, logger, s, startGRPCListening, conf); err != nil {
-		// 	return err
-		// }
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
@@ -279,37 +273,13 @@ func runReceive(
 	return nil
 }
 
-// runGRPCServer starts the grpc server, once it receives a signal from the startGRPCListening channel.
-func runGRPCServer(g *run.Group,
-	logger log.Logger,
-	s *grpcserver.Server,
-	startGRPCListening chan struct{},
-	conf *receiveConfig,
-
-) error {
-	// We need to be able to start and stop the gRPC server
-	// whenever the DB changes, thus it needs its own run group.
-	g.Add(func() error {
-		for range startGRPCListening {
-			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
-			if err := s.ListenAndServe(); err != nil {
-				return errors.Wrap(err, "serve gRPC")
-			}
-		}
-		return nil
-	}, func(error) {})
-
-	return nil
-}
-
-// setupGRPCServer sets up the configuration for the gRPC server.
+// setupAndRunGRPCServer sets up the configuration for the gRPC server.
 // It also sets up a handler for reloading the server if tsdb reloads.
-func setupGRPCServer(g *run.Group,
+func setupAndRunGRPCServer(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	conf *receiveConfig, s *grpcserver.Server,
-	startGRPCListening chan struct{},
+	conf *receiveConfig,
 	reloadGRPCServer chan struct{},
 	comp component.SourceStoreAPI,
 	dbs *receive.MultiTSDB,
@@ -319,6 +289,11 @@ func setupGRPCServer(g *run.Group,
 	grpcProbe *prober.GRPCProbe,
 
 ) error {
+
+	var s *grpcserver.Server
+	// startGRPCListening re-starts the gRPC server once it receives a signal.
+	startGRPCListening := make(chan struct{})
+
 	g.Add(func() error {
 		defer close(startGRPCListening)
 
