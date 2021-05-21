@@ -6,6 +6,7 @@ package store
 import (
 	"bufio"
 	"bytes"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -749,6 +750,7 @@ func (s *bucketSeriesSet) Err() error {
 
 // blockSeries returns series matching given matchers, that have some data in given time range.
 func blockSeries(
+	ctx context.Context, // Context for all of the operations, used in all readers as well.
 	extLset labels.Labels, // External labels added to the returned series labels.
 	indexr *bucketIndexReader, // Index reader for block.
 	chunkr *bucketChunkReader, // Chunk reader for block.
@@ -758,6 +760,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
+	h *seriesResponsesHeap,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -788,6 +791,11 @@ func blockSeries(
 		lset           labels.Labels
 		chks           []chunks.Meta
 	)
+
+	var chunkLoader *errgroup.Group
+	if chunkr != nil {
+		chunkLoader, _ = errgroup.WithContext(ctx)
+	}
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
@@ -826,6 +834,14 @@ func blockSeries(
 		}
 
 		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
+
+		if h != nil {
+			entry := h.p.Get().(*seriesResponseEntry)
+			entry.lbls = &s.lset
+			entry.series = &s
+			entry.loadingGroup = chunkLoader
+			heap.Push(h, entry)
+		}
 		res = append(res, s)
 	}
 
@@ -833,9 +849,9 @@ func blockSeries(
 		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
-	if err := chunkr.load(res, loadAggregates); err != nil {
-		return nil, nil, errors.Wrap(err, "load chunks")
-	}
+	chunkLoader.Go(func() error {
+		return errors.Wrap(chunkr.load(res, loadAggregates), "load chunks")
+	})
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
@@ -947,6 +963,76 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxResolutionMillis, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
+type seriesResponseEntry struct {
+	lbls         *labels.Labels
+	series       *seriesEntry
+	loadingGroup *errgroup.Group
+}
+
+type seriesResponsesHeap struct {
+	entries []*seriesResponseEntry
+	mtx     *sync.Mutex
+	p       *sync.Pool
+}
+
+func newSeriesResponsesHeap() *seriesResponsesHeap {
+	return &seriesResponsesHeap{
+		p: &sync.Pool{
+			New: func() interface{} {
+				return &seriesResponseEntry{}
+			},
+		},
+		mtx:     &sync.Mutex{},
+		entries: make([]*seriesResponseEntry, 0),
+	}
+}
+
+func (h seriesResponsesHeap) Len() int {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	return len(h.entries)
+}
+
+func (h seriesResponsesHeap) Less(i, j int) bool {
+	return labels.Compare(*h.entries[i].lbls, *h.entries[j].lbls) > 0
+}
+
+func (h seriesResponsesHeap) Swap(i, j int) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	h.entries[i], h.entries[j] = h.entries[j], h.entries[i]
+}
+func (h *seriesResponsesHeap) Push(x interface{}) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	entries := h.entries
+	data := x.(*seriesResponseEntry)
+	entries = append(entries, data)
+	h.entries = entries
+}
+
+func (h *seriesResponsesHeap) Pop() (ret interface{}) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
+	old := *h
+	entries := h.entries
+	n := len(entries)
+
+	if old.entries[n-1].loadingGroup != nil {
+		err := old.entries[n-1].loadingGroup.Wait()
+		if err != nil {
+			return err
+		}
+	}
+
+	x := old.entries[n-1]
+
+	entries = entries[0 : n-1]
+	h.entries = entries
+	return x
+}
+
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
 	if s.queryGate != nil {
@@ -977,7 +1063,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		reqBlockMatchers []*labels.Matcher
 		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks"))
 		seriesLimiter    = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
+		h                = &seriesResponsesHeap{
+			entries: make([]*seriesResponseEntry, 0),
+			mtx:     &sync.Mutex{},
+		}
 	)
+
+	heap.Init(h)
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
@@ -1026,6 +1118,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			g.Go(func() error {
 				part, pstats, err := blockSeries(
+					ctx,
 					b.extLset,
 					indexr,
 					chunkr,
@@ -1035,6 +1128,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
+					h,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1097,42 +1191,88 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
 	}
-	// Merge the sub-results from each selected block.
-	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
-		begin := time.Now()
 
-		// NOTE: We "carefully" assume series and chunks are sorted within each SeriesSet. This should be guaranteed by
-		// blockSeries method. In worst case deduplication logic won't deduplicate correctly, which will be accounted later.
-		set := storepb.MergeSeriesSets(res...)
-		for set.Next() {
-			var series storepb.Series
+	var lastLbls *labels.Labels
+	var ss []seriesEntry
 
-			stats.mergedSeriesCount++
-
-			var lset labels.Labels
-			if req.SkipChunks {
-				lset, _ = set.At()
-			} else {
-				lset, series.Chunks = set.At()
-
-				stats.mergedChunksCount += len(series.Chunks)
-				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
-			}
-			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
-			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
-				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-				return
-			}
-		}
-		if set.Err() != nil {
-			err = status.Error(codes.Unknown, errors.Wrap(set.Err(), "expand series set").Error())
+	for h.Len() > 0 {
+		el := heap.Pop(h)
+		switch v := el.(type) {
+		case error:
+			err = status.Error(codes.Unknown, errors.Wrap(v, "popping heap").Error())
 			return
-		}
-		stats.mergeDuration = time.Since(begin)
-		s.metrics.seriesMergeDuration.Observe(stats.mergeDuration.Seconds())
+		case *seriesResponseEntry:
+			var shouldSend bool
+			if lastLbls != nil {
+				shouldSend = labels.Compare(*v.lbls, *lastLbls) != 0
+			}
 
-		err = nil
-	})
+			if shouldSend {
+				set := storepb.MergeSeriesSets(newBucketSeriesSet(ss))
+				for set.Next() {
+					var series storepb.Series
+
+					stats.mergedSeriesCount++
+
+					var lset labels.Labels
+					if req.SkipChunks {
+						lset, _ = set.At()
+					} else {
+						lset, series.Chunks = set.At()
+
+						stats.mergedChunksCount += len(series.Chunks)
+						s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
+					}
+					series.Labels = labelpb.ZLabelsFromPromLabels(lset)
+					if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+						err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+						h.p.Put(el)
+						return
+					}
+				}
+				for _, entry := range ss {
+					h.p.Put(&entry)
+				}
+				ss = ss[:0]
+			}
+
+			ser := v.series
+			ss = append(ss, *ser)
+
+			if h.Len() == 0 && !shouldSend {
+				// Send again! ===
+				set := storepb.MergeSeriesSets(newBucketSeriesSet(ss))
+				for set.Next() {
+					var series storepb.Series
+
+					stats.mergedSeriesCount++
+
+					var lset labels.Labels
+					if req.SkipChunks {
+						lset, _ = set.At()
+					} else {
+						lset, series.Chunks = set.At()
+
+						stats.mergedChunksCount += len(series.Chunks)
+						s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
+					}
+					series.Labels = labelpb.ZLabelsFromPromLabels(lset)
+					if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+						err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+						h.p.Put(el)
+
+						return
+					}
+
+				}
+				for _, entry := range ss {
+					h.p.Put(&entry)
+				}
+				ss = ss[:0]
+			}
+			lastLbls = v.lbls
+		}
+	}
 
 	if s.enableSeriesResponseHints {
 		var anyHints *types.Any
@@ -1224,7 +1364,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(ctx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1349,7 +1489,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(ctx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -2421,7 +2561,7 @@ func (r *bucketChunkReader) addLoad(id uint64, seriesEntry, chunk int) error {
 
 // load loads all added chunks and saves resulting aggrs to res.
 func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) error {
-	g, ctx := errgroup.WithContext(r.ctx)
+	g, ctx := errgroup.WithContext(context.Background())
 
 	for seq, pIdxs := range r.toLoad {
 		sort.Slice(pIdxs, func(i, j int) bool {

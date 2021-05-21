@@ -5,6 +5,7 @@ package store
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -2365,6 +2366,9 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 			defer wg.Done()
 
 			for n := 0; n < queriesPerWorker; n++ {
+				h := newSeriesResponsesHeap()
+				heap.Init(h)
+
 				// Each query touches a subset of series. To make it reproducible and make sure
 				// we just don't query consecutive series (as is in the real world), we do create
 				// a label matcher which looks for a short integer within the label value.
@@ -2388,7 +2392,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader(ctx)
 				chunkReader := blk.chunkReader(ctx)
 
-				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
+				seriesSet, _, err := blockSeries(context.TODO(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, h)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
