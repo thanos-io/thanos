@@ -936,6 +936,15 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "metadata_http_request")
+		defer span.Finish()
+
+		var (
+			t        map[string][]metadatapb.Meta
+			warnings storage.Warnings
+			err      error
+		)
+
 		req := &metadatapb.MetricMetadataRequest{
 			// By default we use -1, which means no limit.
 			Limit:                   -1,
@@ -952,7 +961,9 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			req.Limit = int32(limit)
 		}
 
-		t, warnings, err := client.MetricMetadata(r.Context(), req)
+		tracing.DoInSpan(ctx, "retrieve_metadata", func(ctx context.Context) {
+			t, warnings, err = client.MetricMetadata(ctx, req)
+		})
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
 		}
