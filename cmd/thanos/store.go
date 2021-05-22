@@ -221,6 +221,7 @@ func runStore(
 	srv := httpserver.New(logger, reg, conf.component, httpProbe,
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
+		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
 	)
 
 	g.Add(func() error {
@@ -406,7 +407,7 @@ func runStore(
 		r := route.New()
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
-		compactorView := ui.NewBucketUI(logger, "", conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, "/loaded", conf.component)
+		compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)
 		compactorView.Register(r, ins)
 
 		// Configure Request Logging for HTTP calls.

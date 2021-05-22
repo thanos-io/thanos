@@ -218,6 +218,9 @@ Flags:
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
+      --http.config=""          [EXPERIMENTAL] Path to the configuration file
+                                that can enable TLS or authentication for all
+                                HTTP endpoints.
       --label=LABEL             Prometheus label to use as timeline title
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
@@ -485,6 +488,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
+                                 that can enable TLS or authentication for all
+                                 HTTP endpoints.
       --id=ID ...                Block to be replicated to the destination
                                  bucket. IDs will be used to match blocks and
                                  other matchers will be ignored. When specified,
@@ -589,6 +595,9 @@ Flags:
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
                               Server.
+      --http.config=""        [EXPERIMENTAL] Path to the configuration file that
+                              can enable TLS or authentication for all HTTP
+                              endpoints.
       --log.format=logfmt     Log format to use. Possible options: logfmt or
                               json.
       --log.level=info        Log filtering level.
@@ -676,7 +685,7 @@ Flags:
 
 ### Bucket Rewrite
 
-`tools bucket rewrite` reewrites chosen blocks in the bucket, while deleting or modifying series.
+`tools bucket rewrite` rewrites chosen blocks in the bucket, while deleting or modifying series.
 
 For example we can remove all non counters from the block you have on your disk (e.g in Prometheus dir):
 
@@ -820,7 +829,7 @@ Flags:
 #### Probes
 
 - The downsample service exposes two endpoints for probing:
-  - `/-/healthy` starts as soon as initial setup completed.
+  - `/-/healthy` starts as soon as the initial setup is completed.
   - `/-/ready` starts after all the bootstrapping completed (e.g object store bucket connection) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.

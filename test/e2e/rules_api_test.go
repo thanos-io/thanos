@@ -16,7 +16,9 @@ import (
 	"github.com/cortexproject/cortex/integration/e2e"
 	"github.com/pkg/errors"
 
+	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -33,16 +35,22 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-	rulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(s.SharedDir(), rulesSubDir))
+	promRulesSubDir := filepath.Join("rules")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), promRulesSubDir), os.ModePerm))
+	// Create the abort_on_partial_response alert for Prometheus.
+	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
+	createRuleFile(t, filepath.Join(s.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+
+	thanosRulesSubDir := filepath.Join("thanos-rules")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), thanosRulesSubDir), os.ModePerm))
+	createRuleFiles(t, filepath.Join(s.SharedDir(), thanosRulesSubDir))
 
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		s.SharedDir(),
 		netName,
 		"prom1",
-		defaultPromConfig("ha", 0, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 0, "", filepath.Join(e2e.ContainerSharedDir, promRulesSubDir, "*.yaml")),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -50,25 +58,24 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		s.SharedDir(),
 		netName,
 		"prom2",
-		defaultPromConfig("ha", 1, "", filepath.Join(e2e.ContainerSharedDir, rulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 1, "", filepath.Join(e2e.ContainerSharedDir, promRulesSubDir, "*.yaml")),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	// 2x Rulers.
-	r1, err := e2ethanos.NewRuler(s.SharedDir(), "rule1", rulesSubDir, nil, nil)
+	r1, err := e2ethanos.NewRuler(s.SharedDir(), "rule1", thanosRulesSubDir, nil, nil)
 	testutil.Ok(t, err)
-	r2, err := e2ethanos.NewRuler(s.SharedDir(), "rule2", rulesSubDir, nil, nil)
+	r2, err := e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, nil)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(r1, r2))
 
 	q, err := e2ethanos.NewQuerier(
 		s.SharedDir(),
 		"query",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
+		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
 		nil,
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()},
+		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
 		nil,
 		nil,
 		nil,
@@ -79,6 +86,22 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
+	queryCfg := []query.Config{
+		{
+			EndpointsConfig: http_util.EndpointsConfig{
+				StaticAddresses: []string{q.NetworkHTTPEndpoint()},
+				Scheme:          "http",
+			},
+		},
+	}
+
+	// Recreate rulers with the corresponding query config.
+	r1, err = e2ethanos.NewRuler(s.SharedDir(), "rule1", thanosRulesSubDir, nil, queryCfg)
+	testutil.Ok(t, err)
+	r2, err = e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, queryCfg)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(r1, r2))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
@@ -87,7 +110,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", []*rulespb.RuleGroup{
 		{
 			Name: "example_abort",
-			File: "/shared/rules/rules-0.yaml",
+			File: "/shared/rules/rules.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -98,8 +121,15 @@ func TestRulesAPI_Fanout(t *testing.T) {
 						{Name: "severity", Value: "page"},
 					}},
 				}),
+			},
+		},
+		{
+			Name: "example_abort",
+			File: "/shared/thanos-rules/rules-0.yaml",
+			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
+					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
@@ -109,19 +139,11 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_warn",
-			File: "/shared/rules/rules-1.yaml",
+			File: "/shared/thanos-rules/rules-1.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
-					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "prometheus", Value: "ha"},
-						{Name: "severity", Value: "page"},
-					}},
-				}),
-				rulespb.NewAlertingRule(&rulespb.Alert{
-					Name:  "TestAlert_WarnOnPartialResponse",
 					Query: "absent(some_metric)",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},

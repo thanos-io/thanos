@@ -6,7 +6,6 @@ package ui
 import (
 	"net/http"
 	"path"
-	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/route"
@@ -24,7 +23,7 @@ type Bucket struct {
 	Err error
 }
 
-func NewBucketUI(logger log.Logger, label, externalPrefix, prefixHeader, uiPrefix string, comp component.Component) *Bucket {
+func NewBucketUI(logger log.Logger, externalPrefix, prefixHeader string, comp component.Component) *Bucket {
 	tmplVariables := map[string]string{
 		"Component": comp.String(),
 	}
@@ -46,7 +45,8 @@ func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddle
 	// Redirect the original React UI's path (under "/new") to its new path at the root.
 	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 		p := route.Param(r.Context(), "path")
-		http.Redirect(w, r, path.Join(GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
+		prefix := GetWebPrefix(b.logger, b.externalPrefix, b.prefixHeader, r)
+		http.Redirect(w, r, path.Join("/", prefix, p)+"?"+r.URL.RawQuery, http.StatusFound)
 	})
 	registerReactApp(r, ins, b.BaseUI)
 }

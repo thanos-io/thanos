@@ -6,7 +6,7 @@ menu: components
 
 # Receiver
 
-The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It builds on top of existing Prometheus TSDB and retains their usefulness while extending their functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
+The `thanos receive` command implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). It builds on top of existing Prometheus TSDB and retains its usefulness while extending its functionality with long-term-storage, horizontal scalability, and downsampling. It exposes the StoreAPI so that [Thanos Queriers](./query.md) can query received metrics in real-time. The [Thanos Sidecar](./sidecar.md) is not sufficient for this, as the system would always lag the block length behind (typically 2 hours).
 
 We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
@@ -63,7 +63,7 @@ The example content of `hashring.json`:
     }
 ]
 ```
-With such configuration any receive is listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
+With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
 for tenancy and replication.
 
 ## Flags
@@ -101,6 +101,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
+                                 that can enable TLS or authentication for all
+                                 HTTP endpoints.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
                                  tsdb instances is added.

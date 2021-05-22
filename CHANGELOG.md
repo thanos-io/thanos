@@ -16,6 +16,11 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
 - [#4171](https://github.com/thanos-io/thanos/pull/4171) Docker: Busybox image updated to latest (1.33.1)
+- [#4175](https://github.com/thanos-io/thanos/pull/4175) Added Tag Configuration Support Lightstep Tracing
+- [#4176](https://github.com/thanos-io/thanos/pull/4176) Query API: Adds optional `Stats param` to return stats for query APIs
+- [#4125](https://github.com/thanos-io/thanos/pull/4125) Rule: Add `--alert.relabel-config` / `--alert.relabel-config-file` allowing to specify alert relabel configurations like [Prometheus](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
+- [#4211](https://github.com/thanos-io/thanos/pull/4211) Add TLS and basic authentication to Thanos APIs
+- [#4249](https://github.com/thanos-io/thanos/pull/4249) UI: add dark theme
 - [#4163](https://github.com/thanos-io/thanos/pull/4163) Old UI is removed in favor of the react-app.
 
 ### Fixed
@@ -24,6 +29,11 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 -
 ### Removed
 -
+## [v0.20.2](https://github.com/thanos-io/thanos/releases/tag/v0.20.2) - 2021.05.20
+
+### Fixed
+
+- [#4208](https://github.com/thanos-io/thanos/pull/4208) UI: Fix infinite redirection loop on root (/).
 
 ## [v0.20.1](https://github.com/thanos-io/thanos/releases/tag/v0.20.1) - 2021.04.30
 

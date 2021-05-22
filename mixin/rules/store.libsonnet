@@ -5,7 +5,7 @@
     dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusRules+:: {
-    groups+: [
+    groups+: if thanos.store == null then [] else [
       {
         name: 'thanos-store.rules',
         rules: [

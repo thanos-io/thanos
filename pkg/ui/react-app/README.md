@@ -4,7 +4,7 @@ This file explains how to work with the React-based Thanos UI.
 
 ## Introduction
 
-The [React-based](https://reactjs.org/) Thanos UI was was bootstrapped using [Create React App](https://github.com/facebook/create-react-app), a popular toolkit for generating React application setups. You can find general information about Create React App on [their documentation site](https://create-react-app.dev/).
+The [React-based](https://reactjs.org/) Thanos UI was bootstrapped using [Create React App](https://github.com/facebook/create-react-app), a popular toolkit for generating React application setups. You can find general information about Create React App on [their documentation site](https://create-react-app.dev/).
 
 Instead of plain JavaScript, we use [TypeScript](https://www.typescriptlang.org/) to ensure typed code.
 

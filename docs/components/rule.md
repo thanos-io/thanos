@@ -244,6 +244,13 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
+      --alert.relabel-config=<content>
+                                 Alternative to 'alert.relabel-config-file' flag
+                                 (mutually exclusive). Content of YAML file that
+                                 contains alert relabelling configuration.
+      --alert.relabel-config-file=<file-path>
+                                 Path to YAML file that contains alert
+                                 relabelling configuration.
       --alertmanagers.config=<content>
                                  Alternative to 'alertmanagers.config-file' flag
                                  (mutually exclusive). Content of YAML file that
@@ -304,6 +311,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
+                                 that can enable TLS or authentication for all
+                                 HTTP endpoints.
       --label=<name>="<value>" ...
                                  Labels to be applied to all generated metrics
                                  (repeated). Similar to external labels for

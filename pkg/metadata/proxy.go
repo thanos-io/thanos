@@ -17,6 +17,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // Proxy implements metadatapb.Metadata gRPC that fanouts requests to given metadatapb.Metadata and deduplication on the way.
@@ -40,10 +41,14 @@ func NewProxy(logger log.Logger, metadata func() []metadatapb.MetadataClient) *P
 }
 
 func (s *Proxy) MetricMetadata(req *metadatapb.MetricMetadataRequest, srv metadatapb.Metadata_MetricMetadataServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "proxy_metadata")
+	defer span.Finish()
+
 	var (
-		g, gctx  = errgroup.WithContext(srv.Context())
+		g, gctx  = errgroup.WithContext(ctx)
 		respChan = make(chan *metadatapb.MetricMetadata, 10)
 		metas    []*metadatapb.MetricMetadata
+		err      error
 	)
 
 	for _, metadataClient := range s.metadata() {
@@ -71,7 +76,10 @@ func (s *Proxy) MetricMetadata(req *metadatapb.MetricMetadataRequest, srv metada
 	}
 
 	for _, t := range metas {
-		if err := srv.Send(metadatapb.NewMetricMetadataResponse(t)); err != nil {
+		tracing.DoInSpan(srv.Context(), "send_metadata_response", func(_ context.Context) {
+			err = srv.Send(metadatapb.NewMetricMetadataResponse(t))
+		})
+		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send metric metadata response").Error())
 		}
 	}
@@ -87,7 +95,15 @@ type metricMetadataStream struct {
 }
 
 func (stream *metricMetadataStream) receive(ctx context.Context) error {
-	metadataCli, err := stream.client.MetricMetadata(ctx, stream.request)
+	var (
+		err         error
+		metadataCli metadatapb.Metadata_MetricMetadataClient
+	)
+
+	tracing.DoInSpan(ctx, "receive_metadata_stream_request", func(ctx context.Context) {
+		metadataCli, err = stream.client.MetricMetadata(ctx, stream.request)
+	})
+
 	if err != nil {
 		err = errors.Wrapf(err, "fetching metric metadata from metadata client %v", stream.client)
 

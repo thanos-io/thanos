@@ -12,7 +12,7 @@ Both Thanos and Prometheus projects participate in various, periodic mentoring p
 
 Programs we participated / are participating:
 
-- [CommunityBridge](https://github.com/cncf/mentoring/tree/master/communitybridge)
+- [LFX Mentorship](https://github.com/cncf/mentoring/tree/master/lfx-mentorship)
 - [Google Summer of Code](https://github.com/cncf/mentoring/tree/master/summerofcode)
 - [Red Hat Beyond](https://research.redhat.com/blog/2020/05/24/open-source-development-course-and-devops-methodology/)
 
@@ -54,7 +54,7 @@ There are certain rules you can follow to make the MOST from your time with us!
 - Try to be independent and responsible for the feature you want to deliver. The sooner you start to lead your task, the better for you! It's hard in the beginning but try to think about the user experience.
   Is it hard or easy to make mistake using it? How difficult is it to migrate to this feature? Is there anything we can do to reduce data loss errors?
 - Try to help others by **reviewing** other contributors, mentees or mentors' Pull Requests! It sounds scary, but this is actually the best way to learn about coding practices, patterns and how to maintain high quality codebase! (GIFs on PRs are welcome as well!)
-- Try using an [iterative process for development](https://en.wikipedia.org/wiki/Iterative_and_incremental_development). Start with small and simple assumptions, and once you have a working example ready, keep improving and discusing with the mentors. Small changes are easy to review and easy to accept 😄.
+- Try using an [iterative process for development](https://en.wikipedia.org/wiki/Iterative_and_incremental_development). Start with small and simple assumptions, and once you have a working example ready, keep improving and discussing with the mentors. Small changes are easy to review and easy to accept 😄.
 - Try working out a [proof of concept](https://en.wikipedia.org/wiki/Proof_of_concept), which can be used as a baseline, and can be improved upon. These are real-world projects, so it's not possible to have a deterministic solution everytime, and proof of concepts are quick way to determine feasibility.
 
 ### Thanos Mentoring Office Hours

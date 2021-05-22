@@ -66,7 +66,7 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	// Redirect the original React UI's path (under "/new") to its new path at the root.
 	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 		p := route.Param(r.Context(), "path")
-		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
+		http.Redirect(w, r, path.Join("/", GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), p)+"?"+r.URL.RawQuery, http.StatusFound)
 	})
 
 	registerReactApp(r, ins, q.BaseUI)

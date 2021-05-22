@@ -13,6 +13,7 @@ import {
   DropdownToggle,
 } from 'reactstrap';
 import PathPrefixProps from '../types/PathPrefixProps';
+import { ThemeToggle } from '../Theme';
 
 interface NavConfig {
   name: string;
@@ -93,7 +94,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
   const toggle = () => setIsOpen(!isOpen);
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
-      <NavbarToggler onClick={toggle} />
+      <NavbarToggler onClick={toggle} className="mr-2" />
       <Link className="navbar-brand" to={`${pathPrefix}${defaultRoute}`}>
         Thanos - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
@@ -130,6 +131,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
           </NavItem>
         </Nav>
       </Collapse>
+      <ThemeToggle />
     </Navbar>
   );
 };

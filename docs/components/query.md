@@ -48,7 +48,7 @@ even if those clusters runs multiple Prometheus servers each. Querier will know 
 ### Run-time deduplication of HA groups
 
 Prometheus is stateful and does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use.
-Simple loadbalancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a
+Simple load balancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a
  second replica that maybe was up, but it could be down in other moment (e.g rolling restart), so load balancing on top of those is not working well.
 
 Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer.
@@ -144,7 +144,7 @@ Now it supports two strategies:
 * "warn"
 * "abort" (default)
 
-NOTE: Having warning does not necessary means partial response (e.g no store matched query warning).
+NOTE: Having a warning does not necessarily mean partial response (e.g no store matched query warning).
 
 Querier also allows to configure different timeouts:
 
@@ -323,6 +323,9 @@ Flags:
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
+      --http.config=""           [EXPERIMENTAL] Path to the configuration file
+                                 that can enable TLS or authentication for all
+                                 HTTP endpoints.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.

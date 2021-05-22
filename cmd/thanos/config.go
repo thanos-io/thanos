@@ -44,6 +44,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 
 type httpConfig struct {
 	bindAddress string
+	tlsConfig   string
 	gracePeriod model.Duration
 }
 
@@ -54,6 +55,10 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 	cmd.Flag("http-grace-period",
 		"Time to wait after an interrupt received for HTTP Server.").
 		Default("2m").SetValue(&hc.gracePeriod)
+	cmd.Flag(
+		"http.config",
+		"[EXPERIMENTAL] Path to the configuration file that can enable TLS or authentication for all HTTP endpoints.",
+	).Default("").StringVar(&hc.tlsConfig)
 	return hc
 }
 
@@ -202,6 +207,7 @@ type alertMgrConfig struct {
 	alertmgrsDNSSDInterval time.Duration
 	alertExcludeLabels     []string
 	alertQueryURL          *string
+	alertRelabelConfigPath *extflag.PathOrContent
 }
 
 func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
@@ -215,5 +221,6 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	ac.alertQueryURL = cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		StringsVar(&ac.alertExcludeLabels)
+	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", false)
 	return ac
 }
