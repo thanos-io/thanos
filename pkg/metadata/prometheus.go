@@ -37,6 +37,5 @@ func (p *Prometheus) MetricMetadata(r *metadatapb.MetricMetadataRequest, s metad
 		err = s.Send(&metadatapb.MetricMetadataResponse{Result: &metadatapb.MetricMetadataResponse_Metadata{
 			Metadata: metadatapb.FromMetadataMap(md)}})
 	})
-
 	return err
 }
