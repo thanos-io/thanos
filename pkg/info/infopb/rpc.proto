@@ -1,0 +1,73 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+
+import "store/labelpb/types.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "infopb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+/// Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
+service Info {
+    /// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
+    rpc Info(InfoRequest) returns (InfoResponse);
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+    repeated ZLabelSet label_sets      = 1 [(gogoproto.nullable) = false];
+    string ComponentType               = 2;
+    
+    /// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
+    StoreInfo store                    = 3;    
+
+    /// RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
+    RulesInfo rules                    = 4;
+    
+    /// MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
+    MetricMetadataInfo metric_metadata = 5;
+    
+    /// TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
+    TargetsInfo targets                = 6;
+    
+    /// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
+    ExemplarsInfo exemplars            = 7;
+}
+
+/// StoreInfo holds the metadata related to Store API exposed by the component.
+message StoreInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
+
+/// RulesInfo holds the metadata related to Rules API exposed by the component.
+message RulesInfo {
+}
+
+/// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
+message MetricMetadataInfo {
+}
+
+/// TargetsInfo holds the metadata related to Targets API exposed by the component.
+message TargetsInfo {
+}
+
+/// EXemplarsInfo holds the metadata related to Exemplars API exposed by the component.
+message ExemplarsInfo {
+    int64 min_time = 1;
+    int64 max_time = 2;
+}
