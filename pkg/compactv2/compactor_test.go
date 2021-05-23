@@ -401,7 +401,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 			},
 		},
 		{
-			name: "1 block + relabel modifier, separate chunks from the same series are merged",
+			name: "1 block + relabel modifier, two chunks from the same series are merged into one larger chunk",
 			input: [][]seriesSamples{
 				{
 					{lset: labels.Labels{{Name: "a", Value: "1"}},
@@ -412,7 +412,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 			modifiers: []Modifier{WithRelabelModifier(
 				&relabel.Config{
 					Action:       relabel.Drop,
-					Regex:        relabel.MustNewRegexp("2"),
+					Regex:        relabel.MustNewRegexp("no-match"),
 					SourceLabels: model.LabelNames{"a"},
 				},
 			)},
@@ -565,7 +565,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 						chunks: [][]sample{{{0, 0}, {2, 2}, {3, 3}}, {{4, 4}, {11, 11}, {20, 20}, {25, 25}}}},
 				},
 			},
-			// Drop all label name "a".
+			// Replace values of label name "a" with "0".
 			modifiers: []Modifier{WithRelabelModifier(
 				&relabel.Config{
 					Action:       relabel.Replace,
