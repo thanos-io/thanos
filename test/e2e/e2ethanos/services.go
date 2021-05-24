@@ -6,7 +6,6 @@ package e2ethanos
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/rules/remotewrite"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -512,20 +511,10 @@ func NewIngestingReceiver(e e2e.Environment, name string) (*e2e.InstrumentedRunn
 	return receiver, nil
 }
 
-<<<<<<< HEAD
 func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
 
-=======
-func NewTSDBRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*Service, error) {
-	return NewRuler(sharedDir, name, ruleSubDir, amCfg, queryCfg, false, remotewrite.Config{})
-}
-
-func NewRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config, remoteWrite bool, remoteWriteCfg remotewrite.Config) (*Service, error) {
-	dir := filepath.Join(sharedDir, "data", "rule", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "rule", name)
->>>>>>> fc8f1035 (Set up tests and implementations for configuring remote-write for ruler)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create rule dir")
 	}
