@@ -21,6 +21,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#4125](https://github.com/thanos-io/thanos/pull/4125) Rule: Add `--alert.relabel-config` / `--alert.relabel-config-file` allowing to specify alert relabel configurations like [Prometheus](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
 - [#4211](https://github.com/thanos-io/thanos/pull/4211) Add TLS and basic authentication to Thanos APIs
 - [#4249](https://github.com/thanos-io/thanos/pull/4249) UI: add dark theme
+- [#3707](https://github.com/thanos-io/thanos/pull/3707) Tools: Added `--rewrite.to-relabel-config` to bucket rewrite tool to support series relabel from given blocks.
 
 ### Fixed
 -
