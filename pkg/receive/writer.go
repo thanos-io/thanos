@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -88,6 +89,22 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
 				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", s)
+			}
+		}
+
+		// Current implemetation of app.AppendExemplar doesn't create a new series, so it must be already present.
+		// We drop the exemplars in case the series doesn't exist.
+		if ref != 0 && len(t.Exemplars) > 0 {
+			for _, ex := range t.Exemplars {
+				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
+				if _, err := app.AppendExemplar(ref, lset, exemplar.Exemplar{
+					Labels: exLset,
+					Value:  ex.Value,
+					Ts:     ex.Timestamp,
+					HasTs:  true,
+				}); err != nil {
+					level.Debug(r.logger).Log("msg", "Error ingesting exemplar", "exemplarLset", exLset, "err", err)
+				}
 			}
 		}
 	}

@@ -70,6 +70,7 @@ func registerReceive(app *extkingpin.App) {
 			NoLockfile:             conf.noLockFile,
 			WALCompression:         conf.walCompression,
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:           conf.tsdbMaxExemplars,
 		}
 
 		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
@@ -687,6 +688,7 @@ type receiveConfig struct {
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
+	tsdbMaxExemplars           int
 
 	walCompression bool
 	noLockFile     bool
@@ -759,6 +761,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
+
+	cmd.Flag("tsdb.max-exemplars", "Enables support for ingesting exemplars and set the maximum number that will be stored. 0 (or less) disables exemplars storage.").Default("0").IntVar(&rc.tsdbMaxExemplars)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
