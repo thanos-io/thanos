@@ -750,7 +750,6 @@ func (s *bucketSeriesSet) Err() error {
 
 // blockSeries returns series matching given matchers, that have some data in given time range.
 func blockSeries(
-	ctx context.Context, // Context for all of the operations, used in all readers as well.
 	extLset labels.Labels, // External labels added to the returned series labels.
 	indexr *bucketIndexReader, // Index reader for block.
 	chunkr *bucketChunkReader, // Chunk reader for block.
@@ -760,7 +759,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
-	h *seriesResponsesHeap,
+	h *seriesResponsesHeap, // Min heap for the series responses.
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -793,9 +792,6 @@ func blockSeries(
 	)
 
 	var chunkLoader *errgroup.Group
-	if chunkr != nil {
-		chunkLoader, _ = errgroup.WithContext(ctx)
-	}
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
@@ -837,9 +833,8 @@ func blockSeries(
 
 		if h != nil {
 			entry := h.p.Get().(*seriesResponseEntry)
-			entry.lbls = &s.lset
 			entry.series = &s
-			entry.loadingGroup = chunkLoader
+			entry.loadingGroup = &chunkLoader
 			heap.Push(h, entry)
 		}
 		res = append(res, s)
@@ -849,9 +844,8 @@ func blockSeries(
 		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
-	chunkLoader.Go(func() error {
-		return errors.Wrap(chunkr.load(res, loadAggregates), "load chunks")
-	})
+	g := chunkr.load(res, loadAggregates)
+	chunkLoader = g
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
@@ -964,9 +958,8 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 type seriesResponseEntry struct {
-	lbls         *labels.Labels
 	series       *seriesEntry
-	loadingGroup *errgroup.Group
+	loadingGroup **errgroup.Group
 }
 
 type seriesResponsesHeap struct {
@@ -994,7 +987,7 @@ func (h seriesResponsesHeap) Len() int {
 }
 
 func (h seriesResponsesHeap) Less(i, j int) bool {
-	return labels.Compare(*h.entries[i].lbls, *h.entries[j].lbls) > 0
+	return labels.Compare(h.entries[i].series.lset, h.entries[j].series.lset) > 0
 }
 
 func (h seriesResponsesHeap) Swap(i, j int) {
@@ -1020,7 +1013,7 @@ func (h *seriesResponsesHeap) Pop() (ret interface{}) {
 	n := len(entries)
 
 	if old.entries[n-1].loadingGroup != nil {
-		err := old.entries[n-1].loadingGroup.Wait()
+		err := (*old.entries[n-1].loadingGroup).Wait()
 		if err != nil {
 			return err
 		}
@@ -1063,10 +1056,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		reqBlockMatchers []*labels.Matcher
 		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks"))
 		seriesLimiter    = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
-		h                = &seriesResponsesHeap{
-			entries: make([]*seriesResponseEntry, 0),
-			mtx:     &sync.Mutex{},
-		}
+		h                = newSeriesResponsesHeap()
 	)
 
 	heap.Init(h)
@@ -1118,7 +1108,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			g.Go(func() error {
 				part, pstats, err := blockSeries(
-					ctx,
 					b.extLset,
 					indexr,
 					chunkr,
@@ -1204,11 +1193,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		case *seriesResponseEntry:
 			var shouldSend bool
 			if lastLbls != nil {
-				shouldSend = labels.Compare(*v.lbls, *lastLbls) != 0
+				shouldSend = labels.Compare(v.series.lset, *lastLbls) != 0
 			}
 
 			if shouldSend {
-				set := storepb.MergeSeriesSets(newBucketSeriesSet(ss))
+				set := newBucketSeriesSet(ss)
 				for set.Next() {
 					var series storepb.Series
 
@@ -1240,8 +1229,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			ss = append(ss, *ser)
 
 			if h.Len() == 0 && !shouldSend {
-				// Send again! ===
-				set := storepb.MergeSeriesSets(newBucketSeriesSet(ss))
+				set := newBucketSeriesSet(ss)
 				for set.Next() {
 					var series storepb.Series
 
@@ -1270,7 +1258,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 				ss = ss[:0]
 			}
-			lastLbls = v.lbls
+			lastLbls = &v.series.lset
 		}
 	}
 
@@ -1364,7 +1352,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(ctx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1489,7 +1477,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(ctx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -2560,8 +2548,8 @@ func (r *bucketChunkReader) addLoad(id uint64, seriesEntry, chunk int) error {
 }
 
 // load loads all added chunks and saves resulting aggrs to res.
-func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) error {
-	g, ctx := errgroup.WithContext(context.Background())
+func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) *errgroup.Group {
+	g, ctx := errgroup.WithContext(r.ctx)
 
 	for seq, pIdxs := range r.toLoad {
 		sort.Slice(pIdxs, func(i, j int) bool {
@@ -2580,7 +2568,7 @@ func (r *bucketChunkReader) load(res []seriesEntry, aggrs []storepb.Aggr) error 
 			})
 		}
 	}
-	return g.Wait()
+	return g
 }
 
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
