@@ -760,26 +760,26 @@ func blockSeries(
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
 	h *seriesResponsesHeap, // Min heap for the series responses.
-) (storepb.SeriesSet, *queryStats, error) {
+) (*queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "expanded matching posting")
+		return nil, errors.Wrap(err, "expanded matching posting")
 	}
 
 	if len(ps) == 0 {
-		return storepb.EmptySeriesSet(), indexr.stats, nil
+		return indexr.stats, nil
 	}
 
 	// Reserve series seriesLimiter
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return nil, nil, errors.Wrap(err, "exceeded series limit")
+		return nil, errors.Wrap(err, "exceeded series limit")
 	}
 
 	// Preload all series index data.
 	// TODO(bwplotka): Consider not keeping all series in memory all the time.
 	// TODO(bwplotka): Do lazy loading in one step as `ExpandingPostings` method.
 	if err := indexr.PreloadSeries(ps); err != nil {
-		return nil, nil, errors.Wrap(err, "preload series")
+		return nil, errors.Wrap(err, "preload series")
 	}
 
 	// Transform all series into the response types and mark their relevant chunks
@@ -795,7 +795,7 @@ func blockSeries(
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "read series")
+			return nil, errors.Wrap(err, "read series")
 		}
 		if !ok {
 			// No matching chunks for this time duration, skip series.
@@ -811,7 +811,7 @@ func blockSeries(
 				// seriesEntry s is appended to res, but not at every outer loop iteration,
 				// therefore len(res) is the index we need here, not outer loop iteration number.
 				if err := chunkr.addLoad(meta.Ref, len(res), j); err != nil {
-					return nil, nil, errors.Wrap(err, "add chunk load")
+					return nil, errors.Wrap(err, "add chunk load")
 				}
 				s.chks = append(s.chks, storepb.AggrChunk{
 					MinTime: meta.MinTime,
@@ -822,11 +822,11 @@ func blockSeries(
 
 			// Ensure sample limit through chunksLimiter if we return chunks.
 			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+				return nil, errors.Wrap(err, "exceeded chunks limit")
 			}
 		}
 		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
-			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
+			return nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
 		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
@@ -841,13 +841,13 @@ func blockSeries(
 	}
 
 	if skipChunks {
-		return newBucketSeriesSet(res), indexr.stats, nil
+		return indexr.stats, nil
 	}
 
 	g := chunkr.load(res, loadAggregates)
 	chunkLoader = g
 
-	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
+	return indexr.stats.merge(chunkr.stats), nil
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error)) error {
@@ -998,31 +998,25 @@ func (h seriesResponsesHeap) Swap(i, j int) {
 func (h *seriesResponsesHeap) Push(x interface{}) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-	entries := h.entries
 	data := x.(*seriesResponseEntry)
-	entries = append(entries, data)
-	h.entries = entries
+	h.entries = append(h.entries, data)
 }
 
 func (h *seriesResponsesHeap) Pop() (ret interface{}) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
 
-	old := *h
-	entries := h.entries
-	n := len(entries)
+	n := len(h.entries)
 
-	if old.entries[n-1].loadingGroup != nil {
-		err := (*old.entries[n-1].loadingGroup).Wait()
+	if h.entries[n-1].loadingGroup != nil {
+		err := (*h.entries[n-1].loadingGroup).Wait()
 		if err != nil {
 			return err
 		}
 	}
 
-	x := old.entries[n-1]
-
-	entries = entries[0 : n-1]
-	h.entries = entries
+	x := h.entries[n-1]
+	h.entries = h.entries[0 : n-1]
 	return x
 }
 
@@ -1049,7 +1043,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	var (
 		ctx              = srv.Context()
 		stats            = &queryStats{}
-		res              []storepb.SeriesSet
 		mtx              sync.Mutex
 		g, gctx          = errgroup.WithContext(ctx)
 		resHints         = &hintspb.SeriesResponseHints{}
@@ -1107,7 +1100,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 
 			g.Go(func() error {
-				part, pstats, err := blockSeries(
+				pstats, err := blockSeries(
 					b.extLset,
 					indexr,
 					chunkr,
@@ -1124,7 +1117,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 
 				mtx.Lock()
-				res = append(res, part)
 				stats = stats.merge(pstats)
 				mtx.Unlock()
 
@@ -1175,7 +1167,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 			return status.Error(code, err.Error())
 		}
-		stats.blocksQueried = len(res)
 		stats.getAllDuration = time.Since(begin)
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
@@ -1191,6 +1182,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			err = status.Error(codes.Unknown, errors.Wrap(v, "popping heap").Error())
 			return
 		case *seriesResponseEntry:
+			stats.blocksQueried++
+
 			var shouldSend bool
 			if lastLbls != nil {
 				shouldSend = labels.Compare(v.series.lset, *lastLbls) != 0
@@ -1218,9 +1211,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 						h.p.Put(el)
 						return
 					}
-				}
-				for _, entry := range ss {
-					h.p.Put(&entry)
 				}
 				ss = ss[:0]
 			}
@@ -1253,12 +1243,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					}
 
 				}
-				for _, entry := range ss {
-					h.p.Put(&entry)
-				}
 				ss = ss[:0]
 			}
 			lastLbls = &v.series.lset
+			h.p.Put(el)
 		}
 	}
 
@@ -1311,6 +1299,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 	g, gctx := errgroup.WithContext(ctx)
 
+	h := newSeriesResponsesHeap()
+
 	s.mtx.RLock()
 
 	var mtx sync.Mutex
@@ -1352,10 +1342,23 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				_, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
+
+				allSeries := []seriesEntry{}
+				for h.Len() > 0 {
+					el := heap.Pop(h)
+					switch v := el.(type) {
+					case error:
+						return errors.Wrap(v, "popping heap")
+					case *seriesResponseEntry:
+						allSeries = append(allSeries, *v.series)
+						h.p.Put(v)
+					}
+				}
+				seriesSet := newBucketSeriesSet(allSeries)
 
 				// Extract label names from all series. Many label names will be the same, so we need to deduplicate them.
 				// Note that label names will already include external labels (passed to blockSeries), so we don't need
@@ -1415,6 +1418,8 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	resHints := &hintspb.LabelValuesResponseHints{}
 
 	g, gctx := errgroup.WithContext(ctx)
+
+	h := newSeriesResponsesHeap()
 
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
@@ -1477,10 +1482,23 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				_, err := blockSeries(b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, h)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
+
+				allSeries := []seriesEntry{}
+				for h.Len() > 0 {
+					el := heap.Pop(h)
+					switch v := el.(type) {
+					case error:
+						return errors.Wrap(v, "popping heap")
+					case *seriesResponseEntry:
+						allSeries = append(allSeries, *v.series)
+						h.p.Put(v)
+					}
+				}
+				seriesSet := newBucketSeriesSet(allSeries)
 
 				// Extract given label's value from all series and deduplicate them.
 				// We don't need to deal with external labels, since they are already added by blockSeries.

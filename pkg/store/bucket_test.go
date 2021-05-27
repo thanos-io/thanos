@@ -2392,11 +2392,12 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader(ctx)
 				chunkReader := blk.chunkReader(ctx)
 
-				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, h)
+				_, err = blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, h)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
-				testutil.Equals(b, true, seriesSet.Next())
+				element := heap.Pop(h).(*seriesResponseEntry)
+				testutil.Assert(b, element.series != nil)
 
 				testutil.Ok(b, indexReader.Close())
 				testutil.Ok(b, chunkReader.Close())
