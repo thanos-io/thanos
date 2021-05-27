@@ -29,8 +29,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -819,7 +821,8 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").Enum("SHA256", "")
 	dryRun := cmd.Flag("dry-run", "Prints the series changes instead of doing them. Defaults to true, for user to double check. (: Pass --no-dry-run to skip this.").Default("true").Bool()
-	toDelete := extflag.RegisterPathOrContent(cmd, "rewrite.to-delete-config", "YAML file that contains []metadata.DeletionRequest that will be applied to blocks", true)
+	toDelete := extflag.RegisterPathOrContent(cmd, "rewrite.to-delete-config", "YAML file that contains []metadata.DeletionRequest that will be applied to blocks", false)
+	toRelabel := extflag.RegisterPathOrContent(cmd, "rewrite.to-relabel-config", "YAML file that contains relabel configs that will be applied to blocks", false)
 	provideChangeLog := cmd.Flag("rewrite.add-change-log", "If specified, all modifications are written to new block directory. Disable if latency is to high.").Default("true").Bool()
 	promBlocks := cmd.Flag("prom-blocks", "If specified, we assume the blocks to be uploaded are only used with Prometheus so we don't check external labels in this case.").Default("false").Bool()
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -833,14 +836,35 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
+		var modifiers []compactv2.Modifier
+
+		relabelYaml, err := toRelabel.Content()
+		if err != nil {
+			return err
+		}
+		var relabels []*relabel.Config
+		if len(relabelYaml) > 0 {
+			relabels, err = block.ParseRelabelConfig(relabelYaml, nil)
+			if err != nil {
+				return err
+			}
+			modifiers = append(modifiers, compactv2.WithRelabelModifier(relabels...))
+		}
+
 		deletionsYaml, err := toDelete.Content()
 		if err != nil {
 			return err
 		}
-
 		var deletions []metadata.DeletionRequest
-		if err := yaml.Unmarshal(deletionsYaml, &deletions); err != nil {
-			return err
+		if len(deletionsYaml) > 0 {
+			if err := yaml.Unmarshal(deletionsYaml, &deletions); err != nil {
+				return err
+			}
+			modifiers = append(modifiers, compactv2.WithDeletionModifier(deletions...))
+		}
+
+		if len(modifiers) == 0 {
+			return errors.New("rewrite configuration should be provided")
 		}
 
 		var ids []ulid.ULID
@@ -885,6 +909,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				meta.Thanos.Rewrites = append(meta.Thanos.Rewrites, metadata.Rewrite{
 					Sources:          meta.Compaction.Sources,
 					DeletionsApplied: deletions,
+					RelabelsApplied:  relabels,
 				})
 				meta.Compaction.Sources = []ulid.ULID{newID}
 				meta.Thanos.Source = metadata.BucketRewriteSource
@@ -916,8 +941,8 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					comp = compactv2.New(*tmpDir, logger, changeLog, chunkPool)
 				}
 
-				level.Info(logger).Log("msg", "starting rewrite for block", "source", id, "new", newID, "toDelete", string(deletionsYaml))
-				if err := comp.WriteSeries(ctx, []block.Reader{b}, d, p, compactv2.WithDeletionModifier(deletions...)); err != nil {
+				level.Info(logger).Log("msg", "starting rewrite for block", "source", id, "new", newID, "toDelete", string(deletionsYaml), "toRelabel", string(relabelYaml))
+				if err := comp.WriteSeries(ctx, []block.Reader{b}, d, p, modifiers...); err != nil {
 					return errors.Wrapf(err, "writing series from %v to %v", id, newID)
 				}
 

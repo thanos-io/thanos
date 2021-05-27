@@ -17,12 +17,15 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -395,6 +398,192 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 				NumSamples: 36,
 				NumSeries:  6,
 				NumChunks:  12,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, two chunks from the same series are merged into one larger chunk",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}}}},
+				},
+			},
+			// Not used in this test case.
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("no-match"),
+					SourceLabels: model.LabelNames{"a"},
+				},
+			)},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
+			},
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 6,
+				NumSeries:  1,
+				NumChunks:  1,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, delete first series",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+					{lset: labels.Labels{{Name: "a", Value: "3"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 13}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("1"),
+					SourceLabels: model.LabelNames{"a"},
+				},
+			)},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "2"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				{lset: labels.Labels{{Name: "a", Value: "3"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 13}, {11, 11}, {20, 20}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\"} [{0 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 13,
+				NumSeries:  2,
+				NumChunks:  2,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, series reordered",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, -1}, {2, -2}, {10, -10}, {11, -11}, {20, -20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+			},
+			// {a="1"} will be relabeled to {a="3"} while {a="2"} will be relabeled to {a="0"}.
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action:       relabel.Replace,
+					Regex:        relabel.MustNewRegexp("1"),
+					SourceLabels: model.LabelNames{"a"},
+					TargetLabel:  "a",
+					Replacement:  "3",
+				},
+				&relabel.Config{
+					Action:       relabel.Replace,
+					Regex:        relabel.MustNewRegexp("2"),
+					SourceLabels: model.LabelNames{"a"},
+					TargetLabel:  "a",
+					Replacement:  "0",
+				},
+			)},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "0"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				{lset: labels.Labels{{Name: "a", Value: "3"}},
+					chunks: [][]sample{{{0, 0}, {1, -1}, {2, -2}, {10, -10}, {11, -11}, {20, -20}}}},
+			},
+			expectedChanges: "Relabelled {a=\"1\"} {a=\"3\"}\nRelabelled {a=\"2\"} {a=\"0\"}\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 13,
+				NumSeries:  2,
+				NumChunks:  2,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, series deleted because of no labels left after relabel",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+				{
+					{lset: labels.Labels{{Name: "a", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+			},
+			// Drop all label name "a".
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("a"),
+				},
+			)},
+			expected:        nil,
+			expectedChanges: "Deleted {a=\"1\"} [{0 25}]\nDeleted {a=\"2\"} [{0 25}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 0,
+				NumSeries:  0,
+				NumChunks:  0,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, series 1 is deleted because of no labels left after relabel",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+				{
+					{lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+			},
+			// Drop all label name "a".
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("a"),
+				},
+			)},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "b", Value: "1"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\"} [{0 25}]\nRelabelled {a=\"2\", b=\"1\"} {b=\"1\"}\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 7,
+				NumSeries:  1,
+				NumChunks:  1,
+			},
+		},
+		{
+			name: "1 block + relabel modifier, series merged after relabeling",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.Labels{{Name: "a", Value: "1"}},
+						chunks: [][]sample{{{1, 1}, {2, 2}, {10, 10}, {20, 20}}}},
+					{lset: labels.Labels{{Name: "a", Value: "2"}},
+						chunks: [][]sample{{{0, 0}, {2, 2}, {3, 3}}, {{4, 4}, {11, 11}, {20, 20}, {25, 25}}}},
+				},
+			},
+			// Replace values of label name "a" with "0".
+			modifiers: []Modifier{WithRelabelModifier(
+				&relabel.Config{
+					Action:       relabel.Replace,
+					Regex:        relabel.MustNewRegexp("1|2"),
+					SourceLabels: model.LabelNames{"a"},
+					TargetLabel:  "a",
+					Replacement:  "0",
+				},
+			)},
+			expected: []seriesSamples{
+				{lset: labels.Labels{{Name: "a", Value: "0"}},
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {10, 10}, {11, 11}, {20, 20}, {25, 25}}}},
+			},
+			expectedChanges: "Relabelled {a=\"1\"} {a=\"0\"}\nRelabelled {a=\"2\"} {a=\"0\"}\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 9,
+				NumSeries:  1,
+				NumChunks:  1,
 			},
 		},
 	} {

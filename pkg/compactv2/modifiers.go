@@ -4,13 +4,19 @@
 package compactv2
 
 import (
+	"math"
+	"sort"
+
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
@@ -325,4 +331,154 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 func (p *delChunkSeriesIterator) At() chunks.Meta { return p.curr }
 
-// TODO(bwplotka): Add relabelling.
+type RelabelModifier struct {
+	relabels []*relabel.Config
+}
+
+func WithRelabelModifier(relabels ...*relabel.Config) *RelabelModifier {
+	return &RelabelModifier{relabels: relabels}
+}
+
+func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet, log ChangeLogger, p ProgressLogger) (index.StringIter, storage.ChunkSeriesSet) {
+	// Gather symbols.
+	symbols := make(map[string]struct{})
+	chunkSeriesMap := make(map[string]*mergeChunkSeries)
+
+	for set.Next() {
+		s := set.At()
+		lbls := s.Labels()
+		chksIter := s.Iterator()
+
+		if processedLabels := relabel.Process(lbls, d.relabels...); len(processedLabels) == 0 {
+			// Special case: Delete whole series if no labels are present.
+			var (
+				minT int64 = math.MaxInt64
+				maxT int64 = math.MinInt64
+			)
+			for chksIter.Next() {
+				c := chksIter.At()
+				if c.MinTime < minT {
+					minT = c.MinTime
+				}
+				if c.MaxTime > maxT {
+					maxT = c.MaxTime
+				}
+			}
+
+			if err := chksIter.Err(); err != nil {
+				return errorOnlyStringIter{err: err}, nil
+			}
+
+			var deleted tombstones.Intervals
+			// If minTime is set then there is at least one chunk.
+			if minT != math.MaxInt64 {
+				deleted = deleted.Add(tombstones.Interval{Mint: minT, Maxt: maxT})
+			}
+			log.DeleteSeries(lbls, deleted)
+			p.SeriesProcessed()
+		} else {
+			for _, lb := range processedLabels {
+				symbols[lb.Name] = struct{}{}
+				symbols[lb.Value] = struct{}{}
+			}
+
+			lbStr := processedLabels.String()
+			if _, ok := chunkSeriesMap[lbStr]; !ok {
+				chunkSeriesMap[lbStr] = newChunkSeriesBuilder(processedLabels)
+			}
+			cs := chunkSeriesMap[lbStr]
+
+			// We have to iterate over the chunks and populate them here as
+			// lazyPopulateChunkSeriesSet reuses chunks and previous chunks
+			// will be overwritten at set.Next() call.
+			for chksIter.Next() {
+				c := chksIter.At()
+				cs.addIter(c.Chunk.Iterator(nil))
+			}
+			if err := chksIter.Err(); err != nil {
+				return errorOnlyStringIter{err}, nil
+			}
+
+			if !labels.Equal(lbls, processedLabels) {
+				log.ModifySeries(lbls, processedLabels)
+			}
+		}
+	}
+
+	symbolsSlice := make([]string, 0, len(symbols))
+	for s := range symbols {
+		symbolsSlice = append(symbolsSlice, s)
+	}
+	sort.Strings(symbolsSlice)
+
+	chunkSeriesSet := make([]storage.ChunkSeries, 0, len(chunkSeriesMap))
+	for _, chunkSeries := range chunkSeriesMap {
+		chunkSeriesSet = append(chunkSeriesSet, chunkSeries)
+	}
+	sort.Slice(chunkSeriesSet, func(i, j int) bool {
+		return labels.Compare(chunkSeriesSet[i].Labels(), chunkSeriesSet[j].Labels()) < 0
+	})
+	return index.NewStringListIter(symbolsSlice), newListChunkSeriesSet(chunkSeriesSet...)
+}
+
+// mergeChunkSeries build storage.ChunkSeries from several chunkenc.Iterator.
+type mergeChunkSeries struct {
+	lset labels.Labels
+	ss   []storage.Series
+}
+
+func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
+	return &mergeChunkSeries{
+		lset: lset,
+		ss:   make([]storage.Series, 0),
+	}
+}
+
+func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
+	s.ss = append(s.ss, &storage.SeriesEntry{
+		SampleIteratorFn: func() chunkenc.Iterator {
+			return iter
+		},
+	})
+}
+
+func (s *mergeChunkSeries) Labels() labels.Labels {
+	return s.lset
+}
+
+func (s *mergeChunkSeries) Iterator() chunks.Iterator {
+	if len(s.ss) == 0 {
+		return nil
+	}
+	if len(s.ss) == 1 {
+		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator()
+	}
+
+	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator()
+}
+
+type errorOnlyStringIter struct {
+	err error
+}
+
+func (errorOnlyStringIter) Next() bool   { return false }
+func (errorOnlyStringIter) At() string   { return "" }
+func (s errorOnlyStringIter) Err() error { return s.err }
+
+type listChunkSeriesSet struct {
+	css []storage.ChunkSeries
+	idx int
+}
+
+func newListChunkSeriesSet(css ...storage.ChunkSeries) storage.ChunkSeriesSet {
+	return &listChunkSeriesSet{css: css, idx: -1}
+}
+
+func (s *listChunkSeriesSet) Next() bool {
+	s.idx++
+	return s.idx < len(s.css)
+}
+
+func (s *listChunkSeriesSet) At() storage.ChunkSeries    { return s.css[s.idx] }
+func (s *listChunkSeriesSet) Err() error                 { return nil }
+func (s *listChunkSeriesSet) Warnings() storage.Warnings { return nil }
