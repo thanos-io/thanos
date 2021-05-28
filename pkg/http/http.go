@@ -5,17 +5,12 @@
 package http
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -169,7 +164,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		return newRT(tlsConfig)
 	}
 
-	return newTLSRoundTripper(tlsConfig, cfg.TLSConfig.CAFile, newRT)
+	return config_util.NewTLSRoundTripper(tlsConfig, cfg.TLSConfig.CAFile, newRT)
 }
 
 // NewHTTPClient returns a new HTTP client.
@@ -383,152 +378,4 @@ func (c *Client) Discover(ctx context.Context) {
 // Resolve refreshes and resolves the list of targets.
 func (c *Client) Resolve(ctx context.Context) error {
 	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
-}
-
-// Duplicated from github.com/prometheus/common/config
-// better option would be to expose config_util.newTLSRoundTripper function from prometheus
-
-func JoinDir(dir, path string) string {
-	if path == "" || filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(dir, path)
-}
-
-// SetDirectory joins any relative file paths with dir.
-func (c *TLSConfig) SetDirectory(dir string) {
-	if c == nil {
-		return
-	}
-	c.CAFile = JoinDir(dir, c.CAFile)
-	c.CertFile = JoinDir(dir, c.CertFile)
-	c.KeyFile = JoinDir(dir, c.KeyFile)
-}
-
-// UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (c *TLSConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	type plain TLSConfig
-	return unmarshal((*plain)(c))
-}
-
-// readCAFile reads the CA cert file from disk.
-func readCAFile(f string) ([]byte, error) {
-	data, err := ioutil.ReadFile(f)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load specified CA cert %s: %s", f, err)
-	}
-	return data, nil
-}
-
-// updateRootCA parses the given byte slice as a series of PEM encoded certificates and updates tls.Config.RootCAs.
-func updateRootCA(cfg *tls.Config, b []byte) bool {
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(b) {
-		return false
-	}
-	cfg.RootCAs = caCertPool
-	return true
-}
-
-// tlsRoundTripper is a RoundTripper that updates automatically its TLS
-// configuration whenever the content of the CA file changes.
-type tlsRoundTripper struct {
-	caFile string
-	// newRT returns a new RoundTripper.
-	newRT func(*tls.Config) (http.RoundTripper, error)
-
-	mtx        sync.RWMutex
-	rt         http.RoundTripper
-	hashCAFile []byte
-	tlsConfig  *tls.Config
-}
-
-func newTLSRoundTripper(
-	cfg *tls.Config,
-	caFile string,
-	newRT func(*tls.Config) (http.RoundTripper, error),
-) (http.RoundTripper, error) {
-	t := &tlsRoundTripper{
-		caFile:    caFile,
-		newRT:     newRT,
-		tlsConfig: cfg,
-	}
-
-	rt, err := t.newRT(t.tlsConfig)
-	if err != nil {
-		return nil, err
-	}
-	t.rt = rt
-
-	_, t.hashCAFile, err = t.getCAWithHash()
-	if err != nil {
-		return nil, err
-	}
-
-	return t, nil
-}
-
-func (t *tlsRoundTripper) getCAWithHash() ([]byte, []byte, error) {
-	b, err := readCAFile(t.caFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	h := sha256.Sum256(b)
-	return b, h[:], nil
-
-}
-
-// RoundTrip implements the http.RoundTrip interface.
-func (t *tlsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	b, h, err := t.getCAWithHash()
-	if err != nil {
-		return nil, err
-	}
-
-	t.mtx.RLock()
-	equal := bytes.Equal(h[:], t.hashCAFile)
-	rt := t.rt
-	t.mtx.RUnlock()
-	if equal {
-		// The CA cert hasn't changed, use the existing RoundTripper.
-		return rt.RoundTrip(req)
-	}
-
-	// Create a new RoundTripper.
-	tlsConfig := t.tlsConfig.Clone()
-	if !updateRootCA(tlsConfig, b) {
-		return nil, fmt.Errorf("unable to use specified CA cert %s", t.caFile)
-	}
-	rt, err = t.newRT(tlsConfig)
-	if err != nil {
-		return nil, err
-	}
-	t.CloseIdleConnections()
-
-	t.mtx.Lock()
-	t.rt = rt
-	t.hashCAFile = h[:]
-	t.mtx.Unlock()
-
-	return rt.RoundTrip(req)
-}
-
-type closeIdler interface {
-	CloseIdleConnections()
-}
-
-func (t *tlsRoundTripper) CloseIdleConnections() {
-	t.mtx.RLock()
-	defer t.mtx.RUnlock()
-	if ci, ok := t.rt.(closeIdler); ok {
-		ci.CloseIdleConnections()
-	}
-}
-
-func (c ClientConfig) String() string {
-	b, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Sprintf("<error creating http client config string: %s>", err)
-	}
-	return string(b)
 }
