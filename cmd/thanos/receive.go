@@ -72,7 +72,8 @@ func registerReceive(app *extkingpin.App) {
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
 		}
 
-		// enable ingestion if endpoint is specified, or both the hashrings config are empty,
+		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
+		// Otherwise, run the receiver exclusively as a distributor.
 		// otherwise run receiver in distributor mode.
 		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
 
@@ -359,7 +360,6 @@ func setupHashring(g *run.Group,
 	statusProber prober.Probe,
 	reloadGRPCServer chan struct{},
 	enableIngestion bool,
-
 ) error {
 	// Note: the hashring configuration watcher
 	// is the sender and thus closes the chan.
