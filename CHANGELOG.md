@@ -13,6 +13,21 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
+
+-
+
+### Fixed
+
+-
+
+### Changed
+
+-
+
+## [v0.21.0](https://github.com/thanos-io/thanos/releases/tag/v0.21.0) - 2021.05.28
+
+### Added
+
 - [#4117](https://github.com/thanos-io/thanos/pull/4117) Mixin:  new alert ThanosReceiveTrafficBelowThreshold to flag if the ingestion average of the last hour dips below 50% of the ingestion average for the last 12 hours.
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
 - [#3940](https://github.com/thanos-io/thanos/pull/3940) Sidecar: Added matchers support to `LabelValues`
@@ -25,13 +40,12 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 - [#3707](https://github.com/thanos-io/thanos/pull/3707) Tools: Added `--rewrite.to-relabel-config` to bucket rewrite tool to support series relabel from given blocks.
 
 ### Fixed
+
 - [#4105](https://github.com/thanos-io/thanos/pull/4105) Tools: Add glob support for filepath in tools command
 ### Changed
 
 - [#4223](https://github.com/thanos-io/thanos/pull/4223) Query: federated exemplars API only add replica labels to series labels, not to exemplar labels.
 
-### Removed
--
 ## [v0.20.2](https://github.com/thanos-io/thanos/releases/tag/v0.20.2) - 2021.05.20
 
 ### Fixed
