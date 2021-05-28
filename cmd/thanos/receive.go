@@ -74,7 +74,6 @@ func registerReceive(app *extkingpin.App) {
 
 		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
 		// Otherwise, run the receiver exclusively as a distributor.
-		// otherwise run receiver in distributor mode.
 		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
 
 		return runReceive(
@@ -252,7 +251,6 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
-
 		if err := setupAndRunGRPCServer(g, logger, reg, tracer, conf, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
 			return err
 		}

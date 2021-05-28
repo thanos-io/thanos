@@ -243,7 +243,7 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 	return receiver, nil
 }
 
-func NewReceiverWithDistributorMode(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+func NewReceiverWithoutTSDB(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
 
 	if len(hashring) == 0 {
 		return nil, errors.New("hashring should not be empty for receive-distributor mode")
