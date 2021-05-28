@@ -1,6 +1,5 @@
 import React, { Dispatch, FC, SetStateAction } from 'react';
 import { Button, ButtonGroup } from 'reactstrap';
-import styles from './Filter.module.css';
 
 export interface FilterData {
   showHealthy: boolean;
@@ -17,19 +16,19 @@ const Filter: FC<FilterProps> = ({ filter, setFilter }) => {
   const btnProps = {
     all: {
       active: showHealthy,
-      className: `all ${styles.btn}`,
+      className: 'all',
       color: 'primary',
       onClick: (): void => setFilter({ ...filter, showHealthy: true }),
     },
     unhealthy: {
       active: !showHealthy,
-      className: `unhealthy ${styles.btn}`,
+      className: 'unhealthy',
       color: 'primary',
       onClick: (): void => setFilter({ ...filter, showHealthy: false }),
     },
   };
   return (
-    <ButtonGroup>
+    <ButtonGroup className="mt-3 mb-4">
       <Button {...btnProps.all}>All</Button>
       <Button {...btnProps.unhealthy}>Unhealthy</Button>
     </ButtonGroup>

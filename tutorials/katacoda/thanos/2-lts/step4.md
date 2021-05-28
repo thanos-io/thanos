@@ -62,4 +62,4 @@ Having a long time metric retention for Prometheus was always involving lots of 
 
 Awesome work! Feel free to play with the setup 🤗
 
-Once Done, hit `Continue` for summary.
+Once done, hit `Continue` for summary.

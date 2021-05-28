@@ -37,22 +37,13 @@ func (p *Prometheus) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Ex
 	}
 
 	// Prometheus does not add external labels, so we need to add on our own.
-	enrichExemplarsWithExtLabels(exemplars, p.extLabels())
-
+	extLset := p.extLabels()
 	for _, e := range exemplars {
+		// Make sure the returned series labels are sorted.
+		e.SetSeriesLabels(labelpb.ExtendSortedLabels(e.SeriesLabels.PromLabels(), extLset))
 		if err := s.Send(&exemplarspb.ExemplarsResponse{Result: &exemplarspb.ExemplarsResponse_Data{Data: e}}); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func enrichExemplarsWithExtLabels(exemplars []*exemplarspb.ExemplarData, extLset labels.Labels) {
-	for _, d := range exemplars {
-		d.SetSeriesLabels(labelpb.ExtendSortedLabels(d.SeriesLabels.PromLabels(), extLset))
-		for i, e := range d.Exemplars {
-			e.SetLabels(labelpb.ExtendSortedLabels(e.Labels.PromLabels(), extLset))
-			d.Exemplars[i] = e
-		}
-	}
 }

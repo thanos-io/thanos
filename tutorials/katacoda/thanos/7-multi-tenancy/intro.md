@@ -2,8 +2,8 @@
 
 Welcome to the tutorial where you learn how to manage fruits 🍇 and vegetables 🥦 reliably and efficiently.
 
-On serious note, we will look into how to use Thanos for multi-tenant use cases. Centralized, long-term
-metrics capabilities is very addictive, so it's very often the case that multiple teams want to use Thanos without
+On a serious note, we will look into how to use Thanos for multi-tenant use cases. Centralized, long-term
+metrics capabilities are very addictive, so it's very often the case that multiple teams want to use Thanos without
 impacting each other or accessing each other data.
 
 Thanos was built with this in mind and it in this tutorial you will learn:

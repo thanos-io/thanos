@@ -29,26 +29,26 @@ Release shepherd responsibilities:
 * Perform releases (from first RC to actual release).
 * Announce all releases on all communication channels.
 
-| Release   | Time of first RC         | Shepherd (GitHub handle) |
-|-----------|--------------------------|--------------------------|
-| v0.22.0   | (planned) 2021.06.16     | TBD                      |
-| v0.21.0   | (planned) 2021.05.04     | TBD                      |
-| v0.20.0   | 2021.04.23               | `@kakkoyun`              |
-| v0.19.0   | 2021.03.02               | `@bwplotka`              |
-| v0.18.0   | 2021.01.06               | `@squat`                 |
-| v0.17.0   | 2020.11.18               | `@metalmatze`            |
-| v0.16.0   | 2020.10.26               | `@bwplotka`              |
-| v0.15.0   | 2020.08.12               | `@kakkoyun`              |
-| v0.14.0   | 2020.07.10               | `@kakkoyun`              |
-| v0.13.0   | 2020.05.13               | `@bwplotka`              |
-| v0.12.0   | 2020.04.15               | `@squat`                 |
-| v0.11.0   | 2020.02.19               | `@metalmatze`            |
-| v0.10.0   | 2020.01.08               | `@GiedriusS`             |
-| v0.9.0    | 2019.11.26               | `@bwplotka`              |
-| v0.8.0    | 2019.10.09               | `@bwplotka`              |
-| v0.7.0    | 2019.08.28               | `@domgreen`              |
-| v0.6.0    | 2019.07.12               | `@GiedriusS`             |
-| v0.5.0    | 2019.06.31               | `@bwplotka`              |
+| Release   | Time of first RC         | Shepherd (GitHub handle)    |
+|-----------|--------------------------|-----------------------------|
+| v0.22.0   | (planned) 2021.07.06     | TBD                         |
+| v0.21.0   | 2021.05.28               | `@metalmatze` and `@onprem` |
+| v0.20.0   | 2021.04.23               | `@kakkoyun`                 |
+| v0.19.0   | 2021.03.02               | `@bwplotka`                 |
+| v0.18.0   | 2021.01.06               | `@squat`                    |
+| v0.17.0   | 2020.11.18               | `@metalmatze`               |
+| v0.16.0   | 2020.10.26               | `@bwplotka`                 |
+| v0.15.0   | 2020.08.12               | `@kakkoyun`                 |
+| v0.14.0   | 2020.07.10               | `@kakkoyun`                 |
+| v0.13.0   | 2020.05.13               | `@bwplotka`                 |
+| v0.12.0   | 2020.04.15               | `@squat`                    |
+| v0.11.0   | 2020.02.19               | `@metalmatze`               |
+| v0.10.0   | 2020.01.08               | `@GiedriusS`                |
+| v0.9.0    | 2019.11.26               | `@bwplotka`                 |
+| v0.8.0    | 2019.10.09               | `@bwplotka`                 |
+| v0.7.0    | 2019.08.28               | `@domgreen`                 |
+| v0.6.0    | 2019.07.12               | `@GiedriusS`                |
+| v0.5.0    | 2019.06.31               | `@bwplotka`                 |
 
 # For maintainers: Cutting individual release
 
@@ -108,14 +108,14 @@ separate what have changed between release candidates.
     1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part
        of the repository now
 
-1. Update website's [hugo.yaml](../website/hugo.yaml) to have correct links for new release (
+1. Update website's [hugo.yaml](https://github.com/thanos-io/thanos/blob/main/website/hugo.yaml) to have correct links for new release (
    add `0.y.z: "/:sections/:filename.md"`).
 
 1. Update tutorials:
 
     1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
     1. In case of any breaking changes or necessary updates adjust the manifests so the tutorial stays up to date.
-    1. Update the [scripts/quickstart.sh](../scripts/quickstart.sh) script if needed.
+    1. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/main/scripts/quickstart.sh) script if needed.
 
 1. After review, merge the PR and immediately after this tag a version:
 

@@ -58,6 +58,7 @@ func RunDownsample(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	httpBindAddr string,
+	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
@@ -136,6 +137,7 @@ func RunDownsample(
 	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
+		httpserver.WithTLSConfig(httpTLSConfig),
 	)
 
 	g.Add(func() error {
@@ -162,7 +164,7 @@ func downsampleBucket(
 	dir string,
 	hashFunc metadata.HashFunc,
 ) (rerr error) {
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
 

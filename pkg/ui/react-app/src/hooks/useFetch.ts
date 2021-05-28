@@ -26,6 +26,7 @@ export const useFetch = <T extends any>(url: string, options?: RequestInit): Fet
         setIsLoading(false);
       } catch (error) {
         setError(error);
+        setIsLoading(false);
       }
     };
     fetchData();

@@ -9,9 +9,10 @@ import (
 )
 
 type options struct {
-	gracePeriod time.Duration
-	listen      string
-	mux         *http.ServeMux
+	gracePeriod   time.Duration
+	listen        string
+	tlsConfigPath string
+	mux           *http.ServeMux
 }
 
 // Option overrides behavior of Server.
@@ -38,6 +39,12 @@ func WithGracePeriod(t time.Duration) Option {
 func WithListen(s string) Option {
 	return optionFunc(func(o *options) {
 		o.listen = s
+	})
+}
+
+func WithTLSConfig(tls string) Option {
+	return optionFunc(func(o *options) {
+		o.tlsConfigPath = tls
 	})
 }
 

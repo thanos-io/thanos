@@ -879,15 +879,18 @@ var (
 )
 
 // ParseRelabelConfig parses relabel configuration.
+// If supportedActions not specified, all relabel actions are valid.
 func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
 	var relabelConfig []*relabel.Config
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
 	}
 
-	for _, cfg := range relabelConfig {
-		if _, ok := supportedActions[cfg.Action]; !ok {
-			return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+	if supportedActions != nil {
+		for _, cfg := range relabelConfig {
+			if _, ok := supportedActions[cfg.Action]; !ok {
+				return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+			}
 		}
 	}
 

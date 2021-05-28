@@ -221,6 +221,7 @@ func runStore(
 	srv := httpserver.New(logger, reg, conf.component, httpProbe,
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
+		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
 	)
 
 	g.Add(func() error {

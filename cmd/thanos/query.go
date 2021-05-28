@@ -57,7 +57,7 @@ func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
-	httpBindAddr, httpGracePeriod := extkingpin.RegisterHTTPFlags(cmd)
+	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
@@ -227,6 +227,7 @@ func registerQuery(app *extkingpin.App) {
 			*caCert,
 			*serverName,
 			*httpBindAddr,
+			*httpTLSConfig,
 			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
 			*webExternalPrefix,
@@ -287,6 +288,7 @@ func runQuery(
 	caCert string,
 	serverName string,
 	httpBindAddr string,
+	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	webRoutePrefix string,
 	webExternalPrefix string,
@@ -593,6 +595,7 @@ func runQuery(
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),
 			httpserver.WithGracePeriod(httpGracePeriod),
+			httpserver.WithTLSConfig(httpTLSConfig),
 		)
 		srv.Handle("/", router)
 

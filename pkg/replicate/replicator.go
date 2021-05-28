@@ -75,6 +75,7 @@ func RunReplicate(
 	reg *prometheus.Registry,
 	_ opentracing.Tracer,
 	httpBindAddr string,
+	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	labelSelector labels.Selector,
 	resolutions []compact.ResolutionLevel,
@@ -98,6 +99,7 @@ func RunReplicate(
 	s := http.New(logger, reg, component.Replicate, httpProbe,
 		http.WithListen(httpBindAddr),
 		http.WithGracePeriod(httpGracePeriod),
+		http.WithTLSConfig(httpTLSConfig),
 	)
 
 	g.Add(func() error {
@@ -211,6 +213,7 @@ func RunReplicate(
 		defer runutil.CloseWithLogOnErr(logger, fromBkt, "from bucket client")
 		defer runutil.CloseWithLogOnErr(logger, toBkt, "to bucket client")
 
+		statusProber.Ready()
 		if singleRun || len(blockIDs) > 0 {
 			return replicateFn()
 		}

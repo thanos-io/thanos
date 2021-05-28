@@ -100,7 +100,7 @@ PROM_EU1_1_EXT_ADDRESS=https://[[HOST_SUBDOMAIN]]-${PROM_EU1_1_PORT}-[[KATACODA_
 PROM_US1_0_EXT_ADDRESS=https://[[HOST_SUBDOMAIN]]-${PROM_US1_0_PORT}-[[KATACODA_HOST]].environments.katacoda.com
 ```{{execute}}
 
-### Deploying Prometheus-es/Prometheis/Prometheus instances
+### Deploying Prometheus-es/Prometheus/Prometheus instances
 
 ```
 docker run -it --rm quay.io/prometheus/prometheus:v2.20.0 --help

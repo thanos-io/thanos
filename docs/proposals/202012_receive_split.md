@@ -13,8 +13,10 @@ status: accepted
 
 ### Summary
 
-This document describes the motivation and design of running Receiver in a stateless mode that does not have capabilities to store samples, it only routes remote write
-to further Receivers based on hashring. This allows setting optional deployment model were only Routing Receivers are using hashring files and does the routing and replication. That allows ingesting Receivers to not handle any routing or hashring, only receiving multi tenant writes.
+This document describes the motivation and design of running **Receiver** in a stateless mode that does not have capabilities to store samples, it only routes remote write
+to further receivers based on hashring.
+
+This allows setting optional deployment model were only ***routing receivers*** are using hashring files and does the routing and replication. That allows ***ingesting receivers*** to not handle any routing or hashring, only receiving multi tenant writes.
 
 ### Motivation
 
@@ -25,11 +27,11 @@ to further Receivers based on hashring. This allows setting optional deployment 
 
 ### Goals
 
-* Reduce downtime of the ingestion logic in Thanos Receiver
+* Reduce downtime of the ingestion logic in Thanos Receiver.
 
 ### Proposal
 
-We propose allowing to run Thanos Receiver in a mode that only forwards/replicates remote write (distributor mode). You can enable that mode by simply not specifying:
+We propose allowing to run Thanos Receiver in a mode that only forwards/replicates remote write (distributor mode) apart from the ingesting mode (default mode). You can enable that mode by simply *not specifying*:
 
 ```yaml
   --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
@@ -38,7 +40,7 @@ We propose allowing to run Thanos Receiver in a mode that only forwards/replicat
                                  configuration.
 ```
 
-We can call this mode a "Routing Receiver". Similarly, we can skip specifying any hashring to Thanos Receiver (`--receive.hashrings-file=<path>`), explicitly purposing it only for ingesting. We can call this mode "Ingesting Receiver".
+We can call this mode a "**Routing Receiver**". Similarly, we can skip specifying any hashring to Thanos Receiver (`--receive.hashrings-file=<path>`), explicitly purposing it only for ingesting. We can call this mode "**Ingesting Receiver**".
 
 User can also mix all of those two modes for various federated hashrings etc. So instead of what we had before:
 
@@ -50,31 +52,31 @@ We have:
 
 This allows us to (optionally) model deployment in a way that avoid expensive re-configuration of the stateful ingesting Receivers after the hashring configuration file has changed.
 
-In comparison to previous proposal (as mentioned in [alternatives](#previous-proposal-separate-receive-route-command) we have big adventages:
+In comparison to previous proposal (as mentioned in [alternatives](#previous-proposal-separate-receive-route-command) we have big advantages:
 
-1. We can reduce number of components in Thanos system, we can reuse similar component flags and documentation. Users has to learn about one less command and in result Thanos design is much more approachable. Less components mean less maintainance, code and other implicit duties: Separate changelogs, issue confusions, boilerplates, etc.
+1. We can *reduce number of components* in Thanos system, we can reuse similar component flags and documentation. Users has to learn about one less command and in result Thanos design is much more approachable. Less components mean less maintainance, code and other implicit duties: Separate changelogs, issue confusions, boilerplates, etc.
 2. Allow consistent pattern with Query. We don't have separate StoreAPI component for proxying, we have that baked into Querier. This has been proven to be flexible and understandable, so I would like to propose similar pattern in Receiver.
-3. This is more future proof for potential advanced cases like chain of routers -> receivers -> routers -> receivers for federated writes, so trees with depth n.
+3. This is more future proof for potential advanced cases like *chain of routers -> receivers -> routers -> receivers* for federated writes, so ***trees with depth n***.
 
 ### Plan
 
-* Receiver without `--receive.hashrings` does not forward or replicate requests, it routes straight to multi-tsdb.
-* Receiver without ` --Receiver.local-endpoint` will assume that no storage is needed, so will skip creating any resources for multi TSDB.
+* Receiver without `--receive.hashrings` does not forward or replicate requests, **it routes straight to multi-tsdb**.
+* Receiver without ` --Receiver.local-endpoint` will assume that no storage is needed, **so will skip creating any resources for multi TSDB**.
 * Add changes to the documentation (it's simplistic now). Mention two modes.
 
 ### Alternative Solutions
 
 #### Previous Proposal: Separate receive-route command
 
-1. Split the Receiver component into receive-route and Receiver (and ensure ease of resharding events).
+1. Split the Receiver component into **receive-route** and **receiver** (and ensure ease of resharding events).
 1. Evaluate any effects on performance by simulating scenarios and collecting and analyzing metrics.
-1. Use consistent hashing to avoid reshuffling time series after resharding events. The exact consistent hashing mechanism to be used needs some further research.
-1. Migration: We document how the new architecture can be set up to have the same general deployment of the old architecture. (We run router and Receiver on the same node).
+1. Use ***consistent hashing*** to avoid reshuffling time series after resharding events. The exact consistent hashing mechanism to be used needs some further research.
+1. **Migration**: We document how the new architecture can be set up to have the same general deployment of the old architecture. (We run router and Receiver on the same node).
 
-This potentially makes the receiver more difficult to operate and understand for Thanos users. I would argue this is however much harder in overall Thanos deployment. Otherwise, this option is exactly the same.
+This potentially makes the receiver more difficult to operate and understandable for Thanos users. I would argue this is however much harder in overall Thanos deployment. Otherwise, this option is exactly the same.
 
-#### Flag for current Receiver --receive-route
+#### Flag for current Receiver: --receive-route
 
 Idea would be similar same as in [Proposal](#Proposal), but there will be explicit flag to turn off local storage capabilities.
 
-I think we can have much more understandable logic if we simply not configure hashring for ingesting Receivers and not configure local hashring endpoint to notify that such Receiver instance will never store anything.
+I think we can have much more understandable logic if *we simply not* configure hashring for **ingesting receivers** and not configure local hashring endpoint to notify that such Receiver instance will never store anything.
