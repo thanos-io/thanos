@@ -31,8 +31,8 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle)    |
 |-----------|--------------------------|-----------------------------|
-| v0.22.0   | (planned) 2021.06.16     | TBD                         |
-| v0.21.0   | (planned) 2021.05.04     | `@metalmatze` and `@onprem` |
+| v0.22.0   | (planned) 2021.07.06     | TBD                         |
+| v0.21.0   | 2021.05.28               | `@metalmatze` and `@onprem` |
 | v0.20.0   | 2021.04.23               | `@kakkoyun`                 |
 | v0.19.0   | 2021.03.02               | `@bwplotka`                 |
 | v0.18.0   | 2021.01.06               | `@squat`                    |
