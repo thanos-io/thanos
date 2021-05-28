@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -61,10 +62,23 @@ type ProxyStore struct {
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
+
+	// Request -> add yourself to list of listeners that are listening on that store+request.
+	// At the end, send the same data to each worker.
+	// Delete the request from the map at the end!
+	requestListeners   map[string]*requestListenerVal
+	requestListenerMtx *sync.Mutex
+}
+
+type requestListenerVal struct {
+	listeners         []chan *storepb.SeriesResponse
+	listenerCnt       int
+	sentFirstResponse bool
 }
 
 type proxyStoreMetrics struct {
-	emptyStreamResponses prometheus.Counter
+	emptyStreamResponses       prometheus.Counter
+	deduplicatedStreamRequests prometheus.Counter
 }
 
 func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
@@ -73,6 +87,11 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 	m.emptyStreamResponses = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_proxy_store_empty_stream_responses_total",
 		Help: "Total number of empty responses received.",
+	})
+
+	m.deduplicatedStreamRequests = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_proxy_store_deduplicated_stream_requests_total",
+		Help: "How many requests we've avoided sending due to deduplication.",
 	})
 
 	return &m
@@ -100,12 +119,14 @@ func NewProxyStore(
 
 	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
-		logger:          logger,
-		stores:          stores,
-		component:       component,
-		selectorLabels:  selectorLabels,
-		responseTimeout: responseTimeout,
-		metrics:         metrics,
+		logger:             logger,
+		stores:             stores,
+		component:          component,
+		selectorLabels:     selectorLabels,
+		responseTimeout:    responseTimeout,
+		metrics:            metrics,
+		requestListenerMtx: &sync.Mutex{},
+		requestListeners:   make(map[string]*requestListenerVal),
 	}
 	return s
 }
@@ -185,9 +206,137 @@ func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
 	}
 }
 
-// Series returns all series for a requested time range and label matcher. Requested series are taken from other
-// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
+type broadcastingSeriesServer struct {
+	cacheKey         string
+	s                *ProxyStore
+	srv              storepb.Store_SeriesServer
+	setFirstResponse *sync.Once
+}
+
+// Send is like a regular Send() but it fans out those responses to multiple channels.
+func (b *broadcastingSeriesServer) Send(resp *storepb.SeriesResponse) error {
+	b.s.requestListenerMtx.Lock()
+	defer b.s.requestListenerMtx.Unlock()
+
+	b.setFirstResponse.Do(func() {
+		b.s.requestListeners[b.cacheKey].sentFirstResponse = true
+	})
+
+	for _, listener := range b.s.requestListeners[b.cacheKey].listeners {
+		select {
+		case listener <- resp:
+		case <-b.Context().Done():
+			for _, l := range b.s.requestListeners[b.cacheKey].listeners {
+				close(l)
+			}
+			return b.Context().Err()
+		}
+	}
+	return nil
+}
+
+func (b *broadcastingSeriesServer) Context() context.Context {
+	return b.srv.Context()
+}
+
+func (b *broadcastingSeriesServer) Close() {
+	b.s.requestListenerMtx.Lock()
+	defer b.s.requestListenerMtx.Unlock()
+	for _, l := range b.s.requestListeners[b.cacheKey].listeners {
+		close(l)
+	}
+}
+
+func (b *broadcastingSeriesServer) RecvMsg(m interface{}) error    { return b.srv.RecvMsg(m) }
+func (b *broadcastingSeriesServer) SendMsg(m interface{}) error    { return b.srv.SendMsg(m) }
+func (b *broadcastingSeriesServer) SetHeader(m metadata.MD) error  { return b.srv.SetHeader(m) }
+func (b *broadcastingSeriesServer) SendHeader(m metadata.MD) error { return b.srv.SendHeader(m) }
+func (b *broadcastingSeriesServer) SetTrailer(m metadata.MD)       { b.srv.SetTrailer(m) }
+
+// Memoized version of realSeries() - it doesn't perform any Series() call unless such a request
+// isn't happening already. This helps a lot in cases when a dashboard gets opened with lots
+// of different queries that use the same metrics.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	var (
+		cacheKey        string
+		shouldSendQuery bool
+		dataIn          chan *storepb.SeriesResponse = make(chan *storepb.SeriesResponse)
+		cacheKeyID      int
+	)
+	stores := s.stores()
+	for _, st := range stores {
+		cacheKey += st.String()
+	}
+	cacheKey += r.String()
+
+	// If already sending response back -> create a new cache key.
+	s.requestListenerMtx.Lock()
+	finalCacheKey := fmt.Sprintf("%s-%d", cacheKey, cacheKeyID)
+	if s.requestListeners[finalCacheKey] == nil {
+		s.requestListeners[finalCacheKey] = &requestListenerVal{}
+	}
+	if s.requestListeners[finalCacheKey].sentFirstResponse {
+		for {
+			cacheKeyID++
+			finalCacheKey := fmt.Sprintf("%s-%d", cacheKey, cacheKeyID)
+			if s.requestListeners[finalCacheKey] == nil {
+				s.requestListeners[finalCacheKey] = &requestListenerVal{}
+				break
+			}
+			if !s.requestListeners[finalCacheKey].sentFirstResponse {
+				break
+			}
+		}
+	}
+	shouldSendQuery = s.requestListeners[finalCacheKey].listenerCnt == 0
+	s.requestListeners[finalCacheKey].listenerCnt++
+	s.requestListeners[finalCacheKey].listeners = append(s.requestListeners[finalCacheKey].listeners, dataIn)
+	s.requestListenerMtx.Unlock()
+
+	g, _ := errgroup.WithContext(srv.Context())
+
+	bss := &broadcastingSeriesServer{
+		finalCacheKey,
+		s,
+		srv,
+		&sync.Once{},
+	}
+
+	if shouldSendQuery {
+		g.Go(func() error {
+			return s.realSeries(stores, r, bss)
+		})
+	} else {
+		s.metrics.deduplicatedStreamRequests.Inc()
+	}
+
+	g.Go(func() error {
+		for din := range dataIn {
+			if err := srv.Send(din); err != nil {
+				return errors.Wrap(err, "sending cached Series() response")
+			}
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	s.requestListenerMtx.Lock()
+	s.requestListeners[finalCacheKey].listenerCnt--
+	if s.requestListeners[finalCacheKey].listenerCnt == 0 {
+		delete(s.requestListeners, finalCacheKey)
+	}
+	s.requestListenerMtx.Unlock()
+
+	return nil
+}
+
+// realSeries returns all series for a requested time range and label matcher. Requested series are taken from other
+// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
+func (s *ProxyStore) realSeries(stores []Client, r *storepb.SeriesRequest, srv *broadcastingSeriesServer) error {
+	defer srv.Close()
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
 	reqLogger := log.With(s.logger, "component", "proxy", "request", r.String())
@@ -234,7 +383,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			close(respCh)
 		}()
 
-		for _, st := range s.stores() {
+		for _, st := range stores {
 			// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 			if ok, reason := storeMatches(gctx, st, r.MinTime, r.MaxTime, matchers...); !ok {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
