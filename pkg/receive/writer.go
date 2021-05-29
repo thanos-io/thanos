@@ -41,9 +41,12 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 
 func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
 	var (
-		numOutOfOrder  = 0
-		numDuplicates  = 0
-		numOutOfBounds = 0
+		numOutOfOrder           = 0
+		numDuplicates           = 0
+		numOutOfBounds          = 0
+		numExemplarsOutOfOrder  = 0
+		numExemplarsDuplicate   = 0
+		numExemplarsLabelLength = 0
 	)
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
@@ -97,13 +100,24 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
 				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
-				if _, err := app.AppendExemplar(ref, lset, exemplar.Exemplar{
+				logger := log.With(r.logger, "exemplarLset", exLset, "exemplar", ex.String())
+
+				_, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
 					Labels: exLset,
 					Value:  ex.Value,
 					Ts:     ex.Timestamp,
 					HasTs:  true,
-				}); err != nil {
-					level.Debug(r.logger).Log("msg", "Error ingesting exemplar", "exemplarLset", exLset, "err", err)
+				})
+				switch err {
+				case storage.ErrOutOfOrderExemplar:
+					numExemplarsOutOfOrder++
+					level.Debug(logger).Log("msg", "Out of order exemplar")
+				case storage.ErrDuplicateExemplar:
+					numExemplarsDuplicate++
+					level.Debug(logger).Log("msg", "Out of order exemplar")
+				case storage.ErrExemplarLabelLength:
+					numExemplarsLabelLength++
+					level.Debug(logger).Log("msg", "Label length for exemplar exceeds max limit")
 				}
 			}
 		}
@@ -120,6 +134,18 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if numOutOfBounds > 0 {
 		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
 		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
+	}
+	if numExemplarsOutOfOrder > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d samples", numExemplarsOutOfOrder))
+	}
+	if numExemplarsDuplicate > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
+		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d samples", numExemplarsDuplicate))
+	}
+	if numExemplarsLabelLength > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
+		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d samples", numExemplarsLabelLength))
 	}
 
 	if err := app.Commit(); err != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -320,6 +321,7 @@ func setupAndRunGRPCServer(g *run.Group,
 			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 				grpcserver.WithServer(store.RegisterStoreServer(rw)),
 				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),

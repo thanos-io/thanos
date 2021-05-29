@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -38,6 +39,7 @@ func TestMultiTSDB(t *testing.T) {
 				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 				RetentionDuration: (6 * time.Hour).Milliseconds(),
 				NoLockfile:        true,
+				MaxExemplars:      100,
 			},
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
@@ -66,7 +68,15 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, err)
 		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
 		testutil.Ok(t, err)
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
+		ref, err := a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
+		testutil.Ok(t, err)
+
+		// Test exemplars.
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 1})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 2.1212})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 3.1313})
 		testutil.Ok(t, err)
 		testutil.Ok(t, a.Commit())
 
