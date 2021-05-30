@@ -5,7 +5,6 @@ package receive
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"io/ioutil"
@@ -13,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cespare/xxhash"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -290,10 +290,10 @@ func parseConfig(content []byte) ([]HashringConfig, error) {
 
 // hashAsMetricValue generates metric value from hash of data.
 func hashAsMetricValue(data []byte) float64 {
-	sum := sha256.Sum256(data)
+	sum := xxhash.Sum64(data)
 	// We only want 48 bits as a float64 only has a 53 bit mantissa.
-	smallSum := sum[0:6]
+	strSum := strconv.FormatUint(sum, 10)
 	var bytes = make([]byte, 8)
-	copy(bytes, smallSum)
+	copy(bytes, strSum)
 	return float64(binary.LittleEndian.Uint64(bytes))
 }
