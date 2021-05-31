@@ -314,6 +314,11 @@ func runCompact(
 		if len(conf.dedupReplicaLabels) == 0 {
 			return errors.New("penalty based deduplication needs at least one replica label specified")
 		}
+	case "":
+		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+
+	default:
+		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
 	}
 
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
@@ -651,7 +656,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
 		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
-		Hidden().StringsVar(&cc.dedupReplicaLabels)
+		StringsVar(&cc.dedupReplicaLabels)
 
 	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
 	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
