@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -1742,10 +1743,12 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 
 	logger := log.NewNopLogger()
 	store := &ProxyStore{
-		logger:          logger,
-		stores:          func() []Client { return clients },
-		metrics:         newProxyStoreMetrics(nil),
-		responseTimeout: 0,
+		logger:             logger,
+		stores:             func() []Client { return clients },
+		metrics:            newProxyStoreMetrics(nil),
+		responseTimeout:    0,
+		requestListeners:   make(map[string]*requestListenerVal),
+		requestListenerMtx: &sync.Mutex{},
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -1863,10 +1866,12 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	p := &ProxyStore{
-		logger:          logger,
-		stores:          func() []Client { return clients },
-		metrics:         newProxyStoreMetrics(nil),
-		responseTimeout: 0,
+		logger:             logger,
+		stores:             func() []Client { return clients },
+		metrics:            newProxyStoreMetrics(nil),
+		responseTimeout:    0,
+		requestListeners:   make(map[string]*requestListenerVal),
+		requestListenerMtx: &sync.Mutex{},
 	}
 
 	t.Run("failling send", func(t *testing.T) {
