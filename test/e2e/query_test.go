@@ -87,8 +87,10 @@ rule_files:
 
 func defaultWebConfig() string {
 	// username: test, secret: test(bcrypt hash)
-	return `basic_auth_users:
-  test: "$2y$10$IsC9GG9U61sPCuDwwwcnPuMRyzx62cIcdNRs4SIdKwgWihfX4IC.C"`
+	return `
+basic_auth_users:
+  test: $2y$10$IsC9GG9U61sPCuDwwwcnPuMRyzx62cIcdNRs4SIdKwgWihfX4IC.C
+`
 }
 
 func sortResults(res model.Vector) {
