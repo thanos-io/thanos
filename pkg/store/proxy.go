@@ -317,6 +317,13 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 	cacheKey += r.String()
 
+	// For RAW data, it doesn't matter what aggregation has been set underneath
+	// so set the aggregations to some "default" value to save even more.
+	// TODO(GiedriusS): remove this once query push-down becomes a reality.
+	if r.MaxResolutionWindow == 0 {
+		r.Aggregates = []storepb.Aggr{storepb.Aggr_RAW}
+	}
+
 	g, gctx := errgroup.WithContext(srv.Context())
 
 	s.requestListenerMtx.Lock()
