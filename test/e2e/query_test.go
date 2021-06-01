@@ -355,11 +355,15 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 
 	prom, sidecar, err := e2ethanos.NewPrometheusAndSidecarWithBasicAuth(s.SharedDir(), s.NetworkName(), "alone", defaultPromConfig("prom-alone", 0, "", ""), defaultWebConfig(), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	s.StartAndWaitReady(prom, sidecar)
+	_ = s.StartAndWaitReady(prom, sidecar)
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "alone", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
+
+	// q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "alone", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	// testutil.Ok(t, err).Build()
+	// testutil.Ok(t, s.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)

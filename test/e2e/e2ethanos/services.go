@@ -708,7 +708,7 @@ func NewPrometheusAndSidecarWithBasicAuth(sharedDir string, netName string, name
 	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(promConfig), 0666); err != nil {
 		return nil, nil, errors.Wrap(err, "creating prom config failed")
 	}
-	fmt.Println(webConfig)
+
 	if err := ioutil.WriteFile(filepath.Join(dir, "web-config.yml"), []byte(webConfig), 0666); err != nil {
 		return nil, nil, errors.Wrap(err, "creating web-config failed")
 	}
