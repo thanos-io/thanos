@@ -398,10 +398,10 @@ func (s *exemplarsServer) Context() context.Context {
 
 func checkExemplarsResponse(t *testing.T, expected []exemplarspb.ExemplarData, data []exemplarspb.ExemplarData) {
 	testutil.Equals(t, len(expected), len(data))
-	for i, _ := range data {
+	for i := range data {
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
 		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
-		for j, _ := range data[i].Exemplars {
+		for j := range data[i].Exemplars {
 			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
 		}
 	}
