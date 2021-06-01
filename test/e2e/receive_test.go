@@ -92,7 +92,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
