@@ -20,20 +20,20 @@ Don't be afraid of multiline flags!
 In Kubernetes, it is as easy as (on Thanos sidecar example):
 
 ```yaml
-- args:
- - sidecar
- - |
- --objstore.config=type: GCS
- config:
- bucket: <bucket>
- - --prometheus.url=http://localhost:9090
- - |
- --tracing.config=type: STACKDRIVER
- config:
- service_name: ""
- project_id: <project>
- sample_factor: 16
- - --tsdb.path=/prometheus-data
+      - args:
+        - sidecar
+        - |
+          --objstore.config=type: GCS
+          config:
+            bucket: <bucket>
+        - --prometheus.url=http://localhost:9090
+        - |
+          --tracing.config=type: STACKDRIVER
+          config:
+            service_name: ""
+            project_id: <project>
+            sample_factor: 16
+        - --tsdb.path=/prometheus-data
 ```
 
 ## How to add a new client?
@@ -53,7 +53,7 @@ Current tracing supported backends:
 
 Client for https://github.com/jaegertracing/jaeger tracing.
 
-[embedmd]: # "flags/config_tracing_jaeger.txt yaml"
+[embedmd]: # 'flags/config_tracing_jaeger.txt yaml'
 
 ```yaml
 type: JAEGER
@@ -81,13 +81,13 @@ config:
 
 Client for https://cloud.google.com/trace/ tracing.
 
-[embedmd]: # "flags/config_tracing_stackdriver.txt yaml"
+[embedmd]: # 'flags/config_tracing_stackdriver.txt yaml'
 
 ```yaml
 type: STACKDRIVER
 config:
-  service_name: ""
-  project_id: ""
+  service_name: ''
+  project_id: ''
   sample_factor: 0
 ```
 
@@ -95,14 +95,14 @@ config:
 
 Client for https://www.elastic.co/products/apm tracing.
 
-[embedmd]: # "flags/config_tracing_elastic_apm.txt yaml"
+[embedmd]: # 'flags/config_tracing_elastic_apm.txt yaml'
 
 ```yaml
 type: ELASTIC_APM
 config:
-  service_name: ""
-  service_version: ""
-  service_environment: ""
+  service_name: ''
+  service_version: ''
+  service_environment: ''
   sample_rate: 0
 ```
 
@@ -112,17 +112,16 @@ Client for [Lightstep](https://lightstep.com).
 
 In order to configure Thanos to interact with Lightstep, you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
-[embedmd]: # "flags/config_tracing_lightstep.txt yaml"
-
+[embedmd]:# (flags/config_tracing_lightstep.txt yaml)
 ```yaml
 type: LIGHTSTEP
 config:
   access_token: ""
   collector:
-  scheme: ""
-  host: ""
-  port: 0
-  plaintext: false
-  custom_ca_cert_file: ""
+    scheme: ""
+    host: ""
+    port: 0
+    plaintext: false
+    custom_ca_cert_file: ""
   tags: ""
 ```
