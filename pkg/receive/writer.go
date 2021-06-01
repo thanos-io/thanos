@@ -141,15 +141,15 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 	if numExemplarsOutOfOrder > 0 {
 		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d samples", numExemplarsOutOfOrder))
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d exemplars", numExemplarsOutOfOrder))
 	}
 	if numExemplarsDuplicate > 0 {
 		level.Warn(r.logger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d samples", numExemplarsDuplicate))
+		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d exemplars", numExemplarsDuplicate))
 	}
 	if numExemplarsLabelLength > 0 {
 		level.Warn(r.logger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
-		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d samples", numExemplarsLabelLength))
+		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
 	}
 
 	if err := app.Commit(); err != nil {
