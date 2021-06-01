@@ -4,8 +4,6 @@
 package exemplars
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -25,10 +23,9 @@ func NewMultiTSDB(tsdbExemplarsServers func() map[string]exemplarspb.ExemplarsSe
 
 // Exemplars returns all specified exemplars from a MultiTSDB instance.
 func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
-	fmt.Println("meer paas request aayi", m.tsdbExemplarsServers())
 	for tenant, es := range m.tsdbExemplarsServers() {
 		if err := es.Exemplars(r, s); err != nil {
-			return errors.Wrapf(err, "get info for tenant %s", tenant)
+			return errors.Wrapf(err, "get exemplars for tenant %s", tenant)
 		}
 	}
 	return nil

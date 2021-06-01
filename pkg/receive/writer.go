@@ -114,10 +114,14 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 					level.Debug(logger).Log("msg", "Out of order exemplar")
 				case storage.ErrDuplicateExemplar:
 					numExemplarsDuplicate++
-					level.Debug(logger).Log("msg", "Out of order exemplar")
+					level.Debug(logger).Log("msg", "Duplicate exemplar")
 				case storage.ErrExemplarLabelLength:
 					numExemplarsLabelLength++
-					level.Debug(logger).Log("msg", "Label length for exemplar exceeds max limit")
+					level.Debug(logger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
+				default:
+					if err != nil {
+						level.Debug(logger).Log("msg", "Error ingesting exemplar", "err", err)
+					}
 				}
 			}
 		}

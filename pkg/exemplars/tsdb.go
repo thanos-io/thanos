@@ -52,8 +52,9 @@ func (t *TSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplar
 					labelpb.ExtendSortedLabels(e.SeriesLabels, t.extLabels),
 				),
 			},
+			Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
 		}
-		if err := s.Send(&exemplarspb.ExemplarsResponse{Result: &exemplarspb.ExemplarsResponse_Data{Data: &exd}}); err != nil {
+		if err := s.Send(exemplarspb.NewExemplarsResponse(&exd)); err != nil {
 			return err
 		}
 	}
