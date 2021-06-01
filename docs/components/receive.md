@@ -196,6 +196,9 @@ Flags:
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
+      --tsdb.max-exemplars=0     Enables support for ingesting exemplars and set
+                                 the maximum number that will be stored. 0 (or
+                                 less) disables exemplars storage.
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
