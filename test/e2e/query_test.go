@@ -361,10 +361,6 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	// q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "alone", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
-	// testutil.Ok(t, err).Build()
-	// testutil.Ok(t, s.StartAndWaitReady(q))
-
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
