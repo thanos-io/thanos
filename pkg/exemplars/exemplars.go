@@ -5,6 +5,7 @@ package exemplars
 
 import (
 	"context"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"sort"
 
 	"github.com/pkg/errors"
@@ -73,6 +74,9 @@ func NewGRPCClientWithDedup(es exemplarspb.ExemplarsServer, replicaLabels []stri
 }
 
 func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, storage.Warnings, error) {
+	span, ctx := tracing.StartSpan(ctx, "exemplar_grpc_request")
+	defer span.Finish()
+
 	resp := &exemplarsServer{ctx: ctx}
 
 	if err := rr.proxy.Exemplars(req, resp); err != nil {
