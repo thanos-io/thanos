@@ -240,7 +240,7 @@ Generally, the maximum memory utilization is exactly the same as for Prometheus 
   * 1/32 of all block's posting offsets
 * Single series with all labels and all chunks.
 
-You need to multiply this with X where X is `--compaction.concurrency` (by default 1).
+You need to multiply this with X where X is `--compact.concurrency` (by default 1).
 
 **NOTE:** Don't check heap memory only. Prometheus and Thanos compaction leverages `mmap` heavily which is outside of `Go` `runtime` stats.
 Refer to process / OS memory used rather. On Linux/MacOS Go will also use as much as available, so utilization will be always near limit.
@@ -261,7 +261,7 @@ for medium sized bucket about 100GB should be enough to keep working as the comp
 size of the blocks. In worst case scenario compactor has to have space adequate to 2 times 2 weeks (if your maximum compaction level is 2 weeks) worth of smaller blocks to
 perform compaction. First, to download all of those source blocks, second to build on disk output of 2 week block composed of those smaller ones.
 
-You need to multiply this with X where X is `--compaction.concurrency` (by default 1).
+You need to multiply this with X where X is `--compact.concurrency` (by default 1).
 
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 However, it's recommended to give the Compactor persistent disk in order to effectively use bucket state cache between restarts.
