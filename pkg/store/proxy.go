@@ -213,10 +213,10 @@ func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
 type broadcastingSeriesServer struct {
 	ctx context.Context
 
-	cacheKey string
-	s        *ProxyStore
-	srv      storepb.Store_SeriesServer
-	resps    []*storepb.SeriesResponse
+	listenerKey string
+	s           *ProxyStore
+	srv         storepb.Store_SeriesServer
+	resps       []*storepb.SeriesResponse
 }
 
 // Send is like a regular Send() but it fans out those responses to multiple channels.
@@ -264,9 +264,9 @@ func copySeriesResponse(r *storepb.SeriesResponse) *storepb.SeriesResponse {
 }
 
 func (b *broadcastingSeriesServer) Close() error {
-	val, ok := b.s.requestListenersLRU.Get(b.cacheKey)
+	val, ok := b.s.requestListenersLRU.Get(b.listenerKey)
 	if !ok {
-		return fmt.Errorf("%s key not found", b.cacheKey)
+		return fmt.Errorf("%s key not found", b.listenerKey)
 	}
 	rlk := val.(*requestListenerVal)
 
