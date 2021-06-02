@@ -36,7 +36,8 @@ import (
 
 type ctxKey int
 
-const rlkLRUSize = 250_000
+// Seems good enough. In the worst case, there are going to be more allocations.
+const rlkLRUSize = 1_000_000
 
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
@@ -213,10 +214,9 @@ func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
 type broadcastingSeriesServer struct {
 	ctx context.Context
 
-	listenerKey string
-	s           *ProxyStore
-	srv         storepb.Store_SeriesServer
-	resps       []*storepb.SeriesResponse
+	rlk   *requestListenerVal
+	srv   storepb.Store_SeriesServer
+	resps []*storepb.SeriesResponse
 }
 
 // Send is like a regular Send() but it fans out those responses to multiple channels.
@@ -264,11 +264,7 @@ func copySeriesResponse(r *storepb.SeriesResponse) *storepb.SeriesResponse {
 }
 
 func (b *broadcastingSeriesServer) Close() error {
-	val, ok := b.s.requestListenersLRU.Get(b.listenerKey)
-	if !ok {
-		return fmt.Errorf("%s key not found", b.listenerKey)
-	}
-	rlk := val.(*requestListenerVal)
+	rlk := b.rlk
 
 	rlk.valLock.Lock()
 	defer func() {
@@ -277,24 +273,14 @@ func (b *broadcastingSeriesServer) Close() error {
 	}()
 
 	for li, l := range rlk.listeners {
-		if li > 0 {
-			wg := &sync.WaitGroup{}
-			for _, resp := range b.resps {
-				resp := resp
-				go func() {
-					resp = copySeriesResponse(resp)
-					select {
-					case l <- resp:
-					case <-b.srv.Context().Done():
-						return
-					}
-				}()
+		for _, resp := range b.resps {
+			if li > 0 {
+				resp = copySeriesResponse(resp)
 			}
-
-			wg.Wait()
-
-			err := b.srv.Context().Err()
-			if err != nil {
+			select {
+			case l <- resp:
+			case <-b.srv.Context().Done():
+				err := b.srv.Context().Err()
 				for _, lc := range rlk.listeners {
 					select {
 					case lc <- storepb.NewWarnSeriesResponse(err):
@@ -304,26 +290,8 @@ func (b *broadcastingSeriesServer) Close() error {
 				}
 				return b.srv.Context().Err()
 			}
-			close(l)
-
-		} else {
-			for _, resp := range b.resps {
-				select {
-				case l <- resp:
-				case <-b.srv.Context().Done():
-					err := b.srv.Context().Err()
-					for _, lc := range rlk.listeners {
-						select {
-						case lc <- storepb.NewWarnSeriesResponse(err):
-						default:
-						}
-						close(lc)
-					}
-					return b.srv.Context().Err()
-				}
-			}
-			close(l)
 		}
+		close(l)
 	}
 	return nil
 }
@@ -389,8 +357,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		bss := &broadcastingSeriesServer{
 			ctx,
-			listenerKey,
-			s,
+			rlk,
 			srv,
 			[]*storepb.SeriesResponse{},
 		}
