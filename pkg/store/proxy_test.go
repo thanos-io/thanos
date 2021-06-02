@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/simplelru"
+
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -1742,13 +1744,14 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 	}
 
 	logger := log.NewNopLogger()
+	l, _ := lru.NewLRU(rlkLRUSize, nil)
 	store := &ProxyStore{
-		logger:             logger,
-		stores:             func() []Client { return clients },
-		metrics:            newProxyStoreMetrics(nil),
-		responseTimeout:    0,
-		requestListeners:   make(map[string]*requestListenerVal),
-		requestListenerMtx: &sync.Mutex{},
+		logger:               logger,
+		stores:               func() []Client { return clients },
+		metrics:              newProxyStoreMetrics(nil),
+		responseTimeout:      0,
+		requestListenersLRU:  l,
+		requestListenersLock: &sync.Mutex{},
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -1773,7 +1776,13 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 	}
 
 	chunkLen := len(allResps[len(allResps)-1].GetSeries().Chunks)
-	maxTime := allResps[len(allResps)-1].GetSeries().Chunks[chunkLen-1].MaxTime
+	var maxTime int64
+
+	if chunkLen == 0 {
+		maxTime = math.MaxInt64
+	} else {
+		maxTime = allResps[len(allResps)-1].GetSeries().Chunks[chunkLen-1].MaxTime
+	}
 	storetestutil.TestServerSeries(t, store,
 		&storetestutil.SeriesCase{
 			Name: fmt.Sprintf("%d client with %d samples, %d series each", numOfClients, samplesPerSeriesPerClient, seriesPerClient),
@@ -1865,13 +1874,14 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	}
 
 	logger := log.NewNopLogger()
+	l, _ := lru.NewLRU(rlkLRUSize, nil)
 	p := &ProxyStore{
-		logger:             logger,
-		stores:             func() []Client { return clients },
-		metrics:            newProxyStoreMetrics(nil),
-		responseTimeout:    0,
-		requestListeners:   make(map[string]*requestListenerVal),
-		requestListenerMtx: &sync.Mutex{},
+		logger:               logger,
+		stores:               func() []Client { return clients },
+		metrics:              newProxyStoreMetrics(nil),
+		responseTimeout:      0,
+		requestListenersLRU:  l,
+		requestListenersLock: &sync.Mutex{},
 	}
 
 	t.Run("failling send", func(t *testing.T) {

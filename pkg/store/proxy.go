@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
+	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,6 +35,8 @@ import (
 )
 
 type ctxKey int
+
+const rlkLRUSize = 250_000
 
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
@@ -67,12 +70,13 @@ type ProxyStore struct {
 	// Request -> add yourself to list of listeners that are listening on those stores+request.
 	// At the end, send the same data to each worker.
 	// Delete the request from the map at the end!
-	requestListeners   map[string]*requestListenerVal
-	requestListenerMtx *sync.Mutex
+	requestListenersLRU  *lru.LRU
+	requestListenersLock *sync.Mutex
 }
 
 type requestListenerVal struct {
 	listeners []chan *storepb.SeriesResponse
+	valLock   *sync.Mutex
 }
 
 type proxyStoreMetrics struct {
@@ -117,15 +121,16 @@ func NewProxyStore(
 	}
 
 	metrics := newProxyStoreMetrics(reg)
+	l, _ := lru.NewLRU(rlkLRUSize, nil)
 	s := &ProxyStore{
-		logger:             logger,
-		stores:             stores,
-		component:          component,
-		selectorLabels:     selectorLabels,
-		responseTimeout:    responseTimeout,
-		metrics:            metrics,
-		requestListenerMtx: &sync.Mutex{},
-		requestListeners:   make(map[string]*requestListenerVal),
+		logger:               logger,
+		stores:               stores,
+		component:            component,
+		selectorLabels:       selectorLabels,
+		responseTimeout:      responseTimeout,
+		metrics:              metrics,
+		requestListenersLRU:  l,
+		requestListenersLock: &sync.Mutex{},
 	}
 	return s
 }
@@ -259,29 +264,38 @@ func copySeriesResponse(r *storepb.SeriesResponse) *storepb.SeriesResponse {
 }
 
 func (b *broadcastingSeriesServer) Close() error {
-	b.s.requestListenerMtx.Lock()
-	defer b.s.requestListenerMtx.Unlock()
+	val, ok := b.s.requestListenersLRU.Get(b.cacheKey)
+	if !ok {
+		return fmt.Errorf("%s key not found", b.cacheKey)
+	}
+	rlk := val.(*requestListenerVal)
+
+	rlk.valLock.Lock()
 	defer func() {
-		delete(b.s.requestListeners, b.cacheKey)
+		rlk.listeners = rlk.listeners[:0]
+		rlk.valLock.Unlock()
 	}()
 
-	for li, l := range b.s.requestListeners[b.cacheKey].listeners {
-		for _, resp := range b.resps {
-			// Make a copy here if it is sent to other listeners.
-			// This is because _a lot_ of upper-level code assumes
-			// that they have sole ownership of the series.
-			// For example, the replica labels might be different from query to query
-			// and deduplication happens in the upper layer.
-			// TODO(GiedriusS): remove this assumption.
-			if li > 0 {
-				resp = copySeriesResponse(resp)
+	for li, l := range rlk.listeners {
+		if li > 0 {
+			wg := &sync.WaitGroup{}
+			for _, resp := range b.resps {
+				resp := resp
+				go func() {
+					resp = copySeriesResponse(resp)
+					select {
+					case l <- resp:
+					case <-b.srv.Context().Done():
+						return
+					}
+				}()
 			}
 
-			select {
-			case l <- resp:
-			case <-b.srv.Context().Done():
-				err := b.srv.Context().Err()
-				for _, lc := range b.s.requestListeners[b.cacheKey].listeners {
+			wg.Wait()
+
+			err := b.srv.Context().Err()
+			if err != nil {
+				for _, lc := range rlk.listeners {
 					select {
 					case lc <- storepb.NewWarnSeriesResponse(err):
 					default:
@@ -290,8 +304,26 @@ func (b *broadcastingSeriesServer) Close() error {
 				}
 				return b.srv.Context().Err()
 			}
+			close(l)
+
+		} else {
+			for _, resp := range b.resps {
+				select {
+				case l <- resp:
+				case <-b.srv.Context().Done():
+					err := b.srv.Context().Err()
+					for _, lc := range rlk.listeners {
+						select {
+						case lc <- storepb.NewWarnSeriesResponse(err):
+						default:
+						}
+						close(lc)
+					}
+					return b.srv.Context().Err()
+				}
+			}
+			close(l)
 		}
-		close(l)
 	}
 	return nil
 }
@@ -302,42 +334,62 @@ func (b *broadcastingSeriesServer) SetHeader(m metadata.MD) error  { return b.sr
 func (b *broadcastingSeriesServer) SendHeader(m metadata.MD) error { return b.srv.SendHeader(m) }
 func (b *broadcastingSeriesServer) SetTrailer(m metadata.MD)       { b.srv.SetTrailer(m) }
 
+func generateListenerKey(stores []Client, r *storepb.SeriesRequest) string {
+	var sb strings.Builder
+
+	for _, st := range stores {
+		fmt.Fprint(&sb, st.String())
+	}
+
+	fmt.Fprintf(&sb, "%d%d%v%v%v%v%v", r.MaxTime, r.MinTime, r.Matchers, r.MaxResolutionWindow, r.PartialResponseStrategy, r.PartialResponseDisabled, r.Hints.String())
+
+	// For RAW data it doesn't matter what the aggregates are.
+	// TODO(GiedriusS): remove this once query push-down becomes a reality.
+	if r.MaxResolutionWindow != 0 {
+		fmt.Fprintf(&sb, "%v", r.Aggregates)
+	}
+
+	return sb.String()
+}
+
 // Memoized version of realSeries() - it doesn't perform any Series() call unless such a request
 // isn't happening already. This helps a lot in cases when a dashboard gets opened with lots
 // of different queries that use the same metrics.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	var (
-		cacheKey        string
 		shouldSendQuery bool
 		dataIn          chan *storepb.SeriesResponse = make(chan *storepb.SeriesResponse)
+		ctx             context.Context              = srv.Context()
+		g               *errgroup.Group
 	)
 	stores := s.stores()
-	for _, st := range stores {
-		cacheKey += st.String()
-	}
-	cacheKey += r.String()
+	listenerKey := generateListenerKey(stores, r)
 
-	// For RAW data, it doesn't matter what aggregation has been set underneath
-	// so set the aggregations to some "default" value to save even more.
-	// TODO(GiedriusS): remove this once query push-down becomes a reality.
-	if r.MaxResolutionWindow == 0 {
-		r.Aggregates = []storepb.Aggr{storepb.Aggr_RAW}
+	s.requestListenersLock.Lock()
+	val, ok := s.requestListenersLRU.Get(listenerKey)
+	if !ok {
+		val = &requestListenerVal{
+			valLock: &sync.Mutex{},
+		}
+		s.requestListenersLRU.Add(listenerKey, val)
 	}
+	s.requestListenersLock.Unlock()
 
-	g, gctx := errgroup.WithContext(srv.Context())
+	rlk := val.(*requestListenerVal)
 
-	s.requestListenerMtx.Lock()
-	if s.requestListeners[cacheKey] == nil {
-		s.requestListeners[cacheKey] = &requestListenerVal{}
-	}
-	shouldSendQuery = len(s.requestListeners[cacheKey].listeners) == 0
-	s.requestListeners[cacheKey].listeners = append(s.requestListeners[cacheKey].listeners, dataIn)
-	s.requestListenerMtx.Unlock()
+	rlk.valLock.Lock()
+	shouldSendQuery = len(rlk.listeners) == 0
+	rlk.listeners = append(rlk.listeners, dataIn)
+	rlk.valLock.Unlock()
 
 	if shouldSendQuery {
+		gr, gctx := errgroup.WithContext(ctx)
+		ctx = gctx
+		g = gr
+
 		bss := &broadcastingSeriesServer{
-			gctx,
-			cacheKey,
+			ctx,
+			listenerKey,
 			s,
 			srv,
 			[]*storepb.SeriesResponse{},
@@ -349,16 +401,26 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		s.metrics.coalescedSeriesRequests.Inc()
 	}
 
-	g.Go(func() error {
-		for din := range dataIn {
-			if err := srv.Send(din); err != nil {
-				return errors.Wrap(err, "sending cached Series() response")
+	if shouldSendQuery {
+		g.Go(func() error {
+			for din := range dataIn {
+				if err := srv.Send(din); err != nil {
+					return errors.Wrap(err, "sending cached Series() response")
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-	return g.Wait()
+		return g.Wait()
+	}
+
+	for din := range dataIn {
+		if err := srv.Send(din); err != nil {
+			return errors.Wrap(err, "sending cached Series() response")
+		}
+	}
+	return nil
+
 }
 
 // realSeries returns all series for a requested time range and label matcher. Requested series are taken from other
