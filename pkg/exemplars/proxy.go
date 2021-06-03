@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -52,6 +53,9 @@ type exemplarsStream struct {
 }
 
 func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exemplars_ExemplarsServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
+	defer span.Finish()
+
 	expr, err := parser.ParseExpr(req.Query)
 	if err != nil {
 		return err
@@ -72,7 +76,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	var (
-		g, gctx   = errgroup.WithContext(srv.Context())
+		g, gctx   = errgroup.WithContext(ctx)
 		respChan  = make(chan *exemplarspb.ExemplarData, 10)
 		exemplars []*exemplarspb.ExemplarData
 	)
@@ -147,7 +151,10 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	for _, e := range exemplars {
-		if err := srv.Send(exemplarspb.NewExemplarsResponse(e)); err != nil {
+		tracing.DoInSpan(srv.Context(), "send_exemplars_response", func(_ context.Context) {
+			err = srv.Send(exemplarspb.NewExemplarsResponse(e))
+		})
+		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send exemplars response").Error())
 		}
 	}

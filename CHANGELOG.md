@@ -28,6 +28,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#4299](https://github.com/thanos-io/thanos/pull/4299) Tracing: Add tracing to exemplar APIs.
 - [#4117](https://github.com/thanos-io/thanos/pull/4117) Mixin:  new alert ThanosReceiveTrafficBelowThreshold to flag if the ingestion average of the last hour dips below 50% of the ingestion average for the last 12 hours.
 - [#4107](https://github.com/thanos-io/thanos/pull/4107) Store: `LabelNames` and `LabelValues` now support label matchers.
 - [#3940](https://github.com/thanos-io/thanos/pull/3940) Sidecar: Added matchers support to `LabelValues`
