@@ -817,7 +817,7 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		}
 
 		tracing.DoInSpan(ctx, "retrieve_exemplars", func(ctx context.Context) {
-			exemplarsData, exemplarWarnings, exemplarError = client.Exemplars(r.Context(), req)
+			exemplarsData, exemplarWarnings, exemplarError = client.Exemplars(ctx, req)
 		})
 
 		if exemplarError != nil {
