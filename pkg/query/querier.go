@@ -38,7 +38,7 @@ type TenantInfo struct {
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant TenantInfo) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant *TenantInfo) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -46,7 +46,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant TenantInfo) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, tenant *TenantInfo) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -78,7 +78,7 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
-	tenant               TenantInfo
+	tenant               *TenantInfo
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
@@ -117,7 +117,7 @@ func newQuerier(
 	partialResponse, skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
-	tenant TenantInfo,
+	tenant *TenantInfo,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -133,9 +133,9 @@ func newQuerier(
 	if tenant.Access != "" {
 		enforcer = promLabelProxy.NewEnforcer(
 			&labels.Matcher{
-				Name:  tenant.LabelName,
+				Name:  (*tenant).LabelName,
 				Type:  labels.MatchEqual,
-				Value: tenant.Access,
+				Value: (*tenant).Access,
 			},
 		)
 	}

@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -571,7 +570,7 @@ func TestQueryMultiTenancy(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{receiver1.GRPCNetworkEndpoint(), receiver2.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{receiver1.GRPCNetworkEndpoint(), receiver2.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
