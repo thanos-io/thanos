@@ -5,13 +5,13 @@ package exemplars
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/tracing"
 	"sort"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 var _ UnaryClient = &GRPCClient{}
