@@ -795,9 +795,9 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		defer span.Finish()
 
 		var (
-			exemplarsData    []*exemplarspb.ExemplarData
-			exemplarWarnings storage.Warnings
-			exemplarError    error
+			data     []*exemplarspb.ExemplarData
+			warnings storage.Warnings
+			err      error
 		)
 
 		start, err := cortexutil.ParseTime(r.FormValue("start"))
@@ -817,13 +817,13 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		}
 
 		tracing.DoInSpan(ctx, "retrieve_exemplars", func(ctx context.Context) {
-			exemplarsData, exemplarWarnings, exemplarError = client.Exemplars(ctx, req)
+			data, warnings, err = client.Exemplars(ctx, req)
 		})
 
-		if exemplarError != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(exemplarError, "retrieving exemplars")}
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}
 		}
-		return exemplarsData, exemplarWarnings, nil
+		return data, warnings, nil
 	}
 }
 
