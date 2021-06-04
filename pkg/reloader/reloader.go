@@ -290,7 +290,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			defer func() {
 				_ = os.Remove(tmpFile)
 			}()
-			if err := ioutil.WriteFile(tmpFile, b, 0600); err != nil {
+			if err := ioutil.WriteFile(tmpFile, b, 0644); err != nil {
 				return errors.Wrap(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
