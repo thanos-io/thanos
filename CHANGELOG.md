@@ -24,6 +24,12 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 -
 
+## [v0.21.1](https://github.com/thanos-io/thanos/releases/tag/v0.21.1) - 2021.06.04
+
+### Fixed
+
+- [#4308](https://github.com/thanos-io/thanos/pull/4308) Sidecar: reloader: fix output config file permission
+
 ## [v0.21.0](https://github.com/thanos-io/thanos/releases/tag/v0.21.0) - 2021.06.03
 
 ### Added
