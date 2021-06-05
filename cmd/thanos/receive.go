@@ -764,7 +764,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
 
-	cmd.Flag("tsdb.max-exemplars", "Enables support for ingesting exemplars and set the maximum number that will be stored. 0 (or less) disables exemplars storage.").Default("0").IntVar(&rc.tsdbMaxExemplars)
+	cmd.Flag("tsdb.max-exemplars",
+		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+
+			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
+			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
+		Default("0").IntVar(&rc.tsdbMaxExemplars)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
