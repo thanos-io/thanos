@@ -5,6 +5,8 @@ package exemplars
 
 import (
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 )
@@ -25,7 +27,7 @@ func NewMultiTSDB(tsdbExemplarsServers func() map[string]exemplarspb.ExemplarsSe
 func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
 	for tenant, es := range m.tsdbExemplarsServers() {
 		if err := es.Exemplars(r, s); err != nil {
-			return errors.Wrapf(err, "get exemplars for tenant %s", tenant)
+			return status.Error(codes.Aborted, errors.Wrapf(err, "get exemplars for tenant %s", tenant).Error())
 		}
 	}
 	return nil
