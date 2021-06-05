@@ -7,7 +7,6 @@ import (
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc/codes"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-// TSDB implements exemplarspb.Exemplars that allows to fetch exemplars from a TSDB instance.
+// TSDB allows fetching exemplars from a TSDB instance.
 type TSDB struct {
 	db        storage.ExemplarQueryable
 	extLabels labels.Labels
@@ -30,13 +29,8 @@ func NewTSDB(db storage.ExemplarQueryable, extLabels labels.Labels) *TSDB {
 }
 
 // Exemplars returns all specified exemplars from a TSDB instance.
-func (t *TSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplars_ExemplarsServer) error {
-	expr, err := parser.ParseExpr(r.Query)
-	if err != nil {
-		return status.Error(codes.Internal, err.Error())
-	}
-
-	match, selectors := selectorsMatchesExternalLabels(parser.ExtractSelectors(expr), t.extLabels)
+func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemplarspb.Exemplars_ExemplarsServer) error {
+	match, selectors := selectorsMatchesExternalLabels(matchers, t.extLabels)
 
 	if !match {
 		return nil
@@ -51,7 +45,7 @@ func (t *TSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exemplar
 		return status.Error(codes.Internal, err.Error())
 	}
 
-	exemplars, err := eq.Select(r.Start, r.End, selectors...)
+	exemplars, err := eq.Select(start, end, selectors...)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}

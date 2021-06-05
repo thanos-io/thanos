@@ -22,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
-	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -276,11 +275,11 @@ func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 	return res
 }
 
-func (t *MultiTSDB) TSDBExemplars() map[string]exemplarspb.ExemplarsServer {
+func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	res := make(map[string]exemplarspb.ExemplarsServer, len(t.tenants))
+	res := make(map[string]*exemplars.TSDB, len(t.tenants))
 	for k, tenant := range t.tenants {
 		e := tenant.exemplars()
 		if e != nil {
@@ -457,19 +456,11 @@ func (a adapter) StartTime() (int64, error) {
 }
 
 func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	q, err := a.db.Querier(ctx, mint, maxt)
-	if err != nil {
-		return nil, err
-	}
-	return q, nil
+	return a.db.Querier(ctx, mint, maxt)
 }
 
 func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {
-	q, err := a.db.ExemplarQuerier(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return q, nil
+	return a.db.ExemplarQuerier(ctx)
 }
 
 // Appender returns a new appender against the storage.

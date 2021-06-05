@@ -311,11 +311,12 @@ func testMulitTSDBExemplars(t *testing.T, m *MultiTSDB) {
 
 		g.Go(func() error {
 			srv := newExemplarsServer(context.Background())
-			if err := s["foo"].Exemplars(&exemplarspb.ExemplarsRequest{
-				Query: `{a="1"}`,
-				Start: 0,
-				End:   10,
-			}, srv); err != nil {
+			if err := s["foo"].Exemplars(
+				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+				0,
+				10,
+				srv,
+			); err != nil {
 				return err
 			}
 			respFoo <- srv.Data
@@ -323,11 +324,12 @@ func testMulitTSDBExemplars(t *testing.T, m *MultiTSDB) {
 		})
 		g.Go(func() error {
 			srv := newExemplarsServer(context.Background())
-			if err := s["bar"].Exemplars(&exemplarspb.ExemplarsRequest{
-				Query: `{a="1"}`,
-				Start: 0,
-				End:   10,
-			}, srv); err != nil {
+			if err := s["bar"].Exemplars(
+				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+				0,
+				10,
+				srv,
+			); err != nil {
 				return err
 			}
 			respBar <- srv.Data
