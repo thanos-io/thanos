@@ -19,7 +19,7 @@ Currently in version [v0.21.2](https://github.com/thanos-io/thanos/blob/main/CHA
 
 This helps receiver relieve of additional responsibility, and can focus on solo behaviour of ingestion/routing. This would enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
 
-![](../components/receiver.png)
+![](https://docs.google.com/drawings/d/e/2PACX-1vQaLa9EdF_frGmE6zbK48Zj9a8lIKxdx8NpOCU0eFizGCALRY8uUzZfFJLH8VNvtjyi-YBmVHq6PR8A/pub?w=1442&h=563)
 
 The current behaviour for receiver, however has not been modified, and works as expected. So users who are using receiver for both routing and ingestion, should not notice any changes as such. The change is backwards compatible. However, it is suggested that the new behaviour should be used, due to benchmarking, which shows drastic improvement of receiver.
 
