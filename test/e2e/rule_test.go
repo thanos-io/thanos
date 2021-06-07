@@ -33,7 +33,7 @@ const (
 	testAlertRuleAbortOnPartialResponse = `
 groups:
 - name: example_abort
-  interval: 100ms
+  interval: 1s
   # Abort should be a default: partial_response_strategy: "ABORT"
   rules:
   - alert: TestAlert_AbortOnPartialResponse
@@ -47,7 +47,7 @@ groups:
 	testAlertRuleWarnOnPartialResponse = `
 groups:
 - name: example_warn
-  interval: 100ms
+  interval: 1s
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_WarnOnPartialResponse
@@ -61,7 +61,7 @@ groups:
 	testAlertRuleAddedLaterWebHandler = `
 groups:
 - name: example
-  interval: 100ms
+  interval: 1s
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_HasBeenLoadedViaWebHandler
@@ -184,7 +184,7 @@ func TestRule(t *testing.T) {
 				},
 				Scheme: "http",
 			},
-			Timeout:    model.Duration(time.Second),
+			Timeout:    model.Duration(10 * time.Second),
 			APIVersion: alert.APIv1,
 		},
 	}, []query.Config{
