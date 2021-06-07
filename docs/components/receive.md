@@ -77,9 +77,9 @@ for tenancy and replication.
 ### Enabling Routing and Ingestion for the Thanos Receiver
 
 We have not added another flag for controlling this behaviour. Instead, we have relied on the existing flags and the below convention to enable and disable the ingestion and routing functionalities:
-* **Ingestion and Distribution** - Make sure that `--receive.local-endpoint` and either `--receive.hashrings` or `--receive.hashrings-file` are provided.
+* **Ingestion and Routing** - Make sure that `--receive.local-endpoint` and either `--receive.hashrings` or `--receive.hashrings-file` are provided.
 * **Ingestion** - Since routing behaviour is not needed, provide `--receive.local-endpoint` only.
-* **Distribution** - For routing functionality, provide one of the hashring configuration flags: either `--receive.hashrings` or `--receive.hashrings-file`. Do not specify a local endpoint, as doing so would enable ingestion.
+* **Routing** - For routing functionality, provide one of the hashring configuration flags: either `--receive.hashrings` or `--receive.hashrings-file`. Do not specify a local endpoint, as doing so would enable ingestion.
 
 ## Flags
 
