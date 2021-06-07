@@ -15,7 +15,7 @@ Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documen
 For more information please check out [initial design proposal](../proposals/201812_thanos-remote-receive.md).
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
 
-Currently in version [v0.21.2](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#v0211---20210604), receiver implements the split behaviour of solo ingestion/routing (see the [proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md) for more details). This means, we can enable receiver to ingest data only, or re-route requests only.
+As of version [v0.21.2](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#v0211---20210604), the Thanos receiver implements the [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md), which allows data ingestion as well as request routing to be independently enabled/disabled.
 
 This helps receiver relieve of additional responsibility, and can focus on solo behaviour of ingestion/routing. This would enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
 
@@ -74,12 +74,12 @@ The example content of `hashring.json`:
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
 for tenancy and replication.
 
-### Enabling Routing/Ingestion for Thanos Receiver
+### Enabling Routing and Ingestion for the Thanos Receiver
 
-We have not added yet another flag for controlling this behaviour. We have relied on the below convention to enable ingestion/routing -
-* **Ingestion and Distribution** - Make sure `--receive.local-endpoint` and `--receive.hashrings` / `--receive.hashrings-file` are provided.
-* **Ingestion** - Since routing behaviour is not needed, just provide `--receive.local-endpoint` only.
-* **Distribution** - For routing functionality, just provide one of the hashring flags - `--receive.hashrings` / `--receive.hashrings-file`. Don't provide local endpoint, as it would enable ingestion also.
+We have not added another flag for controlling this behaviour. Instead, we have relied on the existing flags and the below convention to enable and disable the ingestion and routing functionalities:
+* **Ingestion and Distribution** - Make sure that `--receive.local-endpoint` and either `--receive.hashrings` or `--receive.hashrings-file` are provided.
+* **Ingestion** - Since routing behaviour is not needed, provide `--receive.local-endpoint` only.
+* **Distribution** - For routing functionality, provide one of the hashring configuration flags: either `--receive.hashrings` or `--receive.hashrings-file`. Do not specify a local endpoint, as doing so would enable ingestion.
 
 ## Flags
 
