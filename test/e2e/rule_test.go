@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -97,6 +96,7 @@ groups:
     annotations:
       summary: "I always complain and I have been loaded via sighup signal."
 `
+	amTimeout = model.Duration(10 * time.Second)
 )
 
 type rulesResp struct {
@@ -235,7 +235,7 @@ func TestRule(t *testing.T) {
 				},
 				Scheme: "http",
 			},
-			Timeout:    model.Duration(10 * time.Second),
+			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
 	}, []httpconfig.Config{
@@ -446,7 +446,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	testRuleRecordAbsentMetric := `
 groups:
 - name: example_record_rules
-  interval: 100ms
+  interval: 1s
   rules:
   - record: test_absent_metric
     expr: absent(nonexistent{job='thanos-receive'})
@@ -471,8 +471,8 @@ groups:
 	receiver, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
-	rwURL, err := url.Parse(e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)))
-	testutil.Ok(t, err)
+	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)))
+
 	querier, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{receiver.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(querier))
@@ -484,7 +484,7 @@ groups:
 				},
 				Scheme: "http",
 			},
-			Timeout:    model.Duration(time.Second),
+			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
 	}, []query.Config{
