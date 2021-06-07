@@ -17,7 +17,7 @@ For further information on tuning Prometheus Remote Write [see remote write tuni
 
 As of version [v0.21.2](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#v0211---20210604), the Thanos receiver implements the [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md), which allows data ingestion as well as request routing to be independently enabled/disabled.
 
-This helps receiver relieve of additional responsibility, and can focus on solo behaviour of ingestion/routing. This would enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
+The current implementation of [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md) helps receiver relieve of additional responsibility, and can focus on solo behaviour of ingestion/routing. This would enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
 
 ![](https://docs.google.com/drawings/d/e/2PACX-1vQaLa9EdF_frGmE6zbK48Zj9a8lIKxdx8NpOCU0eFizGCALRY8uUzZfFJLH8VNvtjyi-YBmVHq6PR8A/pub?w=1442&h=563)
 
