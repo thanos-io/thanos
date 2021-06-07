@@ -74,12 +74,12 @@ The example content of `hashring.json`:
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed
 for tenancy and replication.
 
-### Enabling Routing/Ingestion Mode for Thanos Receiver
+### Enabling Routing/Ingestion for Thanos Receiver
 
 We have not added yet another flag for controlling this behaviour. We have relied on the below convention to enable ingestion/routing -
-* **Dual Mode** - Make sure `--receive.local-endpoint` and `--receive.hashrings` / `--receive.hashrings-file` are provided.
-* **Ingestion Mode** - Since routing behaviour is not needed, just provide `--receive.local-endpoint` only.
-* **Distribution Mode** - For routing mode, just provide one of the hashring flags - `--receive.hashrings` / `--receive.hashrings-file`. Don't provide local endpoint, as it would enable ingestion mode also.
+* **Ingestion and Distribution** - Make sure `--receive.local-endpoint` and `--receive.hashrings` / `--receive.hashrings-file` are provided.
+* **Ingestion** - Since routing behaviour is not needed, just provide `--receive.local-endpoint` only.
+* **Distribution** - For routing functionality, just provide one of the hashring flags - `--receive.hashrings` / `--receive.hashrings-file`. Don't provide local endpoint, as it would enable ingestion also.
 
 ## Flags
 
