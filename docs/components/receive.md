@@ -15,13 +15,13 @@ Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documen
 For more information please check out [initial design proposal](../proposals/201812_thanos-remote-receive.md).
 For further information on tuning Prometheus Remote Write [see remote write tuning document](https://prometheus.io/docs/practices/remote_write/).
 
-As of version [v0.21.2](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#v0211---20210604), the Thanos receiver implements the [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md), which allows data ingestion as well as request routing to be independently enabled/disabled.
+As of version [v0.22.0](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#added), the Thanos receiver implements the [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md), which allows data ingestion as well as request routing to be independently enabled/disabled.
 
 The current implementation of [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md) helps receiver relieve of additional responsibility, and can focus on solo behaviour of ingestion/routing. This would enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
 
-![](https://docs.google.com/drawings/d/e/2PACX-1vQaLa9EdF_frGmE6zbK48Zj9a8lIKxdx8NpOCU0eFizGCALRY8uUzZfFJLH8VNvtjyi-YBmVHq6PR8A/pub?w=1442&h=563)
+![Example Receive architecture diagram](https://docs.google.com/drawings/d/e/2PACX-1vQaLa9EdF_frGmE6zbK48Zj9a8lIKxdx8NpOCU0eFizGCALRY8uUzZfFJLH8VNvtjyi-YBmVHq6PR8A/pub?w=1442&h=563)
 
-The current behaviour for receiver, however has not been modified, and works as expected. So users who are using receiver for both routing and ingestion, should not notice any changes as such. The change is backwards compatible. However, it is suggested that the new behaviour should be used, due to benchmarking, which shows drastic improvement of receiver.
+The current behaviour for receiver, however has not been modified, and works as expected. So users who are using receiver for both routing and ingestion, should not notice any changes as such. The change is backwards compatible.
 
 > NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
 
