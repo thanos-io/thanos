@@ -398,7 +398,7 @@ func runStore(
 				MaxTime: maxt,
 			}
 		},
-		func() *infopb.ExemplarsInfo { return nil },
+		nil,
 		nil,
 		nil,
 		nil,
