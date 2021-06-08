@@ -252,6 +252,9 @@ func newAggrChunkIterator(iters [5]chunkenc.Iterator) chunks.Iterator {
 
 func (a *aggrChunkIterator) Next() bool {
 	if !a.countChkIter.Next() {
+		if err := a.countChkIter.Err(); err != nil {
+			a.err = err
+		}
 		return false
 	}
 
@@ -266,40 +269,15 @@ func (a *aggrChunkIterator) Next() bool {
 	)
 
 	chks[downsample.AggrCount] = countChk.Chunk
-	chk, err = a.toChunk(downsample.AggrSum, mint, maxt)
-	if err != nil {
-		a.err = err
-		return false
-	}
-	if chk != nil {
-		chks[downsample.AggrSum] = chk.Chunk
-	}
-
-	chk, err = a.toChunk(downsample.AggrMin, mint, maxt)
-	if err != nil {
-		a.err = err
-		return false
-	}
-	if chk != nil {
-		chks[downsample.AggrMin] = chk.Chunk
-	}
-
-	chk, err = a.toChunk(downsample.AggrMax, mint, maxt)
-	if err != nil {
-		a.err = err
-		return false
-	}
-	if chk != nil {
-		chks[downsample.AggrMax] = chk.Chunk
-	}
-
-	chk, err = a.toChunk(downsample.AggrCounter, mint, maxt)
-	if err != nil {
-		a.err = err
-		return false
-	}
-	if chk != nil {
-		chks[downsample.AggrCounter] = chk.Chunk
+	for i := downsample.AggrSum; i <= downsample.AggrCounter; i++ {
+		chk, err = a.toChunk(i, mint, maxt)
+		if err != nil {
+			a.err = err
+			return false
+		}
+		if chk != nil {
+			chks[i] = chk.Chunk
+		}
 	}
 
 	a.curr = chunks.Meta{
@@ -337,6 +315,9 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 	for it.Next() {
 		lastT, lastV = it.At()
 		appender.Append(lastT, lastV)
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
 	}
 
 	// No sample in the required time range.

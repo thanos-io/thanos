@@ -642,7 +642,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h").SetValue(&cc.deleteDelay)
 
-	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
+	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more. "+
 		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
@@ -653,7 +653,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
 
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+		"Experimental. When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
 		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
 		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
 		StringsVar(&cc.dedupReplicaLabels)

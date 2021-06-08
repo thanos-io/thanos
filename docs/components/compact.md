@@ -365,16 +365,16 @@ Flags:
                                 that can be deduplicated (repeated flag). This
                                 will merge multiple replica blocks into one.
                                 This process is irreversible.Experimental. When
-                                it is set to true, compactor will ignore the
-                                given labels so that vertical compaction can
-                                merge the blocks.Please note that by default
-                                this uses a NAIVE algorithm for merging which
-                                works well for deduplication of blocks with
-                                **precisely the same samples** like produced by
-                                Receiver replication.If you need a different
-                                deduplication algorithm (e.g one that works well
-                                with Prometheus replicas), please set it via
-                                --deduplication.func.
+                                one or more labels are set, compactor will
+                                ignore the given labels so that vertical
+                                compaction can merge the blocks.Please note that
+                                by default this uses a NAIVE algorithm for
+                                merging which works well for deduplication of
+                                blocks with **precisely the same samples** like
+                                produced by Receiver replication.If you need a
+                                different deduplication algorithm (e.g one that
+                                works well with Prometheus replicas), please set
+                                it via --deduplication.func.
       --delete-delay=48h        Time before a block marked for deletion is
                                 deleted from bucket. If delete-delay is non
                                 zero, blocks will be marked for deletion and
