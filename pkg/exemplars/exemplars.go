@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 var _ UnaryClient = &GRPCClient{}
@@ -73,6 +74,9 @@ func NewGRPCClientWithDedup(es exemplarspb.ExemplarsServer, replicaLabels []stri
 }
 
 func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsRequest) ([]*exemplarspb.ExemplarData, storage.Warnings, error) {
+	span, ctx := tracing.StartSpan(ctx, "exemplar_grpc_request")
+	defer span.Finish()
+
 	resp := &exemplarsServer{ctx: ctx}
 
 	if err := rr.proxy.Exemplars(req, resp); err != nil {

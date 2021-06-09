@@ -66,7 +66,7 @@ scrape_configs:
       - targets: ['127.0.0.1:9091']
   - job_name: 'store_gateway'
     static_configs:
-      - targets: ['127.0.0.1:19092']
+      - targets: ['127.0.0.1:19091']
 </pre>
 
 ## Starting Prometheus Instance

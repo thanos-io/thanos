@@ -70,19 +70,10 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	r2, err := e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, nil)
 	testutil.Ok(t, err)
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(),
-		"query",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
-		nil,
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
-		nil,
-		nil,
-		nil,
-		"",
-		"",
-	)
-
+	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)}
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores).
+		WithRuleAddresses(stores).
+		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

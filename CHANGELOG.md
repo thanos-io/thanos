@@ -14,7 +14,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Added
 
--
+- [#4299](https://github.com/thanos-io/thanos/pull/4299) Tracing: Add tracing to exemplar APIs.
 
 ### Fixed
 
