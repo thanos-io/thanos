@@ -20,7 +20,9 @@ However! This setup **does not** satisfy our requirements above.
 <details>
  <summary>Can you think why?</summary>
 
-Thanos Sidecar only uploads `blocks` of metrics data that have been written to disk, which happens every 2 hours in Prometheus.
+Since we cannot access the `Thanos Sidecar` directly - we cannot query metrics data in real-time.
+
+`Thanos Sidecar` only uploads `blocks` of metrics data that have been written to disk, which happens every 2 hours in Prometheus.
 <br>
 This means that the Global View would be at least 2 hours out of date, and does not satisfy requirement #2.
 </details>  
@@ -80,7 +82,7 @@ docker run -d --rm \
     --store "0.0.0.0:10907"
 ```{{execute}}
 
-`Thanos Receive` exposed its GRPC endpoint at `0.0.0.0:10907`, so we need to tell `Thanos Query` to use this endpoint with the `--store` flag.
+`Thanos Receive` exposed its gRPC endpoint at `0.0.0.0:10907`, so we need to tell `Thanos Query` to use this endpoint with the `--store` flag.
 
 Verify that `Thanos Query` is working and configured correctly by looking at the 'stores' tab [here](https://[[HOST_SUBDOMAIN]]-39090-[[KATACODA_HOST]].environments.katacoda.com/stores).
 
@@ -91,7 +93,7 @@ Now we are done right? Try querying for some data...
 <details>
  <summary>Uh-oh! Why are we seeing 'Empty Query Result' responses?</summary>
 
-We have correctly configured `Thanos Receive` & `Thanos Store`, but we have not yet configured Prometheus to write to remote write its data to the right place.
+We have correctly configured `Thanos Receive` & `Thanos Query`, but we have not yet configured Prometheus to write to remote write its data to the right place.
 
 </details>
 
