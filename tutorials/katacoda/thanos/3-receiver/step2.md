@@ -25,13 +25,13 @@ Since we cannot access the `Thanos Sidecar` directly - we cannot query metrics d
 `Thanos Sidecar` only uploads `blocks` of metrics data that have been written to disk, which happens every 2 hours in Prometheus.
 <br>
 This means that the Global View would be at least 2 hours out of date, and does not satisfy requirement #2.
-</details>  
+</details>
 
 ## Thanos Receive
 
 Enter [Thanos Receive](https://thanos.io/tip/components/receive.md/).
 
-`Thanos Receive` is a component that implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This means that it will accept metrics data that is sent to it by other Prometheus instances. 
+`Thanos Receive` is a component that implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This means that it will accept metrics data that is sent to it by other Prometheus instances.
 
 Prometheus can be configured to `Remote Write`. This means that Prometheus will send all of its metrics data to a remote endpoint as they are being ingested - useful for our requirements!
 

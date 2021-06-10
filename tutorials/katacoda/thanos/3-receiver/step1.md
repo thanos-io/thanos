@@ -51,10 +51,10 @@ Verify that `prometheus-batcave` is running by navigating to the [Batcave Promet
 
 <details>
  <summary>Why do we enable the web lifecycle flag?</summary>
- 
-  By specifying `--web.enable-lifecycle`, we tell Prometheus to expose the `/-/reload` HTTP endpoint. 
-  
-  This lets us tell Prometheus to dynamically reload its configuration, which will be useful later in this tutorial. 
+
+  By specifying `--web.enable-lifecycle`, we tell Prometheus to expose the `/-/reload` HTTP endpoint.
+
+  This lets us tell Prometheus to dynamically reload its configuration, which will be useful later in this tutorial.
 </details>
 
 ### Batcomputer
@@ -85,7 +85,7 @@ docker run -d --net=host --rm \
     --storage.tsdb.path=/prometheus \
     --web.listen-address=:9091 \
     --web.external-url=https://2886795291-9091-elsy05.environments.katacoda.com \
-    --web.enable-lifecycle 
+    --web.enable-lifecycle
 ```{{execute}}
 
 Verify that `prometheus-batcomputer` is running by navigating to the [Batcomputer Prometheus UI](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com).

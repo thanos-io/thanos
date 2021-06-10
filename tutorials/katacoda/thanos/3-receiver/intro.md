@@ -10,7 +10,7 @@ In this tutorial, you will learn:
 * How to setup a Thanos Querier to access this data.
 * How Thanos Receive is different from Thanos Sidecar, and when is the right time to use each of them.
 
-This will allow you to setup infrastucture 
+This will allow you to setup infrastucture
 
 > NOTE: This course uses docker containers with pre-built Thanos, Prometheus, and Minio Docker images available publicly.
 
