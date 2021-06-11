@@ -1,6 +1,6 @@
 ---
-title: Troubleshooting
 type: docs
+title: Troubleshooting
 menu: operating
 ---
 
@@ -57,7 +57,6 @@ level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="ch
 
 * Make sure that prometheus is running while thanos is started. The `connection_refused` states that there is no server running in the `localhost:9090`, which is the address for prometheus in this case.
 
-
 ## Thanos not identifying Prometheus
 
 ### Description
@@ -98,7 +97,7 @@ level=warn ts=2021-05-01T04:57:12.249429787Z caller=writer.go:100 component=rece
 ### Possible Cause
 
 1. Thanos Receiver was stopped previously and is just resumed, remote Prometheus starts to write from the oldest sample, which is too old to be digested and hence rejected.
-1. Thanos Receiver does not have enough compute resources to ingest the remote write data (is too slow). The latest ingested sample is gradually falling behind the latest scraped samples.
+2. Thanos Receiver does not have enough compute resources to ingest the remote write data (is too slow). The latest ingested sample is gradually falling behind the latest scraped samples.
 
 ### Diagnostic and Possible Solution
 

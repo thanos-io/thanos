@@ -1,20 +1,18 @@
 ---
-title: Tools
 type: docs
+title: Tools
 menu: components
 ---
 
 # Tools
 
-The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that
-are meant to be ran for development or debugging purposes.
+The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that are meant to be ran for development or debugging purposes.
 
 All commands added as tools should land in `tools.go` or file with `tools_` prefix.
 
 ## Flags
 
-[embedmd]:# (flags/tools.txt $)
-```$
+```$ mdox-exec="thanos tools --help"
 usage: thanos tools <command> [<args> ...]
 
 Tools utility commands
@@ -24,12 +22,12 @@ Flags:
                            --help-man).
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -90,8 +88,7 @@ Subcommands:
 
 ## Bucket
 
-The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets.
-It is normally run as a standalone command to aid with troubleshooting.
+The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets. It is normally run as a standalone command to aid with troubleshooting.
 
 Example:
 
@@ -101,17 +98,16 @@ thanos tools bucket verify --objstore.config-file=bucket.yml
 
 The content of `bucket.yml`:
 
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
 type: GCS
 config:
-  bucket: example-bucket
+  bucket: ""
+  service_account: ""
 ```
 
-Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
-by adding a new command within [`/cmd/thanos/tools_bucket.go`](/cmd/thanos/tools_bucket.go)  .
+Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets by adding a new command within [`/cmd/thanos/tools_bucket.go`](../../cmd/thanos/tools_bucket.go)  .
 
-[embedmd]:# (flags/tools_bucket.txt $)
-```$
+```$ mdox-exec="thanos tools bucket --help"
 usage: thanos tools bucket [<flags>] <command> [<args> ...]
 
 Bucket utility commands
@@ -121,21 +117,21 @@ Flags:
                            --help-man).
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (mutually
                            exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -205,8 +201,7 @@ Example:
 thanos tools bucket web --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_web.txt $)
-```$
+```$ mdox-exec="thanos tools bucket web --help"
 usage: thanos tools bucket web [<flags>]
 
 Web interface for remote storage bucket.
@@ -214,7 +209,7 @@ Web interface for remote storage bucket.
 Flags:
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
@@ -225,25 +220,25 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                 Alternative to 'objstore.config-file' flag
                                 (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --timeout=5m              Timeout to download metadata from remote storage
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                 Alternative to 'tracing.config-file' flag
                                 (mutually exclusive). Content of YAML file with
                                 tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                 Path to YAML file with tracing configuration.
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -290,8 +285,7 @@ thanos tools bucket verify --objstore.config-file="..."
 
 When using the `--repair` option, make sure that the compactor job is disabled first.
 
-[embedmd]:# (flags/tools_bucket_verify.txt $)
-```$
+```$ mdox-exec="thanos tools bucket verify --help"
 usage: thanos tools bucket verify [<flags>]
 
 Verify all blocks in the bucket against specified issues. NOTE: Depending on
@@ -316,14 +310,14 @@ Flags:
       --id=ID ...          Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
-  -i, --issues=index_known_issues... ...
+  -i, --issues=index_known_issues... ...  
                            Issues to verify (and optionally repair). Possible
                            issue to verify, without repair: [overlapped_blocks];
                            Possible issue to verify and repair:
                            [index_known_issues duplicated_compaction]
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
-      --objstore-backup.config=<content>
+      --objstore-backup.config=<content>  
                            Alternative to 'objstore-backup.config-file' flag
                            (mutually exclusive). Content of YAML file that
                            contains object store-backup configuration. See
@@ -331,29 +325,29 @@ Flags:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
-      --objstore-backup.config-file=<file-path>
+      --objstore-backup.config-file=<file-path>  
                            Path to YAML file that contains object store-backup
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (mutually
                            exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -371,8 +365,7 @@ Example:
 thanos tools bucket ls -o json --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_ls.txt $)
-```$
+```$ mdox-exec="thanos tools bucket ls --help"
 usage: thanos tools bucket ls [<flags>]
 
 List all blocks in the bucket.
@@ -382,24 +375,24 @@ Flags:
                            --help-man).
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (mutually
                            exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
                            information. Options are 'json', 'wide' or a custom
                            template.
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -417,8 +410,7 @@ Example:
 thanos tools bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_inspect.txt $)
-```$
+```$ mdox-exec="thanos tools bucket inspect --help"
 usage: thanos tools bucket inspect [<flags>]
 
 Inspect all blocks in the bucket in detailed, table-like way.
@@ -429,17 +421,17 @@ Flags:
       --log.format=logfmt    Log format to use. Possible options: logfmt or
                              json.
       --log.level=info       Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                              Alternative to 'objstore.config-file' flag
                              (mutually exclusive). Content of YAML file that
                              contains object store configuration. See format
                              details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                              Path to YAML file that contains object store
                              configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
-  -l, --selector=<name>=\"<value>\" ...
+  -l, --selector=<name>=\"<value>\" ...  
                              Selects blocks based on label, e.g. '-l
                              key1=\"value1\" -l key2=\"value2\"'. All key value
                              pairs must match.
@@ -448,12 +440,12 @@ Flags:
                              UNTIL'. I.e., if the 'FROM' value is equal the rows
                              are then further sorted by the 'UNTIL' value.
       --timeout=5m           Timeout to download metadata from remote storage
-      --tracing.config=<content>
+      --tracing.config=<content>  
                              Alternative to 'tracing.config-file' flag (mutually
                              exclusive). Content of YAML file with tracing
                              configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                              Path to YAML file with tracing configuration. See
                              format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -468,12 +460,12 @@ Flags:
 NOTE: Currently it works only with Thanos blocks (meta.json has to have Thanos metadata).
 
 Example:
+
 ```
 thanos tools bucket replicate --objstore.config-file="..." --objstore-to.config="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_replicate.txt $)
-```$
+```$ mdox-exec="thanos tools bucket replicate --help"
 usage: thanos tools bucket replicate [<flags>]
 
 Replicate data from one object storage to another. NOTE: Currently it works only
@@ -484,7 +476,7 @@ Flags:
                                  be replicated. Repeated flag.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
@@ -501,7 +493,7 @@ Flags:
       --log.level=info           Log filtering level.
       --matcher=key="value" ...  Only blocks whose external labels exactly match
                                  this matcher will be replicated.
-      --max-time=9999-12-31T23:59:59Z
+      --max-time=9999-12-31T23:59:59Z  
                                  End of time range limit to replicate. Thanos
                                  Replicate will replicate only metrics, which
                                  happened earlier than this value. Option can be
@@ -509,7 +501,7 @@ Flags:
                                  duration relative to current time, such as -1d
                                  or 2h45m. Valid duration units are ms, s, m, h,
                                  d, w, y.
-      --min-time=0000-01-01T00:00:00Z
+      --min-time=0000-01-01T00:00:00Z  
                                  Start of time range limit to replicate. Thanos
                                  Replicate will replicate only metrics, which
                                  happened later than this value. Option can be a
@@ -517,37 +509,37 @@ Flags:
                                  duration relative to current time, such as -1d
                                  or 2h45m. Valid duration units are ms, s, m, h,
                                  d, w, y.
-      --objstore-to.config=<content>
+      --objstore-to.config=<content>  
                                  Alternative to 'objstore-to.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains object store-to configuration. See
                                  format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
                                  The object storage which replicate data to.
-      --objstore-to.config-file=<file-path>
+      --objstore-to.config-file=<file-path>  
                                  Path to YAML file that contains object store-to
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
                                  The object storage which replicate data to.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --resolution=0s... ...     Only blocks with these resolutions will be
                                  replicated. Repeated flag.
       --single-run               Run replication only one time, then exit.
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing configuration.
                                  See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -557,8 +549,7 @@ Flags:
 
 ### Bucket downsample
 
-`tools bucket downsample` is used to downsample blocks in an object store bucket as a service.
-It implements the downsample API on top of historical data in an object storage bucket.
+`tools bucket downsample` is used to downsample blocks in an object store bucket as a service. It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
 thanos tools bucket downsample \
@@ -568,14 +559,14 @@ thanos tools bucket downsample \
 
 The content of `bucket.yml`:
 
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
 type: GCS
 config:
-  bucket: example-bucket
+  bucket: ""
+  service_account: ""
 ```
 
-[embedmd]:# (flags/tools_bucket_downsample.txt $)
-```$
+```$ mdox-exec="thanos tools bucket downsample --help"
 usage: thanos tools bucket downsample [<flags>]
 
 Continuously downsamples blocks in an object store bucket.
@@ -591,7 +582,7 @@ Flags:
                               are: "", "SHA256".
   -h, --help                  Show context-sensitive help (also try --help-long
                               and --help-man).
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
                               Server.
@@ -601,22 +592,22 @@ Flags:
       --log.format=logfmt     Log format to use. Possible options: logfmt or
                               json.
       --log.level=info        Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                               Alternative to 'objstore.config-file' flag
                               (mutually exclusive). Content of YAML file that
                               contains object store configuration. See format
                               details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                               Path to YAML file that contains object store
                               configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                               Alternative to 'tracing.config-file' flag
                               (mutually exclusive). Content of YAML file with
                               tracing configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                               Path to YAML file with tracing configuration. See
                               format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -638,14 +629,14 @@ thanos tools bucket mark \
 
 The example content of `bucket.yml`:
 
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
 type: GCS
 config:
-  bucket: example-bucket
+  bucket: ""
+  service_account: ""
 ```
 
-[embedmd]:# (flags/tools_bucket_mark.txt $)
-```$
+```$ mdox-exec="thanos tools bucket mark --help"
 usage: thanos tools bucket mark --id=ID --marker=MARKER --details=DETAILS
 
 Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is
@@ -661,21 +652,21 @@ Flags:
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
       --marker=MARKER      Marker to be put.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (mutually
                            exclusive). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -708,8 +699,7 @@ By default, rewrite also produces `change.log` in the tmp local dir. Look for lo
 ts=2020-11-09T00:40:13.703322181Z caller=level.go:63 level=info msg="changelog will be available" file=/tmp/thanos-rewrite/01EPN74E401ZD2SQXS4SRY6DZX/change.log`
 ```
 
-[embedmd]:# (flags/tools_bucket_rewrite.txt $)
-```$
+```$ mdox-exec="thanos tools bucket rewrite --help"
 usage: thanos tools bucket rewrite --id=ID [<flags>]
 
 Rewrite chosen blocks in the bucket, while deleting or modifying series Resulted
@@ -744,13 +734,13 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                 Alternative to 'objstore.config-file' flag
                                 (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
@@ -760,31 +750,31 @@ Flags:
       --rewrite.add-change-log  If specified, all modifications are written to
                                 new block directory. Disable if latency is to
                                 high.
-      --rewrite.to-delete-config=<content>
+      --rewrite.to-delete-config=<content>  
                                 Alternative to 'rewrite.to-delete-config-file'
                                 flag (mutually exclusive). Content of YAML file
                                 that contains []metadata.DeletionRequest that
                                 will be applied to blocks
-      --rewrite.to-delete-config-file=<file-path>
+      --rewrite.to-delete-config-file=<file-path>  
                                 Path to YAML file that contains
                                 []metadata.DeletionRequest that will be applied
                                 to blocks
-      --rewrite.to-relabel-config=<content>
+      --rewrite.to-relabel-config=<content>  
                                 Alternative to 'rewrite.to-relabel-config-file'
                                 flag (mutually exclusive). Content of YAML file
                                 that contains relabel configs that will be
                                 applied to blocks
-      --rewrite.to-relabel-config-file=<file-path>
+      --rewrite.to-relabel-config-file=<file-path>  
                                 Path to YAML file that contains relabel configs
                                 that will be applied to blocks
-      --tmp.dir="/tmp/thanos-rewrite"
+      --tmp.dir="/tmp/thanos-rewrite"  
                                 Working directory for temporary files
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                 Alternative to 'tracing.config-file' flag
                                 (mutually exclusive). Content of YAML file with
                                 tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                 Path to YAML file with tracing configuration.
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
@@ -798,8 +788,7 @@ The `tools rules-check` subcommand contains tools for validation of Prometheus r
 
 This is allowing to check the rules with the same validation as is used by the Thanos Ruler node.
 
-NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos Ruler extended rules file syntax,
-which includes `partial_response_strategy` field which `promtool` does not allow.
+NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos Ruler extended rules file syntax, which includes `partial_response_strategy` field which `promtool` does not allow.
 
 If the check fails the command fails with exit code `1`, otherwise `0`.
 
@@ -809,8 +798,7 @@ Example:
 ./thanos tools rules-check --rules cmd/thanos/testdata/rules-files/*.yaml
 ```
 
-[embedmd]:# (flags/tools_rules-check.txt $)
-```$
+```$ mdox-exec="thanos tools rules-check --help"
 usage: thanos tools rules-check --rules=RULES
 
 Check if the rule files are valid or not.
@@ -821,12 +809,12 @@ Flags:
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
       --rules=RULES ...    The rule files glob to check (repeated).
-      --tracing.config=<content>
+      --tracing.config=<content>  
                            Alternative to 'tracing.config-file' flag (mutually
                            exclusive). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration

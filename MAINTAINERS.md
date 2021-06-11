@@ -1,20 +1,18 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                  | Slack                    | GitHub                                      | Company           |
-|-----------------------|------------------------|--------------------------|---------------------------------------------|-------------------|
-| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
-| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Polar Signals     |
-| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
-| Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)    | Red Hat           |
-| Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)          | Red Hat           |
-| Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)        | Red Hat           |
-| Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)    | Grafana Labs      |
-| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Polar Signals     |
-| Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)        | Red Hat           |
+| Name                  | Email                  | Slack                    | GitHub                                       | Company       |
+|-----------------------|------------------------|--------------------------|----------------------------------------------|---------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)     | Red Hat       |
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)         | Polar Signals |
+| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)   | AdForm        |
+| Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)     | Red Hat       |
+| Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)           | Red Hat       |
+| Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)         | Red Hat       |
+| Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)     | Grafana Labs  |
+| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze) | Polar Signals |
+| Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)         | Red Hat       |
 
-We are bunch of people from different companies with various interests and skills.
-We are from different parts of the world: Germany, Italy, Lithuania, Poland, UK, India and China.
-We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
+We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Italy, Lithuania, Poland, UK, India and China. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
 
@@ -26,25 +24,23 @@ You can reach us under `thanos-io@googlegroups.com` email.
 
 ## Triage
 
-We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization)
-for details about the role's permission.
+We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization) for details about the role's permission.
 
 Full list of triage persons is displayed below:
 
-| Name                  | Slack                    | GitHub                                                     | Company               |
-|-----------------------|--------------------------|------------------------------------------------------------|-----------------------|
-| Adrien Fillon         | `@Adrien F`              | [@adrien-f](https://github.com/adrien-f)                   |                       |
-| Martin Chodur         | `@FUSAKLA`               | [@fusakla](https://github.com/fusakla)                     |                       |
-| Michael Dai           | `@jojohappy`             | [@jojohappy](https://github.com/jojohappy)                 |                       |
-| Xiang Dai             | `@daixiang0`             | [@daixiang0](https://github.com/daixiang0)                 |                       |
-| Wiard van Rij         | `@wiard van Rij`         | [@wiardvanrij](https://github.com/wiardvanrij)             |  Fullstaq             |
+| Name          | Slack            | GitHub                                         | Company  |
+|---------------|------------------|------------------------------------------------|----------|
+| Adrien Fillon | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)       |          |
+| Martin Chodur | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)         |          |
+| Michael Dai   | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)     |          |
+| Xiang Dai     | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)     |          |
+| Wiard van Rij | `@wiard van Rij` | [@wiardvanrij](https://github.com/wiardvanrij) | Fullstaq |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
 ### Triage labels
 
-To improve navigating through issues and PRs we introduce various [labels](https://github.com/thanos-io/thanos/issues/labels). Part of triaging process for Triage and Maintainers
-is to adjust those labels if needed manual. The `Prow` system can automate a portion of this in future.
+To improve navigating through issues and PRs we introduce various [labels](https://github.com/thanos-io/thanos/issues/labels). Part of triaging process for Triage and Maintainers is to adjust those labels if needed manual. The `Prow` system can automate a portion of this in future.
 
 The main labels are:
 
@@ -76,8 +72,7 @@ This helps to also estimate how long it can potentially take to review the PR or
 
 #### State
 
-Github shows some basic states, but sometimes PR is stale due to requested changes, but it's not clear from first glance.
-That's why `state: changes-requested` is helpful on those.
+Github shows some basic states, but sometimes PR is stale due to requested changes, but it's not clear from first glance. That's why `state: changes-requested` is helpful on those.
 
 #### Other
 
@@ -95,19 +90,16 @@ Maintainers of bucket storage clients are available [here](/docs/storage.md#impl
 
 ## How to be maintainer?
 
-Any [contributor](/CONTRIBUTING.md) that shows effort and willingness in maintaining Thanos repository can join maintainer team.
+Any [contributor](CONTRIBUTING.md) that shows effort and willingness in maintaining Thanos repository can join maintainer team.
 
 Open Source is all about the trust, which is the key factor in decision to add write permissions.
 
-In time we plan to set up maintainers team that will be organization independent. Reach us if you have any questions or want to join
-maintainer team.
+In time we plan to set up maintainers team that will be organization independent. Reach us if you have any questions or want to join maintainer team.
 
 ## Initial authors
 
 Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
 
-
 ## Previous Maintainers
 
-Dominic Green
-Povilas Versockas
+Dominic Green Povilas Versockas
