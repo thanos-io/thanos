@@ -791,6 +791,15 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "exemplar_query_request")
+		defer span.Finish()
+
+		var (
+			data     []*exemplarspb.ExemplarData
+			warnings storage.Warnings
+			err      error
+		)
+
 		start, err := cortexutil.ParseTime(r.FormValue("start"))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -806,11 +815,15 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			Query:                   r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}
-		exemplarsData, warnings, err := client.Exemplars(r.Context(), req)
+
+		tracing.DoInSpan(ctx, "retrieve_exemplars", func(ctx context.Context) {
+			data, warnings, err = client.Exemplars(ctx, req)
+		})
+
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}
 		}
-		return exemplarsData, warnings, nil
+		return data, warnings, nil
 	}
 }
 

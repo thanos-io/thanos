@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
+	extflag "github.com/efficientgo/tools/extkingpin"
 
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -186,7 +186,7 @@ type queryConfig struct {
 func (qc *queryConfig) registerFlag(cmd extkingpin.FlagClause) *queryConfig {
 	cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").StringsVar(&qc.addrs)
-	qc.configPath = extflag.RegisterPathOrContent(cmd, "query.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", false)
+	qc.configPath = extflag.RegisterPathOrContent(cmd, "query.config", "YAML file that contains query API servers configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--query' and '--query.sd-files' flags.", extflag.WithEnvSubstitution())
 	cmd.Flag("query.sd-files", "Path to file that contains addresses of query API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").StringsVar(&qc.sdFiles)
 	cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
@@ -211,7 +211,7 @@ type alertMgrConfig struct {
 }
 
 func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
-	ac.configPath = extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
+	ac.configPath = extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/tip/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", extflag.WithEnvSubstitution())
 	cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		StringsVar(&ac.alertmgrURLs)
 	cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").
@@ -221,6 +221,6 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	ac.alertQueryURL = cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		StringsVar(&ac.alertExcludeLabels)
-	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", false)
+	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
 	return ac
 }

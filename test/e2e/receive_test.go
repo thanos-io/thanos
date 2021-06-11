@@ -56,6 +56,77 @@ func ErrorHandler(_ http.ResponseWriter, _ *http.Request, err error) {
 
 func TestReceive(t *testing.T) {
 	t.Parallel()
+	t.Run("receive_distributor_ingestor_mode", func(t *testing.T) {
+		t.Parallel()
+
+		s, err := e2e.NewScenario("receive_distributor_ingestor_mode")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, s))
+
+		// Setup 3 ingestors.
+		i1, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "i1", 1)
+		testutil.Ok(t, err)
+		i2, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "i2", 1)
+		testutil.Ok(t, err)
+		i3, err := e2ethanos.NewReceiver(s.SharedDir(), s.NetworkName(), "i3", 1)
+		testutil.Ok(t, err)
+
+		h := receive.HashringConfig{
+			Endpoints: []string{
+				i1.GRPCNetworkEndpointFor(s.NetworkName()),
+				i2.GRPCNetworkEndpointFor(s.NetworkName()),
+				i3.GRPCNetworkEndpointFor(s.NetworkName()),
+			},
+		}
+
+		// Setup 1 distributor
+		d1, err := e2ethanos.NewReceiverWithoutTSDB(s.SharedDir(), s.NetworkName(), "d1", 1, h)
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(i1, i2, i3, d1))
+
+		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(d1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(d1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(d1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
+
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
+		testutil.Ok(t, err)
+		testutil.Ok(t, s.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+
+		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "i2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom2",
+				"receive":    "i1",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom3",
+				"receive":    "i2",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+		})
+	})
 
 	t.Run("hashring", func(t *testing.T) {
 		t.Parallel()
@@ -102,7 +173,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -178,7 +249,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -253,7 +324,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -325,7 +396,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -400,7 +471,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 		testutil.Ok(t, s.StartAndWaitReady(prom2))
 
-		q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
