@@ -7,6 +7,10 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+type FlagClause interface {
+	Flag(name, help string) *kingpin.FlagClause
+}
+
 // HiddenCmdClause returns FlagClause that hides created flags.
 func HiddenCmdClause(c FlagClause) FlagClause {
 	return hidden{c: c}
