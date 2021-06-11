@@ -133,7 +133,7 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			merged := m(tc.input...)
-			testutil.Equals(t,tc.expected.Labels(), merged.Labels() )
+			testutil.Equals(t, tc.expected.Labels(), merged.Labels())
 			actChks, actErr := storage.ExpandChunks(merged.Iterator())
 			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator())
 
