@@ -115,6 +115,8 @@ The main risk is the **irreversible** implications of potential configuration er
 * If you accidentally upload block with the same external labels but produced by totally different Prometheus for totally different applications, some metrics can overlap
 and potentially can merge together making such series useless.
 * If you merge disjoint series in multiple of blocks together, there is currently no easy way to split them back.
+* The `penalty` offline deduplication algorithm has its own limitation. Even though it has been battle-tested for quite a long time but still very few issues come up from time to time
+  such as https://github.com/thanos-io/thanos/issues/2890. If you'd like to enable this deduplication algorithm, please take the risk and make sure you back up your data.
 
 #### Enabling Vertical Compaction
 

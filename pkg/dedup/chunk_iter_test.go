@@ -11,8 +11,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
-	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestDedupChunkSeriesMerger(t *testing.T) {
@@ -133,12 +133,12 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			merged := m(tc.input...)
-			require.Equal(t, tc.expected.Labels(), merged.Labels())
+			testutil.Equals(t,tc.expected.Labels(), merged.Labels() )
 			actChks, actErr := storage.ExpandChunks(merged.Iterator())
 			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator())
 
-			require.Equal(t, expErr, actErr)
-			require.Equal(t, expChks, actChks)
+			testutil.Equals(t, expErr, actErr)
+			testutil.Equals(t, expChks, actChks)
 		})
 	}
 }
@@ -303,12 +303,12 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			merged := m(tc.input...)
-			require.Equal(t, tc.expected.Labels(), merged.Labels())
+			testutil.Equals(t, tc.expected.Labels(), merged.Labels())
 			actChks, actErr := storage.ExpandChunks(merged.Iterator())
 			expChks, expErr := storage.ExpandChunks(tc.expected.Iterator())
 
-			require.Equal(t, expErr, actErr)
-			require.Equal(t, expChks, actChks)
+			testutil.Equals(t, expErr, actErr)
+			testutil.Equals(t, expChks, actChks)
 		})
 	}
 }
