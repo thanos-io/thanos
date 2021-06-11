@@ -18,9 +18,9 @@ global:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['0.0.0.0:9090']
+      - targets: ['127.0.0.1:9090']
 remote_write:
-- url: 'http://0.0.0.0:10908/api/v1/receive'
+- url: 'http://127.0.0.1:10908/api/v1/receive'
 </pre>
 
 <pre class="file" data-filename="prometheus-batcomputer.yaml" data-target="replace">
@@ -33,9 +33,9 @@ global:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['0.0.0.0:9090']
+      - targets: ['127.0.0.1:9091']
 remote_write:
-- url: 'http://0.0.0.0:10908/api/v1/receive'
+- url: 'http://127.0.0.1:10908/api/v1/receive'
 </pre>
 
 ## Reload Configuration
@@ -43,8 +43,8 @@ remote_write:
 Since we supplied the `--web.enable-lifecycle` flag in our Prometheus instances, we can dynamically reload the configuration by `curl`-ing the `/-/reload` endpoints.
 
 ```
-curl -X POST http://0.0.0.0:9090/-/reload
-curl -X POST http://0.0.0.0:9091/-/reload
+curl -X POST http://127.0.0.1:9090/-/reload
+curl -X POST http://127.0.0.1:9091/-/reload
 ```{{execute}}
 
 Verify this has taken affect by checking the `/config` page on our Prometheus instances:

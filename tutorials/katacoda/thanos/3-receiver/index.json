@@ -46,7 +46,7 @@
     "showdashboard": true,
     "dashboards": [
       {"name": "Prometheus Batcave", "port": 9090},
-      {"name": "Prometheus Batcomputer", "port": 9000},
+      {"name": "Prometheus Batcomputer", "port": 9001},
       {"name": "Thanos Query", "port": 39090}
   ]
   },

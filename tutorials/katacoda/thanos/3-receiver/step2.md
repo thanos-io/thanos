@@ -51,11 +51,11 @@ docker run -d --rm \
     quay.io/thanos/thanos:v0.21.0 \
     receive \
     --tsdb.path "/receive/data" \
-    --grpc-address 0.0.0.0:10907 \
-    --http-address 0.0.0.0:10909 \
+    --grpc-address 127.0.0.1:10907 \
+    --http-address 127.0.0.1:10909 \
     --label "receive_replica=\"0\"" \
     --label "receive_cluster=\"wayne-enterprises\"" \
-    --remote-write.address 0.0.0.0:10908
+    --remote-write.address 127.0.0.1:10908
 ```{{execute}}
 
 Let's talk about some important parameters:
@@ -78,11 +78,11 @@ docker run -d --rm \
     --name query \
     quay.io/thanos/thanos:v0.21.0 \
     query \
-    --http-address "0.0.0.0:39090" \
-    --store "0.0.0.0:10907"
+    --http-address "127.0.0.1:39090" \
+    --store "127.0.0.1:10907"
 ```{{execute}}
 
-`Thanos Receive` exposed its gRPC endpoint at `0.0.0.0:10907`, so we need to tell `Thanos Query` to use this endpoint with the `--store` flag.
+`Thanos Receive` exposed its gRPC endpoint at `127.0.0.1:10907`, so we need to tell `Thanos Query` to use this endpoint with the `--store` flag.
 
 Verify that `Thanos Query` is working and configured correctly by looking at the 'stores' tab [here](https://[[HOST_SUBDOMAIN]]-39090-[[KATACODA_HOST]].environments.katacoda.com/stores).
 
