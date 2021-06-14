@@ -41,12 +41,13 @@
           {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for {{$value}} seconds.' % location,
+              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for more than {{$value}} seconds.' % location,
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (%(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 600
+              time() - max by (%(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 240
             ||| % thanos.sidecar,
+            'for': '5m',
             labels: {
               severity: 'critical',
             },

@@ -19,7 +19,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 
 ### Fixed
 
--
+- [#4342](https://github.com/thanos-io/thanos/pull/4342) ThanosSidecarUnhealthy doesn't fire if the sidecar is never healthy
 
 ### Changed
 

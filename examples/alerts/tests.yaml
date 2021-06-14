@@ -79,7 +79,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-0
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for 600 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 600 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
@@ -87,7 +87,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-1
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for 600 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 600 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 11m
@@ -98,7 +98,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-0
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for 660 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 660 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
@@ -106,7 +106,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-1
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for 660 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 660 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
   - eval_time: 12m
@@ -117,7 +117,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-0
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for 720 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 720 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
     - exp_labels:
@@ -125,7 +125,7 @@ tests:
         job: thanos-sidecar
         instance: thanos-sidecar-1
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for 720 seconds.'
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 720 seconds.'
         runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
         summary: 'Thanos Sidecar is unhealthy.'
 - interval: 1m
