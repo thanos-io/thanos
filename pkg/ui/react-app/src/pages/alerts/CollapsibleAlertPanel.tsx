@@ -35,14 +35,6 @@ const CollapsibleAlertPanel: FC<CollapsibleAlertPanelProps> = ({ rule, showAnnot
             <div>
               expr: <a href={createExternalExpressionLink(rule.query)}>{rule.query}</a>
             </div>
-            {rule.duration > 0 && (
-              <div>
-                <div>for: {formatDuration(rule.duration * 1000)}</div>
-              </div>
-            )}
-            <div>
-              <div>for: {formatDuration(rule.duration * 1000)}</div>
-            </div>
             <div>
               <div>labels:</div>
               <div className="ml-5">severity: {rule.labels.severity}</div>
