@@ -51,7 +51,7 @@ class GraphControls extends Component<GraphControlsProps> {
     56 * 24 * 60 * 60,
     365 * 24 * 60 * 60,
     730 * 24 * 60 * 60,
-  ].map(s => s * 1000);
+  ].map((s) => s * 1000);
 
   onChangeRangeInput = (rangeText: string): void => {
     const range = parseDuration(rangeText);
