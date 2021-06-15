@@ -4,7 +4,7 @@ import { RuleStatus } from './AlertContents';
 import { Rule } from '../../types/types';
 import { faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { createExternalExpressionLink } from '../../utils/index';
+import { createExternalExpressionLink, formatDuration } from '../../utils/index';
 
 interface CollapsibleAlertPanelProps {
   rule: Rule;
