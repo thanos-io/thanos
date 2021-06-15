@@ -204,7 +204,10 @@ func GetInstr(
 	disableCORS bool,
 ) InstrFunc {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
+
+		var tenantIdentifier string
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenantIdentifier = r.Header.Get("tenantIdentifier")
 			if !disableCORS {
 				SetCORS(w)
 			}
@@ -223,7 +226,7 @@ func GetInstr(
 					gziphandler.GzipHandler(
 						middleware.RequestID(hf),
 					),
-				),
+				), tenantIdentifier,
 			),
 		)
 	}

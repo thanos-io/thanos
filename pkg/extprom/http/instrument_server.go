@@ -20,12 +20,12 @@ import (
 // and provides necessary behaviors.
 type InstrumentationMiddleware interface {
 	// NewHandler wraps the given HTTP handler for instrumentation.
-	NewHandler(handlerName string, handler http.Handler) http.HandlerFunc
+	NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc
 }
 
 type nopInstrumentationMiddleware struct{}
 
-func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	}
@@ -57,7 +57,7 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 				Help:    "Tracks the latencies for HTTP requests.",
 				Buckets: buckets,
 			},
-			[]string{"code", "handler", "method"},
+			[]string{"code", "handler", "method", "tenant_id"},
 		),
 
 		requestSize: promauto.With(reg).NewSummaryVec(
@@ -65,14 +65,14 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 				Name: "http_request_size_bytes",
 				Help: "Tracks the size of HTTP requests.",
 			},
-			[]string{"code", "handler", "method"},
+			[]string{"code", "handler", "method", "tenant_id"},
 		),
 
 		requestsTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "http_requests_total",
 				Help: "Tracks the number of HTTP requests.",
-			}, []string{"code", "handler", "method"},
+			}, []string{"code", "handler", "method", "tenant_id"},
 		),
 
 		responseSize: promauto.With(reg).NewSummaryVec(
@@ -80,7 +80,7 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 				Name: "http_response_size_bytes",
 				Help: "Tracks the size of HTTP responses.",
 			},
-			[]string{"code", "handler", "method"},
+			[]string{"code", "handler", "method", "tenant_id"},
 		),
 	}
 	return &ins
@@ -94,20 +94,20 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 // has a constant label named "handler" with the provided handlerName as
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
-func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc {
 	return promhttp.InstrumentHandlerRequestSize(
-		ins.requestSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+		ins.requestSize.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
 		promhttp.InstrumentHandlerCounter(
-			ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+			ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
 			promhttp.InstrumentHandlerResponseSize(
-				ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+				ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					now := time.Now()
 
 					wd := &responseWriterDelegator{w: w}
 					handler.ServeHTTP(wd, r)
 
-					observer := ins.requestDuration.WithLabelValues(
+					observer := ins.requestDuration.MustCurryWith(prometheus.Labels{"tenant_id": tenantIdentifier[0]}).WithLabelValues(
 						wd.Status(),
 						handlerName,
 						strings.ToLower(r.Method),
