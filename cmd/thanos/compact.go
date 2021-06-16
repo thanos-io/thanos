@@ -24,13 +24,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -302,9 +305,25 @@ func runCompact(
 			cancel()
 		}
 	}()
+
+	var mergeFunc storage.VerticalChunkSeriesMergeFunc
+	switch conf.dedupFunc {
+	case compact.DedupAlgorithmPenalty:
+		mergeFunc = dedup.NewChunkSeriesMerger()
+
+		if len(conf.dedupReplicaLabels) == 0 {
+			return errors.New("penalty based deduplication needs at least one replica label specified")
+		}
+	case "":
+		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+
+	default:
+		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+	}
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), nil)
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -564,6 +583,7 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	dedupFunc                                      string
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -622,16 +642,21 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h").SetValue(&cc.deleteDelay)
 
-	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more. "+
+		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
+	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
+		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
+		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
+		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
+
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
-		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
-		Hidden().StringsVar(&cc.dedupReplicaLabels)
+		"Experimental. When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
+		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
+		StringsVar(&cc.dedupReplicaLabels)
 
 	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
 	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
