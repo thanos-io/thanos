@@ -20,6 +20,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -88,6 +89,11 @@ type ApiError struct {
 	Typ ErrorType
 	Err error
 }
+
+const (
+	// tenantIDKey is the key that holds the tenant ID in a request context.
+	tenantIDKey string = "tenantID"
+)
 
 func (e *ApiError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Typ, e.Err)
@@ -193,6 +199,14 @@ func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
 	}
 }
 
+func getTenantFromHeaders(next http.Handler) http.HandlerFunc{
+	return func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(
+			context.WithValue(r.Context(), tenantIDKey, r.Header.Get("tenantIdentifier")),
+		))
+	}
+}
+
 type InstrFunc func(name string, f ApiFunc) http.HandlerFunc
 
 // Instr returns a http HandlerFunc with the instrumentation middleware.
@@ -205,9 +219,7 @@ func GetInstr(
 ) InstrFunc {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 
-		var tenantIdentifier string
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tenantIdentifier = r.Header.Get("tenantIdentifier")
 			if !disableCORS {
 				SetCORS(w)
 			}
@@ -220,13 +232,17 @@ func GetInstr(
 			}
 		})
 
-		return tracing.HTTPMiddleware(tracer, name, logger,
-			ins.NewHandler(name,
-				logMiddleware.HTTPMiddleware(name,
-					gziphandler.GzipHandler(
-						middleware.RequestID(hf),
+		return getTenantFromHeaders(
+			tracing.HTTPMiddleware(tracer, name, logger,
+				ins.NewHandler(name,
+					ins.InsertTenantIdentifier(
+						logMiddleware.HTTPMiddleware(name,
+							gziphandler.GzipHandler(
+								middleware.RequestID(hf),
+							),
+						),
 					),
-				), tenantIdentifier,
+				),
 			),
 		)
 	}

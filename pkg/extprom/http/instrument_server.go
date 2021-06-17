@@ -4,6 +4,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,14 +21,21 @@ import (
 // and provides necessary behaviors.
 type InstrumentationMiddleware interface {
 	// NewHandler wraps the given HTTP handler for instrumentation.
-	NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc
+	NewHandler(handlerName string, handler http.Handler) http.HandlerFunc
+	InsertTenantIdentifier(next http.Handler) http.HandlerFunc
 }
 
 type nopInstrumentationMiddleware struct{}
 
-func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc {
+func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
+	}
+}
+
+func (ins nopInstrumentationMiddleware) InsertTenantIdentifier(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
 	}
 }
 
@@ -86,6 +94,28 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 	return &ins
 }
 
+func getTenantIdentifier(ctx context.Context) string {
+	return ctx.Value("tenantID").(string)
+}
+
+// InsertTenantIdentifier inserts tenant identifier in metrics.
+func (ins *defaultInstrumentationMiddleware) InsertTenantIdentifier(next http.Handler) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		tenantIdentifier := getTenantIdentifier(r.Context())
+		if tenantIdentifier != "" {
+			ins.requestSize.CurryWith(prometheus.Labels{"tenant_id": tenantIdentifier})
+			ins.requestDuration.CurryWith(prometheus.Labels{"tenant_id": tenantIdentifier})
+			ins.requestsTotal.CurryWith(prometheus.Labels{"tenant_id": tenantIdentifier})
+			// ins.responseSize.CurryWith(prometheus.Labels{"tenant_id": tenantIdentifier})			
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+// func (ins *defaultInstrumentationMiddleware) InsertTenantIdentifier(next http.Handler) http.HandlerFunc{
+// 	ins.requestSize.MustCurryWith(prometheus.Labels{"tenan_id": "tenantIdentifier"})
+// }
+
 // NewHandler wraps the given HTTP handler for instrumentation. It
 // registers four metric collectors (if not already done) and reports HTTP
 // metrics to the (newly or already) registered collectors: http_requests_total
@@ -94,20 +124,20 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 // has a constant label named "handler" with the provided handlerName as
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
-func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler, tenantIdentifier ...string) http.HandlerFunc {
+func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	return promhttp.InstrumentHandlerRequestSize(
-		ins.requestSize.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
+		ins.requestSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 		promhttp.InstrumentHandlerCounter(
-			ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
+			ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 			promhttp.InstrumentHandlerResponseSize(
-				ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName, "tenant_id": tenantIdentifier[0]}),
+				ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					now := time.Now()
 
 					wd := &responseWriterDelegator{w: w}
 					handler.ServeHTTP(wd, r)
 
-					observer := ins.requestDuration.MustCurryWith(prometheus.Labels{"tenant_id": tenantIdentifier[0]}).WithLabelValues(
+					observer := ins.requestDuration.WithLabelValues(
 						wd.Status(),
 						handlerName,
 						strings.ToLower(r.Method),
