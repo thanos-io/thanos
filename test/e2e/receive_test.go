@@ -80,7 +80,7 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Setup 1 distributor
-		d1, err := e2ethanos.NewReceiverWithoutTSDB(s.SharedDir(), s.NetworkName(), "d1", 1, h)
+		d1, err := e2ethanos.NewReceiverWithoutTSDB(s.SharedDir(), s.NetworkName(), "d1", 2, h)
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(i1, i2, i3, d1))
 
