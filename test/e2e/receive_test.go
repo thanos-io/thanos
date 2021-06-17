@@ -59,21 +59,39 @@ func TestReceive(t *testing.T) {
 
 	t.Run("single_ingestor", func(t *testing.T) {
 		/*
-			The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+		<<<<<<< HEAD
+					The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
 
-			 ┌──────────┐
-			 │  Prom    │
-			 └────┬─────┘
-			      │
-			 ┌────▼─────┐
-			 │ Ingestor │
-			 └────┬─────┘
-			      │
-			 ┌────▼─────┐
-			 │  Query   │
-			 └──────────┘
+					 ┌──────────┐
+					 │  Prom    │
+					 └────┬─────┘
+					      │
+					 ┌────▼─────┐
+					 │ Ingestor │
+					 └────┬─────┘
+					      │
+					 ┌────▼─────┐
+					 │  Query   │
+					 └──────────┘
 
-			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+					NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		=======
+				The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+
+				 ┌──────────┐
+				 │  Prom    │
+				 └────┬─────┘
+					  │
+				 ┌────▼─────┐
+				 │ Ingestor │
+				 └────┬─────┘
+					  │
+				 ┌────▼─────┐
+				 │  Query   │
+				 └──────────┘
+
+				NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		>>>>>>> c7bd119b (Adds 2 new integration tests, adds diagrams to integration test comments, adds IngestingReceiver testing type)
 		*/
 
 		t.Parallel()
