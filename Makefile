@@ -1,5 +1,6 @@
 include .bingo/Variables.mk
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell ls *.md)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -167,28 +168,24 @@ docker-push:
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
-docs: ## Regenerates flags in docs for all thanos commands.
-docs: $(EMBEDMD) build
+docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
+docs: $(MDOX) build
 	@echo ">> generating docs"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning white noise"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) build
-	@echo ">> checking docs generation"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
-	@echo ">> checking links (DISABLED for now)"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+check-docs: $(MDOX) build
+	@echo ">> checking local links"
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
-.PHONY:shell-format
+.PHONY: shell-format
 shell-format: $(SHFMT)
 	@echo ">> formatting shell scripts"
 	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
 
-.PHONY:format
+.PHONY: format
 format: ## Formats code including imports and cleans up white noise.
 format: go-format shell-format
 	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
@@ -276,9 +273,14 @@ web-pre-process:
 web: ## Builds our website.
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
-	# TODO(bwplotka): Make it --gc
 	@rm -rf "$(WEB_DIR)/public"
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
+
+.PHONY: web-serve
+web-serve: ## Builds and serves Thanos website on localhost.
+web-serve: web-pre-process $(HUGO)
+	@echo ">> serving documentation website"
+	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY:lint
 lint: ## Runs various static analysis against our code.
@@ -314,17 +316,11 @@ sync/atomic=go.uber.org/atomic" ./...
 	@$(MAKE) proto
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
-.PHONY:shell-lint
+.PHONY: shell-lint
 shell-lint: ## Runs static analysis against our shell scripts.
 shell-lint: $(SHELLCHECK)
 	@echo ">> linting all of the shell script files"
 	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*" -not -path "*node_modules*")
-
-.PHONY: web-serve
-web-serve: ## Builds and serves Thanos website on localhost.
-web-serve: web-pre-process $(HUGO)
-	@echo ">> serving documentation website"
-	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY: examples
 examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md

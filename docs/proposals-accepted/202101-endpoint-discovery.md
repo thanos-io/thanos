@@ -1,9 +1,9 @@
 ---
-title: Unified Endpoint Discovery
 type: proposal
-menu: proposals
+title: Unified Endpoint Discovery
 status: accepted
 owner: lilic
+menu: proposals-accepted
 ---
 
 ### Related Tickets
@@ -32,6 +32,7 @@ Add a new flag called `--endpoint` to Thanos query, and auto-discover what servi
 Each component will expose an Info service, that includes various metadata listed below. Discovery of what services an endpoint is exposing will happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md). Once we discover what services that endpoint is exposing (e.g. StoreAPI, TargetsAPI) we can retrieve metadata about them using a single `Info` method call from the Info service.
 
 Info API metadata would include the following fields regardless of the type:
+
 ```
 info:
   external_labels: blah_1, blah_2, ...
