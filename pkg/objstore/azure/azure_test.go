@@ -20,7 +20,7 @@ type TestCase struct {
 var validConfig = []byte(`storage_account: "myStorageAccount"
 storage_account_key: "abc123"
 container: "MyContainer"
-endpoint: "blob.core.windows.net" 
+endpoint: "blob.core.windows.net"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -38,7 +38,7 @@ var tests = []TestCase{
 		config: []byte(`storage_account: ""
 storage_account_key: "abc123"
 container: "MyContainer"
-endpoint: "blob.core.windows.net" 
+endpoint: "blob.core.windows.net"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -51,7 +51,7 @@ pipeline_config:
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: ""
 container: "MyContainer"
-endpoint: "blob.core.windows.net" 
+endpoint: "blob.core.windows.net"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -64,7 +64,7 @@ pipeline_config:
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: "asdfsdf"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -78,7 +78,7 @@ pipeline_config:
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: "asdfsdf"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": -100
 pipeline_config:
@@ -91,7 +91,7 @@ pipeline_config:
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: "asdfsdf"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -104,7 +104,7 @@ pipeline_config:
 		config: []byte(`storage_account: "asdfasdf"
 storage_account_key: "asdfsdf"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -118,7 +118,7 @@ pipeline_config:
 storage_account_key: "asdfsdf"
 msi_resource: "https://example.blob.core.windows.net"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
@@ -132,7 +132,7 @@ pipeline_config:
 storage_account_key: ""
 msi_resource: "https://example.blob.core.windows.net"
 container: "MyContainer"
-endpoint: "not.valid" 
+endpoint: "not.valid"
 reader_config:
   "max_retry_requests": 100
 pipeline_config:
