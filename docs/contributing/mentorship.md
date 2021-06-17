@@ -12,7 +12,7 @@ Both Thanos and Prometheus projects participate in various, periodic mentoring p
 
 Programs we participated / are participating:
 
-- [LFX Mentorship](https://github.com/cncf/mentoring/tree/master/lfx-mentorship)
+- [LFX Mentorship (previously Community Bridge)](https://github.com/cncf/mentoring/tree/master/lfx-mentorship)
 - [Google Summer of Code](https://github.com/cncf/mentoring/tree/master/summerofcode)
 - [Red Hat Beyond](https://research.redhat.com/blog/2020/05/24/open-source-development-course-and-devops-methodology/)
 
@@ -46,6 +46,46 @@ There are certain rules you can follow to make the MOST from your time with us!
 - Try using an [iterative process for development](https://en.wikipedia.org/wiki/Iterative_and_incremental_development). Start with small and simple assumptions, and once you have a working example ready, keep improving and discussing with the mentors. Small changes are easy to review and easy to accept 😄.
 - Try working out a [proof of concept](https://en.wikipedia.org/wiki/Proof_of_concept), which can be used as a baseline, and can be improved upon. These are real-world projects, so it's not possible to have a deterministic solution everytime, and proof of concepts are quick way to determine feasibility.
 
-### Thanos Mentoring Office Hours
+> At the end of mentorship, it's not the end! You are welcome to join our Community Office Hours. See [this](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#) for details. This is the meeting for any Thanos contributor, but you will fellow current and ex-mentees on the meeting too.
 
-All current and past mentees are welcome to join our special weekly Mentoring Office Hours. See [this](https://www.bwplotka.dev/2020/thanos-mentoring-office-hours/) for details. Ask your mentor to be invited!
+### Mentees Meetup
+
+In order to allow mentees to share the knowledge their learned and allow them to improve public speaking skills, at the end of mentorship cycles we can (optionally) organize virtual "Mentees Meetup". How to organize it:
+
+1. Talk to mentees, check if at least two mentees are interested to present the state of their project or what they learned and how. On top of presenting, check if they are interested in organizing meetup together (organizational skills!). Check if mentors have time to help organizing too.
+2. Help mentees to propose the title, description and outline for 15-20 minutes talk with 5m Q&A.
+3. Consider preparing the agenda of the meetup with mentees talk first then with the "Learnings" talk.
+
+> Potential flow of learning talk is to have mentors go through some filtered list of learnings we gathered from retrospective. On the talk, all mentees might be part of the meeting to chime in anytime and have it more discussion oriented with Q&A time.
+
+1. Find a suitable time slot, typically 2h in the evening.
+2. Announce meetup on (...) platform. Describe agenda, mention timing, how to join, Code of conduct and who is a target audience!
+
+> Target Audience: Other potential mentees, students, other project mentors and community who would like to teach others more, potential Thanos contributors
+
+1. Choose MC! (Someone who leads the meetup).
+2. Create Zoom webinar on Thanos account (use cloud recording).
+3. Perform it! (:
+
+## For Mentors
+
+This section explains some process around selecting mentees (TBD) and [retrospective](#retrospective) process.
+
+### Retrospective
+
+On the last meeting of the mentorship we want to finish with some *actionable learnings*. The experience of both Mentors and Mentees is always different due to differences among us, different task and circumstances. We always want to summarize our experience, no matter if we met the initial goals or not. If goals were not met, then it's extra important to discuss this in honest, blameless atmosphere. If the experience was mostly positive we also want to know what worked to reinforce best practices.
+
+The example retrospective process looks as follows:
+
+* Week before last meeting Mentors are reminding Mentees about the last session and how retrospective will look like. This allows everyone to think through the week about things that worked and not.
+* On the last meeting, start first with retrospective. This is the most important part of meeting, don't let other things (e.g project status) to get in the path.
+  * Write in the Working doc 2 sections: `What we did well`, `What we could do better`.
+  * Give everyone 5m to write down (e.g live) items in those two sections. Be specific, blameless and honest. It's not about offending anyone, but looking for improvements for both Mentor and Mentees work. Be critical to yourself, but also try to balance the good and to improve parts. There is always something we could do better or worse.
+  * When everyone has finished, create new section: `Learnings`.
+  * Go through all elements on the list. Discuss the details. Try to find ideas how to mitigate problem or what to continue doing. Write down those things in `Learning` section.
+  * At the end share the learnings to the team on mailing list.
+  * Consider composing all learnings into nice presentation we can show in [Mentees Meetup](#mentees-meetup)
+
+### Mentees Selection
+
+TBD
