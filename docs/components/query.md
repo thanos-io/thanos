@@ -53,7 +53,7 @@ Thanos Querier instead pulls the data from both replicas, and deduplicate those 
 
 ## Metric Query Flow Overview
 
-<img src="../img/querier.svg" class="img-fluid" alt="querier-steps" />
+<img src="../img/querier.svg" class="img-fluid" alt="querier-steps"/>
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/). The above diagram shows what Querier does for each Prometheus query request.
 

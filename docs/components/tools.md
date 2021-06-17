@@ -193,7 +193,7 @@ Subcommands:
 
 This will start local webserver that will periodically update the view with given refresh.
 
-<img src="../img/bucket-web.jpg" class="img-fluid" alt="web" />
+<img src="../img/bucket-web.jpg" class="img-fluid" alt="web"/>
 
 Example:
 
