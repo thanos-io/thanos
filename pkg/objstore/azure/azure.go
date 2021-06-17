@@ -147,7 +147,7 @@ func parseConfig(conf []byte) (Config, error) {
 	}
 
 	// If we don't have config specific retry values but we do have the generic MaxRetries.
-	// This is part backwards compatibility but also ease of configuration
+	// This is for backwards compatibility but also ease of configuration.
 	if config.MaxRetries > 0 {
 		if config.PipelineConfig.MaxTries == 0 {
 			config.PipelineConfig.MaxTries = int32(config.MaxRetries)

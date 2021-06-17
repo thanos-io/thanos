@@ -35,9 +35,7 @@ func init() {
 }
 
 func getAzureStorageCredentials(conf Config) (blob.Credential, error) {
-
 	if conf.MSIResource != "" {
-
 		msiConfig := auth.NewMSIConfig()
 		msiConfig.Resource = conf.MSIResource
 
@@ -46,7 +44,7 @@ func getAzureStorageCredentials(conf Config) (blob.Credential, error) {
 			return nil, err
 		}
 
-		// Get a new token
+		// Get a new token.
 		err = azureServicePrincipalToken.Refresh()
 		if err != nil {
 			return nil, err
@@ -54,15 +52,13 @@ func getAzureStorageCredentials(conf Config) (blob.Credential, error) {
 		token := azureServicePrincipalToken.Token()
 
 		return blob.NewTokenCredential(token.AccessToken, nil), nil
-
-	} else {
-		credential, err := blob.NewSharedKeyCredential(conf.StorageAccountName, conf.StorageAccountKey)
-		if err != nil {
-			return nil, err
-		}
-		return credential, nil
 	}
 
+	credential, err := blob.NewSharedKeyCredential(conf.StorageAccountName, conf.StorageAccountKey)
+	if err != nil {
+		return nil, err
+	}
+	return credential, nil
 }
 
 func getContainerURL(ctx context.Context, conf Config) (blob.ContainerURL, error) {
