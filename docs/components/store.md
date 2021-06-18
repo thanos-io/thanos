@@ -235,7 +235,7 @@ We recommend having overlapping time ranges with Thanos Sidecar and other Thanos
 
 Thanos Querier deals with overlapping time series by merging them together.
 
-Filtering is done on a [Chunk](../design.md/#chunk) level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
+Filtering is done on a [Chunk](../design.md#chunk) level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
 
 ### External Label Partitioning (Sharding)
 
@@ -295,7 +295,7 @@ config:
 
 The **required** settings are:
 
-- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider. If your cluster supports auto-discovery, you should use the flag `auto_discovery` instead and only point to *one of* the memcached servers. This typically means that there should be only one address specified that resolves to any of the alive memcached servers. Use this for Amazon ElastiCache and other similar services.
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md#dns-service-discovery) provider. If your cluster supports auto-discovery, you should use the flag `auto_discovery` instead and only point to *one of* the memcached servers. This typically means that there should be only one address specified that resolves to any of the alive memcached servers. Use this for Amazon ElastiCache and other similar services.
 
 While the remaining settings are **optional**:
 
@@ -311,7 +311,7 @@ While the remaining settings are **optional**:
 
 ## Caching Bucket
 
-Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md/#chunk) and metadata caching to speed up loading of [chunks](../design.md/#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
+Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md#chunk) and metadata caching to speed up loading of [chunks](../design.md#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 
 Both memcached and in-memory cache "backend"s are supported:
 
@@ -340,11 +340,11 @@ metafile_max_size: 1MiB
 
 `config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
 
-Additional options to configure various aspects of [chunks](../design.md/#chunk) cache are available:
+Additional options to configure various aspects of [chunks](../design.md#chunk) cache are available:
 
-- `chunk_subrange_size`: size of segment of [chunks](../design.md/#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
+- `chunk_subrange_size`: size of segment of [chunks](../design.md#chunk) object that is stored to the cache. This is the smallest unit that chunks cache is working with.
 - `max_chunks_get_range_requests`: how many "get range" sub-requests may cache perform to fetch missing subranges.
-- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md/#chunk-file) attributes (e.g. size) in the cache.
+- `chunk_object_attrs_ttl`: how long to keep information about [chunk file](../design.md#chunk-file) attributes (e.g. size) in the cache.
 - `chunk_subrange_ttl`: how long to keep individual subranges in the cache.
 
 Following options are used for metadata caching (meta.json files, deletion mark files, iteration result):
