@@ -46,7 +46,7 @@ There are certain rules you can follow to make the MOST from your time with us!
 - Try using an [iterative process for development](https://en.wikipedia.org/wiki/Iterative_and_incremental_development). Start with small and simple assumptions, and once you have a working example ready, keep improving and discussing with the mentors. Small changes are easy to review and easy to accept 😄.
 - Try working out a [proof of concept](https://en.wikipedia.org/wiki/Proof_of_concept), which can be used as a baseline, and can be improved upon. These are real-world projects, so it's not possible to have a deterministic solution everytime, and proof of concepts are quick way to determine feasibility.
 
-> At the end of mentorship, it's not the end! You are welcome to join our Community Office Hours. See [this](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#) for details. This is the meeting for any Thanos contributor, but you will fellow current and ex-mentees on the meeting too.
+> At the end of mentorship, it's not the end! You are welcome to join our Community Office Hours. See [this](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#) for details. This is the meeting for any Thanos contributor, but you will find fellow current and ex-mentees on the meeting too.
 
 ### Mentees Meetup
 
