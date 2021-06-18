@@ -252,8 +252,11 @@ func runStore(
 	if err != nil {
 		return errors.Wrap(err, "get caching bucket configuration")
 	}
+
+	r := route.New()
+
 	if len(cachingBucketConfigYaml) > 0 {
-		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg)
+		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
 		if err != nil {
 			return errors.Wrap(err, "create caching bucket")
 		}
@@ -407,7 +410,6 @@ func runStore(
 	}
 	// Add bucket UI for loaded blocks.
 	{
-		r := route.New()
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
 		compactorView := ui.NewBucketUI(logger, "", conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, "/loaded", conf.component)

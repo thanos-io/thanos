@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -25,8 +26,9 @@ import (
 type BucketCacheProvider string
 
 const (
-	InMemoryBucketCacheProvider  BucketCacheProvider = "IN-MEMORY" // In-memory cache-provider for caching bucket.
-	MemcachedBucketCacheProvider BucketCacheProvider = "MEMCACHED" // Memcached cache-provider for caching bucket.
+	InMemoryBucketCacheProvider   BucketCacheProvider = "IN-MEMORY"  // In-memory cache-provider for caching bucket.
+	MemcachedBucketCacheProvider  BucketCacheProvider = "MEMCACHED"  // Memcached cache-provider for caching bucket.
+	GroupcacheBucketCacheProvider BucketCacheProvider = "GROUPCACHE" // Groupcache cache-provider for caching bucket.
 )
 
 // CachingWithBackendConfig is a configuration of caching bucket used by Store component.
@@ -67,7 +69,7 @@ func (cfg *CachingWithBackendConfig) Defaults() {
 }
 
 // NewCachingBucketFromYaml uses YAML configuration to create new caching bucket.
-func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer) (objstore.InstrumentedBucket, error) {
+func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger log.Logger, reg prometheus.Registerer, r *route.Router) (objstore.InstrumentedBucket, error) {
 	level.Info(logger).Log("msg", "loading caching bucket configuration")
 
 	config := &CachingWithBackendConfig{}
@@ -97,6 +99,14 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create inmemory cache")
 		}
+	case string(GroupcacheBucketCacheProvider):
+		const basePath = "/_groupcache/"
+
+		c, err = cache.NewGroupcache("caching-bucket", logger, reg, backendConfig, bucket.Name(), basePath, r, bucket)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create groupcache")
+		}
+
 	default:
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}
