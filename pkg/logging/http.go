@@ -57,11 +57,11 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 			}
 		}
 
-		var deciderUrl string = r.URL.String()
+		deciderURL := r.URL.String()
 		if len(port) > 0 {
-			deciderUrl = net.JoinHostPort(r.URL.String(), port)
+			deciderURL = net.JoinHostPort(deciderURL, port)
 		}
-		decision := m.opts.shouldLog(deciderUrl, nil)
+		decision := m.opts.shouldLog(deciderURL, nil)
 
 		switch decision {
 		case NoLogCall:
