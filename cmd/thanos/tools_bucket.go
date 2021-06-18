@@ -392,7 +392,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
-		api := v1.NewBlocksAPI(logger, *webDisableCORS, *label, flagsMap)
+		api := v1.NewBlocksAPI(logger, *webDisableCORS, *label, flagsMap, configFilesMap)
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {

@@ -549,8 +549,8 @@ func runRule(
 	}
 
 	configFilesMap := map[string]string{
-		"Query Config":          string(queryConfigYAML),
-		"Alert Managers Config": string(alertmgrsConfigYAML),
+		"Query Config":          string(conf.queryConfigYAML),
+		"Alert Managers Config": string(conf.alertmgrsConfigYAML),
 		"Object Storage Config": string(confContentYamlStr),
 	}
 
