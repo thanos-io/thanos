@@ -101,29 +101,21 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		// We expect the data from each Prometheus instance to be replicated twice in our ingesting instances
+		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
-		}, []model.Metric{
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "i2",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
+		}, model.Vector{
+			&model.Sample{
+				Metric:    model.Metric{"prometheus": "prom1"},
+				Value:     2.0,
 			},
-			{
-				"job":        "myself",
-				"prometheus": "prom2",
-				"receive":    "i1",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
+			&model.Sample{
+				Metric:    model.Metric{"prometheus": "prom2"},
+				Value:     2.0,
 			},
-			{
-				"job":        "myself",
-				"prometheus": "prom3",
-				"receive":    "i2",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
+			&model.Sample{
+				Metric:    model.Metric{"prometheus": "prom3"},
+				Value:     2.0,
 			},
 		})
 	})
