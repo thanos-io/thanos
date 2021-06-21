@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -40,9 +41,12 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 
 func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
 	var (
-		numOutOfOrder  = 0
-		numDuplicates  = 0
-		numOutOfBounds = 0
+		numOutOfOrder           = 0
+		numDuplicates           = 0
+		numOutOfBounds          = 0
+		numExemplarsOutOfOrder  = 0
+		numExemplarsDuplicate   = 0
+		numExemplarsLabelLength = 0
 	)
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
@@ -90,6 +94,37 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", s)
 			}
 		}
+
+		// Current implemetation of app.AppendExemplar doesn't create a new series, so it must be already present.
+		// We drop the exemplars in case the series doesn't exist.
+		if ref != 0 && len(t.Exemplars) > 0 {
+			for _, ex := range t.Exemplars {
+				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
+				logger := log.With(r.logger, "exemplarLset", exLset, "exemplar", ex.String())
+
+				_, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
+					Labels: exLset,
+					Value:  ex.Value,
+					Ts:     ex.Timestamp,
+					HasTs:  true,
+				})
+				switch err {
+				case storage.ErrOutOfOrderExemplar:
+					numExemplarsOutOfOrder++
+					level.Debug(logger).Log("msg", "Out of order exemplar")
+				case storage.ErrDuplicateExemplar:
+					numExemplarsDuplicate++
+					level.Debug(logger).Log("msg", "Duplicate exemplar")
+				case storage.ErrExemplarLabelLength:
+					numExemplarsLabelLength++
+					level.Debug(logger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
+				default:
+					if err != nil {
+						level.Debug(logger).Log("msg", "Error ingesting exemplar", "err", err)
+					}
+				}
+			}
+		}
 	}
 
 	if numOutOfOrder > 0 {
@@ -103,6 +138,18 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if numOutOfBounds > 0 {
 		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
 		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
+	}
+	if numExemplarsOutOfOrder > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d exemplars", numExemplarsOutOfOrder))
+	}
+	if numExemplarsDuplicate > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
+		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d exemplars", numExemplarsDuplicate))
+	}
+	if numExemplarsLabelLength > 0 {
+		level.Warn(r.logger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
+		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
 	}
 
 	if err := app.Commit(); err != nil {

@@ -325,7 +325,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// TODO(yeya24): handle remote write metadata and exemplars.
+	// TODO(yeya24): handle remote write metadata.
 	// exit early if the request contained no data
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)

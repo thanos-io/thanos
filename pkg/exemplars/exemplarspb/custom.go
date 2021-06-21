@@ -8,6 +8,7 @@ import (
 	"math/big"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -94,4 +95,16 @@ func (e1 *Exemplar) Compare(e2 *Exemplar) int {
 		return d
 	}
 	return big.NewFloat(e1.Value).Cmp(big.NewFloat(e2.Value))
+}
+
+func ExemplarsFromPromExemplars(exemplars []exemplar.Exemplar) []*Exemplar {
+	ex := make([]*Exemplar, 0, len(exemplars))
+	for _, e := range exemplars {
+		ex = append(ex, &Exemplar{
+			Labels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(e.Labels)},
+			Value:  e.Value,
+			Ts:     e.Ts,
+		})
+	}
+	return ex
 }

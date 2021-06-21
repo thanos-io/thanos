@@ -1,24 +1,22 @@
 ---
-title: Object Storage & Data Format
 type: docs
+title: Object Storage & Data Format
 menu: thanos
 ---
 
 # Object Storage & Data Format
 
-Thanos uses object storage as primary storage for metrics and metadata related to them. In this document you can learn how to configure
-your object storage and what is the data layout and format for primary Thanos components that are "block" aware, like: `sidecar` `compact`, `receive` and `store gateway`.
+Thanos uses object storage as primary storage for metrics and metadata related to them. In this document you can learn how to configure your object storage and what is the data layout and format for primary Thanos components that are "block" aware, like: `sidecar` `compact`, `receive` and `store gateway`.
 
 ## Configuring Access to Object Storage
 
-Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](/pkg/objstore/objstore.go).
+Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](../pkg/objstore/objstore.go).
 
 All clients can be configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
 ### How to our special `config` flags?
 
-**You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`**
-We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
+**You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`** We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
 Don't be afraid of multiline flags!
 
@@ -45,16 +43,15 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 Current object storage client implementations:
 
-| Provider                                                                                           | Maturity           | Aimed For             | Auto-tested on CI | Maintainers             |
-| -------------------------------------------------------------------------------------------------- | ------------------ | --------------------- | ----------------- | ----------------------- |
-| [Google Cloud Storage](./storage.md#gcs)                                                           | Stable             | Production Usage      | yes               | @bwplotka               |
-| [AWS/S3](./storage.md#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
-| [Azure Storage Account](./storage.md#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
-| [OpenStack Swift](./storage.md#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
-| [Tencent COS](./storage.md#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
-| [AliYun OSS](./storage.md#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
-| [Local Filesystem](./storage.md#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
-
+| Provider                                                                               | Maturity           | Aimed For             | Auto-tested on CI | Maintainers             |
+|----------------------------------------------------------------------------------------|--------------------|-----------------------|-------------------|-------------------------|
+| [Google Cloud Storage](#gcs)                                                           | Stable             | Production Usage      | yes               | @bwplotka               |
+| [AWS/S3](#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
+| [Azure Storage Account](#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
+| [OpenStack Swift](#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
+| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
+| [AliYun OSS](#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
+| [Local Filesystem](#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
 
 **Missing support to some object storage?** Check out [how to add your client section](#how-to-add-a-new-client-to-thanos)
 
@@ -68,8 +65,7 @@ You can configure an S3 bucket as an object store with YAML, either by passing t
 
 NOTE: Minio client was mainly for AWS S3, but it can be configured against other S3-compatible object storages e.g Ceph
 
-[embedmd]:# (flags/config_bucket_s3.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=s3.Config"
 type: S3
 config:
   bucket: ""
@@ -159,9 +155,9 @@ You will also need to apply the following AWS IAM policy for the user to access 
 By default Thanos will try to retrieve credentials from the following sources:
 
 1. From config file if BOTH `access_key` and `secret_key` are present.
-1. From the standard AWS environment variable - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-1. From `~/.aws/credentials`
-1. IAM credentials retrieved from an instance profile.
+2. From the standard AWS environment variable - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+3. From `~/.aws/credentials`
+4. IAM credentials retrieved from an instance profile.
 
 NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported.
 
@@ -242,8 +238,7 @@ To configure Google Cloud Storage bucket as an object store you need to set `buc
 
 For example:
 
-[embedmd]:# (flags/config_bucket_gcs.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=gcs.Config"
 type: GCS
 config:
   bucket: ""
@@ -252,25 +247,18 @@ config:
 
 ##### Using GOOGLE_APPLICATION_CREDENTIALS
 
-Application credentials are configured via JSON file and only the bucket needs to be specified,
-the client looks for:
+Application credentials are configured via JSON file and only the bucket needs to be specified, the client looks for:
 
-1. A JSON file whose path is specified by the
-   `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
-2. A JSON file in a location known to the gcloud command-line tool.
-   On Windows, this is `%APPDATA%/gcloud/application_default_credentials.json`.
-   On other systems, `$HOME/.config/gcloud/application_default_credentials.json`.
+1. A JSON file whose path is specified by the `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
+2. A JSON file in a location known to the gcloud command-line tool. On Windows, this is `%APPDATA%/gcloud/application_default_credentials.json`. On other systems, `$HOME/.config/gcloud/application_default_credentials.json`.
 3. On Google App Engine it uses the `appengine.AccessToken` function.
-4. On Google Compute Engine and Google App Engine Managed VMs, it fetches
-   credentials from the metadata server.
-   (In this final case any provided scopes are ignored.)
+4. On Google Compute Engine and Google App Engine Managed VMs, it fetches credentials from the metadata server. (In this final case any provided scopes are ignored.)
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
 
 ##### Using inline a Service Account
 
-Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file.
-This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
+Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file. This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
 
 ```yaml
 type: GCS
@@ -293,7 +281,7 @@ config:
 
 ##### GCS Policies
 
-__Note:__ GCS Policies should be applied at the project level, not at the bucket level
+**Note:** GCS Policies should be applied at the project level, not at the bucket level
 
 For deployment:
 
@@ -323,8 +311,7 @@ To configure Azure Storage account as an object store you need to provide a path
 
 Config file format is the following:
 
-[embedmd]:# (flags/config_bucket_azure.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=azure.Config"
 type: AZURE
 config:
   storage_account: ""
@@ -338,22 +325,11 @@ config:
 
 Thanos uses [ncw/swift](https://github.com/ncw/swift) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store.
-Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.
-Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
+Below is an example configuration file for thanos to use OpenStack swift container as an object store. Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name. Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
 
-By default, OpenStack Swift has a limit for maximum file size of 5 GiB. Thanos index files are often larger than that.
-To resolve this issue, Thanos uses [Static Large Objects (SLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html)
-which are uploaded as segments. These are by default put into the `segments` directory of the same container.
-The default limit for using SLO is 1 GiB which is also the maximum size of the segment.
-If you don't want to use the same container for the segments
-(best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects)
-you can use the `large_file_segments_container_name` option to override the default and put the segments to other container.
-_In rare cases you can switch to [Dynamic Large Objects (DLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html)
-by setting the `use_dynamic_large_objects` to true, but use it with caution since it even more relies on eventual consistency._
+By default, OpenStack Swift has a limit for maximum file size of 5 GiB. Thanos index files are often larger than that. To resolve this issue, Thanos uses [Static Large Objects (SLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html) which are uploaded as segments. These are by default put into the `segments` directory of the same container. The default limit for using SLO is 1 GiB which is also the maximum size of the segment. If you don't want to use the same container for the segments (best practise is to use `<container_name>_segments` to avoid polluting listing of the container objects) you can use the `large_file_segments_container_name` option to override the default and put the segments to other container. *In rare cases you can switch to [Dynamic Large Objects (DLO)](https://docs.openstack.org/swift/latest/overview_large_objects.html) by setting the `use_dynamic_large_objects` to true, but use it with caution since it even more relies on eventual consistency.*
 
-[embedmd]:# (flags/config_bucket_swift.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=swift.Config"
 type: SWIFT
 config:
   auth_version: 0
@@ -385,8 +361,7 @@ To use Tencent COS as storage store, you should apply a Tencent Account to creat
 
 To configure Tencent Account to use COS as storage store you need to set these parameters in yaml format stored in a file:
 
-[embedmd]:# (flags/config_bucket_cos.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=cos.Config"
 type: COS
 config:
   bucket: ""
@@ -404,8 +379,7 @@ In order to use AliYun OSS object storage, you should first create a bucket with
 
 To use AliYun OSS object storage, please specify following yaml configuration file in `objstore.config*` flag.
 
-[embedmd]:# (flags/config_bucket_aliyunoss.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=oss.Config"
 type: ALIYUNOSS
 config:
   endpoint: ""
@@ -418,16 +392,11 @@ Use --objstore.config-file to reference to this configuration file.
 
 #### Filesystem
 
-This storage type is used when user wants to store and access the bucket in the local filesystem.
-We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though,
-we might have the files locally.
+This storage type is used when user wants to store and access the bucket in the local filesystem. We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though, we might have the files locally.
 
-NOTE: This storage type is experimental and might be inefficient. It is NOT advised to use it as the main storage for metrics
-in production environment. Particularly there is no planned support for distributed filesystems like NFS.
-This is mainly useful for testing and demos.
+NOTE: This storage type is experimental and might be inefficient. It is NOT advised to use it as the main storage for metrics in production environment. Particularly there is no planned support for distributed filesystems like NFS. This is mainly useful for testing and demos.
 
-[embedmd]:# (flags/config_bucket_filesystem.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=filesystem.Config"
 type: FILESYSTEM
 config:
   directory: ""
@@ -438,35 +407,30 @@ config:
 Following checklist allows adding new Go code client to supported providers:
 
 1. Create new directory under `pkg/objstore/<provider>`
-2. Implement [objstore.Bucket interface](/pkg/objstore/objstore.go)
+2. Implement [objstore.Bucket interface](../pkg/objstore/objstore.go)
 3. Add `NewTestBucket` constructor for testing purposes, that creates and deletes temporary bucket.
-4. Use created `NewTestBucket` in [ForeachStore method](/pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
-5. RUN the [TestObjStoreAcceptanceTest](/pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
-6. Add client implementation to the factory in [factory](/pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
-7. Add client struct config to [bucketcfggen](/scripts/cfggen/main.go) to allow config auto generation.
+4. Use created `NewTestBucket` in [ForeachStore method](../pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
+5. RUN the [TestObjStoreAcceptanceTest](../pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
+6. Add client implementation to the factory in [factory](../pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
+7. Add client struct config to [bucketcfggen](../scripts/cfggen/main.go) to allow config auto generation.
 
 At that point, anyone can use your provider by spec.
 
 ## Data in Object Storage
 
-Thanos supports writing and reading data in native Prometheus `TSDB blocks` in [TSDB format](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format).
-This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on the local disk. With the efficient index and [chunk](design.md/#chunk) binary formats,
-it also fits well to be used directly from object storage using range GET API.
+Thanos supports writing and reading data in native Prometheus `TSDB blocks` in [TSDB format](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format). This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on the local disk. With the efficient index and [chunk](design.md/#chunk) binary formats, it also fits well to be used directly from object storage using range GET API.
 
 Following sections explain this format in details with the additional files and entries that Thanos system supports.
 
 ### TSDB Block
 
-Official docs for Prometheus TSDB format can be found [here](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format), but this section
-lists the most important elements here.
+Official docs for Prometheus TSDB format can be found [here](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format), but this section lists the most important elements here.
 
-TSDB Block means particularly a set of Blobs (files) in a single directory (or `prefix` if we talk in Object Storage terms) named with
-[ULID](https://github.com/ulid/spec) e.g `01ARZ3NDEKTSV4RRFFQ69G5FAV`.
+TSDB Block means particularly a set of Blobs (files) in a single directory (or `prefix` if we talk in Object Storage terms) named with [ULID](https://github.com/ulid/spec) e.g `01ARZ3NDEKTSV4RRFFQ69G5FAV`.
 
 **Those files contain series (labels with compressed samples) for particular time duration (e.g 2h) from particular `Source` (e.g Prometheus or Thanos Receive)**
 
-In Thanos system, all files are **strictly immutable**. (NOTE: In Prometheus too, but with some caveats like tombstones). This means
-that any modification like `rewrite` `deletion` or `compaction` has to be done by creating a new block and removing (with delay!) old one.
+In Thanos system, all files are **strictly immutable**. (NOTE: In Prometheus too, but with some caveats like tombstones). This means that any modification like `rewrite` `deletion` or `compaction` has to be done by creating a new block and removing (with delay!) old one.
 
 > NOTE: Any other not-known file present in this directory is ignored when reading the data. However, those can be removed when the block is being deleted from object storage/disk.
 
@@ -505,8 +469,7 @@ Let's look at each file one by one.
 
 #### Metadata file (meta.json)
 
-> NOTE: Currently supported meta.json version: v1
-> Currently supported meta.json Thanos section version: v1
+> NOTE: Currently supported meta.json version: v1 Currently supported meta.json Thanos section version: v1
 
 This file is an important entry that described the block and its data.
 
@@ -519,13 +482,12 @@ This file allows you to find for example:
 * What initial smaller blocks IDs are part of this block (`compaction.sources`)
 * What smaller (including intermittent) blocks IDs are part of this block (`compaction.parents`)
 * Thanos Section (only visible for blocks generated by Thanos components like `sidecar`, `receive` or `compact`):
-   * External Labels for block (identifying producers) (`thanos.labels`)
-   * Downsampling resolution if downsampling was done on this block (`thanos.downsample.resolution`). `0` means no downsampling.
-   * What component created block (`thanos.source`)
-   * Files and its sizes that are part of this block (`thanos.files`)
+  * External Labels for block (identifying producers) (`thanos.labels`)
+  * Downsampling resolution if downsampling was done on this block (`thanos.downsample.resolution`). `0` means no downsampling.
+  * What component created block (`thanos.source`)
+  * Files and its sizes that are part of this block (`thanos.files`)
 
-> NOTE: In theory, you can modify this data manually. However, components like Compactor and Store Gateway currently infinitely cache that meta.json,
-> (sometimes on disk if configured), so manual cache removal and restart might be needed.
+> NOTE: In theory, you can modify this data manually. However, components like Compactor and Store Gateway currently infinitely cache that meta.json, (sometimes on disk if configured), so manual cache removal and restart might be needed.
 
 Example meta.json file:
 
@@ -611,22 +573,19 @@ Format in Go code can be found [here](https://github.com/thanos-io/thanos/blob/m
 
 ##### External Labels
 
-External labels are extremely important block metadata. They are stored in `meta.json` in `thanos.labels` section and allows
-to identify the producer and owner of those blocks. This information will be used further by different Thanos components:
+External labels are extremely important block metadata. They are stored in `meta.json` in `thanos.labels` section and allows to identify the producer and owner of those blocks. This information will be used further by different Thanos components:
 
 * Those labels will be visible when data is queried. You can aggregate across those in PromQL etc.
-* [Querier](./components/query.md) to filter out store APIs to touch during query requests.
-* Many object storage readers like [compactor](./components/compact.md) and [store gateway](./components/store.md) which groups the blocks by external labels.
-This grouping allows horizontal scalability like sharding or concurrency.
+* [Querier](components/query.md) to filter out store APIs to touch during query requests.
+* Many object storage readers like [compactor](components/compact.md) and [store gateway](components/store.md) which groups the blocks by external labels. This grouping allows horizontal scalability like sharding or concurrency.
 * Some of those labels can be chosen as **replication** labels. Querier and Compactor will then deduplicate such blocks identified by same HA groups.
 * Some of those labels can be chosen as **tenancy** labels. This allows read, write and storage isolation mechanism.
 
 The `meta.json` and `thanos.labels` labels are filled during block upload/creation. For example:
 
-* Each produced TSDB block by Prometheus is labelled with Prometheus [external labels](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#configuration-file)
-by `sidecar` before upload to object storage.
+* Each produced TSDB block by Prometheus is labelled with Prometheus [external labels](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#configuration-file) by `sidecar` before upload to object storage.
 * Each produced TSDB block by `compact` is labelled with whatever source blocks had. The exception is the deduplication process that removes the chosen replica flag(s).
-* Each produced TSDB block by `receive` is labelled with labels given labels in repeated [receive](./components/receive.md) `--labels` flag.
+* Each produced TSDB block by `receive` is labelled with labels given labels in repeated [receive](components/receive.md) `--labels` flag.
 
 The recommended information that should be given in those labels:
 
@@ -636,8 +595,7 @@ Example Prometheus useful external labels:
 * Cluster, environment, zone, so target origin e.g `cluster="eu-1-production"` or `cluster="1",env="production",region="us-west1"`
 * Tenancy information e.g `tenant="organizationABC"`
 
-> NOTE: Be careful with receive external flags. Remote Write clients can stream any labels. If some label will duplicate with the external label of receive, it will be masked
-> with what receiver has specified. This is why it's recommended to have `receive_` prefix to all receive labels. (e.g to not confuse with Prometheus replicas)
+> NOTE: Be careful with receive external flags. Remote Write clients can stream any labels. If some label will duplicate with the external label of receive, it will be masked with what receiver has specified. This is why it's recommended to have `receive_` prefix to all receive labels. (e.g to not confuse with Prometheus replicas)
 
 Example Receive useful external labels:
 
@@ -649,7 +607,7 @@ Example Receive useful external labels:
 
 > NOTE: Currently supported index file versions: v1 and v2
 
->This file stores the index created to allow efficient lookup for series and its samples.
+> This file stores the index created to allow efficient lookup for series and its samples.
 
 **All entries are sorted lexicographically unless stated otherwise.**
 
@@ -660,8 +618,7 @@ From high level it allows to find:
 * All series labels
 * Given (or all) series' chunk reference. This can be used to find [chunk](design.md/#chunk) with samples in the [chunk files](#chunks-file-format)
 
-The following describes the format of the `index` file found in each block directory.
-It is terminated by a table of contents which serves as an entry point into the index.
+The following describes the format of the `index` file found in each block directory. It is terminated by a table of contents which serves as an entry point into the index.
 
 ```
 ┌────────────────────────────┬─────────────────────┐
@@ -697,13 +654,11 @@ When the index is written, an arbitrary number of padding bytes may be added bet
 
 Most of the sections described below start with a `len` field. It always specifies the number of bytes just before the trailing CRC32 checksum. The checksum is always calculated over those `len` bytes.
 
-
 ##### Symbol Table
 
 The symbol table holds a sorted list of deduplicated strings that occurred in label pairs of the stored series. They can be referenced from subsequent sections and significantly reduce the total index size.
 
-The section contains a sequence of the string entries, each prefixed with the string's length in raw bytes. All strings are utf-8 encoded.
-Strings are referenced by sequential indexing. The strings are sorted in lexicographically ascending order.
+The section contains a sequence of the string entries, each prefixed with the string's length in raw bytes. All strings are utf-8 encoded. Strings are referenced by sequential indexing. The strings are sorted in lexicographically ascending order.
 
 ```
 ┌────────────────────┬─────────────────────┐
@@ -721,11 +676,9 @@ Strings are referenced by sequential indexing. The strings are sorted in lexicog
 └──────────────────────────────────────────┘
 ```
 
-
 ##### Series
 
-The section contains a sequence of series that hold the label set of the series as well as its [chunks](design.md/#chunk) within the block. The series are sorted lexicographically by their label sets.
-Each series section is aligned to 16 bytes. The ID for a series is the `offset/16`. This serves as the series' ID in all subsequent references. Thereby, a sorted list of series IDs implies a lexicographically sorted list of series label sets.
+The section contains a sequence of series that hold the label set of the series as well as its [chunks](design.md/#chunk) within the block. The series are sorted lexicographically by their label sets. Each series section is aligned to 16 bytes. The ID for a series is the `offset/16`. This serves as the series' ID in all subsequent references. Thereby, a sorted list of series IDs implies a lexicographically sorted list of series label sets.
 
 ```
 ┌───────────────────────────────────────┐
@@ -739,8 +692,7 @@ Each series section is aligned to 16 bytes. The ID for a series is the `offset/1
 └───────────────────────────────────────┘
 ```
 
-Every series entry first holds its number of labels, followed by tuples of symbol table references that contain the label name and value. The label pairs are lexicographically sorted.
-After the labels, the number of indexed [chunks](design.md/#chunk) is encoded, followed by a sequence of metadata entries containing the chunks minimum (`mint`) and maximum (`maxt`) timestamp and a reference to its position in the chunk file. The `mint` is the time of the first sample and `maxt` is the time of the last sample in the chunk. Holding the time range data in the index allows dropping chunks irrelevant to queried time ranges without accessing them directly.
+Every series entry first holds its number of labels, followed by tuples of symbol table references that contain the label name and value. The label pairs are lexicographically sorted. After the labels, the number of indexed [chunks](design.md/#chunk) is encoded, followed by a sequence of metadata entries containing the chunks minimum (`mint`) and maximum (`maxt`) timestamp and a reference to its position in the chunk file. The `mint` is the time of the first sample and `maxt` is the time of the last sample in the chunk. Holding the time range data in the index allows dropping chunks irrelevant to queried time ranges without accessing them directly.
 
 `mint` of the first [chunk](design.md/#chunk) is stored, it's `maxt` is stored as a delta and the `mint` and `maxt` are encoded as deltas to the previous time for subsequent chunks. Similarly, the reference of the first chunk is stored and the next ref is stored as a delta to the previous one.
 
@@ -783,8 +735,7 @@ After the labels, the number of indexed [chunks](design.md/#chunk) is encoded, f
 
 ##### Label Index
 
-A label index section indexes the existing (combined) values for one or more label names.
-The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of #names length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
+A label index section indexes the existing (combined) values for one or more label names. The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of #names length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
 
 ```
 ┌───────────────┬────────────────┬────────────────┐
@@ -837,9 +788,7 @@ The sequence of postings sections is finalized by a [postings offset table](#pos
 
 ##### Label Offset Table
 
-A label offset table stores a sequence of label offset entries.
-Every label offset entry holds the label name and the offset to its values in the label index section.
-They are used to track label index sections. This is no longer used.
+A label offset table stores a sequence of label offset entries. Every label offset entry holds the label name and the offset to its values in the label index section. They are used to track label index sections. This is no longer used.
 
 ```
 ┌─────────────────────┬──────────────────────┐
@@ -860,9 +809,7 @@ They are used to track label index sections. This is no longer used.
 
 ##### Postings Offset Table
 
-A postings offset table stores a sequence of postings offset entries, sorted by label name and value.
-Every postings offset entry holds the label name/value pair and the offset to its series list in the postings section.
-They are used to track postings sections. They are partially read into memory when an index file is loaded.
+A postings offset table stores a sequence of postings offset entries, sorted by label name and value. Every postings offset entry holds the label name/value pair and the offset to its series list in the postings section. They are used to track postings sections. They are partially read into memory when an index file is loaded.
 
 ```
 ┌─────────────────────┬──────────────────────┐
@@ -885,8 +832,7 @@ They are used to track postings sections. They are partially read into memory wh
 
 ##### TOC
 
-The table of contents serves as an entry point to the entire index and points to various sections in the file.
-If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
+The table of contents serves as an entry point to the entire index and points to various sections in the file. If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -912,12 +858,9 @@ If a reference is zero, it indicates the respective section does not exist and e
 
 > NOTE: Don't confuse with `chunks format` (XOR encoded, Gorilla compressed set of samples). Overall chunk files are containing multiple series chunks (:
 
-The following describes the format of a chunks file,
-which is created in the `chunks/` directory of a block.
-The maximum size per segment file is 512MiB.
+The following describes the format of a chunks file, which is created in the `chunks/` directory of a block. The maximum size per segment file is 512MiB.
 
-[Chunks](design.md/#chunk) in the files are referenced from the index by uint64 composed of
-in-file offset (lower 4 bytes) and segment sequence number (upper 4 bytes).
+[Chunks](design.md/#chunk) in the files are referenced from the index by uint64 composed of in-file offset (lower 4 bytes) and segment sequence number (upper 4 bytes).
 
 ```
 ┌──────────────────────────────┐

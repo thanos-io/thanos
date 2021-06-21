@@ -22,6 +22,14 @@ type sample struct {
 	v float64
 }
 
+func (s sample) T() int64 {
+	return s.t
+}
+
+func (s sample) V() float64 {
+	return s.v
+}
+
 type series struct {
 	lset    labels.Labels
 	samples []sample

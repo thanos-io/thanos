@@ -1,9 +1,9 @@
 ---
-title: Thanos Remote Write
 type: proposal
-menu: proposals
-status: accepted
+title: Thanos Remote Write
+status: completed
 owner: brancz
+menu: proposals-done
 ---
 
 ## Summary
@@ -31,7 +31,6 @@ The Thanos receiver component seamlessly integrates into the rest of the Thanos 
 Instead of directly scraping metrics, however, the Thanos receiver accepts Prometheus remote-write requests and writes these into a local instance of the Prometheus TSDB. Once successfully committed to the tenant's TSDB, the requests return successfully. To prevent data leaking at the database level, each tenant has an individual TSDB instance, meaning a single Thanos receiver may manage multiple TSDB instances. The receiver answers Thanos store API requests and uploads built blocks of the Prometheus TSDB. Implementation-wise, this just requires wiring up existing components. As tenant's data within object storage are separate objects, it may be enough separation to have a single bucket for all tenants, however, this architecture supports any setup of tenant to object storage bucket combination.
 
 In a minimal setup the system would look like the following:
-
 
 ```
                  +
@@ -94,7 +93,7 @@ Using the tenant's ID in the hash will help to distribute the load across receiv
 hash(string(tenant_id) + sort(timeseries.labelset).join())
 ```
 
-The hashing function used is the same one used by Prometheus: [xxHash][xxHash]. Sorting of labels is necessary in order to ensure that a unique time-series always has the same hash.
+The hashing function used is the same one used by Prometheus: [xxHash](http://cyan4973.github.io/xxHash/). Sorting of labels is necessary in order to ensure that a unique time-series always has the same hash.
 
 While the routing functionality could be a separate component, we choose to have it in the receiver to allow for a simpler setup.
 
@@ -202,7 +201,3 @@ Decisions of the design have consequences some of which will show themselves in 
 * Bursting remote write API requests (after a rollout or easing of rate limiting), as Prometheuses may attempt to push their data simultaneously.
   - This could be solved with a combination of rate limiting and back-off on Prometheus’ side, plus alerts if replication lag gets too large due to rate limiting (or other factors).
 * Additional safeguards may need to be put in place to ensure that hashring resizes do not occur on failed nodes, only once they have recovered and have successfully uploaded their blocks.
-
-[xxhash]: http://cyan4973.github.io/xxHash/
-[prom-label-proxy]: https://github.com/openshift/prom-label-proxy
-

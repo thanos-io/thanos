@@ -1,6 +1,6 @@
 ---
-title: Contribute to docs
 type: docs
+title: Contribute to docs
 menu: contributing
 ---
 
@@ -14,9 +14,7 @@ To make that happen we use following rules and helpers that are listed here.
 
 ## Front Matter
 
-[Front Matter](https://gohugo.io/content-management/front-matter/) is essential on top of every markdown file if
-you want to link this file into any menu/submenu option. We use YAML formatting. This will render
-in GitHub as markdown just fine:
+[Front Matter](https://gohugo.io/content-management/front-matter/) is essential on top of every markdown file if you want to link this file into any menu/submenu option. We use YAML formatting. This will render in GitHub as markdown just fine:
 
 ```md
 
@@ -41,7 +39,7 @@ Then everywhere use native markdown absolute path to the project repository if y
 [title](/Makefile)
 ```
 
-Small [post processing script](/scripts/website/websitepreprocess.sh) adjusts link for Hugo rendering.
+Small [post processing script](../../scripts/website/websitepreprocess.sh) adjusts link for Hugo rendering.
 
 NOTE: Spaces matters so: `[xxx]( link` and `[xxx] (link` will not work.
 
@@ -62,14 +60,13 @@ Show new menu section in main page by changing `website/layouts/_default/baseof.
 
 ## Adopters Logos
 
-We'd love to showcase your company's logo on our main page and README!
-Requirements for the company:
+We'd love to showcase your company's logo on our main page and README! Requirements for the company:
 
 * it is using Thanos on production
 * it is a legal registered company
 * it is happy to announce that you use Thanos publicly
 
-If all those are met, add yourself in [`website/data/adopters.yml`](/website/data/adopters.yml) like so:
+If all those are met, add yourself in [`website/data/adopters.yml`](../../website/data/adopters.yml) like so:
 
 ```yml
 - name: My Awesome Company
@@ -77,7 +74,7 @@ If all those are met, add yourself in [`website/data/adopters.yml`](/website/dat
   logo: company.png
 ```
 
-Copy your company's logo in [`website/static/logos`](/website/static/logos), make sure it follows these rules:
+Copy your company's logo in [`website/static/logos`](../../website/static/logos), make sure it follows these rules:
 
 * Rectangle shape
 * Greyscale is preferred but color is fine
@@ -87,8 +84,7 @@ and create PR against Thanos `main` branch.
 
 ## White noise
 
-We want all docs to not have any white noise. To achieve it, we provide [cleanup-white-noise.sh](https://github.com/thanos-io/thanos/blob/main/scripts/cleanup-white-noise.sh) under `scripts` to check.
-You can call it before a pull request, also PR test would call it too.
+We want all docs to not have any white noise. To achieve it, we provide [cleanup-white-noise.sh](https://github.com/thanos-io/thanos/blob/main/scripts/cleanup-white-noise.sh) under `scripts` to check. You can call it before a pull request, also PR test would call it too.
 
 ## Testing
 
@@ -108,9 +104,8 @@ make web-serve
 
 We use [Netlify](https://www.netlify.com/) for hosting. We are using Open Source license (PRO). Thanks Netlify for this!
 
-On every commit to `main` netlify runs CI that invokes `make web` (defined in [netlify.toml](/netlify.toml))
+On every commit to `main` netlify runs CI that invokes `make web` (defined in [netlify.toml](../../netlify.toml))
 
 NOTE: Check for status badge in README for build status on the page.
 
 If main build for netlify succeed, the new content is published automatically.
-
