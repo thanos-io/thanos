@@ -246,7 +246,7 @@ The main and only `Service Level Indicator` for Compactor is how fast it can cop
 
 To understand that you can use mix `thanos_objstore_bucket_last_successful_upload_time` being quite fresh, `thanos_compactor_halted` being non 1 and `thanos_blocks_meta_synced{state="loaded"}` constantly increasing over days.
 
-<img src="/compactor_no_coping_with_load.png" class="img-fluid" alt="Example view of compactor not coping with amount and size of incoming blocks"/>
+<img src="./compactor_no_coping_with_load.png" class="img-fluid" alt="Example view of compactor not coping with amount and size of incoming blocks"/>
 
 Generally there two scalability directions:
 
