@@ -233,7 +233,6 @@ func TestReceive(t *testing.T) {
 				Value: model.SampleValue(actualReplicationFactor),
 			},
 		})
-
 	})
 
 	t.Run("routing_tree", func(t *testing.T) {
