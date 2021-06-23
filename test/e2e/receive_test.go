@@ -59,21 +59,21 @@ func TestReceive(t *testing.T) {
 
 	t.Run("single_ingestor", func(t *testing.T) {
 		/*
-		The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+			The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
 
-		 ┌──────────┐
-		 │  Prom    │
-		 └────┬─────┘
-			  │
-		 ┌────▼─────┐
-		 │ Ingestor │
-		 └────┬─────┘
-			  │
-		 ┌────▼─────┐
-		 │  Query   │
-		 └──────────┘
+			 ┌──────────┐
+			 │  Prom    │
+			 └────┬─────┘
+				  │
+			 ┌────▼─────┐
+			 │ Ingestor │
+			 └────┬─────┘
+				  │
+			 ┌────▼─────┐
+			 │  Query   │
+			 └──────────┘
 
-		NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
 		t.Parallel()
@@ -116,32 +116,32 @@ func TestReceive(t *testing.T) {
 
 	t.Run("router_replication", func(t *testing.T) {
 		/*
-		The router_replication suite configures separate routing and ingesting components.
-		It verifies that data ingested from Prometheus instances through the router is successfully replicated twice
-		across the ingestors.
+			The router_replication suite configures separate routing and ingesting components.
+			It verifies that data ingested from Prometheus instances through the router is successfully replicated twice
+			across the ingestors.
 
-		  ┌───────┐       ┌───────┐      ┌───────┐
-		  │       │       │       │      │       │
-		  │ Prom1 │       │ Prom2 │      │ Prom3 │
-		  │       │       │       │      │       │
-		  └───┬───┘       └───┬───┘      └──┬────┘
-		      │           ┌───▼────┐        │
-		      └───────────►        ◄────────┘
-		                  │ Router │
-		      ┌───────────┤        ├──────────┐
-		      │           └───┬────┘          │
-		┌─────▼─────┐   ┌─────▼─────┐   ┌─────▼─────┐
-		│           │   │           │   │           │
-		│ Ingestor1 │   │ Ingestor2 │   │ Ingestor3 │
-		│           │   │           │   │           │
-		└─────┬─────┘   └─────┬─────┘   └─────┬─────┘
-		      │           ┌───▼───┐           │
-		      │           │       │           │
-		      └───────────► Query ◄───────────┘
-		                  │       │
-		                  └───────┘
+			  ┌───────┐       ┌───────┐      ┌───────┐
+			  │       │       │       │      │       │
+			  │ Prom1 │       │ Prom2 │      │ Prom3 │
+			  │       │       │       │      │       │
+			  └───┬───┘       └───┬───┘      └──┬────┘
+			      │           ┌───▼────┐        │
+			      └───────────►        ◄────────┘
+			                  │ Router │
+			      ┌───────────┤        ├──────────┐
+			      │           └───┬────┘          │
+			┌─────▼─────┐   ┌─────▼─────┐   ┌─────▼─────┐
+			│           │   │           │   │           │
+			│ Ingestor1 │   │ Ingestor2 │   │ Ingestor3 │
+			│           │   │           │   │           │
+			└─────┬─────┘   └─────┬─────┘   └─────┬─────┘
+			      │           ┌───▼───┐           │
+			      │           │       │           │
+			      └───────────► Query ◄───────────┘
+			                  │       │
+			                  └───────┘
 
-		NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
 		t.Parallel()
@@ -200,40 +200,40 @@ func TestReceive(t *testing.T) {
 
 	t.Run("routing_tree", func(t *testing.T) {
 		/*
-		The routing_tree suite configures a valid and plausible, but non-trivial topology of receiver components.
-		Crucially, the first router routes to both a routing component, and a receiving component. This demonstrates
-		Receiver's ability to handle arbitrary depth receiving trees.
+			The routing_tree suite configures a valid and plausible, but non-trivial topology of receiver components.
+			Crucially, the first router routes to both a routing component, and a receiving component. This demonstrates
+			Receiver's ability to handle arbitrary depth receiving trees.
 
-		Router1 is configured to duplicate data twice, once to Ingestor1, and once to Router2,
-		Router2 is also configured to duplicate data twice, once to Ingestor2, and once to Ingestor3.
+			Router1 is configured to duplicate data twice, once to Ingestor1, and once to Router2,
+			Router2 is also configured to duplicate data twice, once to Ingestor2, and once to Ingestor3.
 
-				   ┌───────┐         ┌───────┐
-				   │       │         │       │
-				   │ Prom1 ├──┐   ┌──┤ Prom2 │
-				   │       │  │   │  │       │
-				   └───────┘  │   │  └───────┘
-						   ┌──▼───▼──┐
-						   │         │
-						   │ Router1 │
-					  ┌────┤         ├───────┐
-					  │    └─────────┘       │
-				  ┌───▼─────┐          ┌─────▼─────┐
-				  │         │          │           │
-				  │ Router2 │          │ Ingestor1 │
-			  ┌───┤         ├───┐      │           │
-			  │   └─────────┘   │      └─────┬─────┘
-		┌─────▼─────┐      ┌────▼──────┐     │
-		│           │      │           │     │
-		│ Ingestor2 │      │ Ingestor3 │     │
-		│           │      │           │     │
-		└─────┬─────┘      └─────┬─────┘     │
-			  │             ┌────▼────┐      │
-			  │             │         │      │
-			  └─────────────►  Query  ◄──────┘
-							│         │
-							└─────────┘
+					   ┌───────┐         ┌───────┐
+					   │       │         │       │
+					   │ Prom1 ├──┐   ┌──┤ Prom2 │
+					   │       │  │   │  │       │
+					   └───────┘  │   │  └───────┘
+							   ┌──▼───▼──┐
+							   │         │
+							   │ Router1 │
+						  ┌────┤         ├───────┐
+						  │    └─────────┘       │
+					  ┌───▼─────┐          ┌─────▼─────┐
+					  │         │          │           │
+					  │ Router2 │          │ Ingestor1 │
+				  ┌───┤         ├───┐      │           │
+				  │   └─────────┘   │      └─────┬─────┘
+			┌─────▼─────┐      ┌────▼──────┐     │
+			│           │      │           │     │
+			│ Ingestor2 │      │ Ingestor3 │     │
+			│           │      │           │     │
+			└─────┬─────┘      └─────┬─────┘     │
+				  │             ┌────▼────┐      │
+				  │             │         │      │
+				  └─────────────►  Query  ◄──────┘
+								│         │
+								└─────────┘
 
-		NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
 		t.Parallel()
@@ -250,7 +250,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 
 		// Setup distributors
-		r2, err := e2ethanos.NewRoutingReceiver(s.SharedDir(),"r2", 2, receive.HashringConfig{
+		r2, err := e2ethanos.NewRoutingReceiver(s.SharedDir(), "r2", 2, receive.HashringConfig{
 			Endpoints: []string{
 				i2.GRPCNetworkEndpointFor(s.NetworkName()),
 				i3.GRPCNetworkEndpointFor(s.NetworkName()),
@@ -296,42 +296,41 @@ func TestReceive(t *testing.T) {
 		}
 	})
 
-
 	t.Run("hashring", func(t *testing.T) {
 		/*
-		The hashring suite creates three receivers, each with a Prometheus
-		remote-writing data to it. However, due to the hashing of the labels,
-		the time series from the Prometheus is forwarded to a different
-		receiver in the hashring than the one handling the request.
-		The querier queries all the receivers and the test verifies
-		the time series are forwarded to the correct receive node.
+			The hashring suite creates three receivers, each with a Prometheus
+			remote-writing data to it. However, due to the hashing of the labels,
+			the time series from the Prometheus is forwarded to a different
+			receiver in the hashring than the one handling the request.
+			The querier queries all the receivers and the test verifies
+			the time series are forwarded to the correct receive node.
 
-		                      ┌───────┐
-		                      │       │
-		                      │ Prom2 │
-		                      │       │
-		                      └───┬───┘
-		                          │
-		                          │
-		    ┌────────┐      ┌─────▼─────┐     ┌───────┐
-		    │        │      │           │     │       │
-		    │ Prom1  │      │ Router    │     │ Prom3 │
-		    │        │      │ Ingestor2 │     │       │
-		    └───┬────┘      │           │     └───┬───┘
-		        │           └──▲──┬──▲──┘         │
-		        │              │  │  │            │
-		   ┌────▼──────┐       │  │  │       ┌────▼──────┐
-		   │           ◄───────┘  │  └───────►           │
-		   │ Router    │          │          │ Router    │
-		   │ Ingestor1 ◄──────────┼──────────► Ingestor3 │
-		   │           │          │          │           │
-		   └─────┬─────┘          │          └────┬──────┘
-		         │                │               │
-		         │            ┌───▼───┐           │
-		         │            │       │           │
-		         └────────────► Query ◄───────────┘
-		                      │       │
-		                      └───────┘
+			                      ┌───────┐
+			                      │       │
+			                      │ Prom2 │
+			                      │       │
+			                      └───┬───┘
+			                          │
+			                          │
+			    ┌────────┐      ┌─────▼─────┐     ┌───────┐
+			    │        │      │           │     │       │
+			    │ Prom1  │      │ Router    │     │ Prom3 │
+			    │        │      │ Ingestor2 │     │       │
+			    └───┬────┘      │           │     └───┬───┘
+			        │           └──▲──┬──▲──┘         │
+			        │              │  │  │            │
+			   ┌────▼──────┐       │  │  │       ┌────▼──────┐
+			   │           ◄───────┘  │  └───────►           │
+			   │ Router    │          │          │ Router    │
+			   │ Ingestor1 ◄──────────┼──────────► Ingestor3 │
+			   │           │          │          │           │
+			   └─────┬─────┘          │          └────┬──────┘
+			         │                │               │
+			         │            ┌───▼───┐           │
+			         │            │       │           │
+			         └────────────► Query ◄───────────┘
+			                      │       │
+			                      └───────┘
 		*/
 		t.Parallel()
 		s, err := e2e.NewScenario("e2e_test_receive_hashring")
