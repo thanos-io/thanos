@@ -23,10 +23,11 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -112,7 +113,8 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}, []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}).
+		WithFileSDStoreAddresses([]string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -187,17 +189,8 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 
 	externalPrefix := "test"
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(), "1",
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		"",
-		externalPrefix,
-	)
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).
+		WithExternalPrefix(externalPrefix).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -213,17 +206,8 @@ func TestQueryExternalPrefix(t *testing.T) {
 
 	externalPrefix := "thanos"
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(), "1",
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		"",
-		externalPrefix,
-	)
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).
+		WithExternalPrefix(externalPrefix).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -245,17 +229,10 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	externalPrefix := "thanos"
 	routePrefix := "test"
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(), "1",
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		routePrefix,
-		externalPrefix,
-	)
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).
+		WithRoutePrefix(routePrefix).
+		WithExternalPrefix(externalPrefix).
+		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -284,19 +261,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(),
-		"1",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
-		[]string{},
-		nil,
-		nil,
-		nil,
-		nil,
-		"",
-		"",
-	)
-
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -345,19 +310,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(),
-		"1",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()},
-		[]string{},
-		nil,
-		nil,
-		nil,
-		nil,
-		"",
-		"",
-	)
-
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), receiver.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -543,6 +496,26 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start,
 
 		if len(warnings) > 0 {
 			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		if check(res) {
+			return nil
+		}
+
+		return errors.Errorf("unexpected results size %d", len(res))
+	}))
+}
+
+func queryExemplars(t *testing.T, ctx context.Context, addr string, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) bool) {
+	t.Helper()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	u := mustURLParse(t, "http://"+addr)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+		res, err := promclient.NewDefaultClient().ExemplarsInGRPC(ctx, u, q, start, end)
+		if err != nil {
+			return err
 		}
 
 		if check(res) {

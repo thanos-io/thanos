@@ -5,7 +5,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/query"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
@@ -41,6 +41,9 @@ import (
 )
 
 var (
+	configs        map[string]interface{}
+	possibleValues []string
+
 	bucketConfigs = map[client.ObjProvider]interface{}{
 		client.AZURE:      azure.Config{},
 		client.GCS:        gcs.Config{},
@@ -68,84 +71,69 @@ var (
 	}
 )
 
-func main() {
-	app := kingpin.New(filepath.Base(os.Args[0]), "Thanos config examples generator.")
-	app.HelpFlag.Short('h')
-	outputDir := app.Flag("output-dir", "Output directory for generated examples.").String()
-
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	if _, err := app.Parse(os.Args[1:]); err != nil {
-		level.Error(logger).Log("err", err)
-		os.Exit(1)
-	}
-
-	for typ, config := range bucketConfigs {
-		if err := generate(client.BucketConfig{Type: typ, Config: config}, generateName("bucket_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
-			os.Exit(1)
-		}
-	}
-
-	if err := generate(logging.RequestConfig{}, generateName("logging_", "request"), *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "request_logging", "err", err)
-		os.Exit(1)
-
-	}
-
-	for typ, config := range tracingConfigs {
-		if err := generate(trclient.TracingConfig{Type: typ, Config: config}, generateName("tracing_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
-			os.Exit(1)
-		}
-	}
-
-	for typ, config := range indexCacheConfigs {
-		if err := generate(storecache.IndexCacheConfig{Type: typ, Config: config}, generateName("index_cache_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
-			os.Exit(1)
-		}
-	}
-
-	for typ, config := range queryfrontendCacheConfigs {
-		if err := generate(queryfrontend.CacheProviderConfig{Type: typ, Config: config}, generateName("response_cache_", string(typ)), *outputDir); err != nil {
-			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
-			os.Exit(1)
-		}
-	}
+func init() {
+	configs = map[string]interface{}{}
+	configs[name(logging.RequestConfig{})] = logging.RequestConfig{}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
 	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
-	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
-		os.Exit(1)
-	}
+	configs[name(alert.AlertingConfig{})] = alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}
 
 	queryCfg := query.DefaultConfig()
 	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
-	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
-		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
+	configs[name(query.Config{})] = []query.Config{queryCfg}
+
+	for typ, config := range bucketConfigs {
+		configs[name(config)] = client.BucketConfig{Type: typ, Config: config}
+	}
+	for typ, config := range tracingConfigs {
+		configs[name(config)] = trclient.TracingConfig{Type: typ, Config: config}
+	}
+	for typ, config := range indexCacheConfigs {
+		configs[name(config)] = storecache.IndexCacheConfig{Type: typ, Config: config}
+	}
+	for typ, config := range queryfrontendCacheConfigs {
+		configs[name(config)] = queryfrontend.CacheProviderConfig{Type: typ, Config: config}
+	}
+
+	for k := range configs {
+		possibleValues = append(possibleValues, k)
+	}
+}
+
+func name(typ interface{}) string {
+	return fmt.Sprintf("%T", typ)
+}
+
+func main() {
+	app := kingpin.New(filepath.Base(os.Args[0]), "Thanos config examples generator.")
+	app.HelpFlag.Short('h')
+	structName := app.Flag("name", fmt.Sprintf("Name of the struct to generated example for. Possible values: %v", strings.Join(possibleValues, ","))).Required().String()
+
+	errLogger := level.Error(log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr)))
+	if _, err := app.Parse(os.Args[1:]); err != nil {
+		errLogger.Log("err", err)
 		os.Exit(1)
 	}
 
-	logger.Log("msg", "success")
+	if c, ok := configs[*structName]; ok {
+		if err := generate(c, os.Stdout); err != nil {
+			errLogger.Log("err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	errLogger.Log("err", errors.Errorf("%v struct not found. Possible values %v", *structName, strings.Join(possibleValues, ",")))
+	os.Exit(1)
 }
 
-func generate(obj interface{}, typ string, outputDir string) error {
+func generate(obj interface{}, w io.Writer) error {
 	// We forbid omitempty option. This is for simplification for doc generation.
 	if err := checkForOmitEmptyTagOption(obj); err != nil {
 		return errors.Wrap(err, "invalid type")
 	}
-
-	out, err := yaml.Marshal(obj)
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(filepath.Join(outputDir, fmt.Sprintf("config_%s.txt", typ)), out, os.ModePerm)
-}
-
-func generateName(prefix, typ string) string {
-	return prefix + strings.ReplaceAll(strings.ToLower(string(typ)), "-", "_")
+	return yaml.NewEncoder(w).Encode(obj)
 }
 
 func checkForOmitEmptyTagOption(obj interface{}) error {

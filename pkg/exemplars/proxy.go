@@ -10,8 +10,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,8 +24,9 @@ import (
 // Proxy implements exemplarspb.Exemplars gRPC that fanouts requests to
 // given exemplarspb.Exemplars.
 type Proxy struct {
-	logger    log.Logger
-	exemplars func() []exemplarspb.ExemplarsClient
+	logger         log.Logger
+	exemplars      func() []*exemplarspb.ExemplarStore
+	selectorLabels labels.Labels
 }
 
 // RegisterExemplarsServer register exemplars server.
@@ -33,10 +37,11 @@ func RegisterExemplarsServer(exemplarsSrv exemplarspb.ExemplarsServer) func(*grp
 }
 
 // NewProxy return new exemplars.Proxy.
-func NewProxy(logger log.Logger, exemplars func() []exemplarspb.ExemplarsClient) *Proxy {
+func NewProxy(logger log.Logger, exemplars func() []*exemplarspb.ExemplarStore, selectorLabels labels.Labels) *Proxy {
 	return &Proxy{
-		logger:    logger,
-		exemplars: exemplars,
+		logger:         logger,
+		exemplars:      exemplars,
+		selectorLabels: selectorLabels,
 	}
 }
 
@@ -48,16 +53,80 @@ type exemplarsStream struct {
 }
 
 func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exemplars_ExemplarsServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
+	defer span.Finish()
+
+	expr, err := parser.ParseExpr(req.Query)
+	if err != nil {
+		return err
+	}
+
+	match, selectors := selectorsMatchesExternalLabels(parser.ExtractSelectors(expr), s.selectorLabels)
+
+	// There is no matched selectors for this thanos query.
+	if !match {
+		return nil
+	}
+
+	if len(selectors) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
 	var (
-		g, gctx   = errgroup.WithContext(srv.Context())
+		g, gctx   = errgroup.WithContext(ctx)
 		respChan  = make(chan *exemplarspb.ExemplarData, 10)
 		exemplars []*exemplarspb.ExemplarData
 	)
 
-	for _, exemplarsClient := range s.exemplars() {
+	for _, st := range s.exemplars() {
+		query := ""
+	Matchers:
+		for _, matchers := range selectors {
+			metricsSelector := ""
+			for _, m := range matchers {
+				for _, ls := range st.LabelSets {
+					if lv := ls.Get(m.Name); lv != "" {
+						if !m.Matches(lv) {
+							continue Matchers
+						} else {
+							// If the current matcher matches one external label,
+							// we don't add it to the current metric selector
+							// as Prometheus' Exemplars API cannot handle external labels.
+							continue
+						}
+					}
+					if metricsSelector == "" {
+						metricsSelector += m.String()
+					} else {
+						metricsSelector += ", " + m.String()
+					}
+				}
+			}
+			// Construct the query by concatenating metric selectors with '+'.
+			// We cannot preserve the original query info, but the returned
+			// results are the same.
+			if query == "" {
+				query += "{" + metricsSelector + "}"
+			} else {
+				query += " + {" + metricsSelector + "}"
+			}
+		}
+
+		// No matchers match this store.
+		if query == "" {
+			continue
+		}
+		r := &exemplarspb.ExemplarsRequest{
+			Start:                   req.Start,
+			End:                     req.End,
+			Query:                   query,
+			PartialResponseStrategy: req.PartialResponseStrategy,
+		}
+
 		es := &exemplarsStream{
-			client:  exemplarsClient,
-			request: req,
+
+			client:  st.ExemplarsClient,
+			request: r,
 			channel: respChan,
 			server:  srv,
 		}
@@ -79,7 +148,10 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	for _, e := range exemplars {
-		if err := srv.Send(exemplarspb.NewExemplarsResponse(e)); err != nil {
+		tracing.DoInSpan(srv.Context(), "send_exemplars_response", func(_ context.Context) {
+			err = srv.Send(exemplarspb.NewExemplarsResponse(e))
+		})
+		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send exemplars response").Error())
 		}
 	}
@@ -136,4 +208,31 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+// matchesExternalLabels returns false if given matchers are not matching external labels.
+// If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
+func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher) {
+	if len(externalLabels) == 0 {
+		return true, ms
+	}
+
+	var newMatchers []*labels.Matcher
+	for i, tm := range ms {
+		// Validate all matchers.
+		extValue := externalLabels.Get(tm.Name)
+		if extValue == "" {
+			// Agnostic to external labels.
+			ms = append(ms[:i], ms[i:]...)
+			newMatchers = append(newMatchers, tm)
+			continue
+		}
+
+		if !tm.Matches(extValue) {
+			// External label does not match. This should not happen - it should be filtered out on query node,
+			// but let's do that anyway here.
+			return false, nil
+		}
+	}
+	return true, newMatchers
 }

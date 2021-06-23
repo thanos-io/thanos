@@ -295,7 +295,7 @@ type FileWriter struct {
 
 // TODO(bwplotka): Added size to method, upstream this.
 func NewFileWriter(name string, size int) (*FileWriter, error) {
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(filepath.Clean(name), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,7 @@
 
 > NOTE: Click `Copy To Editor` for each config to propagate the configs to each file.
 
-Let's imagine we have to deliver centralized metrics platform to multiple teams. For each team we will have a dedicated Prometheus. These could be in the same environment of in different environments (data centers, regions, clusters etc).
+Let's imagine we have to deliver centralized metrics platform to multiple teams. For each team we will have a dedicated Prometheus. These could be in the same environment or in different environments (data centers, regions, clusters etc).
 
 And then we will try to provide low cost, fast global overview. Let's see how we achieve that with Thanos.
 
@@ -103,7 +103,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/prometheus"${i}".yml:/etc/prometheus/prometheus.yml \
     --name prometheus-sidecar"${i}" \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --http-address=0.0.0.0:1909"${i}" \
     --grpc-address=0.0.0.0:1919"${i}" \
@@ -129,7 +129,7 @@ And now, let's deploy Thanos Querier to have a global overview on our services.
 ```
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     query \
     --http-address 0.0.0.0:10912 \
     --grpc-address 0.0.0.0:10901 \

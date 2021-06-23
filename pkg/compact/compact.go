@@ -41,6 +41,12 @@ const (
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
 )
 
+const (
+	// DedupAlgorithmPenalty is the penalty based compactor series merge algorithm.
+	// This is the same as the online deduplication of querier except counter reset handling.
+	DedupAlgorithmPenalty = "penalty"
+)
+
 // Syncer synchronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
@@ -501,7 +507,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 	}()
 
-	if err := os.MkdirAll(subDir, 0777); err != nil {
+	if err := os.MkdirAll(subDir, 0750); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 

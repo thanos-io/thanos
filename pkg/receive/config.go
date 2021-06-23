@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -267,7 +268,7 @@ func loadConfig(logger log.Logger, path string) ([]HashringConfig, float64, erro
 
 // readFile reads the configuration file and returns content of configuration file.
 func readFile(logger log.Logger, path string) ([]byte, error) {
-	fd, err := os.Open(path)
+	fd, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, err
 	}

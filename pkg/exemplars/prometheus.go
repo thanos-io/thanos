@@ -4,12 +4,14 @@
 package exemplars
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // Prometheus implements exemplarspb.Exemplars gRPC that allows to fetch exemplars from Prometheus.
@@ -37,22 +39,18 @@ func (p *Prometheus) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Ex
 	}
 
 	// Prometheus does not add external labels, so we need to add on our own.
-	enrichExemplarsWithExtLabels(exemplars, p.extLabels())
-
+	extLset := p.extLabels()
 	for _, e := range exemplars {
-		if err := s.Send(&exemplarspb.ExemplarsResponse{Result: &exemplarspb.ExemplarsResponse_Data{Data: e}}); err != nil {
+		// Make sure the returned series labels are sorted.
+		e.SetSeriesLabels(labelpb.ExtendSortedLabels(e.SeriesLabels.PromLabels(), extLset))
+
+		var err error
+		tracing.DoInSpan(s.Context(), "send_exemplars_response", func(_ context.Context) {
+			err = s.Send(&exemplarspb.ExemplarsResponse{Result: &exemplarspb.ExemplarsResponse_Data{Data: e}})
+		})
+		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func enrichExemplarsWithExtLabels(exemplars []*exemplarspb.ExemplarData, extLset labels.Labels) {
-	for _, d := range exemplars {
-		d.SetSeriesLabels(labelpb.ExtendSortedLabels(d.SeriesLabels.PromLabels(), extLset))
-		for i, e := range d.Exemplars {
-			e.SetLabels(labelpb.ExtendSortedLabels(e.Labels.PromLabels(), extLset))
-			d.Exemplars[i] = e
-		}
-	}
 }

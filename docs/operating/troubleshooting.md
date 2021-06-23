@@ -1,6 +1,6 @@
 ---
-title: Troubleshooting
 type: docs
+title: Troubleshooting
 menu: operating
 ---
 
@@ -57,7 +57,6 @@ level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="ch
 
 * Make sure that prometheus is running while thanos is started. The `connection_refused` states that there is no server running in the `localhost:9090`, which is the address for prometheus in this case.
 
-
 ## Thanos not identifying Prometheus
 
 ### Description
@@ -78,3 +77,74 @@ global:
     cluster: eu1
     replica: 0
 ```
+
+# Receiver
+
+## Out-of-bound Error
+
+### Description
+
+#### Thanos Receiver Log
+
+```shell
+level=warn ts=2021-05-01T04:57:12.249429787Z caller=writer.go:100 component=receive component=receive-writer msg="Error on ingesting samples that are too old or are too far into the future" num_droppped=47
+```
+
+### Root Cause
+
+- "Out-of-bound" error occurs when the timestamp of the to-be-written sample is lower than the minimum acceptable timestamp of the TSDB head.
+
+### Possible Cause
+
+1. Thanos Receiver was stopped previously and is just resumed, remote Prometheus starts to write from the oldest sample, which is too old to be digested and hence rejected.
+2. Thanos Receiver does not have enough compute resources to ingest the remote write data (is too slow). The latest ingested sample is gradually falling behind the latest scraped samples.
+
+### Diagnostic and Possible Solution
+
+- Check the pod history of Thanos Receiver to see if it is case #1.
+- For case #2, if you installed Prometheus using the [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) helm chart from the Prometheus Community, you can check the "Prometheus / Remote Write dashboard". If the Rate\[5m\] is above 0 for a long period, it is case #2 and you should consider adding replica count or resources to Thanos Receiver.
+
+<img src="../img/thanos_receiver_troubleshoot_grafana_remote_write.png" class="img-fluid" alt="Example Grafana dashboard showing the falling-behind remote write case"/>
+
+## Out-of-order Samples Error
+
+### Description
+
+#### Thanos Receiver Log
+
+```shell
+level=warn ts=2021-05-01T05:02:23.596022921Z caller=writer.go:92 component=receive component=receive-writer msg="Error on ingesting out-of-order samples" num_dropped=14
+```
+
+### Root Cause
+
+- TSDB expects to write samples in chronological order for each series.
+- A sample with timestamp t1 is sent to the Thanos Receiver and accepted, any sample with **timestamp t < t1** and **identical label set** being sent to the receiver after this will be determined as out-of-order sample.
+
+### Possible Cause
+
+- Remote Prometheus is running in high availability mode (more than 1 replica are running). But the replica_external_label_name is not correctly configured (e.g. empty).
+
+<img src="../img/thanos_receiver_troubleshoot_empty_replica_external_label_name.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by empty replica_external_label_name"/>
+
+- Remote Prometheus is running in a federation
+  - the remote-writing Prometheus is running in HA
+  - federation has both honor_label = true and honor_timestamp = true
+  - all layers of Prometheus is using the same replica_external_label_name (e.g. the default "prometheus_replica")
+
+<img src="../img/thanos_receiver_troubleshoot_federation_idential_replica_name.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by misconfigured Prometheus federation"/>
+
+- There are multiple deployments of remote Prometheus, their external_labels are identical (e.g. all being empty), and they have metrics with no unique label (e.g. aggregated cluster CPU usage).
+
+<img src="../img/thanos_receiver_troubleshoot_no_external_labels.drawio.png" class="img-fluid" alt="Example topology diagram of out-of-order error case caused by missing external_labels"/>
+
+### Diagnostic
+
+- Enable debug log on Thanos Receiver (you may need to update cli parameter or helm chart values, depending on how you deployed Thanos Receiver). You can inspect the label set of the out-of-order sample in the debug log of Thanos Receiver, it may provide you some insight.
+- Inspect the topology and configuration of your Prometheus deployment, see if they match the above possible causes.
+
+### Possible Solution
+
+- Configure distinct sets of external_labels for each remote Prometheus deployments.
+- Use different replica_external_label_name for each layer of Prometheus federation (e.g. layer 1: lesser_prometheus_replica, layer 2: main_prometheus_replica).
+- Use static endpoint based federation in Prometheus if the lesser Prometheus is in HA (service monitor based federation will pull metrics from all lesser Prometheus instances).

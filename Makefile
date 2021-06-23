@@ -1,22 +1,23 @@
 include .bingo/Variables.mk
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell ls *.md)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
-SHA=''
+BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
 # Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
-# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly (dependabot?)
-# Update at 2020.2.01
+# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
+# Update at 2021.6.07
 ifeq ($(arch), x86_64)
     # amd64
-    SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
+    BASE_DOCKER_SHA="de4af55df1f648a334e16437c550a2907e0aed4f0b0edf454b0b215a9349bdbb"
 else ifeq ($(arch), armv8)
     # arm64
-    SHA="4dd2d3bba195563e6cb2b286f23dc832d0fda6c6662e6de2e86df454094b44d8"
+    BASE_DOCKER_SHA="5591971699f6cf8abf6776495385e9d62751111a8cba56bf4946cf1d0de425ed"
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
@@ -147,7 +148,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" --build-arg SHA=$(SHA) .
+	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage
@@ -157,7 +158,7 @@ endif
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
 docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg SHA=$(SHA) .
+	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
 .PHONY: docker-push
 docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
@@ -167,28 +168,24 @@ docker-push:
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
-docs: ## Regenerates flags in docs for all thanos commands.
-docs: $(EMBEDMD) build
+docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
+docs: $(MDOX) build
 	@echo ">> generating docs"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning white noise"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) build
-	@echo ">> checking docs generation"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
-	@echo ">> checking links (DISABLED for now)"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+check-docs: $(MDOX) build
+	@echo ">> checking local links"
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
-.PHONY:shell-format
+.PHONY: shell-format
 shell-format: $(SHFMT)
 	@echo ">> formatting shell scripts"
 	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
 
-.PHONY:format
+.PHONY: format
 format: ## Formats code including imports and cleans up white noise.
 format: go-format shell-format
 	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
@@ -276,9 +273,14 @@ web-pre-process:
 web: ## Builds our website.
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
-	# TODO(bwplotka): Make it --gc
 	@rm -rf "$(WEB_DIR)/public"
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
+
+.PHONY: web-serve
+web-serve: ## Builds and serves Thanos website on localhost.
+web-serve: web-pre-process $(HUGO)
+	@echo ">> serving documentation website"
+	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY:lint
 lint: ## Runs various static analysis against our code.
@@ -314,17 +316,11 @@ sync/atomic=go.uber.org/atomic" ./...
 	@$(MAKE) proto
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
-.PHONY:shell-lint
+.PHONY: shell-lint
 shell-lint: ## Runs static analysis against our shell scripts.
 shell-lint: $(SHELLCHECK)
 	@echo ">> linting all of the shell script files"
 	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*" -not -path "*node_modules*")
-
-.PHONY: web-serve
-web-serve: ## Builds and serves Thanos website on localhost.
-web-serve: web-pre-process $(HUGO)
-	@echo ">> serving documentation website"
-	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY: examples
 examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md

@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import { APIResponse } from '../../hooks/useFetch';
 import { UncontrolledAlert, Table, Badge } from 'reactstrap';
-import { formatRelative, createExternalExpressionLink, humanizeDuration } from '../../utils';
+import { formatRelative, createExternalExpressionLink, humanizeDuration, formatDuration } from '../../utils';
 import { Rule } from '../../types/types';
 import { now } from 'moment';
 
@@ -83,9 +83,15 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                   return (
                     <tr key={i}>
                       {r.alerts ? (
-                        <td style={{ backgroundColor: '#F5F5F5' }} className="rule_cell">
+                        <td className="rule-cell">
                           <GraphExpressionLink title="alert" expr={r.name} />
                           <GraphExpressionLink title="expr" expr={r.query} />
+                          {r.duration > 0 && (
+                            <div>
+                              <strong>for:</strong> {formatDuration(r.duration * 1000)}
+                            </div>
+                          )}
+
                           <div>
                             <strong>labels:</strong>
                             {Object.entries(r.labels).map(([key, value]) => (

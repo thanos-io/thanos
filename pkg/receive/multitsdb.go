@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -78,9 +79,10 @@ func NewMultiTSDB(
 }
 
 type tenant struct {
-	readyS    *ReadyStorage
-	storeTSDB *store.TSDBStore
-	ship      *shipper.Shipper
+	readyS        *ReadyStorage
+	storeTSDB     *store.TSDBStore
+	exemplarsTSDB *exemplars.TSDB
+	ship          *shipper.Shipper
 
 	mtx *sync.RWMutex
 }
@@ -102,22 +104,29 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
+func (t *tenant) exemplars() *exemplars.TSDB {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.exemplarsTSDB
+}
+
 func (t *tenant) shipper() *shipper.Shipper {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.ship
 }
 
-func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper) {
+func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
 	t.storeTSDB = storeTSDB
 	t.ship = ship
+	t.exemplarsTSDB = exemplarsTSDB
 	t.mtx.Unlock()
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0777); err != nil {
+	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
 		return err
 	}
 
@@ -266,6 +275,20 @@ func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
 	return res
 }
 
+func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	res := make(map[string]*exemplars.TSDB, len(t.tenants))
+	for k, tenant := range t.tenants {
+		e := tenant.exemplars()
+		if e != nil {
+			res[k] = e
+		}
+	}
+	return res
+}
+
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
 	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
@@ -299,7 +322,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.hashFunc,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship)
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
@@ -398,6 +421,14 @@ func (s *ReadyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Q
 	return nil, ErrNotReady
 }
 
+// ExemplarQuerier implements the Storage interface.
+func (s *ReadyStorage) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {
+	if x := s.get(); x != nil {
+		return x.ExemplarQuerier(ctx)
+	}
+	return nil, ErrNotReady
+}
+
 // Appender implements the Storage interface.
 func (s *ReadyStorage) Appender(ctx context.Context) (storage.Appender, error) {
 	if x := s.get(); x != nil {
@@ -425,11 +456,11 @@ func (a adapter) StartTime() (int64, error) {
 }
 
 func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	q, err := a.db.Querier(ctx, mint, maxt)
-	if err != nil {
-		return nil, err
-	}
-	return q, nil
+	return a.db.Querier(ctx, mint, maxt)
+}
+
+func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, error) {
+	return a.db.ExemplarQuerier(ctx)
 }
 
 // Appender returns a new appender against the storage.

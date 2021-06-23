@@ -7,19 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"gopkg.in/yaml.v2"
@@ -29,7 +25,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -38,7 +33,7 @@ const (
 	testAlertRuleAbortOnPartialResponse = `
 groups:
 - name: example_abort
-  interval: 100ms
+  interval: 1s
   # Abort should be a default: partial_response_strategy: "ABORT"
   rules:
   - alert: TestAlert_AbortOnPartialResponse
@@ -52,7 +47,7 @@ groups:
 	testAlertRuleWarnOnPartialResponse = `
 groups:
 - name: example_warn
-  interval: 100ms
+  interval: 1s
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_WarnOnPartialResponse
@@ -66,7 +61,7 @@ groups:
 	testAlertRuleAddedLaterWebHandler = `
 groups:
 - name: example
-  interval: 100ms
+  interval: 1s
   partial_response_strategy: "WARN"
   rules:
   - alert: TestAlert_HasBeenLoadedViaWebHandler
@@ -148,180 +143,7 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 	testutil.Ok(t, os.Rename(path+".tmp", path))
 }
 
-type mockAlertmanager struct {
-	path      string
-	token     string
-	mtx       sync.Mutex
-	alerts    []*model.Alert
-	lastError error
-}
-
-func newMockAlertmanager(path string, token string) *mockAlertmanager {
-	return &mockAlertmanager{
-		path:   path,
-		token:  token,
-		alerts: make([]*model.Alert, 0),
-	}
-}
-
-func (m *mockAlertmanager) setLastError(err error) {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	m.lastError = err
-}
-
-func (m *mockAlertmanager) LastError() error {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	return m.lastError
-}
-
-func (m *mockAlertmanager) Alerts() []*model.Alert {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	return m.alerts
-}
-
-func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		m.setLastError(errors.Errorf("invalid method: %s", req.Method))
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	if req.URL.Path != m.path {
-		m.setLastError(errors.Errorf("invalid path: %s", req.URL.Path))
-		resp.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	if m.token != "" {
-		auth := req.Header.Get("Authorization")
-		if auth != fmt.Sprintf("Bearer %s", m.token) {
-			m.setLastError(errors.Errorf("invalid auth: %s", req.URL.Path))
-			resp.WriteHeader(http.StatusForbidden)
-			return
-		}
-	}
-
-	b, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		m.setLastError(err)
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	var alerts []*model.Alert
-	if err := json.Unmarshal(b, &alerts); err != nil {
-		m.setLastError(err)
-		resp.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	m.mtx.Lock()
-	m.alerts = append(m.alerts, alerts...)
-	m.mtx.Unlock()
-}
-
-// TestRule_AlertmanagerHTTPClient verifies that Thanos Ruler can send alerts to
-// Alertmanager in various setups:
-// * Plain HTTP.
-// * HTTPS with custom CA.
-// * API with a prefix.
-// * API protected by bearer token authentication.
-//
-// Because Alertmanager supports HTTP only and no authentication, the test uses
-// a mocked server instead of the "real" Alertmanager service.
-// The other end-to-end tests exercise against the "real" Alertmanager
-// implementation.
-func TestRule_AlertmanagerHTTPClient(t *testing.T) {
-	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
-
-	s, err := e2e.NewScenario("e2e_test_rule_am_http_client")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
-
-	tlsSubDir := filepath.Join("tls")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), tlsSubDir), os.ModePerm))
-
-	// API v1 with plain HTTP and a prefix.
-	handler1 := newMockAlertmanager("/prefix/api/v1/alerts", "")
-	srv1 := httptest.NewServer(handler1)
-	t.Cleanup(srv1.Close)
-
-	// API v2 with HTTPS and authentication.
-	handler2 := newMockAlertmanager("/api/v2/alerts", "secret")
-	srv2 := httptest.NewTLSServer(handler2)
-	t.Cleanup(srv2.Close)
-
-	var out bytes.Buffer
-	testutil.Ok(t, pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: srv2.TLS.Certificates[0].Certificate[0]}))
-	caFile := filepath.Join(s.SharedDir(), tlsSubDir, "ca.crt")
-	testutil.Ok(t, ioutil.WriteFile(caFile, out.Bytes(), 0640))
-
-	rulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), rulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(s.SharedDir(), rulesSubDir))
-
-	r, err := e2ethanos.NewRuler(s.SharedDir(), "1", rulesSubDir, []alert.AlertmanagerConfig{
-		{
-			EndpointsConfig: http_util.EndpointsConfig{
-				StaticAddresses: []string{srv1.Listener.Addr().String()},
-				Scheme:          "http",
-				PathPrefix:      "/prefix/",
-			},
-			Timeout:    model.Duration(time.Second),
-			APIVersion: alert.APIv1,
-		},
-		{
-			HTTPClientConfig: http_util.ClientConfig{
-				TLSConfig: http_util.TLSConfig{
-					CAFile: filepath.Join(e2e.ContainerSharedDir, tlsSubDir, "ca.crt"),
-				},
-				BearerToken: "secret",
-			},
-			EndpointsConfig: http_util.EndpointsConfig{
-				StaticAddresses: []string{srv2.Listener.Addr().String()},
-				Scheme:          "https",
-			},
-			Timeout:    model.Duration(time.Second),
-			APIVersion: alert.APIv2,
-		},
-	}, []query.Config{
-		{
-			EndpointsConfig: http_util.EndpointsConfig{
-				StaticAddresses: func() []string {
-					q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", nil, nil, nil, nil, nil, nil, "", "")
-					testutil.Ok(t, err)
-					return []string{q.NetworkHTTPEndpointFor(s.NetworkName())}
-				}(),
-				Scheme: "http",
-			},
-		},
-	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(r))
-
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
-
-	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
-		for i, am := range []*mockAlertmanager{handler1, handler2} {
-			if len(am.Alerts()) == 0 {
-				return errors.Errorf("no alert received from handler%d, last error: %v", i, am.LastError())
-			}
-		}
-
-		return nil
-	}))
-}
-
 func TestRule(t *testing.T) {
-	t.Skip("Flaky test. Fix it. See: https://github.com/thanos-io/thanos/issues/3425.")
 	t.Parallel()
 
 	s, err := e2e.NewScenario("e2e_test_rule")
@@ -362,7 +184,7 @@ func TestRule(t *testing.T) {
 				},
 				Scheme: "http",
 			},
-			Timeout:    model.Duration(time.Second),
+			Timeout:    model.Duration(10 * time.Second),
 			APIVersion: alert.APIv1,
 		},
 	}, []query.Config{
@@ -383,7 +205,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 

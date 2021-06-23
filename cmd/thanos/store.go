@@ -21,11 +21,12 @@ import (
 
 	commonmodel "github.com/prometheus/common/model"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/extflag"
+	hidden "github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -84,11 +85,13 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	sc.indexCacheConfigs = *extflag.RegisterPathOrContent(cmd, "index-cache.config",
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/tip/components/store.md/#index-cache",
-		false)
+		extflag.WithEnvSubstitution(),
+	)
 
-	sc.cachingBucketConfig = *extflag.RegisterPathOrContent(extflag.HiddenCmdClause(cmd), "store.caching-bucket.config",
+	sc.cachingBucketConfig = *extflag.RegisterPathOrContent(hidden.HiddenCmdClause(cmd), "store.caching-bucket.config",
 		"YAML that contains configuration for caching bucket. Experimental feature, with high risk of changes. See format details: https://thanos.io/tip/components/store.md/#caching-bucket",
-		false)
+		extflag.WithEnvSubstitution(),
+	)
 
 	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").BytesVar(&sc.chunkPoolSize)
@@ -221,6 +224,7 @@ func runStore(
 	srv := httpserver.New(logger, reg, conf.component, httpProbe,
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
+		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
 	)
 
 	g.Add(func() error {

@@ -16,8 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/model"
 )
 

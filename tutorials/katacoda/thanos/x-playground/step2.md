@@ -65,7 +65,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-eu1-replica0:/prometheus \
     --name prom-eu1-0-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -85,7 +85,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-eu1-replica1:/prometheus \
     --name prom-eu1-1-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -105,7 +105,7 @@ docker run -d --net=host --rm \
     -v ${CURR_DIR}/prom-us1-replica0:/prometheus \
     --name prom-us1-0-sidecar \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --tsdb.path /prometheus \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
@@ -116,7 +116,7 @@ docker run -d --net=host --rm \
     --prometheus.url "http://127.0.0.1:${PROM_US1_0_PORT}"
 ```{{execute}}
 
-We can check whether the data is uploaded into `thanos` bucket by visitng [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/) (or `localhost:9000`) It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
+We can check whether the data is uploaded into `thanos` bucket by visiting [Minio](https://[[HOST_SUBDOMAIN]]-9000-[[KATACODA_HOST]].environments.katacoda.com/minio/) (or `localhost:9000`) It will take a minute to synchronize all blocks. Note that sidecar by default uploads only "non compacted by Prometheus" blocks.
 
 See [this](https://thanos.io/tip/components/sidecar.md/#upload-compacted-blocks) to read more about uploading old data already touched by Prometheus.
 
@@ -130,7 +130,7 @@ Let's run Store Gateway server:
 docker run -d --net=host --rm \
     -v ${CURR_DIR}/minio-bucket.yaml:/etc/thanos/minio-bucket.yaml \
     --name store-gateway \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     store \
     --objstore.config-file /etc/thanos/minio-bucket.yaml \
     --http-address 0.0.0.0:19094 \
@@ -143,7 +143,7 @@ docker run -d --net=host --rm \
 docker stop querier && \
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     query \
     --http-address 0.0.0.0:9090 \
     --grpc-address 0.0.0.0:19190 \
@@ -156,13 +156,13 @@ docker run -d --net=host --rm \
 
 Visit https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com to see Thanos UI.
 
-### Long term maintainance, retention, dedup and downsampling:
+### Long term maintenance, retention, dedup and downsampling:
 
 ```
 docker run -d --net=host --rm \
     -v ${CURR_DIR}/minio-bucket.yaml:/etc/thanos/minio-bucket.yaml \
     --name compactor \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     compact \
     --wait --wait-interval 30s \
     --consistency-delay 0s \
@@ -172,7 +172,7 @@ docker run -d --net=host --rm \
 
 Visit https://[[HOST_SUBDOMAIN]]-19095-[[KATACODA_HOST]].environments.katacoda.com/new/loaded to see Compactor Web UI.
 
-### Data should be immdiately downsampled as well for smooth expierience!
+### Data should be immediately downsampled as well for smooth experience!
 
 Visit https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com to see Thanos UI and query for 1 year.
 

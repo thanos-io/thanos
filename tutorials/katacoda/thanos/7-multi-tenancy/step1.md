@@ -88,7 +88,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/editor/prometheus0_fruit.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-fruit \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --http-address 0.0.0.0:19090 \
     --grpc-address 0.0.0.0:19190 \
@@ -120,7 +120,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/editor/prometheus0_veggie.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-0-sidecar-veggie \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --http-address 0.0.0.0:19091 \
     --grpc-address 0.0.0.0:19191 \
@@ -152,7 +152,7 @@ docker run -d --net=host --rm \
     -v $(pwd)/editor/prometheus1_veggie.yml:/etc/prometheus/prometheus.yml \
     --name prometheus-01-sidecar-veggie \
     -u root \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     sidecar \
     --http-address 0.0.0.0:19092 \
     --grpc-address 0.0.0.0:19192 \
@@ -162,7 +162,7 @@ docker run -d --net=host --rm \
 
 ### Querier
 
-Now the naive approach to ensure querying isolation (we can't affort veggies to look on fruits data!) would be to setup separate
+Now the naive approach to ensure querying isolation (we can't afford veggies to look on fruits data!) would be to setup separate
 isolated Queriers for each team, so let's start with that.
 
 Fruit:
@@ -170,7 +170,7 @@ Fruit:
 ```
 docker run -d --net=host --rm \
     --name querier-fruit \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     query \
     --http-address 0.0.0.0:29091 \
     --grpc-address 0.0.0.0:29191 \
@@ -183,7 +183,7 @@ Veggie:
 ```
 docker run -d --net=host --rm \
     --name querier-veggie \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.21.1 \
     query \
     --http-address 0.0.0.0:29092 \
     --grpc-address 0.0.0.0:29192 \
@@ -198,7 +198,7 @@ At the end we should see this case:
 
 ![diagram](./assets/no-read-tenancy.png)
 
-This setup can be called "No or Hard Tenancy" where we are setting up separate components (technically disonnected two systems) for
+This setup can be called "No or Hard Tenancy" where we are setting up separate components (technically disconnected two systems) for
 each of tenants.
 
 Once started you should be able to reach both Queriers - each exposing either Fruit's or Veggies's data:
@@ -212,7 +212,7 @@ Let's try to play with this setup a bit. You are free to query any metrics. Data
 endpoint.
 
 However, let's try to imagine a common case in such setups: **What if you are.. a Tomato?** Surprisingly Tomato [is both
-fruit and vegetable](https://www.sciencealert.com/here-s-why-a-tomato-is-actually-both-a-fruit-and-vegetable), so we it
+fruit and vegetable](https://www.sciencealert.com/here-s-why-a-tomato-is-actually-both-a-fruit-and-vegetable), so it
 should be able not only to access metrics from both Veggie and Fruit teams, but also run PromQL across them.
 
 ![diagram](./assets/no-read-tenancy-tomato.png)

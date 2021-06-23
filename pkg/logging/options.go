@@ -8,12 +8,12 @@ import (
 	"math/rand"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"google.golang.org/grpc/codes"
 )
 
@@ -175,7 +175,7 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return logOpts, fmt.Errorf("Both log.request.decision and request.logging has been enabled. Please use one of the flags!")
+		return logOpts, fmt.Errorf("both log.request.decision and request.logging have been enabled, please use only one of the flags")
 	}
 	// If old flag is enabled.
 	if len(flagDecision) > 0 {
@@ -184,12 +184,7 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 		})}
 		return logOpts, nil
 	}
-	logOpts, err = NewHTTPOption(configYAML)
-	if err != nil {
-		return logOpts, err
-	}
-
-	return logOpts, nil
+	return NewHTTPOption(configYAML)
 }
 
 // TODO: @yashrsharma44 - To be deprecated in the next release.
@@ -206,7 +201,7 @@ func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 
 	// Check if the user enables request logging through flags and YAML.
 	if len(configYAML) != 0 && len(flagDecision) != 0 {
-		return []tags.Option{}, logOpts, fmt.Errorf("Both log.request.decision and request.logging-config has been enabled. Please use one of the flags!")
+		return []tags.Option{}, logOpts, fmt.Errorf("both log.request.decision and request.logging-config have been enabled, please use only one of the flags")
 	}
 
 	// If the old flag is empty, use the new YAML config.

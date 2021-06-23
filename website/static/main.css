@@ -41,10 +41,8 @@ pre {
 
 .list-group-item-docs {
     color: #6D41FF;
-    border: 0;
     padding: 0.5rem;
     background-color: transparent;
-    text-indent: 1rem;
 }
 
 .list-group-item-docs:hover {

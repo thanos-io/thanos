@@ -1,6 +1,6 @@
 ---
-title: Binary index-header
 type: docs
+title: Binary index-header
 menu: operating
 ---
 
@@ -11,13 +11,11 @@ In order to query series inside blocks from object storage, [Store Gateway](../c
 - symbols table to unintern string values
 - postings offset for posting lookup
 
-In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk.
-Such `index-header` file is then mmaped and used by Store Gateway, but never uploaded back to the object storage.
+In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk. Such `index-header` file is then mmaped and used by Store Gateway, but never uploaded back to the object storage.
 
 ## Format (version 1)
 
-The following describes the format of the `index-header` file found in each block store gateway local directory.
-It is terminated by a table of contents which serves as an entry point into the index.
+The following describes the format of the `index-header` file found in each block store gateway local directory. It is terminated by a table of contents which serves as an entry point into the index.
 
 ```
 ┌─────────────────────────────┬───────────────────────────────┐
@@ -49,8 +47,7 @@ See [Posting Offset Table](https://github.com/prometheus/prometheus/blob/d782387
 
 ### TOC
 
-The table of contents serves as an entry point to the entire index and points to various sections in the file.
-If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
+The table of contents serves as an entry point to the entire index and points to various sections in the file. If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -76,4 +73,4 @@ The Store Gateway stores each block's index-header on the local disk and loads i
 
 Given an index-header, the Store Gateway does **not** fully load the entire content in memory, but it only loads 1/32 of postings offsets. At query time, postings offsets are then looked up both from memory (1/32 offsets) and from the mmap-ed index-header files, which could hit the disk or not whether the requested file block has been cached by the OS.
 
-The trade-off picked by this optimization technique allows to significantly reduce the Store Gateway memory utilization while increasing CPU and disk read OPS. The Store Gateway has an hidden CLI flag `--store.index-header-posting-offsets-in-mem-sampling` to control the ratio of postings offsets loaded into memory; larger values will lower memory usage and increase CPU and disk read OPS, while lower values will increase memory and lower CPU and disk read OPS. A value of `1` will keep all in memory.
+The trade-off picked by this optimization technique allows to significantly reduce the Store Gateway memory utilization while increasing CPU and disk read OPS. The Store Gateway has a hidden CLI flag `--store.index-header-posting-offsets-in-mem-sampling` to control the ratio of postings offsets loaded into memory; larger values will lower memory usage and increase CPU and disk read OPS, while lower values will increase memory and lower CPU and disk read OPS. A value of `1` will keep all in memory.

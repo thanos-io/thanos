@@ -28,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -328,7 +329,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	}
 
 	for _, fn := range files {
-		b, err := ioutil.ReadFile(fn)
+		b, err := ioutil.ReadFile(filepath.Clean(fn))
 		if err != nil {
 			errs.Add(err)
 			continue
@@ -390,7 +391,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 }
 
 // Rules returns specified rules from manager. This is used by gRPC and locally for HTTP and UI purposes.
-func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) error {
+func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) (err error) {
 	groups := m.protoRuleGroups()
 
 	pgs := make([]*rulespb.RuleGroup, 0, len(groups))
@@ -419,7 +420,10 @@ func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) er
 	enrichRulesWithExtLabels(pgs, m.extLset)
 
 	for _, pg := range pgs {
-		if err := s.Send(&rulespb.RulesResponse{Result: &rulespb.RulesResponse_Group{Group: pg}}); err != nil {
+		tracing.DoInSpan(s.Context(), "send_rule_group_response", func(_ context.Context) {
+			err = s.Send(&rulespb.RulesResponse{Result: &rulespb.RulesResponse_Group{Group: pg}})
+		})
+		if err != nil {
 			return err
 		}
 	}

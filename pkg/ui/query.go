@@ -67,18 +67,14 @@ func queryTmplFuncs() template.FuncMap {
 
 // Register registers new GET routes for subpages and redirects from / to /graph.
 func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), "/graph"), http.StatusFound)
-	})
-
 	r.Get("/classic/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), "/classic/graph"), http.StatusFound)
+		http.Redirect(w, r, path.Join("/", GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), "/classic/graph"), http.StatusFound)
 	})
 
 	// Redirect the original React UI's path (under "/new") to its new path at the root.
 	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
 		p := route.Param(r.Context(), "path")
-		http.Redirect(w, r, path.Join(GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), strings.TrimPrefix(p, "/new"))+"?"+r.URL.RawQuery, http.StatusFound)
+		http.Redirect(w, r, path.Join("/", GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r), p)+"?"+r.URL.RawQuery, http.StatusFound)
 	})
 
 	r.Get("/classic/graph", instrf("graph", ins, q.graph))

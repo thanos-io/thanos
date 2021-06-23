@@ -290,7 +290,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			defer func() {
 				_ = os.Remove(tmpFile)
 			}()
-			if err := ioutil.WriteFile(tmpFile, b, 0666); err != nil {
+			if err := ioutil.WriteFile(tmpFile, b, 0644); err != nil {
 				return errors.Wrap(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
@@ -366,11 +366,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 }
 
 func hashFile(h hash.Hash, fn string) error {
-	f, err := os.Open(fn)
+	f, err := os.Open(filepath.Clean(fn))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer runutil.CloseWithErrCapture(&err, f, "close file")
 
 	if _, err := h.Write([]byte{'\xff'}); err != nil {
 		return err

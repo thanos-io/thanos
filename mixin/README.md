@@ -54,7 +54,7 @@ $ jb update
 
 #### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](/examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](/examples). Default parameters are collected in [config.libsonnet](config.libsonnet), feel free to modify and generate your own definitions.
 
 [embedmd]:# (config.libsonnet)
 ```libsonnet
@@ -144,7 +144,7 @@ Although all the required dependencies are handled by `Makefile`, keep in mind t
 
 #### gojsontoyaml
 
-`gojsontoyaml` is used to convert generated `json` definitons to `yaml`.
+`gojsontoyaml` is used to convert generated `json` definitions to `yaml`.
 
 To install:
 ```shell
@@ -166,7 +166,7 @@ $ make examples
 
 Make action runs the jsonnet code, then reads each key of the generated json and uses that as the file name, and writes the value of that key to that file, and converts each json manifest to yaml.
 
-> Make commands should handle dependecies for you.
+> Make commands should handle dependencies for you.
 
 ### Test and validate
 

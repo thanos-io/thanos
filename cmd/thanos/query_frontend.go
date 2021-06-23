@@ -20,9 +20,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/weaveworks/common/user"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -89,7 +89,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.partial-response", "Enable partial response for query range requests if no partial_response param is specified. --no-query-range.partial-response for disabling.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.PartialResponseStrategy)
 
-	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.QueryRangeConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "query-range.response-cache-config", "YAML file that contains response cache configuration.", extflag.WithEnvSubstitution())
 
 	// Labels tripperware flags.
 	cmd.Flag("labels.split-interval", "Split labels requests by an interval and execute in parallel, it should be greater than 0 when labels.response-cache-config is configured.").
@@ -110,7 +110,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("labels.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified.").
 		Default("24h").DurationVar(&cfg.DefaultTimeRange)
 
-	cfg.LabelsConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "labels.response-cache-config", "YAML file that contains response cache configuration.", false)
+	cfg.LabelsConfig.CachePathOrContent = *extflag.RegisterPathOrContent(cmd, "labels.response-cache-config", "YAML file that contains response cache configuration.", extflag.WithEnvSubstitution())
 
 	cmd.Flag("cache-compression-type", "Use compression in results cache. Supported values are: 'snappy' and '' (disable compression).").
 		Default("").StringVar(&cfg.CacheCompression)
@@ -220,6 +220,7 @@ func runQueryFrontend(
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(cfg.http.bindAddress),
 			httpserver.WithGracePeriod(time.Duration(cfg.http.gracePeriod)),
+			httpserver.WithTLSConfig(cfg.http.tlsConfig),
 		)
 
 		instr := func(f http.HandlerFunc) http.HandlerFunc {

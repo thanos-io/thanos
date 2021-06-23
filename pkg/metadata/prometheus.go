@@ -4,10 +4,12 @@
 package metadata
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // Prometheus implements metadatapb.Metadata gRPC service that allows to fetch metric metadata from Prometheus HTTP /api/v1/metadata endpoint.
@@ -31,6 +33,9 @@ func (p *Prometheus) MetricMetadata(r *metadatapb.MetricMetadataRequest, s metad
 		return err
 	}
 
-	return s.Send(&metadatapb.MetricMetadataResponse{Result: &metadatapb.MetricMetadataResponse_Metadata{
-		Metadata: metadatapb.FromMetadataMap(md)}})
+	tracing.DoInSpan(s.Context(), "send_metadata_response", func(_ context.Context) {
+		err = s.Send(&metadatapb.MetricMetadataResponse{Result: &metadatapb.MetricMetadataResponse_Metadata{
+			Metadata: metadatapb.FromMetadataMap(md)}})
+	})
+	return err
 }

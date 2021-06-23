@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 var _ UnaryClient = &GRPCClient{}
@@ -46,6 +47,9 @@ func NewGRPCClientWithDedup(rs rulespb.RulesServer, replicaLabels []string) *GRP
 }
 
 func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, storage.Warnings, error) {
+	span, ctx := tracing.StartSpan(ctx, "rules_request")
+	defer span.Finish()
+
 	resp := &rulesServer{ctx: ctx}
 
 	if err := rr.proxy.Rules(req, resp); err != nil {
