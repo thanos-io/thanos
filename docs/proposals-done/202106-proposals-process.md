@@ -15,7 +15,7 @@ menu: proposals-done
   * [KEP Process](https://github.com/kubernetes/enhancements/blob/master/keps/README.md)
   * [RHOBS Handbook Proposal Process](https://github.com/rhobs/handbook/pull/15)
 
-> TL;DR: We would like to propose an improved, official proposal process for Monitoring Group that clearly states when, where and how to create proposal/enhancement/design documents.
+> TL;DR: We would like to propose an improved, official proposal process for Thanos that clearly states when, where and how to create proposal/enhancement/design documents. We propose to store done, accepted and rejected proposals in markdown in the main Thanos repo.
 
 ## Why
 

@@ -10,7 +10,14 @@ If there is no problem, there is no need for changing anything, no need for a pr
 
 It takes time to propose an idea, find consensus and implement more significant concepts, so let's not use the time before we feel it's worth it. Even good ideas sometimes have to wait for a good moment to discuss them.
 
-Let's assume the idea sounds interesting to you; what to do next, where to propose it? How to review it? Follow the algorithm below:
+Let's assume the idea sounds interesting to you. Yet, some ideas are quick and trivial enough to not require a formal proposal. To learn if we need proposal, ask yourself a following questions:
+
+* Is the idea hard to explain in 10m?
+* Are there major unknowns?
+* Would the project benefit from documenting the rationales behind this decision?
+* Does it touch the key element of an important API?
+
+If any of this is yes, this idea might require a formal proposal. See full proposal process, visualised below:
 
 ![where](../img/thanos_proposal_flow.png)
 
