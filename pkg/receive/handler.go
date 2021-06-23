@@ -20,8 +20,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
-	"github.com/golang/snappy"
 	"github.com/jpillora/backoff"
+	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -295,7 +295,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqBuf, err := snappy.Decode(nil, compressed.Bytes())
+	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
@@ -325,7 +325,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// TODO(yeya24): handle remote write metadata and exemplars.
+	// TODO(yeya24): handle remote write metadata.
 	// exit early if the request contained no data
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)

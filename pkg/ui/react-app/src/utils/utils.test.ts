@@ -1,19 +1,19 @@
 import moment from 'moment';
 
 import {
-  escapeHTML,
-  metricToSeriesName,
-  formatTime,
-  parseTime,
-  formatDuration,
-  parseDuration,
-  humanizeDuration,
-  formatRelative,
-  now,
-  toQueryString,
-  encodePanelOptionsToQueryString,
-  parseOption,
   decodePanelOptionsFromQueryString,
+  encodePanelOptionsToQueryString,
+  escapeHTML,
+  formatDuration,
+  formatTime,
+  formatRelative,
+  humanizeDuration,
+  metricToSeriesName,
+  now,
+  parseDuration,
+  parseOption,
+  parseTime,
+  toQueryString,
 } from '.';
 import { PanelType } from '../pages/graph/Panel';
 

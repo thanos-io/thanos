@@ -14,7 +14,7 @@
         <div class="sidemenu-docs">
           <input type="checkbox" id="menuinput-{{ .Key }}" class="menuinput" {{if eq .Key "thanos"}} checked {{end}}/>
           <label for="menuinput-{{ .Key }}" class="menulabel-docs">
-            <h5 >{{ .Key }}</h5>
+            <h5 >{{ replace .Key "-" "/" }}</h5>
             <img class="caret-expand" src="/expand.svg" alt="expand" />
           </label>        
           {{ range .Pages }}

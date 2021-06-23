@@ -1,16 +1,15 @@
 ---
-title: Getting Started
-type: docs
-menu: thanos
 weight: 1
+type: docs
+title: Getting Started
+menu: thanos
 ---
 
 # Getting started
 
 Thanos provides a global query view, high availability, data backup with historical, cheap data access as its core features in a single binary.
 
-Those features can be deployed independently of each other. This allows you to have a subset of Thanos features ready
-for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments.
+Those features can be deployed independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments.
 
 In this quick-start guide, we will explain:
 
@@ -32,8 +31,7 @@ Thanos aims for a simple deployment and maintenance model. The only dependencies
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
-Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in
-[quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
+Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
 
@@ -57,19 +55,18 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 ## Contributing
 
-Contributions are very welcome! See our [CONTRIBUTING.md](/CONTRIBUTING.md) for more information.
+Contributions are very welcome! See our [CONTRIBUTING.md](../CONTRIBUTING.md) for more information.
 
 ## Community
 
-Thanos is an open source project and we value and welcome new contributors and members
-of the community. Here are ways to get in touch with the community:
+Thanos is an open source project and we value and welcome new contributors and members of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
 ## Maintainers
 
-See [MAINTAINERS.md](/MAINTAINERS.md).
+See [MAINTAINERS.md](../MAINTAINERS.md).
 
 ## Community Thanos Kubernetes Applications
 
@@ -86,12 +83,11 @@ If you want to add yourself to this list, let us know!
 ## Deploying Thanos
 
 * [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos/1-globalview)
-* [Quick Tutorial](./quick-tutorial.md) on Thanos website.
+* [Quick Tutorial](quick-tutorial.md) on Thanos website.
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md)
-We also have example Grafana dashboards [here](/examples/dashboards/dashboards.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md) We also have example Grafana dashboards [here](../examples/dashboards/dashboards.md) and some [alerts](../examples/alerts/alerts.md) to get you started.
 
 ## Talks
 
@@ -132,19 +128,16 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 ## Integrations
 
-See [Integrations page](./integrations.md).
+See [Integrations page](integrations.md).
 
 ## Testing Thanos on Single Host
 
-We don't recommend running Thanos on a single node on production.
-Thanos is designed and built to run as a distributed system.
-Vanilla Prometheus might be totally enough for small setups.
+We don't recommend running Thanos on a single node on production. Thanos is designed and built to run as a distributed system. Vanilla Prometheus might be totally enough for small setups.
 
-However, in case you want to play and run Thanos components
-on a single node, we recommend following the port layout:
+However, in case you want to play and run Thanos components on a single node, we recommend following the port layout:
 
 | Component      | Interface               | Port  |
-| -------------- | ----------------------- | ----- |
+|----------------|-------------------------|-------|
 | Sidecar        | gRPC                    | 10901 |
 | Sidecar        | HTTP                    | 10902 |
 | Query          | gRPC                    | 10903 |
@@ -159,4 +152,4 @@ on a single node, we recommend following the port layout:
 | Compact        | HTTP                    | 10912 |
 | Query Frontend | HTTP                    | 10913 |
 
-You can see example one-node setup [here](/scripts/quickstart.sh).
+You can see example one-node setup [here](../scripts/quickstart.sh).
