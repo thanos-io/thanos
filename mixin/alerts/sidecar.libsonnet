@@ -45,8 +45,9 @@
               summary: 'Thanos Sidecar is unhealthy.',
             },
             expr: |||
-              time() - max by (%(dimensions)s) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s})) >= 240
+              time() - max by (%(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 240
             ||| % thanos.sidecar,
+            'for': '5m',
             labels: {
               severity: 'critical',
             },
