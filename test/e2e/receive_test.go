@@ -59,39 +59,19 @@ func TestReceive(t *testing.T) {
 
 	t.Run("single_ingestor", func(t *testing.T) {
 		/*
-		<<<<<<< HEAD
-					The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
-
-					 ┌──────────┐
-					 │  Prom    │
-					 └────┬─────┘
-					      │
-					 ┌────▼─────┐
-					 │ Ingestor │
-					 └────┬─────┘
-					      │
-					 ┌────▼─────┐
-					 │  Query   │
-					 └──────────┘
-
-					NB: Made with asciiflow.com - you can copy & paste the above there to modify.
-		=======
-				The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
-
-				 ┌──────────┐
-				 │  Prom    │
-				 └────┬─────┘
-					  │
-				 ┌────▼─────┐
-				 │ Ingestor │
-				 └────┬─────┘
-					  │
-				 ┌────▼─────┐
-				 │  Query   │
-				 └──────────┘
-
-				NB: Made with asciiflow.com - you can copy & paste the above there to modify.
-		>>>>>>> c7bd119b (Adds 2 new integration tests, adds diagrams to integration test comments, adds IngestingReceiver testing type)
+			The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+			 ┌──────────┐
+			 │  Prom    │
+			 └────┬─────┘
+				  │
+			 ┌────▼─────┐
+			 │ Ingestor │
+			 └────┬─────┘
+				  │
+			 ┌────▼─────┐
+			 │  Query   │
+			 └──────────┘
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
 		t.Parallel()
@@ -244,6 +224,7 @@ func TestReceive(t *testing.T) {
 			Router1 is configured to duplicate data twice, once to Ingestor1, and once to Router2,
 			Router2 is also configured to duplicate data twice, once to Ingestor2, and once to Ingestor3.
 
+<<<<<<< HEAD
 			           ┌───────┐         ┌───────┐
 			           │       │         │       │
 			           │ Prom1 ├──┐   ┌──┤ Prom2 │
@@ -259,16 +240,41 @@ func TestReceive(t *testing.T) {
 			          │ Router2 │          │ Ingestor1 │
 			      ┌───┤         ├───┐      │           │
 			      │   └─────────┘   │      └─────┬─────┘
+=======
+					   ┌───────┐         ┌───────┐
+					   │       │         │       │
+					   │ Prom1 ├──┐   ┌──┤ Prom2 │
+					   │       │  │   │  │       │
+					   └───────┘  │   │  └───────┘
+							   ┌──▼───▼──┐
+							   │         │
+							   │ Router1 │
+						  ┌────┤         ├───────┐
+						  │    └─────────┘       │
+					  ┌───▼─────┐          ┌─────▼─────┐
+					  │         │          │           │
+					  │ Router2 │          │ Ingestor1 │
+				  ┌───┤         ├───┐      │           │
+				  │   └─────────┘   │      └─────┬─────┘
+>>>>>>> c12b30af (format)
 			┌─────▼─────┐      ┌────▼──────┐     │
 			│           │      │           │     │
 			│ Ingestor2 │      │ Ingestor3 │     │
 			│           │      │           │     │
 			└─────┬─────┘      └─────┬─────┘     │
+<<<<<<< HEAD
 			      │             ┌────▼────┐      │
 			      │             │         │      │
 			      └─────────────►  Query  ◄──────┘
 			                    │         │
 			                    └─────────┘
+=======
+				  │             ┌────▼────┐      │
+				  │             │         │      │
+				  └─────────────►  Query  ◄──────┘
+								│         │
+								└─────────┘
+>>>>>>> c12b30af (format)
 
 			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
