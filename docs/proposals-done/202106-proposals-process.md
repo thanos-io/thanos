@@ -21,7 +21,7 @@ menu: proposals-done
 
 More extensive architectural, process, or feature decisions are hard to explain, understand and discuss. It takes a lot of time to describe the idea, to motivate interested parties to review it, give feedback and approve. That's why it is essential to streamline the proposal process.
 
-Given that as open source community we work in highly distributed teams and work with multiple communities, we need to allow asynchronous discussions. This means it's essential to structure the talks into shared documents. Persisting in those decisions, once approved or rejected, is equally important, allowing us to understand previous motivations.
+Given that as open-source community we work in highly distributed teams and work with multiple communities, we need to allow asynchronous discussions. This means it's essential to structure the talks into shared documents. Persisting those decisions, once approved or rejected, is equally important, allowing us to understand previous motivations.
 
 There is a common saying [`"I've just been around long enough to know where the bodies are buried"`](https://twitter.com/AlexJonesax/status/1400103567822835714). We want to ensure the team related knowledge is accessible to everyone, every day, no matter if the team member is new or part of the team for ten years.
 

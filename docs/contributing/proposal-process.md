@@ -14,9 +14,9 @@ Let's assume the idea sounds interesting to you; what to do next, where to propo
 
 ![where](../img/thanos_proposal_flow.png)
 
-> Note: It's totally ok for your proposal to be rejected if the community feels the idea is not needed now or having gaps. Not all ideas are as good as it looks at the first glance, with less context. Sometimes it's not good time for it either.It's better to explicitly oppose it than to ignore it and leave it in limbo.
+> Note: It's totally ok for your proposal to be rejected if the community feels the idea is not needed now or having gaps. Not all ideas are as good as it looks at the first glance, with less context. Sometimes it's not a good time for it either. It's better to explicitly oppose it than to ignore it and leave it in limbo.
 
-## Why we have Proposal Process?
+## Why do we have a Proposal Process?
 
 See rationales in our [proposal for proposal process](../proposals-done/202106-proposals-process.md)
 
@@ -33,13 +33,13 @@ See rationales in our [proposal for proposal process](../proposals-done/202106-p
 * **Other docs:**
   * `<Links…>`
 
-> TL;DR: Give here a short summary of what this document is proposing and what components it is touching.
+> TL;DR: Give a summary of what this document is proposing and what components it is touching.
 >
 > *For example: This design doc is proposing a consistent design template for “example.com” organization.*
 
 ## Why
 
-Put here a motivation behind the change proposed by this design document, give context.
+Provide a motivation behind the change proposed by this design document, give context.
 
 *For example: It’s important to clearly explain the reasons behind certain design decisions in order to have a consensus between team members, as well as external stakeholders. Such a design document can also be used as a reference and knowledge-sharing purposes. That’s why we are proposing a consistent style of the design document that will be used for future designs.*
 
@@ -59,7 +59,7 @@ Goals and use cases for the solution as proposed in [How](#how):
 
 ### Audience
 
-If not clear, the target audience that this change relates to.
+If this is not clear already, provide the target audience for this change.
 
 ## Non-Goals
 
