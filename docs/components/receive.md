@@ -140,6 +140,15 @@ Flags:
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
                                  configuration.
+      --receive.propagate-replica  
+                                 Whether or not to propagate the replica count
+                                 of incoming write requests.This mechanism is
+                                 used to detect loops in cyclic receive
+                                 topologies.If your topology is acyclic, this
+                                 can be safely set to false.If your topology
+                                 contains cycles, i.e. fully connected hashring
+                                 of combined routing & ingesting components,
+                                 this should be set as true (default).
       --receive.replica-header="THANOS-REPLICA"  
                                  HTTP header specifying the replica number of a
                                  write request.
