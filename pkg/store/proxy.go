@@ -33,20 +33,19 @@ import (
 
 type ctxKey int
 
-// StoreMatcherKey is the context key for the store's allow list.
-const StoreMatcherKey = ctxKey(0)
+// MatcherKey is the context key for the store's allow list.
+const MatcherKey = ctxKey(0)
 
 // Client holds meta information about a store.
 type Client interface {
-	// Client to access the store.
+	// StoreClient is a client to access the store.
 	storepb.StoreClient
 
 	// LabelSets that each apply to some data exposed by the backing store.
 	LabelSets() []labels.Labels
-
-	// Minimum and maximum time range of data in the store.
+	// TimeRange is minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
-
+	// String returns human readable client name for debugging purposes.
 	String() string
 	// Addr returns address of a Client.
 	Addr() string
@@ -284,7 +283,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		// TODO(bwplotka): Currently we stream into big frames. Consider ensuring 1MB maximum.
 		// This however does not matter much when used with QueryAPI. Matters for federated Queries a lot.
 		// https://github.com/thanos-io/thanos/issues/2332
-		// Series are not necessarily merged across themselves.
+		// NOTE: Series are not necessarily merged across themselves.
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
 			lset, chk := mergedSet.At()
@@ -482,7 +481,7 @@ func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*
 	defer span.Finish()
 
 	var storeDebugMatcher [][]*labels.Matcher
-	if ctxVal := ctx.Value(StoreMatcherKey); ctxVal != nil {
+	if ctxVal := ctx.Value(MatcherKey); ctxVal != nil {
 		if value, ok := ctxVal.([][]*labels.Matcher); ok {
 			storeDebugMatcher = value
 		}

@@ -5,10 +5,13 @@ package dedup
 
 import (
 	"math"
+	"sort"
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type dedupSeriesSet struct {
@@ -20,6 +23,28 @@ type dedupSeriesSet struct {
 	lset     labels.Labels
 	peek     storage.Series
 	ok       bool
+}
+
+// SortLabels re-sorts the set so that the same series with different replica
+// labels are coming right after each other.
+func SortLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
+	for _, s := range set {
+		// Move the replica labels to the very end.
+		sort.Slice(s.Labels, func(i, j int) bool {
+			if _, ok := replicaLabels[s.Labels[i].Name]; ok {
+				return false
+			}
+			if _, ok := replicaLabels[s.Labels[j].Name]; ok {
+				return true
+			}
+			return s.Labels[i].Name < s.Labels[j].Name
+		})
+	}
+	// With the re-ordered label sets, re-sorting all series aligns the same series
+	// from different replicas sequentially.
+	sort.Slice(set, func(i, j int) bool {
+		return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
+	})
 }
 
 func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, isCounter bool) storage.SeriesSet {

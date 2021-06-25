@@ -481,7 +481,7 @@ func TestProxyStore_Series(t *testing.T) {
 
 			ctx := context.Background()
 			if len(tc.storeDebugMatchers) > 0 {
-				ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+				ctx = context.WithValue(ctx, MatcherKey, tc.storeDebugMatchers)
 			}
 
 			s := newStoreSeriesServer(ctx)
@@ -1356,7 +1356,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 
 			ctx := context.Background()
 			if len(tc.storeDebugMatchers) > 0 {
-				ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+				ctx = context.WithValue(ctx, MatcherKey, tc.storeDebugMatchers)
 			}
 			resp, err := q.LabelNames(ctx, tc.req)
 			if tc.expectedErr != nil {

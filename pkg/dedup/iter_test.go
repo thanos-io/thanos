@@ -14,6 +14,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -110,7 +112,7 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 }
 
 func TestDedupSeriesSet(t *testing.T) {
-	tests := []struct {
+	for _, tcase := range []struct {
 		input       []series
 		exp         []series
 		dedupLabels map[string]struct{}
@@ -118,6 +120,62 @@ func TestDedupSeriesSet(t *testing.T) {
 	}{
 		{
 			// Single dedup label.
+			input: []series{
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
+					samples: []sample{{60000, 3}, {70000, 4}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					samples: []sample{{200000, 5}, {210000, 6}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					samples: []sample{{60000, 3}, {70000, 4}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+				},
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+				},
+			},
+			dedupLabels: map[string]struct{}{
+				"replica": {},
+			},
+		},
+		{
+			// Single dedup label with label without replica label value.
+			// Regression against https://github.com/thanos-io/thanos/discussions/4274
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
@@ -417,15 +475,31 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			dedupLabels: map[string]struct{}{"replica": {}},
 		},
-	}
-
-	for _, tcase := range tests {
+	} {
 		t.Run("", func(t *testing.T) {
+			{
+				var cpy []storepb.Series
+				var cpy2 []storepb.Series
+				for _, i := range tcase.input {
+					s := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(i.lset)}
+					cpy = append(cpy, s)
+					cpy2 = append(cpy2, s)
+				}
+
+				SortLabels(cpy2, tcase.dedupLabels)
+
+				// Input is wrong, we expect sorted series by replica labels.
+				// We could sort before running test but it will give wrong impression we sort automatically in prod code too
+				// so failing instead.
+				testutil.Equals(t, cpy, cpy2)
+			}
+
 			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, tcase.dedupLabels, tcase.isCounter)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
 			}
+
 			testutil.Ok(t, dedupSet.Err())
 			testutil.Equals(t, len(tcase.exp), len(ats))
 
@@ -546,4 +620,123 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 	}
 	testutil.Ok(t, it.Err())
 	return res
+}
+
+func TestSortReplicaLabel(t *testing.T) {
+	for _, test := range []struct {
+		input       []storepb.Series
+		exp         []storepb.Series
+		dedupLabels map[string]struct{}
+	}{
+		// No deduplication label specified.
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+		},
+		// No deduplication label in series.
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			dedupLabels: map[string]struct{}{"e": {}},
+		},
+		// Single deduplication label.
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+			},
+			dedupLabels: map[string]struct{}{"b": {}},
+		},
+		// Single deduplication label with no replica label series that should be treated as replica (two cases)
+		// Regression against https://github.com/thanos-io/thanos/discussions/4274
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}}},                           // No b at all.
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}}, // No b at all.
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+			},
+			dedupLabels: map[string]struct{}{"b": {}},
+		},
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "x", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}}},                           // No x at all.
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}}, // No x at all.
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "x", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-2"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}}, // Those series are problematic, because they are between replica series.
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "x", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "x", Value: "replica-1"}}},
+			},
+			dedupLabels: map[string]struct{}{"x": {}},
+		},
+		// Multi deduplication labels.
+		{
+			input: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			},
+			exp: []storepb.Series{
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+			},
+			dedupLabels: map[string]struct{}{"b": {}, "b1": {}},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			SortLabels(test.input, test.dedupLabels)
+			testutil.Equals(t, test.exp, test.input)
+		})
+	}
 }
