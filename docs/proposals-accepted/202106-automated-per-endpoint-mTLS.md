@@ -55,7 +55,7 @@ If the mode is strict (i.e. `mode: ”strict”`) then all the endpoints in that
 
 **Automatic cert-rotation:** for this all the things are managed by the cert manager in the k8s cluster, we just need to redo the TLS handshake when the certificates are rotated by the cert-manager. And for this I would propose to add a new `--grpc-server-max-connection-age` CLI option which takes time as input and controls how often to re-do the tls handshake and re-read the certificates. This in reality is controlled by the keepalive’s [MaxConnectionAge](https://pkg.go.dev/google.golang.org/grpc/keepalive#ServerParameters) option (which will close the connection after every (e.g. 15m) inputted time duration) so when the connection is closed it requires a new tls handshake.
 
-While reading the _cert_file_ on each handshake we can improve the performance by keeping track of the it’s modification time. We should re-load the certificates only if they are actually rotated and there is some change in their modification time otherwise returning the previously stored one. Also if the file is not modified recently then it could be found on the cache memory and it would be faster to get the file details (i.e. modification time).
+While reading the _cert_file_ on each handshake we can improve the performance by keeping track of it’s modification time. We should re-load the certificates only if they are actually rotated and there is some change in their modification time otherwise returning the previously stored one. Also if the file is not modified recently then it could be found on the cache memory and it would be faster to get the file details (i.e. modification time).
 
 ## Alternatives
 
