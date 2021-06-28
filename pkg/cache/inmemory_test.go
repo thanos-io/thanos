@@ -7,6 +7,8 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 
 	"testing"
 	"time"
@@ -14,6 +16,123 @@ import (
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+// TestInmemorySingleflight tests whether the in flight mechanism works.
+func TestInmemorySingleflight(t *testing.T) {
+	t.Parallel()
+
+	conf := []byte(`
+max_size: 1MB
+max_item_size: 2KB
+single_flight: true
+`)
+	const testKey = "test"
+
+	c, _ := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
+
+	ctx := context.Background()
+
+	// Miss! Not blocking, we can continue.
+	hits := c.Fetch(ctx, []string{testKey})
+	testutil.Assert(t, len(hits) == 0)
+
+	g := &errgroup.Group{}
+
+	g.Go(func() error {
+		// This blocks :(
+		hits := c.Fetch(ctx, []string{testKey})
+		if len(hits) == 0 {
+			return errors.New("no hits")
+		}
+		return nil
+	})
+
+	time.Sleep(1 * time.Second)
+	// This unblocks the other goroutine.
+	c.Store(ctx, map[string][]byte{testKey: []byte("aa")}, 1*time.Minute)
+
+	testutil.Ok(t, g.Wait())
+
+	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.singleflightsaved))
+}
+
+// TestInmemorySingleflightMultipleKeys tests whether single-flight mechanism works
+// when a multiple key request comes.
+func TestInmemorySingleflightMultipleKeys(t *testing.T) {
+	t.Parallel()
+
+	conf := []byte(`
+max_size: 1MB
+max_item_size: 2KB
+single_flight: true
+`)
+
+	c, _ := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	testKeys := []string{"test", "test2"}
+
+	hits := c.Fetch(ctx, testKeys)
+	testutil.Assert(t, len(hits) == 0)
+
+	g := &errgroup.Group{}
+
+	g.Go(func() error {
+		hits := c.Fetch(context.Background(), testKeys)
+		if len(hits) != 1 {
+			return errors.New("expected to have 1 hit")
+		}
+		return nil
+	})
+
+	time.Sleep(1 * time.Second)
+	c.Store(context.Background(), map[string][]byte{testKeys[0]: []byte("foobar")}, 1*time.Minute)
+	time.Sleep(1 * time.Second)
+	cancel()
+
+	testutil.Ok(t, g.Wait())
+	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.singleflightsaved))
+}
+
+// TestInmemorySingleflightInterrupted tests whether single-flight mechanism still works
+// properly when Store() never comes.
+func TestInmemorySingleflightInterrupted(t *testing.T) {
+	t.Parallel()
+
+	conf := []byte(`
+max_size: 1MB
+max_item_size: 2KB
+single_flight: true
+`)
+
+	c, _ := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	const testKey = "test"
+
+	// Miss! Not blocking, we can continue.
+	hits := c.Fetch(ctx, []string{testKey})
+	testutil.Assert(t, len(hits) == 0)
+
+	g := &errgroup.Group{}
+
+	g.Go(func() error {
+		// This blocks :(
+		hits := c.Fetch(ctx, []string{testKey})
+
+		if len(hits) != 0 {
+			return errors.New("got hits")
+		}
+		return nil
+	})
+	cancel()
+
+	time.Sleep(1 * time.Second)
+	testutil.Ok(t, g.Wait())
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.singleflightsaved))
+}
 
 func TestInmemoryCache(t *testing.T) {
 	t.Parallel()
