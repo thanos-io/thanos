@@ -187,12 +187,8 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-		result := instantQuery(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
-			Deduplicate: false,
-		}, 3)
-
 		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
-		// be replicated 3 times across each of the Ingestor instances.
+		// be replicated 2 times across the Ingestor instances.
 		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 1.
 		// See https://github.com/thanos-io/thanos/issues/4359 for details.
 		actualReplicationFactor := 1.0
@@ -219,7 +215,6 @@ func TestReceive(t *testing.T) {
 				Value: model.SampleValue(actualReplicationFactor),
 			},
 		})
-
 
 	})
 
@@ -312,9 +307,9 @@ func TestReceive(t *testing.T) {
 
 		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
 		// be replicated 3 times across each of the Ingestor instances.
-		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 2.
+		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 1.
 		// See https://github.com/thanos-io/thanos/issues/4359 for details.
-		actualReplicationFactor := 2.0
+		actualReplicationFactor := 1.0
 
 		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
