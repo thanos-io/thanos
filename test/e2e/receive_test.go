@@ -64,11 +64,11 @@ func TestReceive(t *testing.T) {
 			 ┌──────────┐
 			 │  Prom    │
 			 └────┬─────┘
-				  │
+			      │
 			 ┌────▼─────┐
 			 │ Ingestor │
 			 └────┬─────┘
-				  │
+			      │
 			 ┌────▼─────┐
 			 │  Query   │
 			 └──────────┘
@@ -207,31 +207,31 @@ func TestReceive(t *testing.T) {
 			Router1 is configured to duplicate data twice, once to Ingestor1, and once to Router2,
 			Router2 is also configured to duplicate data twice, once to Ingestor2, and once to Ingestor3.
 
-					   ┌───────┐         ┌───────┐
-					   │       │         │       │
-					   │ Prom1 ├──┐   ┌──┤ Prom2 │
-					   │       │  │   │  │       │
-					   └───────┘  │   │  └───────┘
-							   ┌──▼───▼──┐
-							   │         │
-							   │ Router1 │
-						  ┌────┤         ├───────┐
-						  │    └─────────┘       │
-					  ┌───▼─────┐          ┌─────▼─────┐
-					  │         │          │           │
-					  │ Router2 │          │ Ingestor1 │
-				  ┌───┤         ├───┐      │           │
-				  │   └─────────┘   │      └─────┬─────┘
+			           ┌───────┐         ┌───────┐
+			           │       │         │       │
+			           │ Prom1 ├──┐   ┌──┤ Prom2 │
+			           │       │  │   │  │       │
+			           └───────┘  │   │  └───────┘
+			                   ┌──▼───▼──┐
+			                   │         │
+			                   │ Router1 │
+			              ┌────┤         ├───────┐
+			              │    └─────────┘       │
+			          ┌───▼─────┐          ┌─────▼─────┐
+			          │         │          │           │
+			          │ Router2 │          │ Ingestor1 │
+			      ┌───┤         ├───┐      │           │
+			      │   └─────────┘   │      └─────┬─────┘
 			┌─────▼─────┐      ┌────▼──────┐     │
 			│           │      │           │     │
 			│ Ingestor2 │      │ Ingestor3 │     │
 			│           │      │           │     │
 			└─────┬─────┘      └─────┬─────┘     │
-				  │             ┌────▼────┐      │
-				  │             │         │      │
-				  └─────────────►  Query  ◄──────┘
-								│         │
-								└─────────┘
+			      │             ┌────▼────┐      │
+			      │             │         │      │
+			      └─────────────►  Query  ◄──────┘
+			                    │         │
+			                    └─────────┘
 
 			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
