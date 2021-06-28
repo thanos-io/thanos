@@ -191,11 +191,36 @@ func TestReceive(t *testing.T) {
 			Deduplicate: false,
 		}, 3)
 
-		// TODO(ianbillett): change this assertion to testutil.Equals when #4359 is fixed.
-		// Currently, we expect this e2e test to fail due to bugs in the reicever split proposal implementation.
-		for _, series := range result {
-			testutil.NotEqual(t, series.Value, 2.0)
-		}
+		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
+		// be replicated 3 times across each of the Ingestor instances.
+		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 1.
+		// See https://github.com/thanos-io/thanos/issues/4359 for details.
+		actualReplicationFactor := 1.0
+
+		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"prometheus": "prom1",
+				},
+				Value: model.SampleValue(actualReplicationFactor),
+			},
+			&model.Sample{
+				Metric: model.Metric{
+					"prometheus": "prom2",
+				},
+				Value: model.SampleValue(actualReplicationFactor),
+			},
+			&model.Sample{
+				Metric: model.Metric{
+					"prometheus": "prom3",
+				},
+				Value: model.SampleValue(actualReplicationFactor),
+			},
+		})
+
+
 	})
 
 	t.Run("routing_tree", func(t *testing.T) {
@@ -285,15 +310,28 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-		result := instantQuery(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
-			Deduplicate: false,
-		}, 2)
+		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
+		// be replicated 3 times across each of the Ingestor instances.
+		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 2.
+		// See https://github.com/thanos-io/thanos/issues/4359 for details.
+		actualReplicationFactor := 2.0
 
-		// TODO(ianbillett): change this assertion to testutil.Equals when #4359 is fixed.
-		// Currently, we expect this e2e test to fail due to bugs in the reicever split proposal implementation.
-		for _, series := range result {
-			testutil.NotEqual(t, series.Value, 3.0)
-		}
+		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"prometheus": "prom1",
+				},
+				Value: model.SampleValue(actualReplicationFactor),
+			},
+			&model.Sample{
+				Metric: model.Metric{
+					"prometheus": "prom2",
+				},
+				Value: model.SampleValue(actualReplicationFactor),
+			},
+		})
 	})
 
 	t.Run("hashring", func(t *testing.T) {
