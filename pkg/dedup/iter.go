@@ -27,6 +27,8 @@ type dedupSeriesSet struct {
 
 // SortLabels re-sorts the set so that the same series with different replica
 // labels are coming right after each other.
+// NOTE: The input `set` is expected to have sorted series by labels.
+// TODO(bwplotka): Optimize to stream sort. We don't want to hold all series data in memory.
 func SortLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 	for _, s := range set {
 		// Move the replica labels to the very end.
@@ -40,10 +42,31 @@ func SortLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 			return s.Labels[i].Name < s.Labels[j].Name
 		})
 	}
-	// With the re-ordered label sets, re-sorting all series aligns the same series
-	// from different replicas sequentially.
+	// With the re-ordered label sets, re-sorting all series aligns the same series from different replicas sequentially.
 	sort.Slice(set, func(i, j int) bool {
-		return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
+		li := set[i].Labels
+		for k := len(li) - 1; k > 0; k-- {
+			if _, ok := replicaLabels[li[k].Name]; ok {
+				continue
+			}
+			li = li[:k+1]
+			break
+		}
+
+		lj := set[j].Labels
+		for k := len(lj) - 1; k > 0; k-- {
+			if _, ok := replicaLabels[lj[k].Name]; ok {
+				continue
+			}
+			lj = lj[:k+1]
+			break
+		}
+
+		cmp := labels.Compare(labelpb.ZLabelsToPromLabels(li), labelpb.ZLabelsToPromLabels(lj))
+		if cmp == 0 {
+			return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
+		}
+		return cmp < 0
 	})
 }
 

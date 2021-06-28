@@ -125,59 +125,6 @@ func TestDedupSeriesSet(t *testing.T) {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
-					samples: []sample{{60000, 3}, {70000, 4}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-					samples: []sample{{200000, 5}, {210000, 6}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-					samples: []sample{{60000, 3}, {70000, 4}},
-				},
-			},
-			exp: []series{
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
-				},
-			},
-			dedupLabels: map[string]struct{}{
-				"replica": {},
-			},
-		},
-		{
-			// Single dedup label with label without replica label value.
-			// Regression against https://github.com/thanos-io/thanos/discussions/4274
-			input: []series{
-				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
@@ -188,9 +135,6 @@ func TestDedupSeriesSet(t *testing.T) {
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
@@ -210,10 +154,6 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
@@ -263,6 +203,9 @@ func TestDedupSeriesSet(t *testing.T) {
 			// Multi dedup label.
 			input: []series{
 				{
+					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					samples: []sample{{10000, 1}, {20000, 2}},
+				}, {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
@@ -273,9 +216,6 @@ func TestDedupSeriesSet(t *testing.T) {
 					samples: []sample{{200000, 5}, {210000, 6}},
 				}, {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				}, {
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				}, {
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
@@ -295,10 +235,6 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-					samples: []sample{{10000, 1}, {20000, 2}},
-				},
-				{
-					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					samples: []sample{{10000, 1}, {20000, 2}},
 				},
 				{
@@ -707,10 +643,10 @@ func TestSortReplicaLabel(t *testing.T) {
 			},
 			exp: []storepb.Series{
 				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}}, // Those series are problematic, because they are between replica series.
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "x", Value: "replica-1"}}},
 				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-1"}}},
 				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "x", Value: "replica-2"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "c2", Value: "3"}}},
+				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "x", Value: "replica-1"}}},
 				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "x", Value: "replica-1"}}},
 			},
 			dedupLabels: map[string]struct{}{"x": {}},
