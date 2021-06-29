@@ -754,7 +754,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
-	cmd.Flag("receive.samples-limit-per-each-write", "Number of allowed samples for each write API call.").Default("5000").Uint64Var(&rc.samplesLimitPerEachWrite)
+	cmd.Flag("receive.samples-limit-per-each-write", "Number of allowed samples for each write API call.").Default("50000").Uint64Var(&rc.samplesLimitPerEachWrite)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
