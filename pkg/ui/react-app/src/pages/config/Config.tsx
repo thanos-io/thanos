@@ -4,7 +4,6 @@ import { Button } from 'reactstrap';
 import CopyToClipboard from 'react-copy-to-clipboard';
 import PathPrefixProps from '../../types/PathPrefixProps';
 
-import './Config.css';
 import { withStatusIndicator } from '../../components/withStatusIndicator';
 import { useFetch } from '../../hooks/useFetch';
 

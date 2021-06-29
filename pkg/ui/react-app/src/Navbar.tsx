@@ -13,6 +13,7 @@ import {
   DropdownItem,
 } from 'reactstrap';
 import PathPrefixProps from './types/PathPrefixProps';
+import { ThemeToggle } from './Theme';
 
 interface NavbarProps {
   consolesLink: string | null;
@@ -23,7 +24,7 @@ const Navigation: FC<PathPrefixProps & NavbarProps> = ({ pathPrefix, consolesLin
   const toggle = () => setIsOpen(!isOpen);
   return (
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
-      <NavbarToggler onClick={toggle} />
+      <NavbarToggler onClick={toggle} className="mr-2" />
       <Link className="pt-0 navbar-brand" to={`${pathPrefix}/graph`}>
         Prometheus
       </Link>
@@ -80,6 +81,7 @@ const Navigation: FC<PathPrefixProps & NavbarProps> = ({ pathPrefix, consolesLin
           </NavItem>
         </Nav>
       </Collapse>
+      <ThemeToggle />
     </Navbar>
   );
 };

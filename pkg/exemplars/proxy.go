@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -52,27 +53,27 @@ type exemplarsStream struct {
 }
 
 func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exemplars_ExemplarsServer) error {
+	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
+	defer span.Finish()
+
 	expr, err := parser.ParseExpr(req.Query)
 	if err != nil {
 		return err
 	}
 
-	selectors := parser.ExtractSelectors(expr)
+	match, selectors := selectorsMatchesExternalLabels(parser.ExtractSelectors(expr), s.selectorLabels)
 
-	newSelectors := make([][]*labels.Matcher, 0, len(selectors))
-	for _, matchers := range selectors {
-		matched, newMatchers := matchesExternalLabels(matchers, s.selectorLabels)
-		if matched {
-			newSelectors = append(newSelectors, newMatchers)
-		}
-	}
 	// There is no matched selectors for this thanos query.
-	if len(newSelectors) == 0 {
+	if !match {
 		return nil
 	}
 
+	if len(selectors) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
 	var (
-		g, gctx   = errgroup.WithContext(srv.Context())
+		g, gctx   = errgroup.WithContext(ctx)
 		respChan  = make(chan *exemplarspb.ExemplarData, 10)
 		exemplars []*exemplarspb.ExemplarData
 	)
@@ -80,7 +81,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	for _, st := range s.exemplars() {
 		query := ""
 	Matchers:
-		for _, matchers := range newSelectors {
+		for _, matchers := range selectors {
 			metricsSelector := ""
 			for _, m := range matchers {
 				for _, ls := range st.LabelSets {
@@ -147,7 +148,10 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	for _, e := range exemplars {
-		if err := srv.Send(exemplarspb.NewExemplarsResponse(e)); err != nil {
+		tracing.DoInSpan(srv.Context(), "send_exemplars_response", func(_ context.Context) {
+			err = srv.Send(exemplarspb.NewExemplarsResponse(e))
+		})
+		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send exemplars response").Error())
 		}
 	}

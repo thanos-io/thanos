@@ -1,4 +1,4 @@
-# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.4.0. DO NOT EDIT.
+# Auto generated binary variables helper managed by https://github.com/bwplotka/bingo v0.4.3. DO NOT EDIT.
 # All tools are designed to be build inside $GOBIN.
 BINGO_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 GOPATH ?= $(shell go env GOPATH)
@@ -23,17 +23,11 @@ $(ALERTMANAGER): $(BINGO_DIR)/alertmanager.mod
 	@echo "(re)installing $(GOBIN)/alertmanager-v0.20.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.20.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
 
-BINGO := $(GOBIN)/bingo-v0.3.0
+BINGO := $(GOBIN)/bingo-v0.4.3
 $(BINGO): $(BINGO_DIR)/bingo.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/bingo-v0.3.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.3.0 "github.com/bwplotka/bingo"
-
-EMBEDMD := $(GOBIN)/embedmd-v0.0.0-20181127031020-97c13d6e4160
-$(EMBEDMD): $(BINGO_DIR)/embedmd.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/embedmd-v0.0.0-20181127031020-97c13d6e4160"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=embedmd.mod -o=$(GOBIN)/embedmd-v0.0.0-20181127031020-97c13d6e4160 "github.com/campoy/embedmd"
+	@echo "(re)installing $(GOBIN)/bingo-v0.4.3"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.4.3 "github.com/bwplotka/bingo"
 
 FAILLINT := $(GOBIN)/faillint-v1.5.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
@@ -95,6 +89,12 @@ $(JSONNETFMT): $(BINGO_DIR)/jsonnetfmt.mod
 	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.17.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
+MDOX := $(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197
+$(MDOX): $(BINGO_DIR)/mdox.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197 "github.com/bwplotka/mdox"
+
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): $(BINGO_DIR)/minio.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
@@ -107,13 +107,15 @@ $(PROMDOC): $(BINGO_DIR)/promdoc.mod
 	@echo "(re)installing $(GOBIN)/promdoc-v0.7.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promdoc.mod -o=$(GOBIN)/promdoc-v0.7.0 "github.com/plexsystems/promdoc"
 
-PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f
-$(PROMETHEUS_ARRAY): $(BINGO_DIR)/prometheus.mod $(BINGO_DIR)/prometheus.1.mod
+PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f $(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1
+$(PROMETHEUS_ARRAY): $(BINGO_DIR)/prometheus.mod $(BINGO_DIR)/prometheus.1.mod $(BINGO_DIR)/prometheus.2.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/prometheus-v2.4.3+incompatible"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v2.4.3+incompatible "github.com/prometheus/prometheus/cmd/prometheus"
 	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.1.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f "github.com/prometheus/prometheus/cmd/prometheus"
+	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.2.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1 "github.com/prometheus/prometheus/cmd/prometheus"
 
 PROMTOOL := $(GOBIN)/promtool-v1.8.2-0.20200522113006-f4dd45609a05
 $(PROMTOOL): $(BINGO_DIR)/promtool.mod

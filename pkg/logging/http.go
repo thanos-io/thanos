@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 
 	"net/http"
 	"time"
@@ -43,14 +44,24 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 		if hostPort == "" {
 			hostPort = r.URL.Host
 		}
-		_, port, err := net.SplitHostPort(hostPort)
-		if err != nil {
-			level.Error(m.logger).Log("msg", "failed to parse host port for http log decision", "err", err)
-			next.ServeHTTP(w, r)
-			return
+
+		var port string
+		var err error
+		// Try to extract port if there is ':' as part of 'hostPort'.
+		if strings.Contains(hostPort, ":") {
+			_, port, err = net.SplitHostPort(hostPort)
+			if err != nil {
+				level.Error(m.logger).Log("msg", "failed to parse host port for http log decision", "err", err)
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
 
-		decision := m.opts.shouldLog(net.JoinHostPort(r.URL.String(), port), nil)
+		deciderURL := r.URL.String()
+		if len(port) > 0 {
+			deciderURL = net.JoinHostPort(deciderURL, port)
+		}
+		decision := m.opts.shouldLog(deciderURL, nil)
 
 		switch decision {
 		case NoLogCall:

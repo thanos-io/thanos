@@ -540,21 +540,30 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		vals     []string
 		warnings storage.Warnings
 	)
-	// TODO(yeya24): push down matchers to Store level.
 	if len(matcherSets) > 0 {
-		// Get all series which match matchers.
-		var sets []storage.SeriesSet
-		for _, mset := range matcherSets {
-			s := q.Select(false, nil, mset...)
-			sets = append(sets, s)
+		var callWarnings storage.Warnings
+		labelValuesSet := make(map[string]struct{})
+		for _, matchers := range matcherSets {
+			vals, callWarnings, err = q.LabelValues(name, matchers...)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+			}
+			warnings = append(warnings, callWarnings...)
+			for _, val := range vals {
+				labelValuesSet[val] = struct{}{}
+			}
 		}
-		vals, warnings, err = labelValuesByMatchers(sets, name)
+
+		vals = make([]string, 0, len(labelValuesSet))
+		for val := range labelValuesSet {
+			vals = append(vals, val)
+		}
+		sort.Strings(vals)
 	} else {
 		vals, warnings, err = q.LabelValues(name)
-	}
-
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+		}
 	}
 
 	if vals == nil {
@@ -782,6 +791,15 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "exemplar_query_request")
+		defer span.Finish()
+
+		var (
+			data     []*exemplarspb.ExemplarData
+			warnings storage.Warnings
+			err      error
+		)
+
 		start, err := cortexutil.ParseTime(r.FormValue("start"))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
@@ -797,11 +815,15 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			Query:                   r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}
-		exemplarsData, warnings, err := client.Exemplars(r.Context(), req)
+
+		tracing.DoInSpan(ctx, "retrieve_exemplars", func(ctx context.Context) {
+			data, warnings, err = client.Exemplars(ctx, req)
+		})
+
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}
 		}
-		return exemplarsData, warnings, nil
+		return data, warnings, nil
 	}
 }
 
@@ -903,30 +925,6 @@ func labelNamesByMatchers(sets []storage.SeriesSet) ([]string, storage.Warnings,
 	return labelNames, warnings, nil
 }
 
-// Modified from https://github.com/eklockare/prometheus/blob/6178-matchers-with-label-values/web/api/v1/api.go#L571-L591.
-// LabelValuesByMatchers uses matchers to filter out matching series, then label values are extracted.
-func labelValuesByMatchers(sets []storage.SeriesSet, name string) ([]string, storage.Warnings, error) {
-	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
-	labelValuesSet := make(map[string]struct{})
-	for set.Next() {
-		series := set.At()
-		labelValue := series.Labels().Get(name)
-		labelValuesSet[labelValue] = struct{}{}
-	}
-
-	warnings := set.Warnings()
-	if set.Err() != nil {
-		return nil, warnings, set.Err()
-	}
-	// Convert the map to an array.
-	labelValues := make([]string, 0, len(labelValuesSet))
-	for key := range labelValuesSet {
-		labelValues = append(labelValues, key)
-	}
-	sort.Strings(labelValues)
-	return labelValues, warnings, nil
-}
-
 // NewMetricMetadataHandler creates handler compatible with HTTP /api/v1/metadata https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata
 // which uses gRPC Unary Metadata API.
 func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
@@ -936,6 +934,15 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 	}
 
 	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "metadata_http_request")
+		defer span.Finish()
+
+		var (
+			t        map[string][]metadatapb.Meta
+			warnings storage.Warnings
+			err      error
+		)
+
 		req := &metadatapb.MetricMetadataRequest{
 			// By default we use -1, which means no limit.
 			Limit:                   -1,
@@ -952,7 +959,9 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			req.Limit = int32(limit)
 		}
 
-		t, warnings, err := client.MetricMetadata(r.Context(), req)
+		tracing.DoInSpan(ctx, "retrieve_metadata", func(ctx context.Context) {
+			t, warnings, err = client.MetricMetadata(ctx, req)
+		})
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
 		}

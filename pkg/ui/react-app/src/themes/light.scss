@@ -1,0 +1,26 @@
+/* THIS FILE WAS COPIED INTO THANOS FROM PROMETHEUS 
+   (LIVING AT https://github.com/prometheus/prometheus/blob/main/web/ui/react-app/src/themes/light.scss),
+   PROMETHEUS CODE WAS LICENSED UNDER AN APACHE 2.0 LICENSE, SEE
+   https://github.com/prometheus/prometheus/blob/main/LICENSE.
+*/
+@import 'bootstrap_light';
+
+@import '~bootstrap/scss/functions';
+@import '~bootstrap/scss/variables';
+
+$alert-cell-color: inherit;
+$rule-cell-bg: #f5f5f5;
+
+$config-yaml-color: #333;
+$config-yaml-bg: #f5f5f5;
+$config-yaml-border: #ccc;
+
+$query-stats-color: #71808e;
+
+$metrics-explorer-bg: #efefef;
+
+$clear-time-btn-bg: $white;
+
+.bootstrap {
+  @import './shared';
+}

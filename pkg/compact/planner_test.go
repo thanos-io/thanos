@@ -68,7 +68,7 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 	}
 
 	// This mimics our default ExponentialBlockRanges with min block size equals to 20.
-	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil)
+	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
 	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
@@ -396,7 +396,7 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 	}
 
 	// This mimics our default ExponentialBlockRanges with min block size equals to 20.
-	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil)
+	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
 	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
