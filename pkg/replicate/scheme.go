@@ -204,21 +204,24 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
-	// Replicate concurrently
+	// Replicate concurrently.
 	var wg sync.WaitGroup
 	errChan := make(chan error)
 	finishChan := make(chan struct{})
 
+	// Control number of goroutines to be  with channel.
+	//TODO: Set the maximum number of workers by user. The maximum number is set as 3 temporarily.
+	numChan := make(chan struct{}, 3)
 	for _, b := range availableBlocks {
+		numChan <- struct{}{}
 		wg.Add(1)
 		go func(b *metadata.Meta) {
 			defer wg.Done()
 			if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
 				errChan <- errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
 			}
-			return
+			<-numChan
 		}(b)
-
 	}
 
 	go func() {
