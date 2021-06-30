@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#4342](https://github.com/thanos-io/thanos/pull/4342) ThanosSidecarUnhealthy doesn't fire if the sidecar is never healthy
+- [#4388](https://github.com/thanos-io/thanos/pull/4388) Receive: fix bug in forwarding remote-write requests within the hashring via gRPC when TLS is enabled on the HTTP server but not on the gRPC server.
 
 ### Changed
 
