@@ -65,9 +65,9 @@ type InMemoryCache struct {
 	hitsExpired prometheus.Counter
 	// The input cache value would be copied to an inmemory array
 	// instead of simply using the one sent by the caller.
-	added             prometheus.Counter
-	current           prometheus.Gauge
-	singleflightsaved prometheus.Counter
+	added   prometheus.Counter
+	current prometheus.Gauge
+	sfSaved prometheus.Counter
 
 	currentSize      prometheus.Gauge
 	totalCurrentSize prometheus.Gauge
@@ -121,7 +121,7 @@ func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.R
 
 	if config.Singleflight {
 		c.subs = make(map[string]*pubsub)
-		c.singleflightsaved = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		c.sfSaved = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name:        "thanos_cache_inmemory_singleflight_saved_calls_total",
 			Help:        "Total number of calls saved by the singleflight mechanism.",
 			ConstLabels: prometheus.Labels{"name": name},
@@ -315,23 +315,24 @@ func (c *InMemoryCache) reset() {
 func (c *InMemoryCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
 	for key, val := range data {
 		c.set(key, val, ttl)
-
-		if c.singleFlight {
-			c.mu.Lock()
-
-			if c.subs[key] == nil {
-				c.mu.Unlock()
-				continue
-			}
-
-			for _, listener := range c.subs[key].listeners {
-				listener <- val
-				close(listener)
-			}
-
-			delete(c.subs, key)
-			c.mu.Unlock()
+		if !c.singleFlight {
+			continue
 		}
+
+		c.mu.Lock()
+
+		if c.subs[key] == nil {
+			c.mu.Unlock()
+			continue
+		}
+
+		for _, listener := range c.subs[key].listeners {
+			listener <- val
+			close(listener)
+		}
+
+		delete(c.subs, key)
+		c.mu.Unlock()
 	}
 }
 
@@ -342,29 +343,33 @@ func (c *InMemoryCache) Fetch(ctx context.Context, keys []string) map[string][]b
 	for _, key := range keys {
 		if b, ok := c.get(key); ok {
 			results[key] = b
-		} else if c.singleFlight {
-			c.mu.Lock()
-			if c.subs[key] == nil {
-				c.subs[key] = &pubsub{originalCtx: ctx}
-				c.mu.Unlock()
-			} else {
-				if c.subs[key].originalCtx.Err() != nil {
-					c.subs[key] = &pubsub{originalCtx: ctx}
-				}
-				originalCtx := c.subs[key].originalCtx
-				respReceiver := make(chan []byte)
-				c.subs[key].listeners = append(c.subs[key].listeners, respReceiver)
-				c.mu.Unlock()
+			continue
+		}
+		if !c.singleFlight {
+			continue
+		}
 
-				select {
-				case b := <-respReceiver:
-					results[key] = b
-					c.singleflightsaved.Inc()
-				case <-ctx.Done():
-					return results
-				case <-originalCtx.Done():
-					continue
-				}
+		c.mu.Lock()
+		if c.subs[key] == nil {
+			c.subs[key] = &pubsub{originalCtx: ctx}
+			c.mu.Unlock()
+		} else {
+			if c.subs[key].originalCtx.Err() != nil {
+				c.subs[key] = &pubsub{originalCtx: ctx}
+			}
+			originalCtx := c.subs[key].originalCtx
+			respReceiver := make(chan []byte)
+			c.subs[key].listeners = append(c.subs[key].listeners, respReceiver)
+			c.mu.Unlock()
+
+			select {
+			case b := <-respReceiver:
+				results[key] = b
+				c.sfSaved.Inc()
+			case <-ctx.Done():
+				return results
+			case <-originalCtx.Done():
+				continue
 			}
 		}
 	}

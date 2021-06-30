@@ -55,7 +55,7 @@ single_flight: true
 
 	testutil.Ok(t, g.Wait())
 
-	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.singleflightsaved))
+	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.sfSaved))
 }
 
 // TestInmemorySingleflightMultipleKeys tests whether single-flight mechanism works
@@ -94,7 +94,7 @@ single_flight: true
 	cancel()
 
 	testutil.Ok(t, g.Wait())
-	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.singleflightsaved))
+	testutil.Equals(t, 1.0, prom_testutil.ToFloat64(c.sfSaved))
 }
 
 // TestInmemorySingleflightInterrupted tests whether single-flight mechanism still works
@@ -133,7 +133,7 @@ single_flight: true
 
 	time.Sleep(1 * time.Second)
 	testutil.Ok(t, g.Wait())
-	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.singleflightsaved))
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.sfSaved))
 }
 
 func TestInmemoryCache(t *testing.T) {
@@ -235,6 +235,24 @@ max_item_size: 1MB
 	testutil.Equals(t, (*InMemoryCache)(nil), cache)
 }
 
+func benchCacheGetSet(b *testing.B, cache *InMemoryCache, numKeys, concurrency int) {
+	wg := &sync.WaitGroup{}
+
+	for k := 0; k < numKeys; k++ {
+		wg.Add(concurrency)
+		for i := 0; i < concurrency; i++ {
+			go func() {
+				defer wg.Done()
+				for j := 0; j < b.N; j++ {
+					cache.Fetch(context.Background(), []string{fmt.Sprintf("%d", k)})
+					cache.Store(context.Background(), map[string][]byte{fmt.Sprintf("%d", k): {}}, 1*time.Minute)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+}
+
 func BenchmarkInmemorySingleflight(b *testing.B) {
 	conf := []byte(`max_size: 2KB
 max_item_size: 1KB`)
@@ -248,46 +266,14 @@ single_flight: true`)
 	sfCache, err := NewInMemoryCache("testsf", log.NewNopLogger(), nil, singleflightConf)
 	testutil.Ok(b, err)
 
-	var _ = sfCache
-
 	for _, numKeys := range []int{100, 1000, 10000} {
 		for _, concurrency := range []int{1, 5, 10} {
-			wg := &sync.WaitGroup{}
-
 			b.Run(fmt.Sprintf("inmemory_get_set_keys%d_c%d", numKeys, concurrency), func(b *testing.B) {
-				// b.N times get and set random number of numKeys keys.
-				for k := 0; k < numKeys; k++ {
-					wg.Add(concurrency)
-					for i := 0; i < concurrency; i++ {
-						go func() {
-							defer wg.Done()
-							for j := 0; j < b.N; j++ {
-								cache.Fetch(context.Background(), []string{fmt.Sprintf("%d", k)})
-								cache.Store(context.Background(), map[string][]byte{fmt.Sprintf("%d", k): {}}, 1*time.Minute)
-							}
-						}()
-					}
-					wg.Wait()
-				}
+				benchCacheGetSet(b, cache, numKeys, concurrency)
 			})
 
-			wg = &sync.WaitGroup{}
-
 			b.Run(fmt.Sprintf("inmemory_singleflight_get_set_keys%d_conc%d", numKeys, concurrency), func(b *testing.B) {
-				// b.N times get and set random number of numKeys keys.
-				for k := 0; k < numKeys; k++ {
-					wg.Add(concurrency)
-					for i := 0; i < concurrency; i++ {
-						go func() {
-							defer wg.Done()
-							for j := 0; j < b.N; j++ {
-								sfCache.Fetch(context.Background(), []string{fmt.Sprintf("%d", k)})
-								sfCache.Store(context.Background(), map[string][]byte{fmt.Sprintf("%d", k): {}}, 1*time.Minute)
-							}
-						}()
-					}
-					wg.Wait()
-				}
+				benchCacheGetSet(b, sfCache, numKeys, concurrency)
 			})
 		}
 	}
