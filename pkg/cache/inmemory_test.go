@@ -5,6 +5,8 @@ package cache
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -231,4 +233,62 @@ max_item_size: 1MB
 	cache, err := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, (*InMemoryCache)(nil), cache)
+}
+
+func BenchmarkInmemorySingleflight(b *testing.B) {
+	conf := []byte(`max_size: 2KB
+max_item_size: 1KB`)
+	cache, err := NewInMemoryCache("test", log.NewNopLogger(), nil, conf)
+	testutil.Ok(b, err)
+
+	singleflightConf := []byte(`
+max_size: 2KB
+max_item_size: 1KB
+single_flight: true`)
+	sfCache, err := NewInMemoryCache("testsf", log.NewNopLogger(), nil, singleflightConf)
+	testutil.Ok(b, err)
+
+	var _ = sfCache
+
+	for _, numKeys := range []int{100, 1000, 10000} {
+		for _, concurrency := range []int{1, 5, 10} {
+			wg := &sync.WaitGroup{}
+
+			b.Run(fmt.Sprintf("inmemory_get_set_keys%d_c%d", numKeys, concurrency), func(b *testing.B) {
+				// b.N times get and set random number of numKeys keys.
+				for k := 0; k < numKeys; k++ {
+					wg.Add(concurrency)
+					for i := 0; i < concurrency; i++ {
+						go func() {
+							defer wg.Done()
+							for j := 0; j < b.N; j++ {
+								cache.Fetch(context.Background(), []string{fmt.Sprintf("%d", k)})
+								cache.Store(context.Background(), map[string][]byte{fmt.Sprintf("%d", k): {}}, 1*time.Minute)
+							}
+						}()
+					}
+					wg.Wait()
+				}
+			})
+
+			wg = &sync.WaitGroup{}
+
+			b.Run(fmt.Sprintf("inmemory_singleflight_get_set_keys%d_conc%d", numKeys, concurrency), func(b *testing.B) {
+				// b.N times get and set random number of numKeys keys.
+				for k := 0; k < numKeys; k++ {
+					wg.Add(concurrency)
+					for i := 0; i < concurrency; i++ {
+						go func() {
+							defer wg.Done()
+							for j := 0; j < b.N; j++ {
+								sfCache.Fetch(context.Background(), []string{fmt.Sprintf("%d", k)})
+								sfCache.Store(context.Background(), map[string][]byte{fmt.Sprintf("%d", k): {}}, 1*time.Minute)
+							}
+						}()
+					}
+					wg.Wait()
+				}
+			})
+		}
+	}
 }
