@@ -76,7 +76,7 @@ type Options struct {
 	ReplicaHeader     string
 	Endpoint          string
 	ReplicationFactor uint64
-	PropagateReplica  bool
+	OverrideReplica   bool
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
@@ -91,12 +91,12 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx              sync.RWMutex
-	hashring         Hashring
-	peers            *peerGroup
-	expBackoff       backoff.Backoff
-	peerStates       map[string]*retryState
-	propagateReplica bool
+	mtx             sync.RWMutex
+	hashring        Hashring
+	peers           *peerGroup
+	expBackoff      backoff.Backoff
+	peerStates      map[string]*retryState
+	overrideReplica bool
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -109,12 +109,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:           logger,
-		writer:           o.Writer,
-		router:           route.New(),
-		options:          o,
-		peers:            newPeerGroup(o.DialOpts...),
-		propagateReplica: o.PropagateReplica,
+		logger:          logger,
+		writer:          o.Writer,
+		router:          route.New(),
+		options:         o,
+		peers:           newPeerGroup(o.DialOpts...),
+		overrideReplica: o.OverrideReplica,
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
@@ -263,7 +263,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
 	// This causes issues for correct replication in non-trivial acyclic topologies.
 	// See discussion in: https://github.com/thanos-io/thanos/issues/4359
-	if !h.propagateReplica {
+	if !h.overrideReplica {
 		rep = 0
 	}
 

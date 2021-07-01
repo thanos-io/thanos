@@ -117,8 +117,8 @@ func runReceive(
 	if !enableIngestion {
 		level.Info(logger).Log("msg", "ingestion is disabled for receiver")
 	}
-	if !conf.propagateReplica {
-		level.Info(logger).Log("msg", "not propagating request replica values")
+	if *conf.overrideReplica {
+		level.Info(logger).Log("msg", "write request replica override enabled")
 	}
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
@@ -195,7 +195,7 @@ func runReceive(
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
-		PropagateReplica:  conf.propagateReplica,
+		OverrideReplica:   *conf.overrideReplica,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
@@ -692,7 +692,7 @@ type receiveConfig struct {
 	defaultTenantID   string
 	replicaHeader     string
 	replicationFactor uint64
-	propagateReplica  bool
+	overrideReplica   *bool
 	forwardTimeout    *model.Duration
 
 	tsdbMinBlockDuration       *model.Duration
@@ -760,11 +760,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
-	cmd.Flag("receive.propagate-replica",
-		"Whether or not to propagate the replica count of incoming write requests."+
-			"This mechanism is used to detect loops in cyclic receive topologies."+
-			"If your topology is acyclic, this can be safely set to false."+
-			"If your topology contains cycles, i.e. fully connected hashring of combined routing & ingesting components, this should be set as true (default).").BoolVar(&rc.propagateReplica)
+	rc.overrideReplica = cmd.Flag("receive.override-request-replica",
+		"Whether or not to overwrite the replica count of incoming write requests."+
+			"This is used to detect loops in cyclic receive topologies, and precent infinite forwarding of write requests."+
+			"If your receiver topology is cyclic (i.e. contains cycles), this should be set to false (the default)."+
+			"If your receiver topology is acyclic (i.e. no cycles), this can be safely set to true."+
+			"See the receiver integration tests for examples of when this flag should be set.").Default("false").Bool()
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
