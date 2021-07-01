@@ -888,6 +888,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		g.Add(func() error {
 			chunkPool := chunkenc.NewPool()
 			changeLog := compactv2.NewChangeLog(ioutil.Discard)
+			stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			for _, id := range ids {
 				// Delete series from block & modify.
 				level.Info(logger).Log("msg", "downloading block", "source", id)
@@ -974,7 +975,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				level.Info(logger).Log("msg", "uploaded", "source", id, "new", newID)
 
 				if !*dryRun && *deleteBlocks {
-					if err := block.MarkForDeletion(ctx, logger, bkt, id, "block rewritten", promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+					if err := block.MarkForDeletion(ctx, logger, bkt, id, "block rewritten", stubCounter); err != nil {
 						level.Error(logger).Log("msg", "failed to mark block for deletion", "id", id.String(), "err", err)
 					}
 				}
