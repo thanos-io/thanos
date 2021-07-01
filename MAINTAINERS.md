@@ -10,7 +10,7 @@
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)         | Red Hat       |
 | Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)     | Grafana Labs  |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze) | Polar Signals |
-| Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)         | Red Hat       |
+| Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)         | ByteDance     |
 
 We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Italy, Lithuania, Poland, UK, India and China. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
