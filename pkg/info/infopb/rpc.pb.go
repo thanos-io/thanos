@@ -29,21 +29,21 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type InfoReq struct {
+type InfoRequest struct {
 }
 
-func (m *InfoReq) Reset()         { *m = InfoReq{} }
-func (m *InfoReq) String() string { return proto.CompactTextString(m) }
-func (*InfoReq) ProtoMessage()    {}
-func (*InfoReq) Descriptor() ([]byte, []int) {
+func (m *InfoRequest) Reset()         { *m = InfoRequest{} }
+func (m *InfoRequest) String() string { return proto.CompactTextString(m) }
+func (*InfoRequest) ProtoMessage()    {}
+func (*InfoRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a1214ec45d2bf952, []int{0}
 }
-func (m *InfoReq) XXX_Unmarshal(b []byte) error {
+func (m *InfoRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *InfoReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *InfoRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_InfoReq.Marshal(b, m, deterministic)
+		return xxx_messageInfo_InfoRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -53,19 +53,19 @@ func (m *InfoReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *InfoReq) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InfoReq.Merge(m, src)
+func (m *InfoRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InfoRequest.Merge(m, src)
 }
-func (m *InfoReq) XXX_Size() int {
+func (m *InfoRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *InfoReq) XXX_DiscardUnknown() {
-	xxx_messageInfo_InfoReq.DiscardUnknown(m)
+func (m *InfoRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_InfoRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_InfoReq proto.InternalMessageInfo
+var xxx_messageInfo_InfoRequest proto.InternalMessageInfo
 
-type InfoResp struct {
+type InfoResponse struct {
 	LabelSets     []labelpb.ZLabelSet `protobuf:"bytes,1,rep,name=label_sets,json=labelSets,proto3" json:"label_sets"`
 	ComponentType string              `protobuf:"bytes,2,opt,name=ComponentType,proto3" json:"ComponentType,omitempty"`
 	/// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
@@ -80,18 +80,18 @@ type InfoResp struct {
 	Exemplars *ExemplarsInfo `protobuf:"bytes,7,opt,name=exemplars,proto3" json:"exemplars,omitempty"`
 }
 
-func (m *InfoResp) Reset()         { *m = InfoResp{} }
-func (m *InfoResp) String() string { return proto.CompactTextString(m) }
-func (*InfoResp) ProtoMessage()    {}
-func (*InfoResp) Descriptor() ([]byte, []int) {
+func (m *InfoResponse) Reset()         { *m = InfoResponse{} }
+func (m *InfoResponse) String() string { return proto.CompactTextString(m) }
+func (*InfoResponse) ProtoMessage()    {}
+func (*InfoResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a1214ec45d2bf952, []int{1}
 }
-func (m *InfoResp) XXX_Unmarshal(b []byte) error {
+func (m *InfoResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *InfoResp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *InfoResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_InfoResp.Marshal(b, m, deterministic)
+		return xxx_messageInfo_InfoResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -101,17 +101,17 @@ func (m *InfoResp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *InfoResp) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InfoResp.Merge(m, src)
+func (m *InfoResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InfoResponse.Merge(m, src)
 }
-func (m *InfoResp) XXX_Size() int {
+func (m *InfoResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *InfoResp) XXX_DiscardUnknown() {
-	xxx_messageInfo_InfoResp.DiscardUnknown(m)
+func (m *InfoResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_InfoResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_InfoResp proto.InternalMessageInfo
+var xxx_messageInfo_InfoResponse proto.InternalMessageInfo
 
 /// StoreInfo holds the metadata related to Store API exposed by the component.
 type StoreInfo struct {
@@ -359,7 +359,7 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type InfoClient interface {
 	/// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
-	Info(ctx context.Context, in *InfoReq, opts ...grpc.CallOption) (*InfoResp, error)
+	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 }
 
 type infoClient struct {
@@ -382,14 +382,14 @@ func (c *infoClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc.Cal
 // InfoServer is the server API for Info service.
 type InfoServer interface {
 	/// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
-	Info(context.Context, *InfoReq) (*InfoResp, error)
+	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 }
 
 // UnimplementedInfoServer can be embedded to have forward compatible implementations.
 type UnimplementedInfoServer struct {
 }
 
-func (*UnimplementedInfoServer) Info(ctx context.Context, req *InfoReq) (*InfoResp, error) {
+func (*UnimplementedInfoServer) Info(ctx context.Context, req *InfoRequest) (*InfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Info not implemented")
 }
 
@@ -398,7 +398,7 @@ func RegisterInfoServer(s *grpc.Server, srv InfoServer) {
 }
 
 func _Info_Info_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InfoReq)
+	in := new(InfoRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func _Info_Info_Handler(srv interface{}, ctx context.Context, dec func(interface
 		FullMethod: "/thanos.info.Info/Info",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(InfoServer).Info(ctx, req.(*InfoReq))
+		return srv.(InfoServer).Info(ctx, req.(*InfoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -428,7 +428,7 @@ var _Info_serviceDesc = grpc.ServiceDesc{
 	Metadata: "info/infopb/rpc.proto",
 }
 
-func (m *InfoReq) Marshal() (dAtA []byte, err error) {
+func (m *InfoRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -438,12 +438,12 @@ func (m *InfoReq) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *InfoReq) MarshalTo(dAtA []byte) (int, error) {
+func (m *InfoRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *InfoReq) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *InfoRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -451,7 +451,7 @@ func (m *InfoReq) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *InfoResp) Marshal() (dAtA []byte, err error) {
+func (m *InfoResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -461,12 +461,12 @@ func (m *InfoResp) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *InfoResp) MarshalTo(dAtA []byte) (int, error) {
+func (m *InfoResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *InfoResp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *InfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -701,7 +701,7 @@ func encodeVarintRpc(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *InfoReq) Size() (n int) {
+func (m *InfoRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -710,7 +710,7 @@ func (m *InfoReq) Size() (n int) {
 	return n
 }
 
-func (m *InfoResp) Size() (n int) {
+func (m *InfoResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -812,7 +812,7 @@ func sovRpc(x uint64) (n int) {
 func sozRpc(x uint64) (n int) {
 	return sovRpc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *InfoReq) Unmarshal(dAtA []byte) error {
+func (m *InfoRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -835,10 +835,10 @@ func (m *InfoReq) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: InfoReq: wiretype end group for non-group")
+			return fmt.Errorf("proto: InfoRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: InfoReq: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: InfoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -862,7 +862,7 @@ func (m *InfoReq) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *InfoResp) Unmarshal(dAtA []byte) error {
+func (m *InfoResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -885,10 +885,10 @@ func (m *InfoResp) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: InfoResp: wiretype end group for non-group")
+			return fmt.Errorf("proto: InfoResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: InfoResp: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: InfoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
