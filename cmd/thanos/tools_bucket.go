@@ -825,6 +825,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	toRelabel := extflag.RegisterPathOrContent(cmd, "rewrite.to-relabel-config", "YAML file that contains relabel configs that will be applied to blocks", extflag.WithEnvSubstitution())
 	provideChangeLog := cmd.Flag("rewrite.add-change-log", "If specified, all modifications are written to new block directory. Disable if latency is to high.").Default("true").Bool()
 	promBlocks := cmd.Flag("prom-blocks", "If specified, we assume the blocks to be uploaded are only used with Prometheus so we don't check external labels in this case.").Default("false").Bool()
+	deleteBlocks := cmd.Flag("delete-blocks", "whether to delete the original blocks after rewriting blocks successfully. Available in non dry-run mode only.").Default("false").Bool()
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -971,6 +972,12 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					}
 				}
 				level.Info(logger).Log("msg", "uploaded", "source", id, "new", newID)
+
+				if !*dryRun && *deleteBlocks {
+					if err := block.MarkForDeletion(ctx, logger, bkt, id, "block rewritten", promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						level.Error(logger).Log("msg", "failed to mark block for deletion", "id", id.String(), "err", err)
+					}
+				}
 			}
 			level.Info(logger).Log("msg", "rewrite done", "IDs", strings.Join(*blockIDs, ","))
 			return nil
