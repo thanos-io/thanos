@@ -14,7 +14,7 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 All clients can be configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
-### How to our special `config` flags?
+### How to use our special `config` flags?
 
 **You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`** We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
