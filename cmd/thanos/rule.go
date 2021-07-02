@@ -655,7 +655,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		if len(parts) != 2 {
 			return nil, errors.Errorf("unrecognized label %q", l)
 		}
-		if !model.LabelName.IsValid(model.LabelName(string(parts[0]))) {
+		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
 			return nil, errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
