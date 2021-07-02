@@ -274,7 +274,8 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
-func NewReceiver(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+// NewRoutingAndIngestingReceiver creates a Thanos Receive instances that is configured both for ingesting samples and routing samples to other receivers.
+func NewRoutingAndIngestingReceiver(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
 
 	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
 	if len(hashring) == 0 {
@@ -320,7 +321,8 @@ func NewReceiver(sharedDir string, networkName string, name string, replicationF
 	return receiver, nil
 }
 
-func NewReceiverWithoutTSDB(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+// NewRoutingReceiver creates a Thanos Receive instance that is only configured to route to other receive instances. It has no local storage.
+func NewRoutingReceiver(sharedDir string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
 
 	if len(hashring) == 0 {
 		return nil, errors.New("hashring should not be empty for receive-distributor mode")
@@ -364,7 +366,40 @@ func NewReceiverWithoutTSDB(sharedDir string, networkName string, name string, r
 	return receiver, nil
 }
 
-func NewReceiverWithConfigWatcher(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+// NewIngestingReceiver creates a Thanos Receive instance that is only configured to ingest, not route to other receivers.
+func NewIngestingReceiver(sharedDir string, name string) (*Service, error) {
+	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dataDir := filepath.Join(dir, "data")
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		return nil, errors.Wrap(err, "create receive dir")
+	}
+	receiver := NewService(
+		fmt.Sprintf("receive-%v", name),
+		DefaultImage(),
+		// TODO(bwplotka): BuildArgs should be interface.
+		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
+			"--debug.name":           fmt.Sprintf("receive-%v", name),
+			"--grpc-address":         ":9091",
+			"--grpc-grace-period":    "0s",
+			"--http-address":         ":8080",
+			"--remote-write.address": ":8081",
+			"--label":                fmt.Sprintf(`receive="%s"`, name),
+			"--tsdb.path":            filepath.Join(container, "data"),
+			"--log.level":            infoLogLevel,
+		})...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+		8081,
+	)
+	receiver.SetUser(strconv.Itoa(os.Getuid()))
+	receiver.SetBackoff(defaultBackoffConfig)
+
+	return receiver, nil
+}
+
+func NewRoutingAndIngestingReceiverWithConfigWatcher(sharedDir string, networkName string, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
 	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
 	if len(hashring) == 0 {
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
