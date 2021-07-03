@@ -80,6 +80,10 @@ Subcommands:
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
 
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -183,6 +187,10 @@ Subcommands:
     source block for deletion to avoid overlaps. WARNING: This procedure is
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
+
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
 
 
 ```
@@ -770,7 +778,7 @@ Flags:
       --rewrite.to-relabel-config-file=<file-path>  
                                 Path to YAML file that contains relabel configs
                                 that will be applied to blocks
-      --tmp.dir="/tmp/thanos-rewrite"  
+      --tmp.dir="/var/folders/tz/763pppnx4h31g33dys6bxsqm0000gn/T/thanos-rewrite"  
                                 Working directory for temporary files
       --tracing.config=<content>  
                                 Alternative to 'tracing.config-file' flag
