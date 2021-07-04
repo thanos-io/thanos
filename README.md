@@ -81,6 +81,10 @@ Thanos is an open source project and we value and welcome new contributors and m
 * Slack: [#thanos](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
+## Adopters
+
+See  [`Adopters List`](.website/data/adopters.yml).
+
 ## Maintainers
 
 See [MAINTAINERS.md](MAINTAINERS.md)
