@@ -83,7 +83,7 @@ Thanos is an open source project and we value and welcome new contributors and m
 
 ## Adopters
 
-See [`Adopters List`](.website/data/adopters.yml).
+See [`Adopters List`](website/data/adopters.yml).
 
 ## Maintainers
 
