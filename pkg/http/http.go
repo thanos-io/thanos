@@ -5,23 +5,37 @@
 package http
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/mwitkow/go-conntrack"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
+
+var defaultHTTPClientOptions = httpClientOptions{
+	maxIdleConns:        0,
+	maxIdleConnsPerHost: 100, // see https://github.com/golang/go/issues/13801
+}
 
 // ClientConfig configures an HTTP client.
 type ClientConfig struct {
@@ -71,8 +85,100 @@ func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
 	return conf, nil
 }
 
+type httpClientOptions struct {
+	maxIdleConns        int
+	maxIdleConnsPerHost int
+}
+
+type HTTPClientOption func(options *httpClientOptions)
+
+func WithMaxIdleConns(maxIdleConns int) HTTPClientOption {
+	return func(opts *httpClientOptions) {
+		opts.maxIdleConns = maxIdleConns
+	}
+}
+
+func WithMaxIdleConnsPerHost(maxIdleConnsPerHost int) HTTPClientOption {
+	return func(opts *httpClientOptions) {
+		opts.maxIdleConnsPerHost = maxIdleConnsPerHost
+	}
+}
+
+// NewRoundTripperFromConfig returns a new HTTP RoundTripper configured for the
+// given http.HTTPClientConfig and http.HTTPClientOption.
+func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, name string, optFuncs ...HTTPClientOption) (http.RoundTripper, error) {
+	opts := defaultHTTPClientOptions
+	for _, f := range optFuncs {
+		f(&opts)
+	}
+
+	newRT := func(tlsConfig *tls.Config) (http.RoundTripper, error) {
+		var rt http.RoundTripper = &http.Transport{
+			Proxy:               http.ProxyURL(cfg.ProxyURL.URL),
+			MaxIdleConns:        opts.maxIdleConns,
+			MaxIdleConnsPerHost: opts.maxIdleConnsPerHost,
+			DisableKeepAlives:   true,
+			TLSClientConfig:     tlsConfig,
+			DisableCompression:  true,
+			// 5 minutes is typically above the maximum sane scrape interval. So we can
+			// use keepalive for all configurations.
+			IdleConnTimeout:       5 * time.Minute,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			DialContext: conntrack.NewDialContextFunc(
+				conntrack.DialWithTracing(),
+				conntrack.DialWithName(name)),
+		}
+
+		// HTTP/2 support is golang has many problematic cornercases where
+		// dead connections would be kept and used in connection pools.
+		// https://github.com/golang/go/issues/32388
+		// https://github.com/golang/go/issues/39337
+		// https://github.com/golang/go/issues/39750
+		// TODO: Re-Enable HTTP/2 once upstream issue is fixed.
+		// TODO: use ForceAttemptHTTP2 when we move to Go 1.13+.
+		err := http2.ConfigureTransport(rt.(*http.Transport))
+		if err != nil {
+			return nil, err
+		}
+
+		// If a authorization_credentials is provided, create a round tripper that will set the
+		// Authorization header correctly on each request.
+		if cfg.Authorization != nil && len(cfg.Authorization.Credentials) > 0 {
+			rt = config_util.NewAuthorizationCredentialsRoundTripper(cfg.Authorization.Type, cfg.Authorization.Credentials, rt)
+		} else if cfg.Authorization != nil && len(cfg.Authorization.CredentialsFile) > 0 {
+			rt = config_util.NewAuthorizationCredentialsFileRoundTripper(cfg.Authorization.Type, cfg.Authorization.CredentialsFile, rt)
+		}
+		// Backwards compatibility, be nice with importers who would not have
+		// called Validate().
+		if len(cfg.BearerToken) > 0 {
+			rt = config_util.NewAuthorizationCredentialsRoundTripper("Bearer", cfg.BearerToken, rt)
+		} else if len(cfg.BearerTokenFile) > 0 {
+			rt = config_util.NewAuthorizationCredentialsFileRoundTripper("Bearer", cfg.BearerTokenFile, rt)
+		}
+
+		if cfg.BasicAuth != nil {
+			rt = config_util.NewBasicAuthRoundTripper(cfg.BasicAuth.Username, cfg.BasicAuth.Password, cfg.BasicAuth.PasswordFile, rt)
+		}
+		// Return a new configured RoundTripper.
+		return rt, nil
+	}
+
+	tlsConfig, err := config_util.NewTLSConfig(&cfg.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cfg.TLSConfig.CAFile) == 0 {
+		// No need for a RoundTripper that reloads the CA file automatically.
+		return newRT(tlsConfig)
+	}
+
+	return newTLSRoundTripper(tlsConfig, cfg.TLSConfig.CAFile, newRT)
+}
+
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
+func NewHTTPClient(cfg ClientConfig, name string, optFuncs ...HTTPClientOption) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -103,10 +209,12 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 		return nil, err
 	}
 
-	client, err := config_util.NewClientFromConfig(httpClientConfig, name, config_util.WithHTTP2Disabled())
+	rt, err := NewRoundTripperFromConfig(httpClientConfig, name, optFuncs...)
 	if err != nil {
 		return nil, err
 	}
+	client := &http.Client{Transport: rt}
+
 	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: client.Transport}
 	return client, nil
 }
@@ -266,4 +374,161 @@ func (c *Client) Discover(ctx context.Context) {
 // Resolve refreshes and resolves the list of targets.
 func (c *Client) Resolve(ctx context.Context) error {
 	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+}
+
+// Duplicated from github.com/prometheus/common/config
+// better option would be to expose config_util.newTLSRoundTripper function from prometheus
+
+func JoinDir(dir, path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
+// SetDirectory joins any relative file paths with dir.
+func (c *TLSConfig) SetDirectory(dir string) {
+	if c == nil {
+		return
+	}
+	c.CAFile = JoinDir(dir, c.CAFile)
+	c.CertFile = JoinDir(dir, c.CertFile)
+	c.KeyFile = JoinDir(dir, c.KeyFile)
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (c *TLSConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type plain TLSConfig
+	return unmarshal((*plain)(c))
+}
+
+// getClientCertificate reads the pair of client cert and key from disk and returns a tls.Certificate.
+func (c *TLSConfig) getClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("unable to use specified client cert (%s) & key (%s): %s", c.CertFile, c.KeyFile, err)
+	}
+	return &cert, nil
+}
+
+// readCAFile reads the CA cert file from disk.
+func readCAFile(f string) ([]byte, error) {
+	data, err := ioutil.ReadFile(f)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load specified CA cert %s: %s", f, err)
+	}
+	return data, nil
+}
+
+// updateRootCA parses the given byte slice as a series of PEM encoded certificates and updates tls.Config.RootCAs.
+func updateRootCA(cfg *tls.Config, b []byte) bool {
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(b) {
+		return false
+	}
+	cfg.RootCAs = caCertPool
+	return true
+}
+
+// tlsRoundTripper is a RoundTripper that updates automatically its TLS
+// configuration whenever the content of the CA file changes.
+type tlsRoundTripper struct {
+	caFile string
+	// newRT returns a new RoundTripper.
+	newRT func(*tls.Config) (http.RoundTripper, error)
+
+	mtx        sync.RWMutex
+	rt         http.RoundTripper
+	hashCAFile []byte
+	tlsConfig  *tls.Config
+}
+
+func newTLSRoundTripper(
+	cfg *tls.Config,
+	caFile string,
+	newRT func(*tls.Config) (http.RoundTripper, error),
+) (http.RoundTripper, error) {
+	t := &tlsRoundTripper{
+		caFile:    caFile,
+		newRT:     newRT,
+		tlsConfig: cfg,
+	}
+
+	rt, err := t.newRT(t.tlsConfig)
+	if err != nil {
+		return nil, err
+	}
+	t.rt = rt
+
+	_, t.hashCAFile, err = t.getCAWithHash()
+	if err != nil {
+		return nil, err
+	}
+
+	return t, nil
+}
+
+func (t *tlsRoundTripper) getCAWithHash() ([]byte, []byte, error) {
+	b, err := readCAFile(t.caFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	h := sha256.Sum256(b)
+	return b, h[:], nil
+
+}
+
+// RoundTrip implements the http.RoundTrip interface.
+func (t *tlsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	b, h, err := t.getCAWithHash()
+	if err != nil {
+		return nil, err
+	}
+
+	t.mtx.RLock()
+	equal := bytes.Equal(h[:], t.hashCAFile)
+	rt := t.rt
+	t.mtx.RUnlock()
+	if equal {
+		// The CA cert hasn't changed, use the existing RoundTripper.
+		return rt.RoundTrip(req)
+	}
+
+	// Create a new RoundTripper.
+	tlsConfig := t.tlsConfig.Clone()
+	if !updateRootCA(tlsConfig, b) {
+		return nil, fmt.Errorf("unable to use specified CA cert %s", t.caFile)
+	}
+	rt, err = t.newRT(tlsConfig)
+	if err != nil {
+		return nil, err
+	}
+	t.CloseIdleConnections()
+
+	t.mtx.Lock()
+	t.rt = rt
+	t.hashCAFile = h[:]
+	t.mtx.Unlock()
+
+	return rt.RoundTrip(req)
+}
+
+type closeIdler interface {
+	CloseIdleConnections()
+}
+
+func (t *tlsRoundTripper) CloseIdleConnections() {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	if ci, ok := t.rt.(closeIdler); ok {
+		ci.CloseIdleConnections()
+	}
+}
+
+func (c ClientConfig) String() string {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Sprintf("<error creating http client config string: %s>", err)
+	}
+	return string(b)
 }
