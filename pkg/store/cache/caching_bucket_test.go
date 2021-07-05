@@ -237,7 +237,7 @@ func TestChunksCaching(t *testing.T) {
 	}
 }
 
-func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, offset, length int64, expectedLength int64) {
+func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, offset, length, expectedLength int64) {
 	r, err := cachingBucket.GetRange(context.Background(), name, offset, length)
 	testutil.Ok(t, err)
 
@@ -485,7 +485,7 @@ func TestExistsCachingDisabled(t *testing.T) {
 	verifyExists(t, cb, testFilename, false, false, cfgName)
 }
 
-func verifyExists(t *testing.T, cb *CachingBucket, file string, exists bool, fromCache bool, cfgName string) {
+func verifyExists(t *testing.T, cb *CachingBucket, file string, exists, fromCache bool, cfgName string) {
 	t.Helper()
 	hitsBefore := int(promtest.ToFloat64(cb.operationHits.WithLabelValues(objstore.OpExists, cfgName)))
 	ok, err := cb.Exists(context.Background(), file)

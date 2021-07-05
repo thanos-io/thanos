@@ -646,7 +646,7 @@ func (i inProcessClient) LabelSets() []labels.Labels {
 	return []labels.Labels{i.extLset}
 }
 
-func (i inProcessClient) TimeRange() (mint int64, maxt int64) {
+func (i inProcessClient) TimeRange() (mint, maxt int64) {
 	r, err := i.Info(context.TODO(), &storepb.InfoRequest{})
 	testutil.Ok(i.t, err)
 	return r.MinTime, r.MaxTime

@@ -89,7 +89,7 @@ func NewHTTPServerMiddleware(logger log.Logger, opts ...Option) *HTTPServerMiddl
 }
 
 // getHTTPLoggingOption returns the logging ENUM based on logStart and logEnd values.
-func getHTTPLoggingOption(logStart bool, logEnd bool) (Decision, error) {
+func getHTTPLoggingOption(logStart, logEnd bool) (Decision, error) {
 	if !logStart && !logEnd {
 		return NoLogCall, nil
 	}

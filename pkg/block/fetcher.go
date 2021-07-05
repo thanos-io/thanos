@@ -646,7 +646,7 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 
-func addNodeBySources(root *Node, add *Node) bool {
+func addNodeBySources(root, add *Node) bool {
 	var rootNode *Node
 	for _, node := range root.Children {
 		parentSources := node.Compaction.Sources
@@ -674,7 +674,7 @@ func addNodeBySources(root *Node, add *Node) bool {
 	return addNodeBySources(rootNode, add)
 }
 
-func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
+func contains(s1, s2 []ulid.ULID) bool {
 	for _, a := range s2 {
 		found := false
 		for _, e := range s1 {
