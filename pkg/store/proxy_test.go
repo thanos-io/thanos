@@ -1075,31 +1075,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	var cls []Client
 	for i := 0; i < 10; i++ {
-		cls = append(cls, &testClient{
-			StoreClient: &mockedStoreAPI{
-				RespError: errors.New("test error"),
-			},
-			minTime: 1,
-			maxTime: 300,
-		})
-		cls = append(cls, &testClient{
-			StoreClient: &mockedStoreAPI{
-				RespSeries: []*storepb.SeriesResponse{
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-					storepb.NewWarnSeriesResponse(errors.New("warning")),
-				},
-			},
-			minTime: 1,
-			maxTime: 300,
-		})
+		cls = append(cls, &testClient{StoreClient: &mockedStoreAPI{RespError: errors.New("test error")}, minTime: 1, maxTime: 300}, &testClient{StoreClient: &mockedStoreAPI{RespSeries: []*storepb.SeriesResponse{storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning")), storepb.NewWarnSeriesResponse(errors.New("warning"))}}, minTime: 1, maxTime: 300})
 
 	}
 
