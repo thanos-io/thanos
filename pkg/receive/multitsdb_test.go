@@ -398,7 +398,7 @@ func (s *exemplarsServer) Context() context.Context {
 	return s.ctx
 }
 
-func checkExemplarsResponse(t *testing.T, expected []exemplarspb.ExemplarData, data []exemplarspb.ExemplarData) {
+func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarData) {
 	testutil.Equals(t, len(expected), len(data))
 	for i := range data {
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)

@@ -458,7 +458,7 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 // readSymbols reads the symbol table fully into memory and allocates proper strings for them.
 // Strings backed by the mmap'd memory would cause memory faults if applications keep using them
 // after the reader is closed.
-func readSymbols(bs index.ByteSlice, version int, off int) ([]string, map[uint32]string, error) {
+func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]string, error) {
 	if off == 0 {
 		return nil, nil, nil
 	}

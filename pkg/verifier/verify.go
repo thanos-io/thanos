@@ -111,7 +111,7 @@ idLoop:
 }
 
 // New returns verifier's manager.
-func NewManager(reg prometheus.Registerer, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, vs Registry) *Manager {
+func NewManager(reg prometheus.Registerer, logger log.Logger, bkt, backupBkt objstore.Bucket, fetcher block.MetadataFetcher, deleteDelay time.Duration, vs Registry) *Manager {
 	return &Manager{
 		Context: Context{
 			Logger:      logger,
