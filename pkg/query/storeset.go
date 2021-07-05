@@ -5,7 +5,6 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -72,22 +71,6 @@ type MetadataSpec interface {
 type ExemplarSpec interface {
 	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
 	StoreAddrSpec
-}
-
-// stringError forces the error to be a string
-// when marshaled into a JSON.
-type stringError struct {
-	originalErr error
-}
-
-// MarshalJSON marshals the error into a string form.
-func (e *stringError) MarshalJSON() ([]byte, error) {
-	return json.Marshal(e.originalErr.Error())
-}
-
-// Error returns the original underlying error.
-func (e *stringError) Error() string {
-	return e.originalErr.Error()
 }
 
 type StoreStatus struct {
