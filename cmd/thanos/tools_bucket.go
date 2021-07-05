@@ -1047,6 +1047,11 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
@@ -1083,9 +1088,17 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			}
 		}
 
+		ctx := context.Background()
+		level.Info(logger).Log("msg", "syncing blocks metadata")
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync blocks")
+		}
+
+		level.Info(logger).Log("msg", "synced blocks done")
+
 		level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
 
-		if err := compact.ApplyRetentionPolicyByResolution(context.Background(), logger, bkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 		return nil
