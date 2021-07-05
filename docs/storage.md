@@ -319,7 +319,27 @@ config:
   container: ""
   endpoint: ""
   max_retries: 0
+  msi_resource: ""
+  pipeline_config:
+    max_tries: 0
+    try_timeout: 0s
+    retry_delay: 0s
+    max_retry_delay: 0s
+  reader_config:
+    max_retry_requests: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    disable_compression: false
 ```
+
+If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`. The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
 
