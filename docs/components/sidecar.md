@@ -130,7 +130,15 @@ Flags:
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --prometheus.ready_timeout=10m  
+      --prometheus.http-client=<content>
+                                 Alternative to 'prometheus.http-client-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 or string with http client configs. see Format
+                                 details : ...
+      --prometheus.http-client-file=<file-path>
+                                 Path to YAML file or string with http client
+                                 configs. see Format details : ...
+      --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
       --prometheus.url=http://localhost:9090  

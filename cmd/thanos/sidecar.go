@@ -26,7 +26,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+<<<<<<< HEAD
 	"github.com/thanos-io/thanos/pkg/exthttp"
+=======
+	"github.com/thanos-io/thanos/pkg/extflag"
+	exthttp "github.com/thanos-io/thanos/pkg/exthttp"
+>>>>>>> 331e2285 (Adds Auth to prom client component)
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanoshttp "github.com/thanos-io/thanos/pkg/http"
@@ -84,7 +89,26 @@ func runSidecar(
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
-	var m = &promMetadata{
+	// configure htp client
+	// var httpClient *http.Client
+	httpConfContentYaml, err := conf.prometheus.http.Content()
+	if err != nil {
+		return errors.Wrap(err, "getting http client config")
+	}
+	httpClientConfig, err := thanoshttp.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		return errors.Wrap(err, "parsing http config YAML")
+	}
+
+	httpClient, err := thanoshttp.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+	if err != nil {
+		return errors.Wrap(err, "Improper http client config")
+
+	}
+
+	reloader.HTTPClient = *httpClient
+
+	m := &promMetadata{
 		promURL: conf.prometheus.url,
 
 		// Start out with the full time range. The shipper will constrain it later.
@@ -93,7 +117,7 @@ func runSidecar(
 		maxt: math.MaxInt64,
 
 		limitMinTime: conf.limitMinTime,
-		client:       promclient.NewWithTracingClient(logger, "thanos-sidecar"),
+		client:       promclient.NewWithTracingClient(logger, *httpClient, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -231,10 +255,13 @@ func runSidecar(
 		})
 	}
 	{
+		// todo(someshkoli): Not sure how to properly implement RoundTripper for these properties or
+		// access existing transport properties in http client built from thanoshttp.NewHTTPClient method
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
 		t.MaxIdleConns = conf.connection.maxIdleConns
-		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
+
+		c := promclient.NewWithTracingClient(logger, http.Client{Transport: tracing.HTTPTripperware(logger, httpClient.Transport)}, thanoshttp.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {

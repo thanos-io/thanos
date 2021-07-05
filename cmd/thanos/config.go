@@ -65,6 +65,7 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 type prometheusConfig struct {
 	url          *url.URL
 	readyTimeout time.Duration
+	http         *extflag.PathOrContent
 }
 
 func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusConfig {
@@ -74,6 +75,7 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 	cmd.Flag("prometheus.ready_timeout",
 		"Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").DurationVar(&pc.readyTimeout)
+	pc.http = extkingpin.RegisterHTTPConfigFlags(cmd)
 	return pc
 }
 

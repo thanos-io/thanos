@@ -85,16 +85,16 @@ func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
 func NewDefaultClient() *Client {
 	return NewWithTracingClient(
 		log.NewNopLogger(),
+		http.Client{},
 		"",
 	)
 }
 
 // NewWithTracingClient returns client with tracing tripperware.
-func NewWithTracingClient(logger log.Logger, userAgent string) *Client {
+func NewWithTracingClient(logger log.Logger, httpClient http.Client, userAgent string) *Client {
+	httpClient.Transport = tracing.HTTPTripperware(log.NewNopLogger(), httpClient.Transport)
 	return NewClient(
-		&http.Client{
-			Transport: tracing.HTTPTripperware(log.NewNopLogger(), http.DefaultTransport),
-		},
+		&httpClient,
 		logger,
 		userAgent,
 	)
@@ -120,7 +120,6 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-
 	resp, err := c.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "perform %s request against %s", method, u.String())
@@ -831,4 +830,20 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 		Data *targetspb.TargetDiscovery `json:"data"`
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
+}
+
+type RoundTripperWithTransportOptions struct {
+	MaxIdleConnsPerHost int
+	MaxIdleConns        int
+	rt                  http.RoundTripper
+}
+
+func (r RoundTripperWithTransportOptions) RoundTrip(req *http.Request) (*http.Response, error) {
+	req2 := new(http.Request)
+	*req2 = *req
+	req2.Header = make(http.Header)
+	for k, s := range req.Header {
+		req2.Header[k] = s
+	}
+	return r.rt.RoundTrip(req2)
 }
