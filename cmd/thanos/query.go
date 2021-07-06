@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -131,8 +132,7 @@ func registerQuery(app *extkingpin.App) {
 	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
-	fileEndpointConfig := cmd.Flag("endpoint.config", "YAML file that contains store API servers configuration.").
-		PlaceHolder("<path>").String()
+	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains store API servers configuration.", extflag.WithEnvSubstitution())
 
 	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
@@ -217,6 +217,11 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Errorf("Address %s is duplicated for --target flag.", dup)
 		}
 
+		endpointConfigYAML, err := endpointConfig.Content()
+		if err != nil {
+			return err
+		}
+
 		var fileSDConfig *file.SDConfig
 		if len(*fileSDFiles) > 0 {
 			fileSDConfig = &file.SDConfig{
@@ -282,7 +287,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
 			fileSDConfig,
-			*fileEndpointConfig,
+			endpointConfigYAML,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
@@ -348,7 +353,7 @@ func runQuery(
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
 	fileSDConfig *file.SDConfig,
-	endpointConfigYAML string,
+	endpointConfigYAML []byte,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
@@ -366,20 +371,23 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	var endpointsConfig []store.Config
-	var err error
-	if len(endpointConfigYAML) > 0 {
-		endpointsConfig, err = store.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig)
-	} else {
-		endpointsConfig, err = store.LoadConfig("", storeAddrs, strictStores, fileSDConfig)
+	// TLSConfig for endpoints supplied in --endpoint, --endpoint.sd-files and --endpoint-strict.
+	var TLSConfig store.TLSConfiguration
+	if secure {
+		TLSConfig.CertFile = cert
+		TLSConfig.KeyFile = key
+		TLSConfig.CaCertFile = caCert
+		TLSConfig.ServerName = serverName
 	}
+
+	endpointsConfig, err := store.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig, TLSConfig)
 	if err != nil {
 		return errors.Wrap(err, "loading store config")
 	}
 
 	var storeSets []*query.EndpointSet
 	for _, config := range endpointsConfig {
-		dialOpts, err := extgrpc.StoreClientGRPCOptsFromTlsConfig(logger, reg, tracer, skipVerify, &config.TlsConfig)
+		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, config.TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")
 		}
@@ -390,14 +398,6 @@ func runQuery(
 			extprom.WrapRegistererWithPrefix("thanos_query_store_apis_", reg),
 			dns.ResolverType(dnsSDResolver),
 		)
-
-		if config.Mode == "strict" {
-			for _, store := range config.EndPoints {
-				if dns.IsDynamicNode(store) {
-					return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
-				}
-			}
-		}
 
 		dnsRuleProvider := dns.NewProvider(
 			logger,
@@ -423,16 +423,23 @@ func runQuery(
 			dns.ResolverType(dnsSDResolver),
 		)
 
+		var spec []query.EndpointSpec
+		// Add strict & static nodes.
+		if config.Mode == store.StrictEndpointMode {
+			for _, addr := range config.Endpoints {
+				if dns.IsDynamicNode(addr) {
+					return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", addr)
+				}
+				spec = append(spec, query.NewGRPCEndpointSpec(addr, true))
+			}
+		}
+
 		endpoints := query.NewEndpointSet(
 			logger,
 			reg,
 			func() (specs []query.EndpointSpec) {
-				// Add strict & static nodes.
-				if config.Mode == "strict" {
-					for _, addr := range strictStores {
-						specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
-					}
-				}
+
+				specs = spec
 
 				for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
 					var tmpSpecs []query.EndpointSpec
@@ -465,12 +472,12 @@ func runQuery(
 			})
 		}
 		// Run File Service Discovery and update the store set when the files are modified.
-		if len(config.EndPoints_sd) > 0 {
+		if len(config.EndpointsSD) > 0 {
 			fileSDUpdates := make(chan []*targetgroup.Group)
 
-			for _, fsdConfig := range config.EndPoints_sd {
+			for _, fSDConfig := range config.EndpointsSD {
 				ctxRun, cancelRun := context.WithCancel(context.Background())
-				fileSD := file.NewDiscovery(&fsdConfig, logger)
+				fileSD := file.NewDiscovery(&fSDConfig, logger)
 				g.Add(func() error {
 					fileSD.Run(ctxRun, fileSDUpdates)
 					return nil
@@ -480,7 +487,7 @@ func runQuery(
 			}
 
 			ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
-			staticAddresses := config.EndPoints
+			staticAddresses := config.Endpoints
 			g.Add(func() error {
 				for {
 					select {
@@ -509,7 +516,7 @@ func runQuery(
 		// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
 		{
 			ctx, cancel := context.WithCancel(context.Background())
-			staticAddresses := config.EndPoints
+			staticAddresses := config.Endpoints
 			g.Add(func() error {
 				return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 					resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)

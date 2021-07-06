@@ -93,8 +93,17 @@ type QueryAPI struct {
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
 
+<<<<<<< HEAD
 	replicaLabels  []string
 	endpointStatus func() []query.EndpointStatus
+=======
+	replicaLabels []string
+<<<<<<< HEAD
+	endpointSet   *query.EndpointSet
+=======
+	storeSets     []*query.StoreSet
+>>>>>>> addressed comments for querier
+>>>>>>> addressed comments for querier
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -106,7 +115,15 @@ type QueryAPI struct {
 // NewQueryAPI returns an initialized QueryAPI type.
 func NewQueryAPI(
 	logger log.Logger,
+<<<<<<< HEAD
 	endpointStatus func() []query.EndpointStatus,
+=======
+<<<<<<< HEAD
+	endpointSet *query.EndpointSet,
+=======
+	storeSets []*query.StoreSet,
+>>>>>>> addressed comments for querier
+>>>>>>> addressed comments for querier
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -146,7 +163,15 @@ func NewQueryAPI(
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
 		replicaLabels:                          replicaLabels,
+<<<<<<< HEAD
 		endpointStatus:                         endpointStatus,
+=======
+<<<<<<< HEAD
+		endpointSet:                            endpointSet,
+=======
+		storeSets:                              storeSets,
+>>>>>>> addressed comments for querier
+>>>>>>> addressed comments for querier
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
