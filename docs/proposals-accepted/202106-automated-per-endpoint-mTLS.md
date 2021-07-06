@@ -46,9 +46,9 @@ I would propose introducing a new CLI option `--endpoints.config`, with no dynam
     key_file: ""
     ca_file: ""
     server_name: ""
-  endpoints:
+  endpoints: []
+  endpoints_sd_files:
     - Files: []
-  endpoints_sd_files: []
   mode: ""
 ```
 
