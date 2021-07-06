@@ -185,11 +185,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
-		// be replicated 2 times across the Ingestor instances.
-		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 1.
-		// See https://github.com/thanos-io/thanos/issues/4359 for details.
-		actualReplicationFactor := 1.0
+		expectedReplicationFactor := 2.0
 
 		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
@@ -198,19 +194,19 @@ func TestReceive(t *testing.T) {
 				Metric: model.Metric{
 					"prometheus": "prom1",
 				},
-				Value: model.SampleValue(actualReplicationFactor),
+				Value: model.SampleValue(expectedReplicationFactor),
 			},
 			&model.Sample{
 				Metric: model.Metric{
 					"prometheus": "prom2",
 				},
-				Value: model.SampleValue(actualReplicationFactor),
+				Value: model.SampleValue(expectedReplicationFactor),
 			},
 			&model.Sample{
 				Metric: model.Metric{
 					"prometheus": "prom3",
 				},
-				Value: model.SampleValue(actualReplicationFactor),
+				Value: model.SampleValue(expectedReplicationFactor),
 			},
 		})
 	})
@@ -302,11 +298,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
 
-		// Based on the architecture outline above, and the configuration of each receiver, we would expect the data to
-		// be replicated 3 times across each of the Ingestor instances.
-		// However, due to edge-cases in our implementation of receive, the actualReplicationFactor we observe is only 1.
-		// See https://github.com/thanos-io/thanos/issues/4359 for details.
-		actualReplicationFactor := 1.0
+		expectedReplicationFactor := 3.0
 
 		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
@@ -315,13 +307,13 @@ func TestReceive(t *testing.T) {
 				Metric: model.Metric{
 					"prometheus": "prom1",
 				},
-				Value: model.SampleValue(actualReplicationFactor),
+				Value: model.SampleValue(expectedReplicationFactor),
 			},
 			&model.Sample{
 				Metric: model.Metric{
 					"prometheus": "prom2",
 				},
-				Value: model.SampleValue(actualReplicationFactor),
+				Value: model.SampleValue(expectedReplicationFactor),
 			},
 		})
 	})

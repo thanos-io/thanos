@@ -76,7 +76,7 @@ type Options struct {
 	ReplicaHeader     string
 	Endpoint          string
 	ReplicationFactor uint64
-	OverrideReplica   bool
+	ReceiverMode      ReceiverMode
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
@@ -91,12 +91,12 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx             sync.RWMutex
-	hashring        Hashring
-	peers           *peerGroup
-	expBackoff      backoff.Backoff
-	peerStates      map[string]*retryState
-	overrideReplica bool
+	mtx          sync.RWMutex
+	hashring     Hashring
+	peers        *peerGroup
+	expBackoff   backoff.Backoff
+	peerStates   map[string]*retryState
+	receiverMode ReceiverMode
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -109,12 +109,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:          logger,
-		writer:          o.Writer,
-		router:          route.New(),
-		options:         o,
-		peers:           newPeerGroup(o.DialOpts...),
-		overrideReplica: o.OverrideReplica,
+		logger:       logger,
+		writer:       o.Writer,
+		router:       route.New(),
+		options:      o,
+		peers:        newPeerGroup(o.DialOpts...),
+		receiverMode: o.ReceiverMode,
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
@@ -259,11 +259,12 @@ type replica struct {
 }
 
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
-	// The replica value is used to detect cycles in cyclic topologies.
+	// This replica value is used to detect cycles in cyclic topologies.
 	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
-	// This causes issues for correct replication in non-trivial acyclic topologies.
+	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
+	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
 	// See discussion in: https://github.com/thanos-io/thanos/issues/4359
-	if !h.overrideReplica {
+	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
 		rep = 0
 	}
 

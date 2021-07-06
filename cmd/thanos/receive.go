@@ -77,9 +77,11 @@ func registerReceive(app *extkingpin.App) {
 			MaxExemplars:           conf.tsdbMaxExemplars,
 		}
 
-		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
-		// Otherwise, run the receiver exclusively as a distributor.
-		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
+		// Has the user provided some kind of hashring configuration?
+		hashringSpecified := conf.hashringsFileContent != "" || conf.hashringsFilePath != ""
+		// Has the user specified the --receive.local-endpoint flag?
+		localEndpointSpecified := conf.endpoint != ""
+		receiveMode := receive.DetermineMode(hashringSpecified, localEndpointSpecified)
 
 		return runReceive(
 			g,
@@ -91,7 +93,7 @@ func registerReceive(app *extkingpin.App) {
 			lset,
 			component.Receive,
 			metadata.HashFunc(conf.hashFunc),
-			enableIngestion,
+			receiveMode,
 			conf,
 		)
 	})
@@ -108,18 +110,12 @@ func runReceive(
 	lset labels.Labels,
 	comp component.SourceStoreAPI,
 	hashFunc metadata.HashFunc,
-	enableIngestion bool,
+	receiveMode receive.ReceiverMode,
 	conf *receiveConfig,
 ) error {
 	logger = log.With(logger, "component", "receive")
-	level.Warn(logger).Log("msg", "setting up receive")
 
-	if !enableIngestion {
-		level.Info(logger).Log("msg", "ingestion is disabled for receiver")
-	}
-	if *conf.overrideReplica {
-		level.Info(logger).Log("msg", "write request replica override enabled")
-	}
+	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
 	if err != nil {
@@ -146,6 +142,9 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+
+	// Has this thanos receive instance been configured to ingest metrics into a local TSDB?
+	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
 
 	upload := len(confContentYaml) > 0
 	if enableIngestion {
@@ -195,7 +194,7 @@ func runReceive(
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
-		OverrideReplica:   *conf.overrideReplica,
+		ReceiverMode:      receiveMode,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
@@ -759,13 +758,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
-
-	rc.overrideReplica = cmd.Flag("receive.override-request-replica",
-		"Whether or not to overwrite the replica count of incoming write requests."+
-			"This is used to detect loops in cyclic receive topologies, and precent infinite forwarding of write requests."+
-			"If your receiver topology is cyclic (i.e. contains cycles), this should be set to false (the default)."+
-			"If your receiver topology is acyclic (i.e. no cycles), this can be safely set to true."+
-			"See the receiver integration tests for examples of when this flag should be set.").Default("false").Bool()
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
