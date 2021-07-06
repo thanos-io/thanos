@@ -876,7 +876,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 	}
 }
 
-func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []ulid.ULID) []string {
+func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 	var ops []string
 	for _, id := range all {
 		blockCached := false
@@ -1818,7 +1818,7 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	testutil.Equals(t, count, c)
 }
 
-func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
+func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = dir
 	headOpts.ChunkRange = int64(totalSamples) * step
