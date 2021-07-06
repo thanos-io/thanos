@@ -38,7 +38,7 @@ const (
 )
 
 // DetermineMode returns the ReceiverMode that this receiver is configured to run in.
-// This is used to configure this Receiver's forwarding and ingesting behaviour at runtime.
+// This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
 func DetermineMode(hashringSpecified, localEndpointSpecified bool) ReceiverMode {
 	switch {
 	case hashringSpecified && localEndpointSpecified:
@@ -54,7 +54,6 @@ func DetermineMode(hashringSpecified, localEndpointSpecified bool) ReceiverMode 
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
-
 	Hashring  string   `json:"hashring,omitempty"`
 	Tenants   []string `json:"tenants,omitempty"`
 	Endpoints []string `json:"endpoints"`

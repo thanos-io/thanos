@@ -691,7 +691,6 @@ type receiveConfig struct {
 	defaultTenantID   string
 	replicaHeader     string
 	replicationFactor uint64
-	overrideReplica   *bool
 	forwardTimeout    *model.Duration
 
 	tsdbMinBlockDuration       *model.Duration
