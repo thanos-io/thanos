@@ -309,7 +309,7 @@ func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) 
 }
 
 func (b *Bucket) getRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	if len(name) == 0 {
+	if name == "" {
 		return nil, errors.New("given object name should not empty")
 	}
 

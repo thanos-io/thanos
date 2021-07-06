@@ -52,7 +52,7 @@ func ParseLastModified(m http.Header, f string) (time.Time, error) {
 		return time.Time{}, errors.Errorf("%s header has no values", name)
 	}
 
-	if len(f) == 0 {
+	if f == "" {
 		f = defaultFormat
 	}
 

@@ -282,7 +282,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
 	level.Debug(b.logger).Log("msg", "getting blob", "blob", name, "offset", offset, "length", length)
-	if len(name) == 0 {
+	if name == "" {
 		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
 	}
 	exists, err := b.Exists(ctx, name)

@@ -323,7 +323,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
-	if len(tenant) == 0 {
+	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
 
