@@ -179,7 +179,7 @@ func newReplicationScheme(
 	}
 }
 
-func (rs *replicationScheme) execute(ctx context.Context) error {
+func (rs *replicationScheme) execute(ctx context.Context, maxConcurrent int) error {
 	availableBlocks := []*metadata.Meta{}
 
 	metas, partials, err := rs.fetcher.Fetch(ctx)
@@ -211,7 +211,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	// Control number of goroutines to be  with channel.
 	//TODO: Set the maximum number of workers by user. The maximum number is set as 3 temporarily.
-	numChan := make(chan struct{}, 3)
+	numChan := make(chan struct{}, maxConcurrent)
 	for _, b := range availableBlocks {
 		numChan <- struct{}{}
 		wg.Add(1)
