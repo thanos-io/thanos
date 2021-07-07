@@ -142,7 +142,7 @@ func (cw *ConfigWatcher) Run(ctx context.Context) {
 		case event := <-cw.watcher.Events:
 			// fsnotify sometimes sends a bunch of events without name or operation.
 			// It's unclear what they are and why they are sent - filter them out.
-			if len(event.Name) == 0 {
+			if event.Name == "" {
 				break
 			}
 			// Everything but a CHMOD requires rereading.

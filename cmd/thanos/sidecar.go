@@ -391,7 +391,7 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *promMetadata) UpdateTimestamps(mint int64, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -410,7 +410,7 @@ func (s *promMetadata) Labels() labels.Labels {
 	return s.labels
 }
 
-func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
+func (s *promMetadata) Timestamps() (mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

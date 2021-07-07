@@ -80,6 +80,10 @@ Subcommands:
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
 
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -183,6 +187,10 @@ Subcommands:
     source block for deletion to avoid overlaps. WARNING: This procedure is
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
+
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
 
 
 ```
@@ -718,6 +726,9 @@ block for deletion to avoid overlaps. WARNING: This procedure is *IRREVERSIBLE*
 after certain time (delete delay), so do backup your blocks first.
 
 Flags:
+      --delete-blocks           Whether to delete the original blocks after
+                                rewriting blocks successfully. Available in non
+                                dry-run mode only.
       --dry-run                 Prints the series changes instead of doing them.
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.

@@ -12,15 +12,22 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#4378](https://github.com/thanos-io/thanos/pull/4378) Implemented single-flight mechanism for the in-memory cache provider. It can be enabled by `single_flight: true`. It potentially greatly reduces the number of calls to remote object storage with very small locking overhead on each cache operation. Also, it means that the timeout of a given request becomes "attached" to a previous one. `thanos_cache_inmemory_singleflight_saved_calls_total` metric will show how many calls have been saved.
+- [#4394](https://github.com/thanos-io/thanos/pull/4394) Add error logs to receiver when write request rejected with invalid replica
+- [#4403](https://github.com/thanos-io/thanos/pull/4403) UI: Add sorting and filtering to flags page
 - [#4299](https://github.com/thanos-io/thanos/pull/4299) Tracing: Add tracing to exemplar APIs.
 - [#4327](https://github.com/thanos-io/thanos/pull/4327) Add environment variable substitution to all YAML configuration flags.
 - [#4239](https://github.com/thanos-io/thanos/pull/4239) Add penalty based deduplication mode for compactor.
 - [#4292](https://github.com/thanos-io/thanos/pull/4292) Receive: Enable exemplars ingestion and querying.
-- [#4378](https://github.com/thanos-io/thanos/pull/4378) Implemented single-flight mechanism for the in-memory cache provider. It can be enabled by `single_flight: true`. It potentially greatly reduces the number of calls to remote object storage with very small locking overhead on each cache operation. Also, it means that the timeout of a given request becomes "attached" to a previous one. `thanos_cache_inmemory_singleflight_saved_calls_total` metric will show how many calls have been saved.
+- [#4392](https://github.com/thanos-io/thanos/pull/4392) Tools: Added `--delete-blocks` to bucket rewrite tool to mark the original blocks for deletion after rewriting is done.
+- [#3970](https://github.com/thanos-io/thanos/pull/3970) Azure: Adds more configuration options for Azure blob storage. This allows for pipeline and reader specific configuration. Implements HTTP transport configuration options. These options allows for more fine-grained control on timeouts and retries. Implements MSI authentication as second method of authentication via a service principal token.
+- [#4406](https://github.com/thanos-io/thanos/pull/4406) Tools: Add retention command for applying retention policy on the bucket.
 
 ### Fixed
 
+- [#4384](https://github.com/thanos-io/thanos/pull/4384) Fix the experimental PromQL editor when used on multiple line.
 - [#4342](https://github.com/thanos-io/thanos/pull/4342) ThanosSidecarUnhealthy doesn't fire if the sidecar is never healthy
+- [#4388](https://github.com/thanos-io/thanos/pull/4388) Receive: fix bug in forwarding remote-write requests within the hashring via gRPC when TLS is enabled on the HTTP server but not on the gRPC server.
 
 ### Changed
 

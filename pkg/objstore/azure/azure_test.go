@@ -5,100 +5,178 @@ package azure
 
 import (
 	"testing"
+	"time"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+type TestCase struct {
+	name             string
+	config           []byte
+	wantFailParse    bool
+	wantFailValidate bool
+}
+
+var validConfig = []byte(`storage_account: "myStorageAccount"
+storage_account_key: "abc123"
+container: "MyContainer"
+endpoint: "blob.core.windows.net"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": 0`)
+
+var tests = []TestCase{
+	{
+		name:             "validConfig",
+		config:           validConfig,
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
+	{
+		name: "Missing storage account",
+		config: []byte(`storage_account: ""
+storage_account_key: "abc123"
+container: "MyContainer"
+endpoint: "blob.core.windows.net"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": 0`),
+		wantFailParse:    false,
+		wantFailValidate: true,
+	},
+	{
+		name: "Missing storage account key",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: ""
+container: "MyContainer"
+endpoint: "blob.core.windows.net"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": 0`),
+		wantFailParse:    false,
+		wantFailValidate: true,
+	},
+	{
+		name: "Negative max_tries",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: "asdfsdf"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "max_tries": -1
+  "try_timeout": 0`),
+		wantFailParse:    false,
+		wantFailValidate: true,
+	},
+	{
+		name: "Negative max_retry_requests",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: "asdfsdf"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": -100
+pipeline_config:
+  "try_timeout": 0`),
+		wantFailParse:    false,
+		wantFailValidate: true,
+	},
+	{
+		name: "Not a Duration",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: "asdfsdf"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": 10`),
+		wantFailParse:    true,
+		wantFailValidate: true,
+	},
+	{
+		name: "Valid Duration",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: "asdfsdf"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": "10s"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
+	{
+		name: "msi resource used with storage accounts",
+		config: []byte(`storage_account: "asdfasdf"
+storage_account_key: "asdfsdf"
+msi_resource: "https://example.blob.core.windows.net"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": "10s"`),
+		wantFailParse:    false,
+		wantFailValidate: true,
+	},
+	{
+		name: "Valid MSI Resource",
+		config: []byte(`storage_account: "myAccount"
+storage_account_key: ""
+msi_resource: "https://example.blob.core.windows.net"
+container: "MyContainer"
+endpoint: "not.valid"
+reader_config:
+  "max_retry_requests": 100
+pipeline_config:
+  "try_timeout": "10s"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
+}
+
 func TestConfig_validate(t *testing.T) {
-	type fields struct {
-		StorageAccountName string
-		StorageAccountKey  string
-		ContainerName      string
-		Endpoint           string
-		MaxRetries         int
+
+	for _, testCase := range tests {
+
+		conf, err := parseConfig(testCase.config)
+
+		if (err != nil) != testCase.wantFailParse {
+			t.Errorf("%s error = %v, wantFailParse %v", testCase.name, err, testCase.wantFailParse)
+			continue
+		}
+
+		validateErr := conf.validate()
+		if (validateErr != nil) != testCase.wantFailValidate {
+			t.Errorf("%s error = %v, wantFailValidate %v", testCase.name, validateErr, testCase.wantFailValidate)
+		}
 	}
-	tests := []struct {
-		name         string
-		fields       fields
-		wantErr      bool
-		wantEndpoint string
-	}{
-		{
-			name: "valid global configuration",
-			fields: fields{
-				StorageAccountName: "foo",
-				StorageAccountKey:  "bar",
-				ContainerName:      "roo",
-				MaxRetries:         3,
-			},
-			wantErr:      false,
-			wantEndpoint: azureDefaultEndpoint,
-		},
-		{
-			name: "valid custom endpoint",
-			fields: fields{
-				StorageAccountName: "foo",
-				StorageAccountKey:  "bar",
-				ContainerName:      "roo",
-				Endpoint:           "blob.core.chinacloudapi.cn",
-			},
-			wantErr:      false,
-			wantEndpoint: "blob.core.chinacloudapi.cn",
-		},
-		{
-			name: "no account key but account name",
-			fields: fields{
-				StorageAccountName: "foo",
-				StorageAccountKey:  "",
-				ContainerName:      "roo",
-			},
-			wantErr: true,
-		},
-		{
-			name: "no account name but account key",
-			fields: fields{
-				StorageAccountName: "",
-				StorageAccountKey:  "bar",
-				ContainerName:      "roo",
-			},
-			wantErr: true,
-		},
-		{
-			name: "no container name",
-			fields: fields{
-				StorageAccountName: "foo",
-				StorageAccountKey:  "bar",
-				ContainerName:      "",
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid max retries (negative)",
-			fields: fields{
-				StorageAccountName: "foo",
-				StorageAccountKey:  "bar",
-				ContainerName:      "roo",
-				MaxRetries:         -3,
-			},
-			wantErr:      true,
-			wantEndpoint: azureDefaultEndpoint,
-		},
+
+}
+
+func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
+
+	cfg, err := parseConfig(validConfig)
+	testutil.Ok(t, err)
+
+	if time.Duration(cfg.HTTPConfig.IdleConnTimeout) != time.Duration(90*time.Second) {
+		t.Errorf("parsing of idle_conn_timeout failed: got %v, expected %v",
+			time.Duration(cfg.HTTPConfig.IdleConnTimeout), time.Duration(90*time.Second))
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conf := &Config{
-				StorageAccountName: tt.fields.StorageAccountName,
-				StorageAccountKey:  tt.fields.StorageAccountKey,
-				ContainerName:      tt.fields.ContainerName,
-				Endpoint:           tt.fields.Endpoint,
-				MaxRetries:         tt.fields.MaxRetries,
-			}
-			err := conf.validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Config.validate() error = %v, wantErr %v", err, tt.wantErr)
-			} else {
-				testutil.Equals(t, tt.wantEndpoint, conf.Endpoint)
-			}
-		})
+
+	if time.Duration(cfg.HTTPConfig.ResponseHeaderTimeout) != time.Duration(2*time.Minute) {
+		t.Errorf("parsing of response_header_timeout failed: got %v, expected %v",
+			time.Duration(cfg.HTTPConfig.IdleConnTimeout), time.Duration(2*time.Minute))
+	}
+
+	if cfg.HTTPConfig.InsecureSkipVerify {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.InsecureSkipVerify, false)
 	}
 }
