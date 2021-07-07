@@ -65,10 +65,9 @@ type InMemoryCache struct {
 	hitsExpired prometheus.Counter
 	// The input cache value would be copied to an inmemory array
 	// instead of simply using the one sent by the caller.
-	added   prometheus.Counter
-	current prometheus.Gauge
-	sfSaved prometheus.Counter
-
+	added            prometheus.Counter
+	current          prometheus.Gauge
+	sfSaved          prometheus.Counter
 	currentSize      prometheus.Gauge
 	totalCurrentSize prometheus.Gauge
 	overflow         prometheus.Counter
@@ -321,7 +320,7 @@ func (c *InMemoryCache) Store(ctx context.Context, data map[string][]byte, ttl t
 
 		c.mu.Lock()
 
-		if c.subs[key] == nil {
+		if _, ok := c.subs[key]; ok {
 			c.mu.Unlock()
 			continue
 		}
@@ -350,7 +349,7 @@ func (c *InMemoryCache) Fetch(ctx context.Context, keys []string) map[string][]b
 		}
 
 		c.mu.Lock()
-		if c.subs[key] == nil {
+		if _, ok := c.subs[key]; ok {
 			c.subs[key] = &pubsub{originalCtx: ctx}
 			c.mu.Unlock()
 		} else {

@@ -34,7 +34,8 @@ single_flight: true
 
 	ctx := context.Background()
 
-	// Miss! Not blocking, we can continue.
+	// Miss! We only block on further Fetch() calls
+	// due to the single-flight mode. Thus, we can continue.
 	hits := c.Fetch(ctx, []string{testKey})
 	testutil.Assert(t, len(hits) == 0)
 
@@ -81,6 +82,7 @@ single_flight: true
 	g := &errgroup.Group{}
 
 	g.Go(func() error {
+		// This blocks :(
 		hits := c.Fetch(context.Background(), testKeys)
 		if len(hits) != 1 {
 			return errors.New("expected to have 1 hit")
@@ -114,7 +116,8 @@ single_flight: true
 
 	const testKey = "test"
 
-	// Miss! Not blocking, we can continue.
+	// Miss! We only block on further Fetch() calls
+	// due to the single-flight mode. Thus, we can continue.
 	hits := c.Fetch(ctx, []string{testKey})
 	testutil.Assert(t, len(hits) == 0)
 
