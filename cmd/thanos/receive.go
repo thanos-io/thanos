@@ -77,11 +77,8 @@ func registerReceive(app *extkingpin.App) {
 			MaxExemplars:           conf.tsdbMaxExemplars,
 		}
 
-		// Has the user provided some kind of hashring configuration?
-		hashringSpecified := conf.hashringsFileContent != "" || conf.hashringsFilePath != ""
-		// Has the user specified the --receive.local-endpoint flag?
-		localEndpointSpecified := conf.endpoint != ""
-		receiveMode := receive.DetermineMode(hashringSpecified, localEndpointSpecified)
+		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
+		receiveMode := conf.determineMode()
 
 		return runReceive(
 			g,
@@ -788,4 +785,25 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+}
+
+// determineMode returns the ReceiverMode that this receiver is configured to run in.
+// This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
+func (rc *receiveConfig) determineMode() receive.ReceiverMode {
+	// Has the user provided some kind of hashring configuration?
+	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != ""
+	// Has the user specified the --receive.local-endpoint flag?
+	localEndpointSpecified := rc.endpoint != ""
+
+	switch {
+	case hashringSpecified && localEndpointSpecified:
+		return receive.RouterIngestor
+	case hashringSpecified && !localEndpointSpecified:
+		// Be careful - if the hashring contains an address that routes to itself and does not specify a local
+		// endpoint - you've just created an infinite loop / fork bomb :)
+		return receive.RouterOnly
+	default:
+		// hashring configuration has not been provided so we ingest all metrics locally.
+		return receive.IngestorOnly
+	}
 }

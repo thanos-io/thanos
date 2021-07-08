@@ -37,20 +37,6 @@ const (
 	RouterIngestor ReceiverMode = "RouterIngestor"
 )
 
-// DetermineMode returns the ReceiverMode that this receiver is configured to run in.
-// This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
-func DetermineMode(hashringSpecified, localEndpointSpecified bool) ReceiverMode {
-	switch {
-	case hashringSpecified && localEndpointSpecified:
-		return RouterIngestor
-	case hashringSpecified && !localEndpointSpecified:
-		return RouterOnly
-	default:
-		// hashring configuration has not been provided so we ingest all metrics locally.
-		return IngestorOnly
-	}
-}
-
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
