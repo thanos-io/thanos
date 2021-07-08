@@ -101,4 +101,4 @@ Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
 
 ## Previous Maintainers
 
-Dominic Green, Povilas Versockas
+Dominic Green, Povilas Versockas, Marco Pracucci
