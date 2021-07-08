@@ -320,7 +320,7 @@ func (c *InMemoryCache) Store(ctx context.Context, data map[string][]byte, ttl t
 
 		c.mu.Lock()
 
-		if _, ok := c.subs[key]; ok {
+		if _, ok := c.subs[key]; !ok {
 			c.mu.Unlock()
 			continue
 		}
@@ -349,7 +349,7 @@ func (c *InMemoryCache) Fetch(ctx context.Context, keys []string) map[string][]b
 		}
 
 		c.mu.Lock()
-		if _, ok := c.subs[key]; ok {
+		if _, ok := c.subs[key]; !ok {
 			c.subs[key] = &pubsub{originalCtx: ctx}
 			c.mu.Unlock()
 		} else {
