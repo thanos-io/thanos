@@ -145,7 +145,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	})
 }
 
-func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, want []*rulespb.RuleGroup) {
+func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*rulespb.RuleGroup) {
 	t.Helper()
 
 	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)

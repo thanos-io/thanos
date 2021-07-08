@@ -1,12 +1,12 @@
 ---
-title: Configuring Thanos Secure TLS Cross-Cluster Communication
 type: docs
+title: Configuring Thanos Secure TLS Cross-Cluster Communication
 menu: operating
 ---
 
 # Configuring Thanos Secure TLS Cross-Cluster Communication
 
-###### _This guide was contributed by the community thanks to [gmintoco](https://github.com/gmintoco)_
+###### *This guide was contributed by the community thanks to [gmintoco](https://github.com/gmintoco)*
 
 With some scale in global view Thanos mode, without [Thanos Receive](../components/receive.md), you often have centralized clusters that require secure, TLS gRPC routes to remote clusters outside your network to access leaf Prometheus-es with sidecars. Common solutions like VPC peering and VPN might be complex to setup, expensive and not easy to manage. In this guide we will explain setting up server proxies to establish secure route for queries.
 
@@ -26,11 +26,11 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 
 [Envoy](https://www.envoyproxy.io/) is a proxy server that has good HTTP2 and gRPC support and is relatively straightforward to configure for this purpose.
 
- - Configure an envoy sidecar container to the Thanos Querier pod (unfortunately this also isn't supported by a lot of Thanos charts) an example pod config is below (see `deployment.yaml`)
- - Make sure that the envoy sidecar has the correct certificates (using a mounted secret) and a valid configuration (using a mounted configmap) an example envoy config is below (`envoy.yaml`)
- - Configure a service for the envoy sidecar an example service is shown below (`service.yaml`) you may have another service already for local cluster access (for Thanos Ruler or Grafana etc.)
- - Point the querier at the service and the correct port an example `--store ` field is below (`thanos-querier args`)
- - Make sure your remote cluster has TLS setup and an appropriate HTTP2 supported ingress, example below `ingress.yaml`
+- Configure an envoy sidecar container to the Thanos Querier pod (unfortunately this also isn't supported by a lot of Thanos charts) an example pod config is below (see `deployment.yaml`)
+- Make sure that the envoy sidecar has the correct certificates (using a mounted secret) and a valid configuration (using a mounted configmap) an example envoy config is below (`envoy.yaml`)
+- Configure a service for the envoy sidecar an example service is shown below (`service.yaml`) you may have another service already for local cluster access (for Thanos Ruler or Grafana etc.)
+- Point the querier at the service and the correct port an example `--store ` field is below (`thanos-querier args`)
+- Make sure your remote cluster has TLS setup and an appropriate HTTP2 supported ingress, example below `ingress.yaml`
 
 ### Observer Cluster: Querier with Envoy `deployment.yaml`
 
@@ -38,8 +38,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 - `[service-name]` is the name of the envoy service
 - `[namespace]` is the name of the envoy service namespace
 
-You may need to change cluster.local depending on your cluster domain.
-The `--store` entries for thanos storegateway etc. may be named different in your setup
+You may need to change cluster.local depending on your cluster domain. The `--store` entries for thanos storegateway etc. may be named different in your setup
 
 ```yaml
 kind: Deployment
@@ -256,7 +255,7 @@ static_resources:
 
 ### `envoy.yaml` V3 API
 
-This is an example envoy config using the v3 API. It does differ slightly to the above (more log formatting) but is essentially the same in functionality. This config  **sends** a client certificate to authenticate with remote clusters (they must have the CA loaded in order to verify). This only implements a single port/listener, but adding more (ie. the v2 example has 2) is fairly trivial. Simple clone the `sidecar_name` listener and the `sidecar_name` cluster blocks.
+This is an example envoy config using the v3 API. It does differ slightly to the above (more log formatting) but is essentially the same in functionality. This config **sends** a client certificate to authenticate with remote clusters (they must have the CA loaded in order to verify). This only implements a single port/listener, but adding more (ie. the v2 example has 2) is fairly trivial. Simple clone the `sidecar_name` listener and the `sidecar_name` cluster blocks.
 
 ```yaml
 admin:

@@ -55,11 +55,11 @@ func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	return span
 }
 
-func (t *tracer) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
+func (t *tracer) Extract(format, carrier interface{}) (opentracing.SpanContext, error) {
 	return t.wrapped.Extract(format, carrier)
 }
 
-func (t *tracer) Inject(sm opentracing.SpanContext, format interface{}, carrier interface{}) error {
+func (t *tracer) Inject(sm opentracing.SpanContext, format, carrier interface{}) error {
 	return t.wrapped.Inject(sm, format, carrier)
 }
 

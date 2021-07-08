@@ -52,7 +52,7 @@ func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions 
 }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosQueryRangeRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosQueryRangeRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
@@ -124,7 +124,7 @@ func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosLabelsRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosLabelsRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
@@ -194,7 +194,7 @@ func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosSeriesRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosSeriesRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end

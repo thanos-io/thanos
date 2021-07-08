@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -54,6 +55,9 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
+		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
+			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
+		}
 		if len(lset) == 0 {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
@@ -70,6 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			NoLockfile:             conf.noLockFile,
 			WALCompression:         conf.walCompression,
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:           conf.tsdbMaxExemplars,
 		}
 
 		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
@@ -122,8 +127,8 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.rwServerCert != "",
-		conf.rwServerClientCA == "",
+		*conf.grpcCert != "",
+		*conf.grpcClientCA == "",
 		conf.rwClientCert,
 		conf.rwClientKey,
 		conf.rwClientServerCA,
@@ -319,6 +324,7 @@ func setupAndRunGRPCServer(g *run.Group,
 			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 				grpcserver.WithServer(store.RegisterStoreServer(rw)),
 				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),
@@ -678,8 +684,8 @@ type receiveConfig struct {
 	refreshInterval   *model.Duration
 	endpoint          string
 	tenantHeader      string
-	defaultTenantID   string
 	tenantLabelName   string
+	defaultTenantID   string
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
@@ -687,6 +693,7 @@ type receiveConfig struct {
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
+	tsdbMaxExemplars           int
 
 	walCompression bool
 	noLockFile     bool
@@ -759,6 +766,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
+
+	cmd.Flag("tsdb.max-exemplars",
+		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+
+			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
+			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
+		Default("0").IntVar(&rc.tsdbMaxExemplars)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

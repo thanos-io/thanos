@@ -20,8 +20,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
-	"github.com/golang/snappy"
 	"github.com/jpillora/backoff"
+	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -61,7 +61,7 @@ var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
 
-	errBadReplica  = errors.New("replica count exceeds replication factor")
+	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
 )
@@ -258,6 +258,8 @@ type replica struct {
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
 	// The replica value in the header is one-indexed, thus we need >.
 	if rep > h.options.ReplicationFactor {
+		level.Error(h.logger).Log("err", errBadReplica, "msg", "write request rejected",
+			"request_replica", rep, "replication_factor", h.options.ReplicationFactor)
 		return errBadReplica
 	}
 
@@ -295,7 +297,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqBuf, err := snappy.Decode(nil, compressed.Bytes())
+	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
@@ -321,11 +323,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
-	if len(tenant) == 0 {
+	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// TODO(yeya24): handle remote write metadata and exemplars.
+	// TODO(yeya24): handle remote write metadata.
 	// exit early if the request contained no data
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)

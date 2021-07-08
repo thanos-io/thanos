@@ -8,9 +8,9 @@ tests:
 - interval: 1m
   input_series:
   - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-0"}'
-    values: '5 10 43 17 11 _x5 0x10'
+    values: '5 10 43 17 11 0 0 0'
   - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-1"}'
-    values: '4 9 42 15 10 _x5 0x10'
+    values: '4 9 42 15 10 0 0 0'
   promql_expr_test:
     - expr: time()
       eval_time: 1m
@@ -22,64 +22,112 @@ tests:
       exp_samples:
         - labels: '{}'
           value: 120
-    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
-      eval_time: 5m
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
+      eval_time: 2m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 60
+          value: 43
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 60
-    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
-      eval_time: 6m
+          value: 42
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
+      eval_time: 10m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 120
+          value: 0
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 120
-    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
-      eval_time: 7m
+          value: 0
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
+      eval_time: 11m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 180
+          value: 0
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 180
-    - expr: time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}))
-      eval_time: 8m
+          value: 0
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
+      eval_time: 10m
       exp_samples:
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 240
+          value: 600
         - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 240
+          value: 600
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
+      eval_time: 11m
+      exp_samples:
+        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
+          value: 660
+        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
+          value: 660
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance) >= 600
+      eval_time: 12m
+      exp_samples:
+        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
+          value: 720
+        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
+          value: 720
   alert_rule_test:
-    - eval_time: 1m
-      alertname: ThanosSidecarUnhealthy
-    - eval_time: 2m
-      alertname: ThanosSidecarUnhealthy
-    - eval_time: 3m
-      alertname: ThanosSidecarUnhealthy
-    - eval_time: 5m
-      alertname: ThanosSidecarUnhealthy
-    - eval_time: 8m
-      alertname: ThanosSidecarUnhealthy
-      exp_alerts:
-      - exp_labels:
-          severity: critical
-          job: thanos-sidecar
-          instance: thanos-sidecar-0
-        exp_annotations:
-          description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 240 seconds.'
-          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-          summary: 'Thanos Sidecar is unhealthy.'
-      - exp_labels:
-          severity: critical
-          job: thanos-sidecar
-          instance: thanos-sidecar-1
-        exp_annotations:
-          description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 240 seconds.'
-          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-          summary: 'Thanos Sidecar is unhealthy.'
-    - eval_time: 10m
-      alertname: ThanosSidecarUnhealthy
+  - eval_time: 1m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 2m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 3m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 10m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 600 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+  - eval_time: 11m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 660 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+  - eval_time: 12m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 720 seconds.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
+        summary: 'Thanos Sidecar is unhealthy.'
 - interval: 1m
   input_series:
   - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'

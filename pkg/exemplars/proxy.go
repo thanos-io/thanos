@@ -61,18 +61,15 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 		return err
 	}
 
-	selectors := parser.ExtractSelectors(expr)
+	match, selectors := selectorsMatchesExternalLabels(parser.ExtractSelectors(expr), s.selectorLabels)
 
-	newSelectors := make([][]*labels.Matcher, 0, len(selectors))
-	for _, matchers := range selectors {
-		matched, newMatchers := matchesExternalLabels(matchers, s.selectorLabels)
-		if matched {
-			newSelectors = append(newSelectors, newMatchers)
-		}
-	}
 	// There is no matched selectors for this thanos query.
-	if len(newSelectors) == 0 {
+	if !match {
 		return nil
+	}
+
+	if len(selectors) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
 	var (
@@ -84,7 +81,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	for _, st := range s.exemplars() {
 		query := ""
 	Matchers:
-		for _, matchers := range newSelectors {
+		for _, matchers := range selectors {
 			metricsSelector := ""
 			for _, m := range matchers {
 				for _, ls := range st.LabelSets {
