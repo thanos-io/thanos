@@ -582,6 +582,9 @@ Continuously downsamples blocks in an object store bucket.
 Flags:
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --downsample.concurrency=1  
+                              Number of goroutines to use when downsampling
+                              blocks.
       --hash-func=            Specify which hash function to use when
                               calculating the hashes of produced files. If no
                               function has been specified, it does not happen.
