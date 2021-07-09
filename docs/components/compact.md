@@ -342,6 +342,9 @@ Flags:
                                 loaded, or compactor is ignoring the deletion
                                 because it's compacting the block at the same
                                 time.
+      --downsample.concurrency=1  
+                                Number of goroutines to use when downsampling
+                                blocks.
       --downsampling.disable    Disables downsampling. This is not recommended
                                 as querying long time ranges without
                                 non-downsampled data is not efficient and useful

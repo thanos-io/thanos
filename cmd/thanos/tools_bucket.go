@@ -522,7 +522,8 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Downsample.String(), "Continuously downsamples blocks in an object store bucket.")
 	httpAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
-	downsampleConcurrency := cmd.Flag("downsample.concurrency", "").Default("1").Int()
+	downsampleConcurrency := cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
+		Default("1").Int()
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
