@@ -12,6 +12,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+### Fixed
+
+### Changed
+
+## [v0.22.0 - in progress](https://github.com/thanos-io/thanos/tree/release-0.22)
+
+### Added
+
 - [#4394](https://github.com/thanos-io/thanos/pull/4394) Add error logs to receiver when write request rejected with invalid replica
 - [#4403](https://github.com/thanos-io/thanos/pull/4403) UI: Add sorting and filtering to flags page
 - [#4299](https://github.com/thanos-io/thanos/pull/4299) Tracing: Add tracing to exemplar APIs.
