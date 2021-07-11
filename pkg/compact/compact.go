@@ -724,7 +724,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
-	toCompactDirs := make([]string, len(toCompact))
+	toCompactDirs := make([]string, 0, len(toCompact))
 
 	var eg errgroup.Group
 	for _, meta := range toCompact {
