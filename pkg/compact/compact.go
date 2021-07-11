@@ -727,10 +727,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	toCompactDirs := make([]string, len(toCompact))
 
 	var eg errgroup.Group
-	for i, meta := range toCompact {
+	for _, meta := range toCompact {
 		meta := meta
 		bdir := filepath.Join(dir, meta.ULID.String())
-		toCompactDirs[i] = bdir
+		toCompactDirs = append(toCompactDirs, bdir)
 		for _, s := range meta.Compaction.Sources {
 			if _, ok := uniqueSources[s]; ok {
 				return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", toCompact))
