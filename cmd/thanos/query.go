@@ -132,7 +132,7 @@ func registerQuery(app *extkingpin.App) {
 	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
-	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains store API servers configuration. Either use this option or seperate endpoint options (endpoint, endpoint.sd-files, endpoint.srict).", extflag.WithEnvSubstitution())
+	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains store API servers configuration. Either use this option or separate endpoint options (endpoint, endpoint.sd-files, endpoint.srict).", extflag.WithEnvSubstitution())
 
 	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
@@ -394,7 +394,7 @@ func runQuery(
 	} else {
 		endpointsConfig, err = store.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
 		if err != nil {
-			return errors.Wrap(err, "initialising endpoint config from individual flags")
+			return errors.Wrap(err, "initializing endpoint config from individual flags")
 		}
 	}
 
@@ -572,7 +572,6 @@ func runQuery(
 	}
 
 	var (
-		get               []store.Client
 		getRuleClient     []rulespb.RulesClient
 		getTargetClient   []targetspb.TargetsClient
 		getMetadataClient []metadatapb.MetadataClient
@@ -580,7 +579,6 @@ func runQuery(
 	)
 
 	for _, ss := range storeSets {
-		get = append(get, ss.Get()...)
 		getRuleClient = append(getRuleClient, ss.GetRulesClients()...)
 		getTargetClient = append(getTargetClient, ss.GetTargetsClients()...)
 		getMetadataClient = append(getMetadataClient, ss.GetMetadataClients()...)
@@ -588,6 +586,10 @@ func runQuery(
 	}
 	var (
 		allClients = func() []store.Client {
+			var get []store.Client
+			for _, ss := range storeSets {
+				get = append(get, ss.Get()...)
+			}
 			return get
 		}
 		ruleClients = func() []rulespb.RulesClient {
