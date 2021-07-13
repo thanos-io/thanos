@@ -22,7 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3970](https://github.com/thanos-io/thanos/pull/3970) Azure: Adds more configuration options for Azure blob storage. This allows for pipeline and reader specific configuration. Implements HTTP transport configuration options. These options allows for more fine-grained control on timeouts and retries. Implements MSI authentication as second method of authentication via a service principal token.
 - [#4406](https://github.com/thanos-io/thanos/pull/4406) Tools: Add retention command for applying retention policy on the bucket.
 - [#4430](https://github.com/thanos-io/thanos/pull/4430) Compact: Add flag `downsample.concurrency` to specify the concurrency of downsampling blocks.
-- [#4231](https://github.com/thanos-io/thanos/pull/4231) Receive: implemented the new dual-mode according to this [doc](https://github.com/thanos-io/thanos/blob/release-0.22/docs/proposals-accepted/202012-receive-split.md). This means that it is now possible to not run a TSDB on a Thanos Receive instance if it only forwards write requests.
+- [#4231](https://github.com/thanos-io/thanos/pull/4231) Receive: Implemented the [receive dual-mode](https://github.com/thanos-io/thanos/blob/release-0.22/docs/proposals-accepted/202012-receive-split.md). This means that it is now you can run receive as ingester (TSDB only, no hashring awareness), as router (no TSDB, only forwarding mode) and old mode (router + ingester) in one service. Consider splitting functionality if you want to scale your hashring into multiple rings or you want horizontally autoscale your ingester more often.
 - [#3678](https://github.com/thanos-io/thanos/pull/3678) UI: add support for new duration format in graph range input. Now it is possible to use composite durations such as `5m30s`.
 
 ### Fixed
@@ -30,14 +30,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4384](https://github.com/thanos-io/thanos/pull/4384) Fix the experimental PromQL editor when used on multiple line.
 - [#4342](https://github.com/thanos-io/thanos/pull/4342) ThanosSidecarUnhealthy doesn't fire if the sidecar is never healthy
 - [#4388](https://github.com/thanos-io/thanos/pull/4388) Receive: fix bug in forwarding remote-write requests within the hashring via gRPC when TLS is enabled on the HTTP server but not on the gRPC server.
-- [#4340](https://github.com/thanos-io/thanos/pull/4340) UI: now displays the duration and all annotations of an alert in the alerts page
-- [#4348](https://github.com/thanos-io/thanos/pull/4348) Fixed parsing of the port in the log middleware
-- [#4417](https://github.com/thanos-io/thanos/pull/4417) UI: fixed the night mode in Bucket UI
+- [#4340](https://github.com/thanos-io/thanos/pull/4340) UI: now displays the duration and all annotations of an alert in the alerts page.
+- [#4348](https://github.com/thanos-io/thanos/pull/4348) Fixed parsing of the port in the log middleware.
+- [#4417](https://github.com/thanos-io/thanos/pull/4417) UI: fixed the night mode in Bucket UI.
 
 ### Changed
 
 - [#4354](https://github.com/thanos-io/thanos/pull/4354) Receive: use the S2 library for decoding Snappy data; saves about 5-7% of CPU time in the Receive component when handling incoming remote write requests
-- [#4369](https://github.com/thanos-io/thanos/pull/4354) Build: do not upgrade Alpine's version
+- [#4369](https://github.com/thanos-io/thanos/pull/4354) Build: Pin upgrade Alpine's version.
 - [#4404](https://github.com/thanos-io/thanos/pull/4404) Receive: added extra validation for the tenant's label name. Some unsupported formats could have passed before.
 
 ## [v0.21.1](https://github.com/thanos-io/thanos/releases/tag/v0.21.1) - 2021.06.04
