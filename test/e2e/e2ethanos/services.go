@@ -17,8 +17,6 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"gopkg.in/yaml.v2"
@@ -141,13 +139,15 @@ type QuerierBuilder struct {
 	routePrefix    string
 	externalPrefix string
 	image          string
+	fileSDPath     string
 
-	storeAddresses       []string
-	fileSDStoreAddresses []string
-	ruleAddresses        []string
-	metadataAddresses    []string
-	targetAddresses      []string
-	exemplarAddresses    []string
+	storeAddresses    []string
+	ruleAddresses     []string
+	metadataAddresses []string
+	targetAddresses   []string
+	exemplarAddresses []string
+
+	endpointConfig []store.Config
 
 	tracingConfig string
 }
@@ -166,9 +166,8 @@ func (q *QuerierBuilder) WithImage(image string) *QuerierBuilder {
 	q.image = image
 	return q
 }
-
-func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses ...string) *QuerierBuilder {
-	q.fileSDStoreAddresses = fileSDStoreAddresses
+func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDPath string) *QuerierBuilder {
+	q.fileSDPath = fileSDPath
 	return q
 }
 
@@ -253,6 +252,12 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 }
 
 func (q *QuerierBuilder) collectArgs() ([]string, error) {
+func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []store.Config) *QuerierBuilder {
+	q.endpointConfig = endpointConfig
+	return q
+}
+
+func (q *QuerierBuilder) Build() (*Service, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -308,6 +313,8 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		}
 
 		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
+	if q.fileSDPath != "" {
+		args = append(args, "--store.sd-files="+q.fileSDPath)
 	}
 
 	if q.routePrefix != "" {
@@ -322,7 +329,26 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
 
-	return args, nil
+	if (len(q.storeAddresses) == 0 && q.fileSDPath == "") && len(q.endpointConfig) > 0 {
+		endpointCfgBytes, err := yaml.Marshal(q.endpointConfig)
+		if err != nil {
+			return nil, errors.Wrapf(err, "generate endpoint config file: %v", q.endpointConfig)
+		}
+		args = append(args, "--endpoint.config="+string(endpointCfgBytes))
+	}
+
+	querier := NewService(
+		fmt.Sprintf("querier-%v", q.name),
+		DefaultImage(),
+		e2e.NewCommand("query", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		8080,
+		9091,
+	)
+	querier.SetUser(strconv.Itoa(os.Getuid()))
+	querier.SetBackoff(defaultBackoffConfig)
+
+	return querier, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }

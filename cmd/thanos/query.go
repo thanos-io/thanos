@@ -384,15 +384,15 @@ func runQuery(
 		TLSConfig.ServerName = serverName
 	}
 
-	var endpointsConfig []store.Config
+	var endpointConfig []store.Config
 	var err error
 	if len(endpointConfigYAML) > 0 {
-		endpointsConfig, err = store.LoadConfig(endpointConfigYAML)
+		endpointConfig, err = store.LoadConfig(endpointConfigYAML)
 		if err != nil {
 			return errors.Wrap(err, "loading endpoint config")
 		}
 	} else {
-		endpointsConfig, err = store.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
+		endpointConfig, err = store.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "initializing endpoint config from individual flags")
 		}
