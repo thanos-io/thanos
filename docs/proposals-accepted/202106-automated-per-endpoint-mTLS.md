@@ -64,7 +64,6 @@ While reading the *cert_file* on each handshake we can improve the performance b
 
 * Try to close connection only when things are actually changed, not based on time. But this is not a general approach and needs some research to figure out if this is possible in go.
 * Another alternative here is having one querier per-certificate realm - meaning one querier for your internal no-mTLS sidecars, and one querier for your clusters that share a root CA.
-root CA.
   * No changes to TLS configuration required.
   * Number of queriers is required to scale with the number of certificates / shared root CAs.
   * Complex scenarios when we need to scale out number of replicas multiples per certificate.
