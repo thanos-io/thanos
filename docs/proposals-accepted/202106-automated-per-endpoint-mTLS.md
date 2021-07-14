@@ -52,7 +52,7 @@ I would propose introducing a new CLI option `--endpoints.config`, with no dynam
   mode: ""
 ```
 
-The endpoints in the list items with no TLS config would be considered insecure. Further endpoints supplied via separate flags (e.g. `--endpoint`, `--endpoint.strict`, `--endpoint.sd-files` (previous `--store.strict`, `--store.sd-files`)) will be considered secure only if TLS config is provided through `--secure`, `--cert`, `--key`, `--caCert`, `--serverName` cli options.
+The endpoints in the list items with no TLS config would be considered insecure. Further endpoints supplied via separate flags (e.g. `--endpoint`, `--endpoint.strict`, `--endpoint.sd-files` (previous `--store.strict`, `--store.sd-files`)) will be considered secure only if TLS config is provided through `--secure`, `--cert`, `--key`, `--caCert`, `--serverName` cli options. User will only be allowed to use separate options or `--endpoints.config`.
 
 If the mode is strict (i.e. `mode: ”strict”`) then all the endpoints in that list item will be considered as strict (statically configured store API servers that are always used, even if the health check fails, as supplied in `--endpoint.strict`). And if there is no mode specified (i.e `mode: “”`) then all endpoints in that item will be considered normal.
 
@@ -63,6 +63,11 @@ While reading the *cert_file* on each handshake we can improve the performance b
 ## Alternatives
 
 * Try to close connection only when things are actually changed, not based on time. But this is not a general approach and needs some research to figure out if this is possible in go.
+* Another alternative here is having one querier per-certificate realm - meaning one querier for your internal no-mTLS sidecars, and one querier for your clusters that share a root CA.
+root CA.
+  * No changes to TLS configuration required.
+  * Number of queriers is required to scale with the number of certificates / shared root CAs.
+  * Complex scenarios when we need to scale out number of replicas multiples per certificate.
 
 ## Action Plan
 
