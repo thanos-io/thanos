@@ -48,7 +48,7 @@ I would propose introducing a new CLI option `--endpoints.config`, with no dynam
     server_name: ""
   endpoints: []
   endpoints_sd_files:
-    - Files: []
+    - files: []
   mode: ""
 ```
 
