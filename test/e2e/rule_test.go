@@ -58,7 +58,7 @@ groups:
     annotations:
       summary: "I always complain and allow partial response in query."
 `
-	testAlertRuleAddedLaterWebHandler = `
+	testAlertRuleAddedLater = `
 groups:
 - name: example
   interval: 1s
@@ -95,6 +95,34 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Ok(t, err)
 	defer resp.Body.Close()
 	testutil.Equals(t, 200, resp.StatusCode)
+}
+
+func reloadRulesSignal(t *testing.T, r *e2ethanos.Service) {
+	c := e2e.NewCommand("kill", "-1", "1")
+	_, _, err := r.Exec(c)
+	testutil.Ok(t, err)
+}
+
+func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	testutil.Ok(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 200, resp.StatusCode)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	testutil.Ok(t, err)
+
+	var data struct {
+		Status string
+		Data   *rulespb.RuleGroups
+	}
+
+	testutil.Ok(t, json.Unmarshal(body, &data))
+	testutil.Equals(t, "success", data.Status)
+
+	testutil.Assert(t, len(data.Data.Groups) == 3, "expected there to be 3 rule groups")
 }
 
 func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
@@ -317,11 +345,16 @@ func TestRule(t *testing.T) {
 		rulegroupCorrectData(t, ctx, r.HTTPEndpoint())
 	})
 
-	t.Run("reload works", func(t *testing.T) {
-		// Add a new rule via /-/reload.
-		// TODO(GiedriusS): add a test for reloading via SIGHUP. Need to extend e2e framework to expose PIDs.
+	t.Run("signal reload works", func(t *testing.T) {
+		// Add a new rule via sending sighup
+		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLater)
+		reloadRulesSignal(t, r)
+		checkReloadSuccessful(t, ctx, r.HTTPEndpoint())
+	})
 
-		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
+	t.Run("http reload works", func(t *testing.T) {
+		// Add a new rule via /-/reload.
+		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLater)
 		reloadRulesHTTP(t, ctx, r.HTTPEndpoint())
 	})
 
