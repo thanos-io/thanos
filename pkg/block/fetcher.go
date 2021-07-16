@@ -227,6 +227,9 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		metaFile       = path.Join(id.String(), MetaFilename)
 		cachedBlockDir = filepath.Join(f.cacheDir, id.String())
 	)
+	if m, seen := f.cached[id]; seen {
+		return m, nil
+	}
 
 	// TODO(bwplotka): If that causes problems (obj store rate limits), add longer ttl to cached items.
 	// For 1y and 100 block sources this generates ~1.5-3k HEAD RPM. AWS handles 330k RPM per prefix.
