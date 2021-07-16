@@ -99,9 +99,6 @@ groups:
 `
 )
 
-
-
-
 type rulesResp struct {
 	Status string
 	Data   *rulespb.RuleGroups
