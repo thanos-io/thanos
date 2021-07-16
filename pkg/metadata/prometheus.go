@@ -5,6 +5,7 @@ package metadata
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
@@ -38,4 +39,8 @@ func (p *Prometheus) MetricMetadata(r *metadatapb.MetricMetadataRequest, s metad
 			Metadata: metadatapb.FromMetadataMap(md)}})
 	})
 	return err
+}
+
+func (p *Prometheus) TargetMetadata(request *metadatapb.TargetMetadataRequest, server metadatapb.Metadata_TargetMetadataServer) error {
+	return fmt.Errorf("not implemented")
 }

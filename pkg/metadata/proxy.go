@@ -5,6 +5,7 @@ package metadata
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/go-kit/kit/log"
@@ -151,4 +152,8 @@ func (stream *metricMetadataStream) receive(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+func (s *Proxy) TargetMetadata(request *metadatapb.TargetMetadataRequest, server metadatapb.Metadata_TargetMetadataServer) error {
+	return fmt.Errorf("not implemented")
 }
