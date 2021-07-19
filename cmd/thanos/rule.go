@@ -80,7 +80,6 @@ type ruleConfig struct {
 	ruleFiles      []string
 	objStoreConfig *extflag.PathOrContent
 	dataDir        string
-	reloadSignal   <-chan struct{}
 	lset           labels.Labels
 }
 
@@ -195,6 +194,7 @@ func registerRule(app *extkingpin.App) {
 			tracer,
 			comp,
 			*conf,
+			reload,
 			getFlagsMap(cmd.Flags()),
 			httpLogOpts,
 			grpcLogOpts,
@@ -257,6 +257,7 @@ func runRule(
 	tracer opentracing.Tracer,
 	comp component.Component,
 	conf ruleConfig,
+	reloadSignal <-chan struct{},
 	flagsMap map[string]string,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
@@ -483,7 +484,7 @@ func runRule(
 			}
 			for {
 				select {
-				case <-conf.reloadSignal:
+				case <-reloadSignal:
 					if err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}

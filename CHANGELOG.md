@@ -33,6 +33,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4340](https://github.com/thanos-io/thanos/pull/4340) UI: now displays the duration and all annotations of an alert in the alerts page.
 - [#4348](https://github.com/thanos-io/thanos/pull/4348) Fixed parsing of the port in the log middleware.
 - [#4417](https://github.com/thanos-io/thanos/pull/4417) UI: fixed the night mode in Bucket UI.
+- [#4442](https://github.com/thanos-io/thanos/pull/4442) Ruler: fix SIGHUP reload signal not working.
 
 ### Changed
 
