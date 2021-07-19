@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#4442](https://github.com/thanos-io/thanos/pull/4442) rule: fix reload signal not working
+
 ### Changed
 
 ## [v0.22.0 - in progress](https://github.com/thanos-io/thanos/tree/release-0.22)
