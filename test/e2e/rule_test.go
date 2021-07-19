@@ -139,10 +139,9 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
 	testutil.Equals(t, 200, resp.StatusCode)
-	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
-	testutil.Ok(t, err)
+	testutil.Ok(t, resp.Body.Close())
 
 	var data = rulesResp{}
 
