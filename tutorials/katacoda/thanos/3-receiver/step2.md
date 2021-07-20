@@ -48,7 +48,7 @@ docker run -d --rm \
     -v $(pwd)/receive-data:/receive/data \
     --net=host \
     --name receive \
-    quay.io/thanos/thanos:v0.22.0-rc.0 \
+    quay.io/thanos/thanos:v0.22.0 \
     receive \
     --tsdb.path "/receive/data" \
     --grpc-address 127.0.0.1:10907 \
@@ -76,7 +76,7 @@ Next, let us run a `Thanos Query` instance:
 docker run -d --rm \
     --net=host \
     --name query \
-    quay.io/thanos/thanos:v0.22.0-rc.0 \
+    quay.io/thanos/thanos:v0.22.0 \
     query \
     --http-address "0.0.0.0:39090" \
     --store "127.0.0.1:10907"
