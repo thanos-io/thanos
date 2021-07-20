@@ -58,7 +58,7 @@ Similarly, we want to reuse this work in Prometheus.
 - Define Thanos APIs in protobuf specification.
 - Generate OpenAPI from protobuf with gnostic extension.
 - Generate documentation from OpenAPI with [swagger](https://github.com/swagger-api/swagger-codegen).
-- Generate server and client API stubs potentially from OpenAPI with [swagger](https://github.com/swagger-api/swagger-codegen) or [oapi-codegen](https://github.com/deepmap/oapi-codegen).
+- Generate server and client API stubs from OpenAPI with [swagger](https://github.com/swagger-api/swagger-codegen) or [oapi-codegen](https://github.com/deepmap/oapi-codegen).
 ## **Alternatives**
 
 ## **Define HTTP RESTful API only in OpenAPI. Not in protobuf.**
@@ -70,7 +70,7 @@ Similarly, we want to reuse this work in Prometheus.
    1. We write API definitions in protobuf for consistency. OpenAPI is less consistent compared to protobuf in a project built on Golang. 
    2. Protobuf definition is more concise to write. 
 
-## **Define APIs in gRPC and have RESTful APIs alongside with [grpc - gateway](https://github.com/grpc-ecosystem/grpc-gateway)**
+## **Define APIs in gRPC and have RESTful APIs alongside with grpc - gateway**
 
 1. Pros:
    1. We can have gRPC and RESTful APIs at the same time.
