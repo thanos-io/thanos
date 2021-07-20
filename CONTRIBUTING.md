@@ -91,7 +91,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 
     export GOPATH="~/Repos/thanosgopath" # Use if you want to have an isolated directory for deps, otherwise, the directory where you have installed golang will be used.
 
-    export GOPROXY="https://proxy.golang.org"  
+    export GOPROXY="https://proxy.golang.org"
     export PATH="$GOBIN:$PATH"
     ```
 
