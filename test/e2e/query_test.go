@@ -245,7 +245,10 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 
 	endpointConfig := []store.Config{
 		{
-			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")},
+			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")},
+		},
+		{
+			Endpoints: []string{sidecar2.InternalEndpoint("grpc")},
 			EndpointsSD: []file.SDConfig{
 				{
 					Files:           []string{fileSDPath},
