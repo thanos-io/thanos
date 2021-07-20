@@ -356,7 +356,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 			// Use full file name appending to work dir, so we can differentiate between different dirs and same filenames(!).
 			// This will be also used as key for file group name.
-			newFn := filepath.Join(m.workDir, s.String(), strings.TrimLeft(fn, m.workDir))
+			newFn := filepath.Join(m.workDir, s.String(), filepath.Base(fn))
 			if err := os.MkdirAll(filepath.Dir(newFn), os.ModePerm); err != nil {
 				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
