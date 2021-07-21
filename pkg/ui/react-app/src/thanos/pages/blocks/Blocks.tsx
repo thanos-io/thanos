@@ -9,9 +9,11 @@ import { Block } from './block';
 import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
-import { sortBlocks } from './helpers';
+import { sortBlocks, getOverlappingBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
+import Checkbox from '../../../components/Checkbox';
+
 export interface BlockListProps {
   blocks: Block[];
   err: string | null;
@@ -22,6 +24,8 @@ export interface BlockListProps {
 export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
+  const [findOverlapBlock, setFindOverlapBlock] = useState<boolean>(false);
+  const [overlapBlocks, setOverlapBlocks] = useState<Set<string>>(new Set());
 
   const { blocks, label, err } = data;
 
@@ -76,6 +80,20 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
             onClick={() => setBlockSearchInput(searchState)}
             defaultValue={blockSearchParam}
           />
+          <Checkbox
+            id="find-overlap-block-checkbox"
+            onChange={({ target }) => {
+              setFindOverlapBlock(target.checked);
+              if (target.checked) {
+                setOverlapBlocks(getOverlappingBlocks(blockPools));
+              } else {
+                setOverlapBlocks(new Set());
+              }
+            }}
+            defaultChecked={findOverlapBlock}
+          >
+            Enable find overlap block
+          </Checkbox>
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
@@ -88,6 +106,8 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
                     gridMinTime={viewMinTime}
                     gridMaxTime={viewMaxTime}
                     blockSearch={blockSearch}
+                    findOverlapBlock={findOverlapBlock}
+                    overlapBlocks={overlapBlocks}
                   />
                 ))}
               </div>

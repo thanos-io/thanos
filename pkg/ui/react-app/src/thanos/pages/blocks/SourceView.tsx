@@ -10,15 +10,26 @@ export const BlocksRow: FC<{
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
   blockSearch: string;
-}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch }) => {
+  overlappingBlocksId: Set<string>;
+  findOverlapBlock: boolean;
+}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch, overlappingBlocksId, findOverlapBlock }) => {
   const blockSearchValue = getBlockByUlid(blocks, blockSearch);
 
   return (
     <div className={styles.row}>
-      {blockSearchValue.map<JSX.Element>((b) => {
-        return (
-          <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
-        );
+      {blockSearchValue.map<JSX.Element | null>((b) => {
+        if (overlappingBlocksId.has(b.ulid) || !findOverlapBlock) {
+          return (
+            <BlockSpan
+              selectBlock={selectBlock}
+              block={b}
+              gridMaxTime={gridMaxTime}
+              gridMinTime={gridMinTime}
+              key={b.ulid}
+            />
+          );
+        }
+        return null;
       })}
     </div>
   );
@@ -31,9 +42,20 @@ export interface SourceViewProps {
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
   blockSearch: string;
+  findOverlapBlock: boolean;
+  overlapBlocks: Set<string>;
 }
 
-export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock, blockSearch }) => {
+export const SourceView: FC<SourceViewProps> = ({
+  data,
+  title,
+  gridMaxTime,
+  gridMinTime,
+  selectBlock,
+  blockSearch,
+  findOverlapBlock,
+  overlapBlocks,
+}) => {
   return (
     <>
       <div className={styles.source}>
@@ -51,6 +73,8 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
                   gridMaxTime={gridMaxTime}
                   gridMinTime={gridMinTime}
                   blockSearch={blockSearch}
+                  findOverlapBlock={findOverlapBlock}
+                  overlappingBlocksId={overlapBlocks}
                 />
               ))}
             </React.Fragment>
