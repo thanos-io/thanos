@@ -377,7 +377,7 @@ func runQuery(
 
 	// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
 	var TLSConfig store.TLSConfiguration
-	if secure {
+	if secure && len(endpointConfigYAML) == 0 {
 		TLSConfig.CertFile = cert
 		TLSConfig.KeyFile = key
 		TLSConfig.CaCertFile = caCert

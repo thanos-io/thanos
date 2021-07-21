@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -149,11 +151,23 @@ func TestQuery(t *testing.T) {
 	fileSDPath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
 	testutil.Ok(t, err)
 
+	queryFileSDDir := filepath.Join(s.SharedDir(), "data", "querier", "1")
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
+	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
+
+	args := e2e.BuildArgs(map[string]string{
+		"--grpc-client-tls-cert": filepath.Join(container, "myclient.crt"),
+		"--grpc-client-tls-key":  filepath.Join(container, "myclient.key"),
+		"--grpc-server-tls-cert": filepath.Join(container, "myserver.crt"),
+		"--grpc-server-tls-key":  filepath.Join(container, "myserver.key"),
+	})
+
+	args = append(args, "--grpc-client-tls-secure")
+	args = append(args, "--grpc-client-tls-skip-verify") // As the certs are self-signed.
+
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).
-		WithFileSDStoreAddresses(sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")).Build()
 	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")}).
-		WithFileSDStoreAddresses(fileSDPath).Build()
+		WithFileSDStoreAddresses(fileSDPath).WithMutualTLS(args).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -856,4 +870,66 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 
 		return nil
 	}))
+}
+
+func cpyDir(scrDir, dest string) error {
+	entries, err := ioutil.ReadDir(scrDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		sourcePath := filepath.Join(scrDir, entry.Name())
+		destPath := filepath.Join(dest, entry.Name())
+
+		fileInfo, err := os.Stat(sourcePath)
+		if err != nil {
+			return err
+		}
+
+		stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw syscall.Stat_t data for '%s'", sourcePath)
+		}
+
+		switch fileInfo.Mode() & os.ModeType {
+		case os.ModeDir:
+			if err := os.MkdirAll(destPath, 0755); err != nil {
+				return err
+			}
+			if err := cpyDir(sourcePath, destPath); err != nil {
+				return err
+			}
+		case os.ModeSymlink:
+			return errors.New("symlink copy is not supported")
+		default:
+			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+				return err
+			}
+			if err := cpyFile(sourcePath, destPath); err != nil {
+				return err
+			}
+		}
+		if err := os.Lchown(destPath, int(stat.Uid), int(stat.Gid)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cpyFile(srcFile, dstFile string) (err error) {
+	out, err := os.Create(dstFile)
+	if err != nil {
+		return err
+	}
+
+	defer runutil.CloseWithErrCapture(&err, out, "close dst")
+
+	in, err := os.Open(srcFile)
+	defer runutil.CloseWithErrCapture(&err, in, "close src")
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(out, in)
+	return err
 }

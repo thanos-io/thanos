@@ -146,6 +146,7 @@ type QuerierBuilder struct {
 	metadataAddresses []string
 	targetAddresses   []string
 	exemplarAddresses []string
+	mutualTLSConfig	  []string
 
 	endpointConfig []store.Config
 
@@ -257,6 +258,11 @@ func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []store.Config) *Quer
 	return q
 }
 
+func (q *QuerierBuilder) WithMutualTLS(mutualTLSConfig []string) *QuerierBuilder {
+	q.mutualTLSConfig = mutualTLSConfig
+	return q
+}
+
 func (q *QuerierBuilder) Build() (*Service, error) {
 	const replicaLabel = "replica"
 
@@ -336,6 +342,8 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 		}
 		args = append(args, "--endpoint.config="+string(endpointCfgBytes))
 	}
+
+	args = append(args, q.mutualTLSConfig...)
 
 	querier := NewService(
 		fmt.Sprintf("querier-%v", q.name),
