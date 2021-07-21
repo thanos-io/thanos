@@ -84,7 +84,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. You may use `GOPROXY=https://goproxy.cn,direct` as an alternative if you cannot visit `https://proxy.golang.org`. For example -
+  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. You may use `GOPROXY=https://goproxy.cn` as an alternative if you cannot visit `https://proxy.golang.org`. For example -
 
     ```
     export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
