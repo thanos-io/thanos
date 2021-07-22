@@ -1,0 +1,144 @@
+# Generated with protoc-gen-openapi
+# https://github.com/googleapis/gnostic/tree/master/apps/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: Rules
+    description: / Rules represents API that is responsible for gathering rules and their statuses.
+    version: 0.0.1
+paths:
+    /api/v1/rules/:
+        get:
+            summary: / Gets a rule recording.
+            operationId: Rules_RulesRecord
+            parameters:
+                - name: type
+                  in: query
+                  description: / The type to request.
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RuleGroups'
+components:
+    schemas:
+        Alert:
+            properties:
+                state:
+                    type: integer
+                    description: / state returns the maximum state of alert instances for this rule.
+                    format: enum
+                name:
+                    type: string
+                query:
+                    type: string
+                duration_seconds:
+                    type: number
+                    format: double
+                labels:
+                    $ref: '#/components/schemas/ZLabelSet'
+                annotations:
+                    $ref: '#/components/schemas/ZLabelSet'
+                alerts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AlertInstance'
+                health:
+                    type: string
+                last_error:
+                    type: string
+                evaluation_duration_seconds:
+                    type: number
+                    format: double
+                last_evaluation:
+                    type: string
+                    format: RFC3339
+        AlertInstance:
+            properties:
+                labels:
+                    $ref: '#/components/schemas/ZLabelSet'
+                annotations:
+                    $ref: '#/components/schemas/ZLabelSet'
+                state:
+                    type: integer
+                    format: enum
+                active_at:
+                    type: string
+                    format: RFC3339
+                value:
+                    type: string
+                PartialResponseStrategy:
+                    type: integer
+                    description: Thanos specific. Used mainly for alert API purposes.
+                    format: enum
+        Label:
+            properties:
+                name:
+                    type: string
+                value:
+                    type: string
+        RecordingRule:
+            properties:
+                name:
+                    type: string
+                query:
+                    type: string
+                labels:
+                    $ref: '#/components/schemas/ZLabelSet'
+                health:
+                    type: string
+                last_error:
+                    type: string
+                evaluation_duration_seconds:
+                    type: number
+                    format: double
+                last_evaluation:
+                    type: string
+                    format: RFC3339
+        Rule:
+            properties:
+                recording:
+                    $ref: '#/components/schemas/RecordingRule'
+                alert:
+                    $ref: '#/components/schemas/Alert'
+        RuleGroup:
+            properties:
+                name:
+                    type: string
+                file:
+                    type: string
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Rule'
+                interval:
+                    type: number
+                    format: double
+                evaluation_duration_seconds:
+                    type: number
+                    format: double
+                last_evaluation:
+                    type: string
+                    format: RFC3339
+                PartialResponseStrategy:
+                    type: integer
+                    description: Thanos specific.
+                    format: enum
+            description: / RuleGroup has info for rules which are part of a group.
+        RuleGroups:
+            properties:
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RuleGroup'
+            description: '/ RuleGroups is set of rule groups./ This and below APIs are meant to be used for unmarshaling and marshsaling rules from/to Prometheus API./ That''s why json tag has to be customized and matching https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L955/ NOTE: See rules_custom_test.go for compatibility tests.// For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105'
+        ZLabelSet:
+            properties:
+                labels:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Label'
