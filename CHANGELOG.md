@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#4442](https://github.com/thanos-io/thanos/pull/4442) rule: fix reload signal not working
+- [#4468] (https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue
 
 ### Changed
 
