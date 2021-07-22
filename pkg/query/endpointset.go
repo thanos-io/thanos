@@ -112,7 +112,7 @@ type EndpointStatus struct {
 	MaxTime       int64               `json:"maxTime"`
 }
 
-// storeSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
+// endpointSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
 // A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
 // TODO(hitanshu-mehta) Currently,only collecting metrics of storeAPI. Make this struct generic.
 type endpointSetNodeCollector struct {
