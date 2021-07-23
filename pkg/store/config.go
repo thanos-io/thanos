@@ -12,6 +12,7 @@ import (
 
 // Config represents the configuration of a set of Store API endpoints.
 type Config struct {
+	Name        string           `yaml:"name"`
 	TLSConfig   TLSConfiguration `yaml:"tls_config"`
 	Endpoints   []string         `yaml:"endpoints"`
 	EndpointsSD []file.SDConfig  `yaml:"endpoints_sd_files"`

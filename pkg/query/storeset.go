@@ -223,7 +223,7 @@ type StoreSet struct {
 func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	instance int,
+	configInstance string,
 	storeSpecs func() []StoreSpec,
 	ruleSpecs func() []RuleSpec,
 	targetSpecs func() []TargetSpec,
@@ -232,7 +232,10 @@ func NewStoreSet(
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
-	storesMetric := newStoreSetNodeCollector(string(rune(instance)))
+	if configInstance == "" {
+		configInstance = "default"
+	}
+	storesMetric := newStoreSetNodeCollector(configInstance)
 	if reg != nil {
 		reg.MustRegister(storesMetric)
 	}

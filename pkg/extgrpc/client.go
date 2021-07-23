@@ -21,8 +21,11 @@ import (
 )
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, instance int, secure, skipVerify bool, tlsConfig store.TLSConfiguration) ([]grpc.DialOption, error) {
-	constLabels := map[string]string{"config_instance": string(rune(instance))}
+func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, clientInstance string, secure, skipVerify bool, tlsConfig store.TLSConfiguration) ([]grpc.DialOption, error) {
+	if clientInstance == "" {
+		clientInstance = "default"
+	}
+	constLabels := map[string]string{"config_name": clientInstance}
 	grpcMets := grpc_prometheus.NewClientMetrics(grpc_prometheus.WithConstLabels(constLabels))
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramConstLabels(constLabels),

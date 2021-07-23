@@ -423,17 +423,17 @@ func runQuery(
 	)
 
 	var storeSets []*query.EndpointSet
-	for instance, config := range endpointConfig {
-		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, instance, secure, skipVerify, config.TLSConfig)
+	fileSDCache := cache.New()
+	for _, config := range endpointConfig {
+		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")
 		}
 
-		fileSDCache := cache.New()
 		dnsStoreProvider := dns.NewProvider(
 			logger,
 			extprom.WrapRegistererWith(
-				map[string]string{"config_instance": string(rune(instance))},
+				map[string]string{"config_name": config.Name},
 				extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
 			),
 			dns.ResolverType(dnsSDResolver),
@@ -453,6 +453,7 @@ func runQuery(
 		endpoints := query.NewEndpointSet(
 			logger,
 			reg,
+			config.Name,
 			func() (specs []query.EndpointSpec) {
 
 				specs = spec
