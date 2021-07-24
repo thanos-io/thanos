@@ -267,7 +267,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		return nil, errors.Wrapf(err, "get meta file: %v", metaFile)
 	}
 
-	defer runutil.CloseWithLogOnErr(f.logger, r, "close bkt meta get")
+	defer runutil.ExhaustCloseWithLogOnErr(f.logger, r, "close bkt meta get")
 
 	metaContent, err := ioutil.ReadAll(r)
 	if err != nil {
